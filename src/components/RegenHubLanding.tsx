@@ -230,37 +230,68 @@ const RegenHubLanding = () => {
             <CardContent className="p-8 md:p-12 text-center">
               <h2 className="text-3xl md:text-4xl font-bold mb-8 text-forest">Find Us in Boulder</h2>
               
+              <div className="glass-panel-subtle p-6 mb-8 bg-accent/5">
+                <h3 className="text-lg font-semibold mb-3 text-foreground">Important Note</h3>
+                <p className="text-muted-foreground mb-2">
+                  RegenHub Boulder is an <strong>invite-only space</strong>. You're welcome to attend our public events 
+                  and inquire about membership and day passes in our community channels.
+                </p>
+                <p className="text-sm text-muted-foreground">Please apply first before purchasing a membership.</p>
+              </div>
+              
               <div className="grid md:grid-cols-2 gap-8 mb-8">
                 <div className="space-y-4">
                   <div className="flex items-center justify-center gap-2">
                     <MapPin className="w-5 h-5 text-primary" />
-                    <span className="text-lg font-medium">Boulder, Colorado</span>
+                    <span className="text-lg font-medium">Address</span>
                   </div>
-                  <p className="text-muted-foreground">Specific address coming soon</p>
+                  <div className="text-muted-foreground">
+                    <p>1515 Walnut St, Ste 200</p>
+                    <p>Boulder, CO 80302</p>
+                  </div>
                 </div>
                 
                 <div className="space-y-4">
                   <div className="flex items-center justify-center gap-2">
                     <Calendar className="w-5 h-5 text-primary" />
-                    <span className="text-lg font-medium">Hours</span>
+                    <span className="text-lg font-medium">Access</span>
                   </div>
                   <div className="text-muted-foreground">
-                    <p>Monday-Friday: 8am-8pm</p>
-                    <p>Weekends: Events Only</p>
+                    <p>Members & Day Pass Holders</p>
+                    <p>Public Events Welcome</p>
                   </div>
                 </div>
               </div>
               
-              <div className="flex items-center justify-center gap-2 mb-6">
-                <Mail className="w-5 h-5 text-primary" />
-                <a href="mailto:hello@regenhub.xyz" className="text-lg font-medium hover:text-primary transition-colors">
-                  hello@regenhub.xyz
-                </a>
+              <div className="grid md:grid-cols-2 gap-6 mb-8">
+                <div className="flex items-center justify-center gap-2">
+                  <Mail className="w-5 h-5 text-primary" />
+                  <a href="mailto:boulder.regenhub@gmail.com" className="text-lg font-medium hover:text-primary transition-colors">
+                    boulder.regenhub@gmail.com
+                  </a>
+                </div>
+                
+                <div className="flex items-center justify-center gap-2">
+                  <span className="text-2xl">📱</span>
+                  <a href="https://t.me/+Mg1PLuT9pX9mMGVh" target="_blank" rel="noopener noreferrer" className="text-lg font-medium hover:text-primary transition-colors">
+                    Community Telegram
+                  </a>
+                </div>
               </div>
               
-              <Button className="btn-glass px-6 py-2">
-                View Event Calendar
-              </Button>
+              <div className="glass-panel-subtle p-4 mb-6 text-sm text-muted-foreground">
+                <p><strong>WiFi Network:</strong> regenhub.xyz_guest</p>
+                <p><strong>WiFi Password:</strong> itsallcoordination</p>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Button className="btn-primary-glass px-6 py-2">
+                  Apply for Membership
+                </Button>
+                <Button className="btn-glass px-6 py-2">
+                  Submit an Event
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -287,10 +318,18 @@ const RegenHubLanding = () => {
             </div>
             
             <div className="flex justify-center gap-4">
-              <Button variant="ghost" size="sm" className="btn-glass">Discord</Button>
-              <Button variant="ghost" size="sm" className="btn-glass">Twitter/X</Button>
-              <Button variant="ghost" size="sm" className="btn-glass">GitHub</Button>
-              <Button variant="ghost" size="sm" className="btn-glass">Newsletter</Button>
+              <Button variant="ghost" size="sm" className="btn-glass" asChild>
+                <a href="https://t.me/+Mg1PLuT9pX9mMGVh" target="_blank" rel="noopener noreferrer">
+                  Telegram
+                </a>
+              </Button>
+              <Button variant="ghost" size="sm" className="btn-glass" asChild>
+                <a href="mailto:boulder.regenhub@gmail.com">
+                  Email
+                </a>
+              </Button>
+              <Button variant="ghost" size="sm" className="btn-glass">Apply</Button>
+              <Button variant="ghost" size="sm" className="btn-glass">Events</Button>
             </div>
           </div>
         </div>
