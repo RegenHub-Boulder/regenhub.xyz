@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -13,21 +13,89 @@ import {
 import forestBackground from "@/assets/forest-background.jpg";
 import particlesOverlay from "@/assets/particles-overlay.png";
 import forestMascot from "@/assets/forest-mascot.png";
+import CommunityGallery from "./CommunityGallery";
+
+// Mascot animation constants
+const MASCOT_CONSTANTS = {
+  INITIAL_OFFSET_X: 250,
+  INITIAL_Y: 100,
+  WIDTH: 200,
+  HEIGHT: 400,
+  MIN_SPINS: 1,
+  MAX_SPINS: 3,
+  ROTATION_DEGREES: 360,
+  MAX_FINAL_ANGLE: 30,
+  MIN_SCALE: 0.8,
+  SCALE_RANGE: 0.6,
+};
+
+const MASCOT_SAYINGS = [
+  "Scenius emerges! 🌿",
+  "Collective genius activated! ✨",
+  "1 + 1 = 11 here! 🚀",
+  "We build the future together! 💚",
+  "Ideas compound daily! 🧠",
+  "Innovation through cooperation! 🤝",
+  "Regenerating community wealth! 🌱",
+  "Aligned action creates magic! ⚡",
+  "Your potential amplified! 🎯",
+  "Together we go far! 🌍",
+];
 
 const RegenHubLanding = () => {
+  const [mascotPosition, setMascotPosition] = useState({
+    x:
+      typeof window !== "undefined"
+        ? window.innerWidth - MASCOT_CONSTANTS.INITIAL_OFFSET_X
+        : 1000,
+    y: MASCOT_CONSTANTS.INITIAL_Y,
+    rotate: 0,
+    scale: 1,
+  });
+  const [mascotClicks, setMascotClicks] = useState(0);
+
+  const handleMascotClick = () => {
+    // Move to random position on screen
+    const newX = Math.random() * (window.innerWidth - MASCOT_CONSTANTS.WIDTH);
+    const newY = Math.random() * (window.innerHeight - MASCOT_CONSTANTS.HEIGHT);
+    // Spin a lot but land within 30 degrees of upright
+    const spins =
+      Math.floor(
+        Math.random() * MASCOT_CONSTANTS.MAX_SPINS + MASCOT_CONSTANTS.MIN_SPINS,
+      ) * MASCOT_CONSTANTS.ROTATION_DEGREES;
+    const finalAngle =
+      (Math.random() - 0.5) * (MASCOT_CONSTANTS.MAX_FINAL_ANGLE * 2);
+    const newRotate = spins + finalAngle;
+    const newScale =
+      MASCOT_CONSTANTS.MIN_SCALE + Math.random() * MASCOT_CONSTANTS.SCALE_RANGE;
+
+    setMascotPosition({ x: newX, y: newY, rotate: newRotate, scale: newScale });
+    setMascotClicks((prev) => prev + 1);
+  };
   return (
     <div className="min-h-screen relative overflow-x-hidden">
       {/* Forest Background Layers */}
-      <div className="forest-bg">
-        <div
-          className="forest-pattern"
-          style={{ backgroundImage: `url(${forestBackground})` }}
-        />
-        <div
-          className="floating-particles"
-          style={{ backgroundImage: `url(${particlesOverlay})` }}
-        />
-      </div>
+      <div
+        className="fixed inset-0 -z-10"
+        style={{
+          background: `url(${forestBackground})`,
+          backgroundSize: "150% 150%",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          opacity: 0.3,
+        }}
+      />
+      <div
+        className="fixed inset-0 -z-10 pointer-events-none"
+        style={{
+          backgroundImage: `url(${particlesOverlay})`,
+          backgroundSize: "100% 100%",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          opacity: 0.1,
+          animation: "float-particles 60s ease-in-out infinite",
+        }}
+      />
 
       {/* Header */}
       <header className="relative z-50 px-6 py-4">
@@ -47,26 +115,13 @@ const RegenHubLanding = () => {
       {/* Hero Section */}
       <section className="relative px-6 py-16 md:py-24">
         <div className="max-w-4xl mx-auto text-center relative">
-          {/* Forest Mascot */}
-          <div className="absolute -right-8 top-8 hidden lg:block animate-fade-in z-10">
-            <img
-              src={forestMascot}
-              alt="RegenHub Forest Mascot"
-              className="w-32 h-32 object-contain opacity-80 hover:opacity-100 transition-opacity duration-300 animate-sway"
-            />
-          </div>
           <div className="glass-panel-strong p-8 md:p-12 hover-lift animate-fade-in-up">
             <h2 className="text-4xl md:text-6xl font-bold mb-6 text-foreground leading-tight">
-              Where Builders Shape Tomorrow
+              Regen Hub
             </h2>
             <p className="text-xl md:text-2xl mb-8 text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-              A regenerative third space for aligned builders
+              A regenerative innovation hub in Boulder, CO
             </p>
-            <div className="prose prose-lg max-w-3xl mx-auto mb-8 text-foreground/80">
-              <p>
-                Cooperative workspace. Economic democracy. Regenerative futures.
-              </p>
-            </div>
           </div>
         </div>
       </section>
@@ -146,6 +201,9 @@ const RegenHubLanding = () => {
           </div>
         </div>
       </section>
+
+      {/* Community Gallery */}
+      <CommunityGallery />
 
       {/* Membership Section */}
       <section className="relative px-6 py-16">
@@ -264,17 +322,18 @@ const RegenHubLanding = () => {
               </p>
             </div>
 
-            <div className="glass-panel-subtle rounded-lg overflow-hidden flex justify-center">
-              <iframe
-                src="https://luma.com/embed/calendar/cal-ZCWMKx1NMCXGd7v/events"
-                width="600"
-                height="450"
-                frameBorder="0"
-                style={{ border: "1px solid #bfcbda88", borderRadius: "4px" }}
-                allowFullScreen
-                aria-hidden="false"
-                tabIndex={0}
-              />
+            <div className="glass-panel-subtle rounded-lg overflow-hidden">
+              <div className="relative w-full" style={{ paddingBottom: "75%" }}>
+                <iframe
+                  src="https://luma.com/embed/calendar/cal-ZCWMKx1NMCXGd7v/events?lt=light"
+                  className="absolute top-0 left-0 w-full h-full"
+                  frameBorder="0"
+                  style={{ border: "1px solid #bfcbda88", borderRadius: "4px" }}
+                  allowFullScreen
+                  aria-hidden="false"
+                  tabIndex={0}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -440,6 +499,30 @@ const RegenHubLanding = () => {
           </div>
         </div>
       </footer>
+
+      {/* Floating Forest Mascot */}
+      <div
+        className="fixed hidden lg:block animate-fade-in z-50 cursor-pointer"
+        style={{
+          left: `${mascotPosition.x}px`,
+          top: `${mascotPosition.y}px`,
+          transform: `rotate(${mascotPosition.rotate}deg) scale(${mascotPosition.scale})`,
+          transition: "all 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55)",
+        }}
+        onClick={handleMascotClick}
+        title="Click me!"
+      >
+        <img
+          src={forestMascot}
+          alt="RegenHub Forest Mascot"
+          className="w-48 h-48 object-contain opacity-80 hover:opacity-100 hover:scale-110 transition-all duration-300 animate-sway"
+        />
+        {mascotClicks > 0 && (
+          <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white/90 px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap shadow-lg">
+            {MASCOT_SAYINGS[mascotClicks % MASCOT_SAYINGS.length]}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
