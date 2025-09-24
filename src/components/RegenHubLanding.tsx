@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Building2, HandHeart, Lightbulb, Sprout, MapPin, Calendar, Mail } from 'lucide-react';
 import forestBackground from '@/assets/forest-background.jpg';
 import particlesOverlay from '@/assets/particles-overlay.png';
-import forestMascot from '@/assets/forest-mascot.png';
+import forestMascot from '@/assets/forest-mascot-transparent.png';
 
 const RegenHubLanding = () => {
   return (
