@@ -1,21 +1,29 @@
-import React from 'react';
+import React from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Building2, HandHeart, Lightbulb, Sprout, MapPin, Calendar, Mail } from 'lucide-react';
-import forestBackground from '@/assets/forest-background.jpg';
-import particlesOverlay from '@/assets/particles-overlay.png';
-import forestMascot from '@/assets/forest-mascot-transparent.png';
+import {
+  Building2,
+  HandHeart,
+  Lightbulb,
+  Sprout,
+  MapPin,
+  Calendar,
+  Mail,
+} from "lucide-react";
+import forestBackground from "@/assets/forest-background.jpg";
+import particlesOverlay from "@/assets/particles-overlay.png";
+import forestMascot from "@/assets/forest-mascot.png";
 
 const RegenHubLanding = () => {
   return (
     <div className="min-h-screen relative overflow-x-hidden">
       {/* Forest Background Layers */}
       <div className="forest-bg">
-        <div 
+        <div
           className="forest-pattern"
           style={{ backgroundImage: `url(${forestBackground})` }}
         />
-        <div 
+        <div
           className="floating-particles"
           style={{ backgroundImage: `url(${particlesOverlay})` }}
         />
@@ -41,9 +49,9 @@ const RegenHubLanding = () => {
         <div className="max-w-4xl mx-auto text-center relative">
           {/* Forest Mascot */}
           <div className="absolute -right-8 top-8 hidden lg:block animate-fade-in z-10">
-            <img 
-              src={forestMascot} 
-              alt="RegenHub Forest Mascot" 
+            <img
+              src={forestMascot}
+              alt="RegenHub Forest Mascot"
               className="w-32 h-32 object-contain opacity-80 hover:opacity-100 transition-opacity duration-300 animate-sway"
             />
           </div>
@@ -75,21 +83,26 @@ const RegenHubLanding = () => {
       <section className="relative px-6 py-16">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-forest">What We Offer</h2>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-forest">
+              What We Offer
+            </h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
               Community. Democracy. Regeneration.
             </p>
           </div>
-          
+
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             <Card className="glass-panel hover-lift group">
               <CardContent className="p-6 text-center">
                 <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center rounded-full bg-primary/10">
                   <Building2 className="w-8 h-8 text-primary" />
                 </div>
-                <h3 className="text-xl font-semibold mb-3 text-foreground">Community Infrastructure</h3>
+                <h3 className="text-xl font-semibold mb-3 text-foreground">
+                  Community Infrastructure
+                </h3>
                 <p className="text-muted-foreground leading-relaxed">
-                  Affordable co-working and event space for regenerative builders and changemakers.
+                  Affordable co-working and event space for regenerative
+                  builders and changemakers.
                 </p>
               </CardContent>
             </Card>
@@ -99,9 +112,12 @@ const RegenHubLanding = () => {
                 <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center rounded-full bg-accent/10">
                   <HandHeart className="w-8 h-8 text-accent" />
                 </div>
-                <h3 className="text-xl font-semibold mb-3 text-foreground">Economic Democracy</h3>
+                <h3 className="text-xl font-semibold mb-3 text-foreground">
+                  Economic Democracy
+                </h3>
                 <p className="text-muted-foreground leading-relaxed">
-                  Meaningful ownership and governance through profit-sharing and equity.
+                  Meaningful ownership and governance through profit-sharing and
+                  equity.
                 </p>
               </CardContent>
             </Card>
@@ -111,9 +127,12 @@ const RegenHubLanding = () => {
                 <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center rounded-full bg-secondary/20">
                   <Sprout className="w-8 h-8 text-secondary" />
                 </div>
-                <h3 className="text-xl font-semibold mb-3 text-foreground">Regenerative Technology Incubation</h3>
+                <h3 className="text-xl font-semibold mb-3 text-foreground">
+                  Regenerative Technology Incubation
+                </h3>
                 <p className="text-muted-foreground leading-relaxed">
-                  Mentorship and support for climate, social equity, and sustainability projects.
+                  Mentorship and support for climate, social equity, and
+                  sustainability projects.
                 </p>
               </CardContent>
             </Card>
@@ -123,9 +142,12 @@ const RegenHubLanding = () => {
                 <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center rounded-full bg-primary/10">
                   <Lightbulb className="w-8 h-8 text-primary" />
                 </div>
-                <h3 className="text-xl font-semibold mb-3 text-foreground">Collective Intelligence</h3>
+                <h3 className="text-xl font-semibold mb-3 text-foreground">
+                  Collective Intelligence
+                </h3>
                 <p className="text-muted-foreground leading-relaxed">
-                  Building 'scenius' - collective intelligence through sustained collaboration.
+                  Building 'scenius' - collective intelligence through sustained
+                  collaboration.
                 </p>
               </CardContent>
             </Card>
@@ -137,16 +159,21 @@ const RegenHubLanding = () => {
       <section className="relative px-6 py-16">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-forest">Become Part of the Cooperative</h2>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-forest">
+              Become Part of the Cooperative
+            </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              Tiered membership with participation-based governance and economic sharing.
+              Tiered membership with participation-based governance and economic
+              sharing.
             </p>
           </div>
-          
+
           <div className="grid md:grid-cols-3 gap-6 mb-8">
             <Card className="glass-panel hover-lift border-l-4 border-l-secondary">
               <CardContent className="p-6">
-                <h3 className="text-xl font-semibold mb-3 text-foreground">Community Participants</h3>
+                <h3 className="text-xl font-semibold mb-3 text-foreground">
+                  Community Participants
+                </h3>
                 <p className="text-muted-foreground mb-4">
                   Access events and resources for mission-aligned individuals.
                 </p>
@@ -160,9 +187,12 @@ const RegenHubLanding = () => {
 
             <Card className="glass-panel hover-lift border-l-4 border-l-accent">
               <CardContent className="p-6">
-                <h3 className="text-xl font-semibold mb-3 text-foreground">Part-time Contributors</h3>
+                <h3 className="text-xl font-semibold mb-3 text-foreground">
+                  Part-time Contributors
+                </h3>
                 <p className="text-muted-foreground mb-4">
-                  Co-working access and governance for active community builders.
+                  Co-working access and governance for active community
+                  builders.
                 </p>
                 <ul className="text-sm text-muted-foreground space-y-1">
                   <li>• Co-working access</li>
@@ -174,9 +204,12 @@ const RegenHubLanding = () => {
 
             <Card className="glass-panel hover-lift border-l-4 border-l-primary">
               <CardContent className="p-6">
-                <h3 className="text-xl font-semibold mb-3 text-foreground">Full-time Cooperative Members</h3>
+                <h3 className="text-xl font-semibold mb-3 text-foreground">
+                  Full-time Cooperative Members
+                </h3>
                 <p className="text-muted-foreground mb-4">
-                  Full ownership and governance for committed regenerative entrepreneurs.
+                  Full ownership and governance for committed regenerative
+                  entrepreneurs.
                 </p>
                 <ul className="text-sm text-muted-foreground space-y-1">
                   <li>• Full ownership rights</li>
@@ -186,10 +219,17 @@ const RegenHubLanding = () => {
               </CardContent>
             </Card>
           </div>
-          
+
           <div className="text-center">
-            <Button className="btn-primary-glass px-8 py-3 text-lg font-semibold hover-glow" asChild>
-              <a href="https://airtable.com/appccpfHK9zFWYR6g/shrAGo58nsstawTjQ" target="_blank" rel="noopener noreferrer">
+            <Button
+              className="btn-primary-glass px-8 py-3 text-lg font-semibold hover-glow"
+              asChild
+            >
+              <a
+                href="https://airtable.com/appccpfHK9zFWYR6g/shrAGo58nsstawTjQ"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 Apply for Membership
               </a>
             </Button>
@@ -201,14 +241,16 @@ const RegenHubLanding = () => {
       <section className="relative px-6 py-16">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-forest">Our Community</h2>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-forest">
+              Our Community
+            </h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
               Builders, creators, and changemakers shaping regenerative futures
             </p>
           </div>
-          
+
           <div className="glass-panel p-8 md:p-12">
-            <iframe 
+            <iframe
               src="https://airtable.com/embed/appccpfHK9zFWYR6g/shr3xghNk7BTrKhRR?backgroundColor=transparent&viewControls=on"
               className="w-full min-h-[600px] rounded-lg"
               frameBorder="0"
@@ -222,12 +264,14 @@ const RegenHubLanding = () => {
         <div className="max-w-5xl mx-auto">
           <div className="glass-panel-subtle p-8 md:p-12">
             <div className="text-center mb-12">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4 text-forest">Upcoming Events</h2>
+              <h2 className="text-3xl md:text-4xl font-bold mb-4 text-forest">
+                Upcoming Events
+              </h2>
               <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
                 Join us for community building, learning, and collaboration
               </p>
             </div>
-            
+
             <div className="glass-panel-subtle rounded-lg overflow-hidden flex justify-center">
               <iframe
                 src="https://luma.com/embed/calendar/cal-ZCWMKx1NMCXGd7v/events"
@@ -249,17 +293,24 @@ const RegenHubLanding = () => {
         <div className="max-w-4xl mx-auto">
           <Card className="glass-panel-strong hover-lift">
             <CardContent className="p-8 md:p-12 text-center">
-              <h2 className="text-3xl md:text-4xl font-bold mb-8 text-forest">Find Us in Boulder</h2>
-              
+              <h2 className="text-3xl md:text-4xl font-bold mb-8 text-forest">
+                Find Us in Boulder
+              </h2>
+
               <div className="glass-panel-subtle p-6 mb-8 bg-accent/5">
-                <h3 className="text-lg font-semibold mb-3 text-foreground">Important Note</h3>
+                <h3 className="text-lg font-semibold mb-3 text-foreground">
+                  Important Note
+                </h3>
                 <p className="text-muted-foreground mb-2">
-                  RegenHub Boulder is an <strong>invite-only space</strong>. You're welcome to attend our public events 
-                  and inquire about membership and day passes in our community channels.
+                  RegenHub Boulder is an <strong>invite-only space</strong>.
+                  You're welcome to attend our public events and inquire about
+                  membership and day passes in our community channels.
                 </p>
-                <p className="text-sm text-muted-foreground">Please apply first before purchasing a membership.</p>
+                <p className="text-sm text-muted-foreground">
+                  Please apply first before purchasing a membership.
+                </p>
               </div>
-              
+
               <div className="grid md:grid-cols-2 gap-8 mb-8">
                 <div className="space-y-4">
                   <div className="flex items-center justify-center gap-2">
@@ -271,7 +322,7 @@ const RegenHubLanding = () => {
                     <p>Boulder, CO 80302</p>
                   </div>
                 </div>
-                
+
                 <div className="space-y-4">
                   <div className="flex items-center justify-center gap-2">
                     <Calendar className="w-5 h-5 text-primary" />
@@ -283,36 +334,56 @@ const RegenHubLanding = () => {
                   </div>
                 </div>
               </div>
-              
+
               <div className="grid md:grid-cols-2 gap-6 mb-8">
                 <div className="flex items-center justify-center gap-2">
                   <Mail className="w-5 h-5 text-primary" />
-                  <a href="mailto:boulder.regenhub@gmail.com" className="text-lg font-medium hover:text-primary transition-colors">
+                  <a
+                    href="mailto:boulder.regenhub@gmail.com"
+                    className="text-lg font-medium hover:text-primary transition-colors"
+                  >
                     boulder.regenhub@gmail.com
                   </a>
                 </div>
-                
+
                 <div className="flex items-center justify-center gap-2">
                   <span className="text-2xl">📱</span>
-                  <a href="https://t.me/+Mg1PLuT9pX9mMGVh" target="_blank" rel="noopener noreferrer" className="text-lg font-medium hover:text-primary transition-colors">
+                  <a
+                    href="https://t.me/+Mg1PLuT9pX9mMGVh"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-lg font-medium hover:text-primary transition-colors"
+                  >
                     Community Telegram
                   </a>
                 </div>
               </div>
-              
+
               <div className="glass-panel-subtle p-4 mb-6 text-sm text-muted-foreground">
-                <p><strong>WiFi Network:</strong> regenhub.xyz_guest</p>
-                <p><strong>WiFi Password:</strong> itsallcoordination</p>
+                <p>
+                  <strong>WiFi Network:</strong> regenhub.xyz_guest
+                </p>
+                <p>
+                  <strong>WiFi Password:</strong> itsallcoordination
+                </p>
               </div>
-              
+
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Button className="btn-primary-glass px-6 py-2" asChild>
-                  <a href="https://airtable.com/appccpfHK9zFWYR6g/shrAGo58nsstawTjQ" target="_blank" rel="noopener noreferrer">
+                  <a
+                    href="https://airtable.com/appccpfHK9zFWYR6g/shrAGo58nsstawTjQ"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                     Apply for Membership
                   </a>
                 </Button>
                 <Button className="btn-glass px-6 py-2" asChild>
-                  <a href="https://luma.com/regenhub" target="_blank" rel="noopener noreferrer">
+                  <a
+                    href="https://luma.com/regenhub"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                     View All Events
                   </a>
                 </Button>
@@ -332,29 +403,35 @@ const RegenHubLanding = () => {
                 RegenHub
               </h3>
             </div>
-            
+
             <p className="text-lg font-medium mb-2 text-foreground">
               Building economic democracy and regenerative livelihoods
             </p>
-            
+
             <div className="text-sm text-muted-foreground space-y-1 mb-6">
               <p>© 2025 RegenHub Limited Cooperative Association</p>
               <p>A Colorado Public Benefit Corporation</p>
             </div>
-            
+
             <div className="flex justify-center gap-4">
               <Button variant="ghost" size="sm" className="btn-glass" asChild>
-                <a href="https://t.me/+Mg1PLuT9pX9mMGVh" target="_blank" rel="noopener noreferrer">
+                <a
+                  href="https://t.me/+Mg1PLuT9pX9mMGVh"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   Telegram
                 </a>
               </Button>
               <Button variant="ghost" size="sm" className="btn-glass" asChild>
-                <a href="mailto:boulder.regenhub@gmail.com">
-                  Email
-                </a>
+                <a href="mailto:boulder.regenhub@gmail.com">Email</a>
               </Button>
-              <Button variant="ghost" size="sm" className="btn-glass">Apply</Button>
-              <Button variant="ghost" size="sm" className="btn-glass">Events</Button>
+              <Button variant="ghost" size="sm" className="btn-glass">
+                Apply
+              </Button>
+              <Button variant="ghost" size="sm" className="btn-glass">
+                Events
+              </Button>
             </div>
           </div>
         </div>
