@@ -43,13 +43,11 @@ const RegenHubLanding = () => {
               Where Builders Shape Tomorrow
             </h2>
             <p className="text-xl md:text-2xl mb-8 text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-              A regenerative third space that transforms coordinated action into collective impact
+              A regenerative third space for aligned builders
             </p>
             <div className="prose prose-lg max-w-3xl mx-auto mb-8 text-foreground/80">
               <p>
-                RegenHub enables aligned technologists, creators, and changemakers to build sustainable livelihoods 
-                while advancing projects that benefit our broader community and environment. We're demonstrating 
-                viable alternatives to traditional capitalism through cooperative ownership and shared success.
+                Cooperative workspace. Economic democracy. Regenerative futures.
               </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
@@ -70,7 +68,7 @@ const RegenHubLanding = () => {
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4 text-forest">What We Offer</h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Building the infrastructure for regenerative community and economic democracy
+              Community. Democracy. Regeneration.
             </p>
           </div>
           
@@ -82,8 +80,7 @@ const RegenHubLanding = () => {
                 </div>
                 <h3 className="text-xl font-semibold mb-3 text-foreground">Community Infrastructure</h3>
                 <p className="text-muted-foreground leading-relaxed">
-                  Maintain affordable co-working and event space accessible to regenerative movement participants 
-                  including builders, changemakers, and creatives.
+                  Affordable co-working and event space for regenerative builders and changemakers.
                 </p>
               </CardContent>
             </Card>
@@ -95,8 +92,7 @@ const RegenHubLanding = () => {
                 </div>
                 <h3 className="text-xl font-semibold mb-3 text-foreground">Economic Democracy</h3>
                 <p className="text-muted-foreground leading-relaxed">
-                  Extend meaningful ownership and governance participation to community members through 
-                  profit-sharing and equity distribution.
+                  Meaningful ownership and governance through profit-sharing and equity.
                 </p>
               </CardContent>
             </Card>
@@ -108,8 +104,7 @@ const RegenHubLanding = () => {
                 </div>
                 <h3 className="text-xl font-semibold mb-3 text-foreground">Regenerative Technology Incubation</h3>
                 <p className="text-muted-foreground leading-relaxed">
-                  Provide mentorship and infrastructure support for projects addressing 
-                  climate, social equity, and economic sustainability challenges.
+                  Mentorship and support for climate, social equity, and sustainability projects.
                 </p>
               </CardContent>
             </Card>
@@ -121,8 +116,7 @@ const RegenHubLanding = () => {
                 </div>
                 <h3 className="text-xl font-semibold mb-3 text-foreground">Collective Intelligence</h3>
                 <p className="text-muted-foreground leading-relaxed">
-                  Foster 'scenius' - collective intelligence through sustained collaboration of 
-                  culturally aligned peers.
+                  Building 'scenius' - collective intelligence through sustained collaboration.
                 </p>
               </CardContent>
             </Card>
@@ -136,8 +130,7 @@ const RegenHubLanding = () => {
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4 text-forest">Become Part of the Cooperative</h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              RegenHub operates through tiered, participation-based membership including full-time cooperative members, 
-              part-time contributors, and community participants, each with appropriate governance rights and economic participation.
+              Tiered membership with participation-based governance and economic sharing.
             </p>
           </div>
           
@@ -146,7 +139,7 @@ const RegenHubLanding = () => {
               <CardContent className="p-6">
                 <h3 className="text-xl font-semibold mb-3 text-foreground">Community Participants</h3>
                 <p className="text-muted-foreground mb-4">
-                  Access to events and resources for mission-aligned individuals exploring regenerative pathways.
+                  Access events and resources for mission-aligned individuals.
                 </p>
                 <ul className="text-sm text-muted-foreground space-y-1">
                   <li>• Event access</li>
@@ -160,7 +153,7 @@ const RegenHubLanding = () => {
               <CardContent className="p-6">
                 <h3 className="text-xl font-semibold mb-3 text-foreground">Part-time Contributors</h3>
                 <p className="text-muted-foreground mb-4">
-                  Co-working access and governance participation for active community builders.
+                  Co-working access and governance for active community builders.
                 </p>
                 <ul className="text-sm text-muted-foreground space-y-1">
                   <li>• Co-working access</li>
@@ -174,7 +167,7 @@ const RegenHubLanding = () => {
               <CardContent className="p-6">
                 <h3 className="text-xl font-semibold mb-3 text-foreground">Full-time Cooperative Members</h3>
                 <p className="text-muted-foreground mb-4">
-                  Full ownership and governance rights for committed regenerative entrepreneurs.
+                  Full ownership and governance for committed regenerative entrepreneurs.
                 </p>
                 <ul className="text-sm text-muted-foreground space-y-1">
                   <li>• Full ownership rights</li>
@@ -201,7 +194,7 @@ const RegenHubLanding = () => {
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4 text-forest">Our Community</h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Meet the builders, creators, and changemakers shaping regenerative futures
+              Builders, creators, and changemakers shaping regenerative futures
             </p>
           </div>
           
