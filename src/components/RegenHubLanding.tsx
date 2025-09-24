@@ -39,7 +39,7 @@ const RegenHubLanding = () => {
       <section className="relative px-6 py-16 md:py-24">
         <div className="max-w-4xl mx-auto text-center">
           <div className="glass-panel-strong p-8 md:p-12 hover-lift animate-fade-in-up">
-            <h2 className="text-4xl md:text-6xl font-bold mb-6 text-glass leading-tight">
+            <h2 className="text-4xl md:text-6xl font-bold mb-6 text-foreground leading-tight">
               Where Builders Shape Tomorrow
             </h2>
             <p className="text-xl md:text-2xl mb-8 text-muted-foreground max-w-2xl mx-auto leading-relaxed">
@@ -108,7 +108,7 @@ const RegenHubLanding = () => {
                 </div>
                 <h3 className="text-xl font-semibold mb-3 text-foreground">Regenerative Technology Incubation</h3>
                 <p className="text-muted-foreground leading-relaxed">
-                  Provide early-stage funding, mentorship, and infrastructure support for projects addressing 
+                  Provide mentorship and infrastructure support for projects addressing 
                   climate, social equity, and economic sustainability challenges.
                 </p>
               </CardContent>
@@ -160,11 +160,11 @@ const RegenHubLanding = () => {
               <CardContent className="p-6">
                 <h3 className="text-xl font-semibold mb-3 text-foreground">Part-time Contributors</h3>
                 <p className="text-muted-foreground mb-4">
-                  Co-working access and profit-sharing eligible for active community builders.
+                  Co-working access and governance participation for active community builders.
                 </p>
                 <ul className="text-sm text-muted-foreground space-y-1">
                   <li>• Co-working access</li>
-                  <li>• Profit-sharing eligible</li>
+                  <li>• Governance participation</li>
                   <li>• Project collaboration</li>
                 </ul>
               </CardContent>
@@ -186,38 +186,52 @@ const RegenHubLanding = () => {
           </div>
           
           <div className="text-center">
-            <Button className="btn-primary-glass px-8 py-3 text-lg font-semibold hover-glow">
-              Apply for Membership
+            <Button className="btn-primary-glass px-8 py-3 text-lg font-semibold hover-glow" asChild>
+              <a href="https://airtable.com/appccpfHK9zFWYR6g/shrAGo58nsstawTjQ" target="_blank" rel="noopener noreferrer">
+                Apply for Membership
+              </a>
             </Button>
           </div>
         </div>
       </section>
 
-      {/* Programs Section */}
+      {/* Members Section */}
+      <section className="relative px-6 py-16">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-forest">Our Community</h2>
+            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+              Meet the builders, creators, and changemakers shaping regenerative futures
+            </p>
+          </div>
+          
+          <div className="glass-panel p-8 md:p-12">
+            <iframe 
+              src="https://airtable.com/embed/appccpfHK9zFWYR6g/shr3xghNk7BTrKhRR?backgroundColor=transparent&viewControls=on"
+              className="w-full min-h-[600px] rounded-lg"
+              frameBorder="0"
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Events Section */}
       <section className="relative px-6 py-16">
         <div className="max-w-5xl mx-auto">
           <div className="glass-panel-subtle p-8 md:p-12">
             <div className="text-center mb-12">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4 text-forest">Living Programs</h2>
+              <h2 className="text-3xl md:text-4xl font-bold mb-4 text-forest">Upcoming Events</h2>
               <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-                Curate programming that builds social cohesion and cross-pollination of ideas among mission-aligned individuals
+                Join us for community building, learning, and collaboration
               </p>
             </div>
             
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[
-                'Happy Hour',
-                'Vibe Coding Night', 
-                'Studio Nights',
-                'CoHere Sessions',
-                'Boulder Blockchain Meetups',
-                'Technical Education Workshops'
-              ].map((program, index) => (
-                <div key={index} className="glass-panel-subtle p-4 hover-lift text-center">
-                  <Calendar className="w-6 h-6 mx-auto mb-2 text-primary" />
-                  <p className="font-medium text-foreground">{program}</p>
-                </div>
-              ))}
+            <div className="glass-panel-subtle rounded-lg overflow-hidden">
+              <iframe 
+                src="https://lu.ma/embed/calendar/cal-K6LgYhqtVaDKD0D/events"
+                className="w-full min-h-[600px]"
+                frameBorder="0"
+              />
             </div>
           </div>
         </div>
@@ -285,11 +299,15 @@ const RegenHubLanding = () => {
               </div>
               
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Button className="btn-primary-glass px-6 py-2">
-                  Apply for Membership
+                <Button className="btn-primary-glass px-6 py-2" asChild>
+                  <a href="https://airtable.com/appccpfHK9zFWYR6g/shrAGo58nsstawTjQ" target="_blank" rel="noopener noreferrer">
+                    Apply for Membership
+                  </a>
                 </Button>
-                <Button className="btn-glass px-6 py-2">
-                  Submit an Event
+                <Button className="btn-glass px-6 py-2" asChild>
+                  <a href="https://luma.com/regenhub" target="_blank" rel="noopener noreferrer">
+                    View All Events
+                  </a>
                 </Button>
               </div>
             </CardContent>
