@@ -21,7 +21,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
@@ -34,7 +34,7 @@ jobs:
       - name: Build with preview base path
         run: pnpm run build
         env:
-          VITE_BASE_URL: /pr-${{ github.event.pull_request.number }}/
+          VITE_BASE_URL: /regenhub.xyz/pr-${{ github.event.pull_request.number }}/
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
@@ -49,7 +49,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const prNumber = context.payload.pull_request.number;
-            const url = `https://regenhub.xyz/pr-${prNumber}/`;
+            const url = `https://regenhub-boulder.github.io/regenhub.xyz/pr-${prNumber}/`;
 
             const comment = `🚀 **Preview Deployed!**
 
