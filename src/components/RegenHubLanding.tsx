@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Building2, HandHeart, Lightbulb, Sprout, MapPin, Calendar, Mail } from 'lucide-react';
 import forestBackground from '@/assets/forest-background.jpg';
 import particlesOverlay from '@/assets/particles-overlay.png';
+import forestMascot from '@/assets/forest-mascot.png';
 
 const RegenHubLanding = () => {
   return (
@@ -37,7 +38,15 @@ const RegenHubLanding = () => {
 
       {/* Hero Section */}
       <section className="relative px-6 py-16 md:py-24">
-        <div className="max-w-4xl mx-auto text-center">
+        <div className="max-w-4xl mx-auto text-center relative">
+          {/* Forest Mascot */}
+          <div className="absolute -right-8 top-8 hidden lg:block animate-fade-in z-10">
+            <img 
+              src={forestMascot} 
+              alt="RegenHub Forest Mascot" 
+              className="w-32 h-32 object-contain opacity-80 hover:opacity-100 transition-opacity duration-300 animate-sway"
+            />
+          </div>
           <div className="glass-panel-strong p-8 md:p-12 hover-lift animate-fade-in-up">
             <h2 className="text-4xl md:text-6xl font-bold mb-6 text-foreground leading-tight">
               Where Builders Shape Tomorrow
