@@ -7,6 +7,7 @@ permissions:
   contents: read
   pull-requests: write
   actions: write
+
 jobs:
   build-preview:
     runs-on: ubuntu-latest
@@ -24,51 +25,10 @@ jobs:
       - run: pnpm install
 
       # Build with PR-specific base URL
-
-      # Build with PR-specific base URL
       - name: Build PR preview
         run: pnpm build
         env:
           VITE_BASE_URL: /regenhub.xyz/pr-${{ github.event.pull_request.number }}/
-
-      # Create PR-specific 404.html with correct pathSegmentsToKeep
-      - name: Create PR-specific 404.html
-        run: |
-          cat > dist/404.html << 'EOF'
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <meta charset="utf-8">
-              <title>RegenHub PR Preview</title>
-              <script type="text/javascript">
-                // Single Page Apps for GitHub Pages - Modified for PR previews
-                // This 404.html file must be at least 512 bytes for IE compatibility
-
-                // For PR previews at /regenhub.xyz/pr-{number}/, we need 2 segments
-                var pathSegmentsToKeep = 2;
-
-                var l = window.location;
-                l.replace(
-                  l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
-                  l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/?/' +
-                  l.pathname.slice(1).split('/').slice(pathSegmentsToKeep).join('/').replace(/&/g, '~and~') +
-                  (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
-                  l.hash
-                );
-              </script>
-            </head>
-            <body>
-              <!-- This page is a fallback for client-side routing in the PR preview -->
-              <!-- Content must be at least 512 bytes for Internet Explorer compatibility -->
-              <!-- Adding padding comments to ensure minimum file size requirement is met -->
-              <!-- ================================================================== -->
-              <!-- ================================================================== -->
-              <!-- ================================================================== -->
-            </body>
-          </html>
-          EOF
-
-      # Deploy to gh-pages branch in PR-specific directory
 
       # Create PR-specific 404.html
       - name: Create PR-specific 404.html
@@ -111,20 +71,15 @@ jobs:
           path: dist/
           retention-days: 7
 
-          # Post comment with preview link
-          keep_files: true # Don't delete other PR previews
-
       # Post comment with preview link
       - uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: preview
           message: |
-            ####🚀 Preview Ready!
+            ## 🚀 Preview Ready!
 
             Your PR preview will be available at:
             👉 **https://regenhub-boulder.github.io/regenhub.xyz/pr-${{ github.event.pull_request.number }}/**
-
-            This preview will be automatically updated with each push to this PR.**
 
             _Note: It may take a few minutes for the preview to deploy after this build completes._
 
