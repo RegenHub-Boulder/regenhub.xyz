@@ -6,7 +6,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
-actions
+  actions: write
 jobs:
   build-preview:
     runs-on: ubuntu-latest
@@ -111,7 +111,7 @@ jobs:
           path: dist/
           retention-days: 7
 
-      # Post comment with preview link
+          # Post comment with preview link
           keep_files: true # Don't delete other PR previews
 
       # Post comment with preview link
