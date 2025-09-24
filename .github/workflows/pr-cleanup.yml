@@ -5,22 +5,44 @@ on:
     types: [closed]
 
 permissions:
-  contents: write
+  actions: write
 
 jobs:
   cleanup:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Delete PR preview artifact
+        uses: actions/github-script@v7
         with:
-          ref: gh-pages
+          script: |
+            // Find and delete the PR preview artifact
+            const artifactName = `pr-preview-${{ github.event.pull_request.number }}`;
 
-      - name: Remove PR preview directory
-        run: |
-          if [ -d "pr-${{ github.event.pull_request.number }}" ]; then
-            git rm -rf pr-${{ github.event.pull_request.number }}
-            git config --local user.email "action@github.com"
-            git config --local user.name "GitHub Action"
-            git commit -m "Remove preview for PR #${{ github.event.pull_request.number }}"
-            git push
-          fi
+            const artifacts = await github.rest.actions.listArtifactsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100
+            });
+
+            for (const artifact of artifacts.data.artifacts) {
+              if (artifact.name === artifactName) {
+                console.log(`Deleting artifact: ${artifact.name}`);
+                await github.rest.actions.deleteArtifact({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  artifact_id: artifact.id
+                });
+              }
+            }
+
+      - name: Trigger main deployment to remove preview
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Trigger the deploy workflow to rebuild without this PR
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'deploy.yml',
+              ref: 'main'
+            });

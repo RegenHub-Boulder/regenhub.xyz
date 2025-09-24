@@ -4,13 +4,15 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-
-# Allow one concurrent deployment
+  workflow_run:
+    workflows: ["Store PR Preview"]
+    types: [completed]
 
 permissions:
   contents: read
   pages: write
   id-token: write
+  actions: read
 
 concurrency:
   group: "pages"
@@ -36,8 +38,46 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build
+      - name: Build main site
         run: pnpm run build
+
+      - name: Download all PR preview artifacts
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            // Get all artifacts that start with 'pr-preview-'
+            const artifacts = await github.rest.actions.listArtifactsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100
+            });
+
+            for (const artifact of artifacts.data.artifacts) {
+              if (artifact.name.startsWith('pr-preview-')) {
+                console.log(`Downloading ${artifact.name}...`);
+
+                const download = await github.rest.actions.downloadArtifact({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  artifact_id: artifact.id,
+                  archive_format: 'zip',
+                });
+
+                const prNumber = artifact.name.replace('pr-preview-', '');
+                const dir = `dist/pr-${prNumber}`;
+
+                // Create directory and extract
+                fs.mkdirSync(dir, { recursive: true });
+                fs.writeFileSync(`${artifact.name}.zip`, Buffer.from(download.data));
+
+                // Unzip to the PR directory
+                await exec.exec('unzip', ['-o', `${artifact.name}.zip`, '-d', dir]);
+                fs.unlinkSync(`${artifact.name}.zip`);
+              }
+            }
 
       - name: Setup Pages
         uses: actions/configure-pages@v4

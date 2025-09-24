@@ -1,14 +1,14 @@
-name: Deploy PR Preview
+name: Store PR Preview
 
 on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
   pull-requests: write
-
+actions
 jobs:
-  deploy:
+  build-preview:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,7 +24,10 @@ jobs:
       - run: pnpm install
 
       # Build with PR-specific base URL
-      - run: pnpm build
+
+      # Build with PR-specific base URL
+      - name: Build PR preview
+        run: pnpm build
         env:
           VITE_BASE_URL: /regenhub.xyz/pr-${{ github.event.pull_request.number }}/
 
@@ -66,11 +69,49 @@ jobs:
           EOF
 
       # Deploy to gh-pages branch in PR-specific directory
-      - uses: peaceiris/actions-gh-pages@v3
+
+      # Create PR-specific 404.html
+      - name: Create PR-specific 404.html
+        run: |
+          cat > dist/404.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="utf-8">
+              <title>RegenHub PR Preview</title>
+              <script type="text/javascript">
+                // For PR previews at /regenhub.xyz/pr-{number}/
+                var pathSegmentsToKeep = 2;
+
+                var l = window.location;
+                l.replace(
+                  l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+                  l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/?/' +
+                  l.pathname.slice(1).split('/').slice(pathSegmentsToKeep).join('/').replace(/&/g, '~and~') +
+                  (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+                  l.hash
+                );
+              </script>
+            </head>
+            <body>
+              <!-- PR Preview 404 handler -->
+              <!-- Padding for IE compatibility (must be >512 bytes) -->
+              <!-- ================================================================== -->
+              <!-- ================================================================== -->
+              <!-- ================================================================== -->
+            </body>
+          </html>
+          EOF
+
+      # Upload as artifact (will be picked up by main deploy workflow)
+      - name: Upload PR preview artifact
+        uses: actions/upload-artifact@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
-          destination_dir: pr-${{ github.event.pull_request.number }}
+          name: pr-preview-${{ github.event.pull_request.number }}
+          path: dist/
+          retention-days: 7
+
+      # Post comment with preview link
           keep_files: true # Don't delete other PR previews
 
       # Post comment with preview link
@@ -78,9 +119,13 @@ jobs:
         with:
           header: preview
           message: |
-            ## 🚀 Preview Deployed!
+            ####🚀 Preview Ready!
 
-            Your PR preview is available at:
+            Your PR preview will be available at:
             👉 **https://regenhub-boulder.github.io/regenhub.xyz/pr-${{ github.event.pull_request.number }}/**
 
-            This preview will be automatically updated with each push to this PR.
+            This preview will be automatically updated with each push to this PR.**
+
+            _Note: It may take a few minutes for the preview to deploy after this build completes._
+
+            The preview will be automatically updated with each push to this PR.
