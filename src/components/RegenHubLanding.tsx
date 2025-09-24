@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -46,13 +46,17 @@ const RegenHubLanding = () => {
   const [mascotPosition, setMascotPosition] = useState({
     x:
       typeof window !== "undefined"
-        ? window.innerWidth - MASCOT_CONSTANTS.INITIAL_OFFSET_X
+        ? Math.random() * (window.innerWidth - MASCOT_CONSTANTS.WIDTH)
         : 1000,
-    y: MASCOT_CONSTANTS.INITIAL_Y,
+    y:
+      typeof window !== "undefined"
+        ? Math.random() * (window.innerHeight - MASCOT_CONSTANTS.HEIGHT)
+        : MASCOT_CONSTANTS.INITIAL_Y,
     rotate: 0,
     scale: 1,
   });
   const [mascotClicks, setMascotClicks] = useState(0);
+  const [scrollOpacity, setScrollOpacity] = useState(1);
 
   const handleMascotClick = () => {
     // Move to random position on screen
@@ -72,6 +76,59 @@ const RegenHubLanding = () => {
     setMascotPosition({ x: newX, y: newY, rotate: newRotate, scale: newScale });
     setMascotClicks((prev) => prev + 1);
   };
+
+  // Auto-move mascot periodically
+  useEffect(() => {
+    const moveInterval = setInterval(() => {
+      if (Math.random() > 0.3) {
+        // 70% chance to move
+        const newX =
+          Math.random() * (window.innerWidth - MASCOT_CONSTANTS.WIDTH);
+        const newY =
+          Math.random() * (window.innerHeight - MASCOT_CONSTANTS.HEIGHT);
+        // Spin but land upright for readability
+        const spins = Math.floor(Math.random() * 3 + 2) * 360;
+        const finalAngle = (Math.random() - 0.5) * 60;
+        const newRotate = spins + finalAngle;
+        const newScale =
+          MASCOT_CONSTANTS.MIN_SCALE +
+          Math.random() * MASCOT_CONSTANTS.SCALE_RANGE;
+
+        setMascotPosition({
+          x: newX,
+          y: newY,
+          rotate: newRotate,
+          scale: newScale,
+        });
+      }
+    }, 8000); // Move every 8 seconds
+
+    return () => clearInterval(moveInterval);
+  }, []);
+
+  // Handle scroll fade
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollY = window.scrollY;
+      const fadeStart = 50;
+      const fadeEnd = 300;
+
+      if (scrollY <= fadeStart) {
+        setScrollOpacity(1);
+      } else if (scrollY >= fadeEnd) {
+        setScrollOpacity(0);
+      } else {
+        const opacity = 1 - (scrollY - fadeStart) / (fadeEnd - fadeStart);
+        setScrollOpacity(opacity);
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    handleScroll(); // Check initial scroll position
+
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
   return (
     <div className="min-h-screen relative overflow-x-hidden">
       {/* Forest Background Layers */}
@@ -508,6 +565,8 @@ const RegenHubLanding = () => {
           top: `${mascotPosition.y}px`,
           transform: `rotate(${mascotPosition.rotate}deg) scale(${mascotPosition.scale})`,
           transition: "all 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55)",
+          opacity: scrollOpacity,
+          pointerEvents: scrollOpacity === 0 ? "none" : "auto",
         }}
         onClick={handleMascotClick}
         title="Click me!"
