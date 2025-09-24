@@ -423,11 +423,11 @@ const RegenHubLanding = () => {
                 <div className="space-y-4">
                   <div className="flex items-center justify-center gap-2">
                     <MapPin className="w-5 h-5 text-primary" />
-                    <span className="text-lg font-medium">Address</span>
+                    <span className="text-lg font-medium">Location</span>
                   </div>
                   <div className="text-muted-foreground">
-                    <p>1515 Walnut St, Ste 200</p>
-                    <p>Boulder, CO 80302</p>
+                    <p>Downtown Boulder</p>
+                    <p>Colorado</p>
                   </div>
                 </div>
 
