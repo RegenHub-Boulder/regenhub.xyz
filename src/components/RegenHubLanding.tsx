@@ -15,37 +15,59 @@ import particlesOverlay from "@/assets/particles-overlay.png";
 import forestMascot from "@/assets/forest-mascot.png";
 import CommunityGallery from "./CommunityGallery";
 
+// Mascot animation constants
+const MASCOT_CONSTANTS = {
+  INITIAL_OFFSET_X: 250,
+  INITIAL_Y: 100,
+  WIDTH: 200,
+  HEIGHT: 400,
+  MIN_SPINS: 1,
+  MAX_SPINS: 3,
+  ROTATION_DEGREES: 360,
+  MAX_FINAL_ANGLE: 30,
+  MIN_SCALE: 0.8,
+  SCALE_RANGE: 0.6,
+};
+
+const MASCOT_SAYINGS = [
+  "Scenius emerges! 🌿",
+  "Collective genius activated! ✨",
+  "1 + 1 = 11 here! 🚀",
+  "We build the future together! 💚",
+  "Ideas compound daily! 🧠",
+  "Innovation through cooperation! 🤝",
+  "Regenerating community wealth! 🌱",
+  "Aligned action creates magic! ⚡",
+  "Your potential amplified! 🎯",
+  "Together we go far! 🌍",
+];
+
 const RegenHubLanding = () => {
   const [mascotPosition, setMascotPosition] = useState({
-    x: typeof window !== "undefined" ? window.innerWidth - 250 : 1000,
-    y: 100,
+    x:
+      typeof window !== "undefined"
+        ? window.innerWidth - MASCOT_CONSTANTS.INITIAL_OFFSET_X
+        : 1000,
+    y: MASCOT_CONSTANTS.INITIAL_Y,
     rotate: 0,
     scale: 1,
   });
   const [mascotClicks, setMascotClicks] = useState(0);
 
-  const mascotSayings = [
-    "Scenius emerges! 🌿",
-    "Collective genius activated! ✨",
-    "1 + 1 = 11 here! 🚀",
-    "We build the future together! 💚",
-    "Ideas compound daily! 🧠",
-    "Innovation through cooperation! 🤝",
-    "Regenerating community wealth! 🌱",
-    "Aligned action creates magic! ⚡",
-    "Your potential amplified! 🎯",
-    "Together we go far! 🌍",
-  ];
-
   const handleMascotClick = () => {
     // Move to random position on screen
-    const newX = Math.random() * (window.innerWidth - 200);
-    const newY = Math.random() * (window.innerHeight - 400);
+    const newX = Math.random() * (window.innerWidth - MASCOT_CONSTANTS.WIDTH);
+    const newY = Math.random() * (window.innerHeight - MASCOT_CONSTANTS.HEIGHT);
     // Spin a lot but land within 30 degrees of upright
-    const spins = Math.floor(Math.random() * 3 + 1) * 360; // 1-3 full rotations
-    const finalAngle = (Math.random() - 0.5) * 60; // -30 to 30 degrees
+    const spins =
+      Math.floor(
+        Math.random() * MASCOT_CONSTANTS.MAX_SPINS + MASCOT_CONSTANTS.MIN_SPINS,
+      ) * MASCOT_CONSTANTS.ROTATION_DEGREES;
+    const finalAngle =
+      (Math.random() - 0.5) * (MASCOT_CONSTANTS.MAX_FINAL_ANGLE * 2);
     const newRotate = spins + finalAngle;
-    const newScale = 0.8 + Math.random() * 0.6; // Scale between 0.8 and 1.4
+    const newScale =
+      MASCOT_CONSTANTS.MIN_SCALE + Math.random() * MASCOT_CONSTANTS.SCALE_RANGE;
 
     setMascotPosition({ x: newX, y: newY, rotate: newRotate, scale: newScale });
     setMascotClicks((prev) => prev + 1);
@@ -497,7 +519,7 @@ const RegenHubLanding = () => {
         />
         {mascotClicks > 0 && (
           <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white/90 px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap shadow-lg">
-            {mascotSayings[mascotClicks % mascotSayings.length]}
+            {MASCOT_SAYINGS[mascotClicks % MASCOT_SAYINGS.length]}
           </div>
         )}
       </div>

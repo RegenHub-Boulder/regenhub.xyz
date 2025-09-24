@@ -5,6 +5,7 @@ import {
   CarouselItem,
   CarouselNext,
   CarouselPrevious,
+  type CarouselApi,
 } from "@/components/ui/carousel";
 import { Card } from "@/components/ui/card";
 import Autoplay from "embla-carousel-autoplay";
@@ -20,7 +21,7 @@ const photoModules = import.meta.glob(
 
 const CommunityGallery = () => {
   const [photos, setPhotos] = useState<string[]>([]);
-  const [api, setApi] = useState<any>();
+  const [api, setApi] = useState<CarouselApi>();
   const [current, setCurrent] = useState(0);
   const plugin = React.useRef(
     Autoplay({ delay: 4000, stopOnInteraction: true }),
@@ -81,16 +82,16 @@ const CommunityGallery = () => {
           onMouseLeave={plugin.current.reset}
         >
           <CarouselContent className="-ml-2 md:-ml-4">
-            {photos.map((photo, index) => (
+            {photos.map((photo) => (
               <CarouselItem
-                key={index}
+                key={photo}
                 className="pl-2 md:pl-4 basis-full md:basis-1/2 lg:basis-1/3"
               >
                 <Card className="glass-panel hover-lift overflow-hidden">
                   <div className="aspect-square relative">
                     <img
                       src={photo}
-                      alt={`Community moment ${index + 1}`}
+                      alt="Community moment"
                       className="absolute inset-0 w-full h-full object-cover"
                       loading="lazy"
                     />
@@ -105,9 +106,9 @@ const CommunityGallery = () => {
 
         {/* Auto-play indicator */}
         <div className="flex justify-center mt-6 gap-2">
-          {photos.map((_, index) => (
+          {photos.map((photo, index) => (
             <button
-              key={index}
+              key={photo}
               className={`transition-all ${
                 index === current
                   ? "w-8 h-2 rounded-full bg-primary"
