@@ -41,7 +41,10 @@ const RegenHubLanding = () => {
     // Move to random position on screen
     const newX = Math.random() * (window.innerWidth - 200);
     const newY = Math.random() * (window.innerHeight - 400);
-    const newRotate = (Math.random() - 0.5) * 720; // Full spins!
+    // Spin a lot but land within 30 degrees of upright
+    const spins = Math.floor(Math.random() * 3 + 1) * 360; // 1-3 full rotations
+    const finalAngle = (Math.random() - 0.5) * 60; // -30 to 30 degrees
+    const newRotate = spins + finalAngle;
     const newScale = 0.8 + Math.random() * 0.6; // Scale between 0.8 and 1.4
 
     setMascotPosition({ x: newX, y: newY, rotate: newRotate, scale: newScale });
