@@ -2,31 +2,34 @@ name: Deploy PR Preview
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
   pull-requests: write
+  pages: write
 
 jobs:
-  deploy-preview:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
       - uses: pnpm/action-setup@v2
         with:
           version: 8
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
       - run: pnpm install
-      - run: pnpm run build
+      - run: pnpm build
         env:
           VITE_BASE_URL: /regenhub.xyz/pr-${{ github.event.pull_request.number }}/
-      - uses: JamesIves/github-pages-deploy-action@v4
+      - uses: peaceiris/actions-gh-pages@v3
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: gh-pages
-          folder: dist
-          target-folder: pr-${{ github.event.pull_request.number }}
-          clean: false
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          destination_dir: pr-${{ github.event.pull_request.number }}
+      - uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: preview
+          message: |
+            Preview: https://regenhub-boulder.github.io/regenhub.xyz/pr-${{ github.event.pull_request.number }}/
