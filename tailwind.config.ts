@@ -2,7 +2,12 @@ import type { Config } from "tailwindcss";
 
 export default {
   darkMode: ["class"],
-  content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
+  content: [
+    "./pages/**/*.{ts,tsx}",
+    "./components/**/*.{ts,tsx}",
+    "./app/**/*.{ts,tsx}",
+    "./src/**/*.{ts,tsx}",
+  ],
   prefix: "",
   theme: {
     container: {
@@ -67,10 +72,17 @@ export default {
         glass: "var(--radius)",
       },
       fontFamily: {
-        sans: ['Inter', 'SF Pro Display', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
+        sans: [
+          "Gowun Dodum",
+          "SF Pro Display",
+          "-apple-system",
+          "BlinkMacSystemFont",
+          "system-ui",
+          "sans-serif",
+        ],
       },
       backdropBlur: {
-        xs: '2px',
+        xs: "2px",
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -78,7 +90,7 @@ export default {
         "float-particles": "float-particles 60s ease-in-out infinite",
         "gentle-sway": "gentle-sway 4s ease-in-out infinite",
         "fade-in-up": "fade-in-up 0.6s ease-out forwards",
-        "shimmer": "shimmer 2s infinite",
+        shimmer: "shimmer 2s infinite",
       },
       keyframes: {
         "accordion-down": {
@@ -100,26 +112,26 @@ export default {
         "float-particles": {
           "0%, 100%": { transform: "translateY(0px) rotate(0deg)" },
           "33%": { transform: "translateY(-10px) rotate(1deg)" },
-          "66%": { transform: "translateY(5px) rotate(-1deg)" }
+          "66%": { transform: "translateY(5px) rotate(-1deg)" },
         },
         "gentle-sway": {
           "0%, 100%": { transform: "rotate(0deg)" },
-          "50%": { transform: "rotate(2deg)" }
+          "50%": { transform: "rotate(2deg)" },
         },
         "fade-in-up": {
           from: {
             opacity: "0",
-            transform: "translateY(30px)"
+            transform: "translateY(30px)",
           },
           to: {
             opacity: "1",
-            transform: "translateY(0)"
-          }
+            transform: "translateY(0)",
+          },
         },
-        "shimmer": {
+        shimmer: {
           "0%": { transform: "translateX(-100%)" },
-          "100%": { transform: "translateX(100%)" }
-        }
+          "100%": { transform: "translateX(100%)" },
+        },
       },
     },
   },

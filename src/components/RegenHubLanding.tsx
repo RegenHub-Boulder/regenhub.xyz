@@ -18,16 +18,27 @@ const RegenHubLanding = () => {
   return (
     <div className="min-h-screen relative overflow-x-hidden">
       {/* Forest Background Layers */}
-      <div className="forest-bg">
-        <div
-          className="forest-pattern"
-          style={{ backgroundImage: `url(${forestBackground})` }}
-        />
-        <div
-          className="floating-particles"
-          style={{ backgroundImage: `url(${particlesOverlay})` }}
-        />
-      </div>
+      <div
+        className="fixed inset-0 -z-10"
+        style={{
+          background: `url(${forestBackground})`,
+          backgroundSize: "150% 150%",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          opacity: 0.3,
+        }}
+      />
+      <div
+        className="fixed inset-0 -z-10 pointer-events-none"
+        style={{
+          backgroundImage: `url(${particlesOverlay})`,
+          backgroundSize: "100% 100%",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          opacity: 0.1,
+          animation: "float-particles 60s ease-in-out infinite",
+        }}
+      />
 
       {/* Header */}
       <header className="relative z-50 px-6 py-4">
@@ -57,7 +68,7 @@ const RegenHubLanding = () => {
           </div>
           <div className="glass-panel-strong p-8 md:p-12 hover-lift animate-fade-in-up">
             <h2 className="text-4xl md:text-6xl font-bold mb-6 text-foreground leading-tight">
-              Where Builders Shape Tomorrow
+              Regenerative Innovation
             </h2>
             <p className="text-xl md:text-2xl mb-8 text-muted-foreground max-w-2xl mx-auto leading-relaxed">
               A regenerative third space for aligned builders
@@ -264,17 +275,18 @@ const RegenHubLanding = () => {
               </p>
             </div>
 
-            <div className="glass-panel-subtle rounded-lg overflow-hidden flex justify-center">
-              <iframe
-                src="https://luma.com/embed/calendar/cal-ZCWMKx1NMCXGd7v/events"
-                width="600"
-                height="450"
-                frameBorder="0"
-                style={{ border: "1px solid #bfcbda88", borderRadius: "4px" }}
-                allowFullScreen
-                aria-hidden="false"
-                tabIndex={0}
-              />
+            <div className="glass-panel-subtle rounded-lg overflow-hidden">
+              <div className="relative w-full" style={{ paddingBottom: "75%" }}>
+                <iframe
+                  src="https://luma.com/embed/calendar/cal-ZCWMKx1NMCXGd7v/events?lt=light"
+                  className="absolute top-0 left-0 w-full h-full"
+                  frameBorder="0"
+                  style={{ border: "1px solid #bfcbda88", borderRadius: "4px" }}
+                  allowFullScreen
+                  aria-hidden="false"
+                  tabIndex={0}
+                />
+              </div>
             </div>
           </div>
         </div>
