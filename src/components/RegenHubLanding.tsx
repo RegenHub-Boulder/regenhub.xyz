@@ -67,14 +67,6 @@ const RegenHubLanding = () => {
                 Cooperative workspace. Economic democracy. Regenerative futures.
               </p>
             </div>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-              <Button className="btn-primary-glass px-8 py-3 text-lg font-semibold hover-glow">
-                Join Our Community
-              </Button>
-              <Button className="btn-glass px-8 py-3 text-lg font-semibold">
-                Learn More
-              </Button>
-            </div>
           </div>
         </div>
       </section>
@@ -426,11 +418,23 @@ const RegenHubLanding = () => {
               <Button variant="ghost" size="sm" className="btn-glass" asChild>
                 <a href="mailto:boulder.regenhub@gmail.com">Email</a>
               </Button>
-              <Button variant="ghost" size="sm" className="btn-glass">
-                Apply
+              <Button variant="ghost" size="sm" className="btn-glass" asChild>
+                <a
+                  href="https://airtable.com/appccpfHK9zFWYR6g/shrAGo58nsstawTjQ"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Apply
+                </a>
               </Button>
-              <Button variant="ghost" size="sm" className="btn-glass">
-                Events
+              <Button variant="ghost" size="sm" className="btn-glass" asChild>
+                <a
+                  href="https://luma.com/regenhub"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Events
+                </a>
               </Button>
             </div>
           </div>
