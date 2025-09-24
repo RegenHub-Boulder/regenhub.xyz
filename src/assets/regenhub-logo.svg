@@ -1,0 +1,24 @@
+<svg width="524" height="285" viewBox="0 0 524 285" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Logo symbol (hands/leaves forming tree pattern) -->
+  <g transform="translate(180, 20)">
+    <!-- Main hand/leaf strokes -->
+    <path d="M40 20 L60 140" stroke="#2d5a3d" stroke-width="12" stroke-linecap="round"/>
+    <path d="M20 30 L35 120" stroke="#2d5a3d" stroke-width="10" stroke-linecap="round"/>
+    <path d="M60 40 L75 130" stroke="#2d5a3d" stroke-width="10" stroke-linecap="round"/>
+    <path d="M80 50 L95 140" stroke="#2d5a3d" stroke-width="8" stroke-linecap="round"/>
+    
+    <!-- Additional connecting elements -->
+    <path d="M100 80 L115 140" stroke="#2d5a3d" stroke-width="8" stroke-linecap="round"/>
+    <path d="M120 90 L135 150" stroke="#2d5a3d" stroke-width="6" stroke-linecap="round"/>
+    
+    <!-- Base elements (horizontal bars) -->
+    <rect x="10" y="120" width="30" height="8" rx="4" fill="#2d5a3d"/>
+    <rect x="15" y="135" width="45" height="8" rx="4" fill="#2d5a3d"/>
+    <rect x="20" y="150" width="60" height="10" rx="5" fill="#2d5a3d"/>
+  </g>
+  
+  <!-- Text: regenhub.xyz -->
+  <text x="262" y="250" font-family="Inter, Arial, sans-serif" font-size="48" font-weight="600" text-anchor="middle" fill="#2d5a3d">
+    regenhub.xyz
+  </text>
+</svg>

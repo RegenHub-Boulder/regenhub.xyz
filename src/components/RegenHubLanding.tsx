@@ -13,6 +13,7 @@ import {
 import forestBackground from "@/assets/forest-background.jpg";
 import particlesOverlay from "@/assets/particles-overlay.png";
 import forestMascot from "@/assets/forest-mascot.png";
+import regenHubLogo from "@/assets/regenhub-logo.svg";
 import CommunityGallery from "./CommunityGallery";
 
 // Mascot animation constants
@@ -158,10 +159,11 @@ const RegenHubLanding = () => {
       <header className="relative z-50 px-6 py-4">
         <nav className="glass-panel-subtle max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="text-2xl animate-sway">🌱</span>
-            <h1 className="text-2xl font-bold text-forest bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-              RegenHub
-            </h1>
+            <img 
+              src={regenHubLogo} 
+              alt="RegenHub Boulder Logo" 
+              className="h-8 w-auto animate-sway"
+            />
           </div>
           <p className="text-sm text-muted-foreground font-medium hidden sm:block">
             Boulder's Regenerative Workspace
