@@ -467,15 +467,6 @@ const RegenHubLanding = () => {
                 </div>
               </div>
 
-              <div className="glass-panel-subtle p-4 mb-6 text-sm text-muted-foreground">
-                <p>
-                  <strong>WiFi Network:</strong> regenhub.xyz_guest
-                </p>
-                <p>
-                  <strong>WiFi Password:</strong> itsallcoordination
-                </p>
-              </div>
-
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Button className="btn-primary-glass px-6 py-2" asChild>
                   <a
