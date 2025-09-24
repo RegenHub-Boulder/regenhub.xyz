@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -13,8 +13,24 @@ import {
 import forestBackground from "@/assets/forest-background.jpg";
 import particlesOverlay from "@/assets/particles-overlay.png";
 import forestMascot from "@/assets/forest-mascot.png";
+import CommunityGallery from "./CommunityGallery";
 
 const RegenHubLanding = () => {
+  const [mascotPosition, setMascotPosition] = useState({ x: 0, y: 0 });
+  const [mascotClicks, setMascotClicks] = useState(0);
+
+  const handleMascotClick = () => {
+    // Random movement within reasonable bounds
+    const newX = (Math.random() - 0.5) * 200;
+    const newY = (Math.random() - 0.5) * 100;
+    setMascotPosition({ x: newX, y: newY });
+    setMascotClicks((prev) => prev + 1);
+
+    // Reset position after animation
+    setTimeout(() => {
+      setMascotPosition({ x: 0, y: 0 });
+    }, 1000);
+  };
   return (
     <div className="min-h-screen relative overflow-x-hidden">
       {/* Forest Background Layers */}
@@ -59,12 +75,36 @@ const RegenHubLanding = () => {
       <section className="relative px-6 py-16 md:py-24">
         <div className="max-w-4xl mx-auto text-center relative">
           {/* Forest Mascot */}
-          <div className="absolute -right-8 top-8 hidden lg:block animate-fade-in z-10">
+          <div
+            className="absolute -right-12 top-4 hidden lg:block animate-fade-in z-10 cursor-pointer"
+            style={{
+              transform: `translate(${mascotPosition.x}px, ${mascotPosition.y}px)`,
+              transition:
+                "transform 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55)",
+            }}
+            onClick={handleMascotClick}
+            title="Click me!"
+          >
             <img
               src={forestMascot}
               alt="RegenHub Forest Mascot"
-              className="w-32 h-32 object-contain opacity-80 hover:opacity-100 transition-opacity duration-300 animate-sway"
+              className="w-48 h-48 object-contain opacity-80 hover:opacity-100 hover:scale-110 transition-all duration-300 animate-sway"
             />
+            {mascotClicks > 0 && mascotClicks < 3 && (
+              <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white/90 px-3 py-1 rounded-full text-sm font-medium">
+                Wheee! 🌿
+              </div>
+            )}
+            {mascotClicks >= 3 && mascotClicks < 6 && (
+              <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white/90 px-3 py-1 rounded-full text-sm font-medium">
+                Again! 🌱
+              </div>
+            )}
+            {mascotClicks >= 6 && (
+              <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white/90 px-3 py-1 rounded-full text-sm font-medium">
+                I love this! 💚
+              </div>
+            )}
           </div>
           <div className="glass-panel-strong p-8 md:p-12 hover-lift animate-fade-in-up">
             <h2 className="text-4xl md:text-6xl font-bold mb-6 text-foreground leading-tight">
@@ -157,6 +197,9 @@ const RegenHubLanding = () => {
           </div>
         </div>
       </section>
+
+      {/* Community Gallery */}
+      <CommunityGallery />
 
       {/* Membership Section */}
       <section className="relative px-6 py-16">
