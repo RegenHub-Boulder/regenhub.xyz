@@ -16,20 +16,28 @@ import forestMascot from "@/assets/forest-mascot.png";
 import CommunityGallery from "./CommunityGallery";
 
 const RegenHubLanding = () => {
-  const [mascotPosition, setMascotPosition] = useState({ x: 0, y: 0 });
+  const [mascotPosition, setMascotPosition] = useState({
+    x: 0,
+    y: 0,
+    rotate: 0,
+    scale: 1,
+  });
   const [mascotClicks, setMascotClicks] = useState(0);
 
   const handleMascotClick = () => {
-    // Random movement within reasonable bounds
-    const newX = (Math.random() - 0.5) * 200;
-    const newY = (Math.random() - 0.5) * 100;
-    setMascotPosition({ x: newX, y: newY });
+    // Bigger, more dynamic movement
+    const newX = (Math.random() - 0.5) * 400;
+    const newY = (Math.random() - 0.5) * 300;
+    const newRotate = (Math.random() - 0.5) * 720; // Full spins!
+    const newScale = 0.8 + Math.random() * 0.6; // Scale between 0.8 and 1.4
+
+    setMascotPosition({ x: newX, y: newY, rotate: newRotate, scale: newScale });
     setMascotClicks((prev) => prev + 1);
 
-    // Reset position after animation
+    // Reset position after animation with a slight bounce
     setTimeout(() => {
-      setMascotPosition({ x: 0, y: 0 });
-    }, 1000);
+      setMascotPosition({ x: 0, y: 0, rotate: 0, scale: 1 });
+    }, 1500);
   };
   return (
     <div className="min-h-screen relative overflow-x-hidden">
@@ -78,9 +86,9 @@ const RegenHubLanding = () => {
           <div
             className="absolute -right-12 top-4 hidden lg:block animate-fade-in z-10 cursor-pointer"
             style={{
-              transform: `translate(${mascotPosition.x}px, ${mascotPosition.y}px)`,
+              transform: `translate(${mascotPosition.x}px, ${mascotPosition.y}px) rotate(${mascotPosition.rotate}deg) scale(${mascotPosition.scale})`,
               transition:
-                "transform 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55)",
+                "transform 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55)",
             }}
             onClick={handleMascotClick}
             title="Click me!"
@@ -91,33 +99,33 @@ const RegenHubLanding = () => {
               className="w-48 h-48 object-contain opacity-80 hover:opacity-100 hover:scale-110 transition-all duration-300 animate-sway"
             />
             {mascotClicks > 0 && mascotClicks < 3 && (
-              <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white/90 px-3 py-1 rounded-full text-sm font-medium">
-                Wheee! 🌿
+              <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white/90 px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap">
+                Scenius emerges! 🌿
               </div>
             )}
             {mascotClicks >= 3 && mascotClicks < 6 && (
-              <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white/90 px-3 py-1 rounded-full text-sm font-medium">
-                Again! 🌱
+              <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white/90 px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap">
+                Collective genius activated! ✨
               </div>
             )}
-            {mascotClicks >= 6 && (
-              <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white/90 px-3 py-1 rounded-full text-sm font-medium">
-                I love this! 💚
+            {mascotClicks >= 6 && mascotClicks < 9 && (
+              <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white/90 px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap">
+                1 + 1 = 11 here! 🚀
+              </div>
+            )}
+            {mascotClicks >= 9 && (
+              <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white/90 px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap">
+                We build the future together! 💚
               </div>
             )}
           </div>
           <div className="glass-panel-strong p-8 md:p-12 hover-lift animate-fade-in-up">
             <h2 className="text-4xl md:text-6xl font-bold mb-6 text-foreground leading-tight">
-              Regenerative Innovation
+              A regenerative third space for aligned builders
             </h2>
             <p className="text-xl md:text-2xl mb-8 text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-              A regenerative third space for aligned builders
+              Cooperative workspace. Economic democracy. Regenerative futures.
             </p>
-            <div className="prose prose-lg max-w-3xl mx-auto mb-8 text-foreground/80">
-              <p>
-                Cooperative workspace. Economic democracy. Regenerative futures.
-              </p>
-            </div>
           </div>
         </div>
       </section>
