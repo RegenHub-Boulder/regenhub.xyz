@@ -272,7 +272,7 @@ const RegenHubLanding = () => {
             <Card className="glass-panel hover-lift border-l-4 border-l-accent">
               <CardContent className="p-6">
                 <h3 className="text-xl font-semibold mb-3 text-foreground">
-                  Part-time Contributors
+                  Co-working Members
                 </h3>
                 <p className="text-muted-foreground mb-4">
                   Co-working access and governance for active community
@@ -289,7 +289,7 @@ const RegenHubLanding = () => {
             <Card className="glass-panel hover-lift border-l-4 border-l-primary">
               <CardContent className="p-6">
                 <h3 className="text-xl font-semibold mb-3 text-foreground">
-                  Full-time Cooperative Members
+                  Cooperative Members
                 </h3>
                 <p className="text-muted-foreground mb-4">
                   Full ownership and governance for committed regenerative
