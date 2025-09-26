@@ -13,6 +13,9 @@ import {
 import forestBackground from "@/assets/forest-background.jpg";
 import particlesOverlay from "@/assets/particles-overlay.png";
 import forestMascot from "@/assets/forest-mascot.png";
+import regenHubLogo from "@/assets/regenhub-logo.svg";
+import regenHubText from "@/assets/regenhub-text.svg";
+import regenHubFull from "@/assets/regenhub-full.svg";
 import CommunityGallery from "./CommunityGallery";
 
 // Mascot animation constants
@@ -157,11 +160,13 @@ const RegenHubLanding = () => {
       {/* Header */}
       <header className="relative z-50 px-6 py-4">
         <nav className="glass-panel-subtle max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl animate-sway">🌱</span>
-            <h1 className="text-2xl font-bold text-forest bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-              RegenHub
-            </h1>
+          <div className="flex items-center gap-2">
+            <img
+              src={regenHubLogo}
+              alt="RegenHub Logo"
+              className="h-8 w-8 animate-sway"
+            />
+            <img src={regenHubText} alt="RegenHub" className="h-8 w-auto" />
           </div>
           <p className="text-sm text-muted-foreground font-medium hidden sm:block">
             Boulder's Regenerative Workspace
@@ -173,9 +178,11 @@ const RegenHubLanding = () => {
       <section className="relative px-6 py-16 md:py-24">
         <div className="max-w-4xl mx-auto text-center relative">
           <div className="glass-panel-strong p-8 md:p-12 hover-lift animate-fade-in-up">
-            <h2 className="text-4xl md:text-6xl font-bold mb-6 text-foreground leading-tight">
-              Regen Hub
-            </h2>
+            <img
+              src={regenHubFull}
+              alt="RegenHub"
+              className="h-32 md:h-40 w-auto mx-auto mb-6"
+            />
             <p className="text-xl md:text-2xl mb-8 text-muted-foreground max-w-2xl mx-auto leading-relaxed">
               A regenerative innovation hub in Boulder, CO
             </p>
@@ -496,11 +503,13 @@ const RegenHubLanding = () => {
       <footer className="relative px-6 py-12 mt-16">
         <div className="max-w-4xl mx-auto">
           <div className="glass-panel p-8 text-center">
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <span className="text-2xl animate-sway">🌱</span>
-              <h3 className="text-2xl font-bold text-forest bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                RegenHub
-              </h3>
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <img
+                src={regenHubLogo}
+                alt="RegenHub Logo"
+                className="h-8 w-8 animate-sway"
+              />
+              <img src={regenHubText} alt="RegenHub" className="h-8 w-auto" />
             </div>
 
             <p className="text-lg font-medium mb-2 text-foreground">
