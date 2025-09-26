@@ -256,7 +256,7 @@ const RegenHubLanding = () => {
             <Card className="glass-panel hover-lift border-l-4 border-l-secondary">
               <CardContent className="p-6">
                 <h3 className="text-xl font-semibold mb-3 text-foreground">
-                  Community Participants
+                  Community Members
                 </h3>
                 <p className="text-muted-foreground mb-4">
                   Access events and resources for mission-aligned individuals.
@@ -280,7 +280,7 @@ const RegenHubLanding = () => {
                 </p>
                 <ul className="text-sm text-muted-foreground space-y-1">
                   <li>• Co-working access</li>
-                  <li>• Governance participation</li>
+                  <li>• shared benefits</li>
                   <li>• Project collaboration</li>
                 </ul>
               </CardContent>
