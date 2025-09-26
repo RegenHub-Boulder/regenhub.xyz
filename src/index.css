@@ -310,6 +310,18 @@ All colors MUST be HSL for glassmorphism effects.
         }
     }
 
+    @keyframes hop-move {
+        0% {
+            transform: translateY(0px);
+        }
+        50% {
+            transform: translateY(-40px);
+        }
+        100% {
+            transform: translateY(0px);
+        }
+    }
+
     .animate-sway {
         animation: gentle-sway 4s ease-in-out infinite;
     }
@@ -320,5 +332,9 @@ All colors MUST be HSL for glassmorphism effects.
 
     .animate-shimmer {
         animation: shimmer 2s infinite;
+    }
+
+    .animate-hop {
+        animation: hop-move 0.8s ease-in-out infinite;
     }
 }

@@ -20,16 +20,12 @@ import CommunityGallery from "./CommunityGallery";
 
 // Mascot animation constants
 const MASCOT_CONSTANTS = {
-  INITIAL_OFFSET_X: 250,
-  INITIAL_Y: 100,
+  INITIAL_OFFSET_X: -200, // Start off-screen left
+  BOTTOM_OFFSET: 60, // Distance from bottom of screen
   WIDTH: 200,
-  HEIGHT: 400,
-  MIN_SPINS: 1,
-  MAX_SPINS: 3,
-  ROTATION_DEGREES: 360,
-  MAX_FINAL_ANGLE: 30,
-  MIN_SCALE: 0.8,
-  SCALE_RANGE: 0.6,
+  HEIGHT: 200,
+  MOVE_SPEED: 2, // Pixels per animation frame
+  HOP_PAUSE: 200, // Pause between hops in ms
 };
 
 const MASCOT_SAYINGS = [
@@ -47,64 +43,38 @@ const MASCOT_SAYINGS = [
 
 const RegenHubLanding = () => {
   const [mascotPosition, setMascotPosition] = useState({
-    x:
-      typeof window !== "undefined"
-        ? Math.random() * (window.innerWidth - MASCOT_CONSTANTS.WIDTH)
-        : 1000,
-    y:
-      typeof window !== "undefined"
-        ? Math.random() * (window.innerHeight - MASCOT_CONSTANTS.HEIGHT)
-        : MASCOT_CONSTANTS.INITIAL_Y,
-    rotate: 0,
-    scale: 1,
+    x: MASCOT_CONSTANTS.INITIAL_OFFSET_X,
+    direction: 1, // 1 for right, -1 for left
   });
   const [mascotClicks, setMascotClicks] = useState(0);
   const [scrollOpacity, setScrollOpacity] = useState(1);
 
   const handleMascotClick = () => {
-    // Move to random position on screen
-    const newX = Math.random() * (window.innerWidth - MASCOT_CONSTANTS.WIDTH);
-    const newY = Math.random() * (window.innerHeight - MASCOT_CONSTANTS.HEIGHT);
-    // Spin a lot but land within 30 degrees of upright
-    const spins =
-      Math.floor(
-        Math.random() * MASCOT_CONSTANTS.MAX_SPINS + MASCOT_CONSTANTS.MIN_SPINS,
-      ) * MASCOT_CONSTANTS.ROTATION_DEGREES;
-    const finalAngle =
-      (Math.random() - 0.5) * (MASCOT_CONSTANTS.MAX_FINAL_ANGLE * 2);
-    const newRotate = spins + finalAngle;
-    const newScale =
-      MASCOT_CONSTANTS.MIN_SCALE + Math.random() * MASCOT_CONSTANTS.SCALE_RANGE;
-
-    setMascotPosition({ x: newX, y: newY, rotate: newRotate, scale: newScale });
+    // Reverse direction on click
+    setMascotPosition(prev => ({
+      ...prev,
+      direction: prev.direction * -1
+    }));
     setMascotClicks((prev) => prev + 1);
   };
 
-  // Auto-move mascot periodically
+  // Hopping animation effect
   useEffect(() => {
     const moveInterval = setInterval(() => {
-      if (Math.random() > 0.3) {
-        // 70% chance to move
-        const newX =
-          Math.random() * (window.innerWidth - MASCOT_CONSTANTS.WIDTH);
-        const newY =
-          Math.random() * (window.innerHeight - MASCOT_CONSTANTS.HEIGHT);
-        // Spin but land upright for readability
-        const spins = Math.floor(Math.random() * 3 + 2) * 360;
-        const finalAngle = (Math.random() - 0.5) * 60;
-        const newRotate = spins + finalAngle;
-        const newScale =
-          MASCOT_CONSTANTS.MIN_SCALE +
-          Math.random() * MASCOT_CONSTANTS.SCALE_RANGE;
-
-        setMascotPosition({
-          x: newX,
-          y: newY,
-          rotate: newRotate,
-          scale: newScale,
-        });
-      }
-    }, 8000); // Move every 8 seconds
+      setMascotPosition(prev => {
+        const screenWidth = typeof window !== "undefined" ? window.innerWidth : 1200;
+        const newX = prev.x + (MASCOT_CONSTANTS.MOVE_SPEED * prev.direction);
+        
+        // Check boundaries and reverse direction if needed
+        if (newX > screenWidth) {
+          return { x: MASCOT_CONSTANTS.INITIAL_OFFSET_X, direction: 1 };
+        } else if (newX < MASCOT_CONSTANTS.INITIAL_OFFSET_X) {
+          return { x: screenWidth, direction: -1 };
+        }
+        
+        return { ...prev, x: newX };
+      });
+    }, 50); // Smooth movement every 50ms
 
     return () => clearInterval(moveInterval);
   }, []);
@@ -557,24 +527,24 @@ const RegenHubLanding = () => {
         </div>
       </footer>
 
-      {/* Floating Forest Mascot */}
+      {/* Hopping Forest Mascot */}
       <div
         className="fixed hidden lg:block animate-fade-in z-50 cursor-pointer"
         style={{
           left: `${mascotPosition.x}px`,
-          top: `${mascotPosition.y}px`,
-          transform: `rotate(${mascotPosition.rotate}deg) scale(${mascotPosition.scale})`,
-          transition: "all 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55)",
+          bottom: `${MASCOT_CONSTANTS.BOTTOM_OFFSET}px`,
+          transform: `scaleX(${mascotPosition.direction})`,
+          transition: "transform 0.3s ease",
           opacity: scrollOpacity,
           pointerEvents: scrollOpacity === 0 ? "none" : "auto",
         }}
         onClick={handleMascotClick}
-        title="Click me!"
+        title="Click me to change direction!"
       >
         <img
           src={forestMascot}
           alt="RegenHub Forest Mascot"
-          className="w-48 h-48 object-contain opacity-80 hover:opacity-100 hover:scale-110 transition-all duration-300 animate-sway"
+          className="w-32 h-32 object-contain opacity-80 hover:opacity-100 hover:scale-110 transition-all duration-300 animate-hop"
         />
         {mascotClicks > 0 && (
           <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white/90 px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap shadow-lg">
