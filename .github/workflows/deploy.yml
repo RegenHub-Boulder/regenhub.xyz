@@ -59,23 +59,34 @@ jobs:
               if (artifact.name.startsWith('pr-preview-')) {
                 console.log(`Downloading ${artifact.name}...`);
 
-                const download = await github.rest.actions.downloadArtifact({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  artifact_id: artifact.id,
-                  archive_format: 'zip',
-                });
+                try {
+                  const download = await github.rest.actions.downloadArtifact({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    artifact_id: artifact.id,
+                    archive_format: 'zip',
+                  });
 
-                const prNumber = artifact.name.replace('pr-preview-', '');
-                const dir = `dist/pr-${prNumber}`;
+                  const prNumber = artifact.name.replace('pr-preview-', '');
+                  const dir = `dist/pr-${prNumber}`;
 
-                // Create directory and extract
-                fs.mkdirSync(dir, { recursive: true });
-                fs.writeFileSync(`${artifact.name}.zip`, Buffer.from(download.data));
+                  // Create directory and extract
+                  fs.mkdirSync(dir, { recursive: true });
+                  fs.writeFileSync(`${artifact.name}.zip`, Buffer.from(download.data));
 
-                // Unzip to the PR directory
-                await exec.exec('unzip', ['-o', `${artifact.name}.zip`, '-d', dir]);
-                fs.unlinkSync(`${artifact.name}.zip`);
+                  // Unzip to the PR directory
+                  await exec.exec('unzip', ['-o', `${artifact.name}.zip`, '-d', dir]);
+                  fs.unlinkSync(`${artifact.name}.zip`);
+
+                  console.log(`✓ Successfully downloaded ${artifact.name}`);
+                } catch (error) {
+                  if (error.status === 410) {
+                    console.log(`⚠ Artifact ${artifact.name} has expired, skipping...`);
+                  } else {
+                    console.error(`✗ Error downloading ${artifact.name}:`, error.message);
+                    throw error;
+                  }
+                }
               }
             }
 
