@@ -1,0 +1,159 @@
+@import "tailwindcss";
+
+/* =====================================================
+   RegenHub Design System — Forest Through Glass
+   ===================================================== */
+
+:root {
+  /* Core palette */
+  --forest: #2d5a3d;
+  --forest-light: #3d7a55;
+  --forest-deep: #1a3a28;
+  --sage: #a8c09a;
+  --sage-light: #c8dcc0;
+  --gold: #e8b04b;
+  --gold-light: #f0c87a;
+
+  /* Semantic tokens */
+  --background: #0f1a12;
+  --foreground: #e8f0e4;
+  --muted-foreground: #8aab7e;
+  --primary: var(--forest);
+  --primary-foreground: #f0f7ec;
+  --secondary: var(--sage);
+  --accent: var(--gold);
+  --card: rgba(30, 55, 36, 0.6);
+  --border: rgba(168, 192, 154, 0.2);
+  --ring: var(--sage);
+
+  /* Glass effect values */
+  --glass-bg: rgba(30, 55, 36, 0.45);
+  --glass-bg-strong: rgba(20, 40, 26, 0.75);
+  --glass-bg-subtle: rgba(30, 55, 36, 0.25);
+  --glass-border: rgba(168, 192, 154, 0.25);
+  --glass-blur: 12px;
+}
+
+/* ---- Base ---- */
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: Inter, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- Glass panels ---- */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+}
+
+.glass-panel-strong {
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(168, 192, 154, 0.3);
+  border-radius: 16px;
+}
+
+.glass-panel-subtle {
+  background: var(--glass-bg-subtle);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(168, 192, 154, 0.15);
+  border-radius: 12px;
+}
+
+/* ---- Buttons ---- */
+.btn-primary-glass {
+  background: linear-gradient(135deg, var(--forest-light), var(--forest-deep));
+  color: var(--primary-foreground);
+  border: 1px solid rgba(168, 192, 154, 0.3);
+  backdrop-filter: blur(8px);
+  transition: all 0.3s ease;
+}
+
+.btn-primary-glass:hover {
+  background: linear-gradient(135deg, var(--forest), var(--forest-light));
+  box-shadow: 0 8px 24px rgba(45, 90, 61, 0.4);
+  transform: translateY(-1px);
+}
+
+.btn-glass {
+  background: var(--glass-bg-subtle);
+  color: var(--foreground);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(8px);
+  transition: all 0.2s ease;
+}
+
+.btn-glass:hover {
+  background: var(--glass-bg);
+  border-color: rgba(168, 192, 154, 0.4);
+}
+
+/* ---- Form inputs ---- */
+.glass-input {
+  background: var(--glass-bg-subtle);
+  border: 1px solid var(--glass-border);
+  color: var(--foreground);
+  backdrop-filter: blur(8px);
+  transition: border-color 0.2s ease;
+}
+
+.glass-input:focus {
+  outline: none;
+  border-color: rgba(168, 192, 154, 0.5);
+  box-shadow: 0 0 0 2px rgba(168, 192, 154, 0.1);
+}
+
+.glass-input::placeholder {
+  color: var(--muted-foreground);
+  opacity: 0.6;
+}
+
+/* ---- Utility ---- */
+.text-forest { color: var(--forest-light); }
+.text-sage   { color: var(--sage); }
+.text-gold   { color: var(--gold); }
+.text-muted  { color: var(--muted-foreground); }
+
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+
+.hover-glow:hover {
+  box-shadow: 0 0 20px rgba(45, 90, 61, 0.5);
+}
+
+/* ---- Animations ---- */
+@keyframes sway {
+  0%, 100% { transform: rotate(-3deg); }
+  50%       { transform: rotate(3deg); }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes hop {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-8px); }
+}
+
+@keyframes float-particles {
+  0%, 100% { background-position: 0% 0%; }
+  50%       { background-position: 5% 5%; }
+}
+
+.animate-sway       { animation: sway 3s ease-in-out infinite; }
+.animate-fade-in-up { animation: fade-in-up 0.6s ease forwards; }
+.animate-hop        { animation: hop 0.6s ease-in-out infinite; }
