@@ -1,0 +1,11 @@
+{
+  "name": "regenhub",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm --filter web build",
+    "bot:dev": "pnpm --filter bot dev",
+    "bot:build": "pnpm --filter bot build"
+  }
+}

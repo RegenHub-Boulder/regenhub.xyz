@@ -1,0 +1,9 @@
+**/.git
+**/.next
+**/node_modules
+**/dist
+**/.env*
+!**/.env*.example
+_archive
+**/Dockerfile
+**/*.md
