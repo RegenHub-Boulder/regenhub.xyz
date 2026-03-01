@@ -1,83 +1,91 @@
 # CLAUDE.md - AI Assistant Guide
 
 ## Project Overview
-RegenHub Boulder is a landing page for a cooperative workspace in Boulder, CO. The site promotes community, economic democracy, and regenerative technology.
+RegenHub Boulder member portal and Telegram bot for a cooperative workspace in Boulder, CO.
+Self-hosted on local infrastructure (compute-1), not deployed to cloud providers.
 
 ## Tech Stack
-- **Frontend**: React 18, TypeScript 5, Vite 5
-- **UI**: Tailwind CSS, shadcn/ui (49 components), Radix UI
-- **Deployment**: GitHub Pages with PR previews
-- **Design**: Custom "Forest Through Glass" glassmorphism theme
+- **Monorepo**: pnpm workspaces (`apps/web`, `apps/bot`)
+- **Web**: Next.js 15 (App Router, TypeScript, Tailwind CSS, shadcn/ui)
+- **Bot**: Node.js + TypeScript Telegram bot (`node-telegram-bot-api`)
+- **Database**: Supabase (self-hosted on compute-1)
+- **Deployment**: Coolify on compute-1, exposed via Cloudflare Tunnels
 
-## Key Files
-- `src/components/RegenHubLanding.tsx` - Main landing page (447 lines)
-- `src/index.css` - Global styles and design system
-- `.github/workflows/` - CI/CD pipelines
+## Live URLs
+- `https://site.regenhub.build` — web app (live)
+- `https://supabasekong-w8gw0wc80o80c0c8g88kk8og.regenhub.build` — Supabase API
+- `regenhub.xyz` — DNS not yet flipped (still GitHub Pages)
 
 ## Development Commands
 ```bash
-pnpm install     # Install dependencies
-pnpm run dev     # Start dev server on :8080
-pnpm run build   # Build for production
-pnpm run lint    # Run ESLint
+pnpm install          # Install all workspace deps
+pnpm --filter web dev # Start Next.js dev server
+pnpm --filter web build
+pnpm --filter bot build
+pnpm --filter web lint
 ```
 
-## Testing
-Run tests and linting before committing:
-```bash
-pnpm run lint
-pnpm run build
-```
+## Environment Variables
+`NEXT_PUBLIC_*` vars are baked at **build time** — changing them requires a full redeploy.
 
-## Design System
-- **Colors**: Forest green (#2d5a3d), Sage (#a8c09a), Gold (#e8b04b)
-- **Effects**: Glassmorphism with backdrop blur
-- **Animations**: Sway, fade-in-up, hover effects
-- **Font**: Inter (Google Fonts)
-
-## External Integrations
-- **Airtable**: Member directory and applications
-- **Luma**: Event calendar
-- **Contact**: boulder.regenhub@gmail.com
-- **Telegram**: Community chat
-
-## Deployment
-- **Production**: Pushes to main deploy to GitHub Pages
-- **PR Previews**: Auto-deploy to `/pr-{number}/`
-- **Custom Domain**: Configure in public/CNAME
-
-## Common Tasks
-
-### Add new section to landing page
-Edit `src/components/RegenHubLanding.tsx`
-
-### Update colors/theme
-Modify CSS variables in `src/index.css`
-
-### Add new route
-Update `src/App.tsx` and create page in `src/pages/`
-
-### Deploy changes
-Push to main branch - GitHub Actions handles deployment
+| Variable | Where |
+|----------|-------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Web app (build-time) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Web app (build-time) |
+| `SUPABASE_URL` | Bot (runtime) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Bot (runtime) |
+| `TELEGRAM_BOT_TOKEN` | Bot (runtime) |
+| `HA_URL` / `HA_TOKEN` | Bot (runtime, Home Assistant door control) |
 
 ## Project Structure
 ```
-src/
-├── assets/        # Images (forest-background.jpg, mascot.png)
-├── components/
-│   ├── ui/        # shadcn components
-│   └── RegenHubLanding.tsx
-├── pages/         # Route components
-├── hooks/         # Custom hooks
-├── lib/           # Utilities
-└── App.tsx        # Router
+apps/
+├── web/                    # Next.js 15 app
+│   ├── src/app/            # App Router pages
+│   ├── src/components/     # React components
+│   └── Dockerfile
+├── bot/                    # Telegram bot
+│   ├── src/bot.ts          # Bot commands + handlers
+│   ├── src/db/supabase.ts  # DB helpers
+│   └── Dockerfile
+supabase/
+└── migrations/             # SQL migrations (apply in order)
+    └── 001_initial_schema.sql
+DEPLOYMENT.md               # Full infra guide for agents + humans
 ```
 
+## Database Schema (Supabase)
+- `members` — RegenHub members (full + daypass), linked to `auth.users`
+- `day_passes` — pool of N-use guest passes per member
+- `day_codes` — temporary door codes (PIN slots 125-249) issued against a pass
+- `access_logs` — every door access event
+
+## Common Tasks
+
+### Trigger a redeploy
+```bash
+curl -X GET "https://admin.regenhub.build/api/v1/deploy?uuid=ew848c4os44sw0wowwk0ksk8&force=true" \
+  -H "Authorization: Bearer <coolify-api-key>"
+```
+
+### Check deployment status
+```bash
+curl "https://admin.regenhub.build/api/v1/deployments/<dep-uuid>" \
+  -H "Authorization: Bearer <coolify-api-key>" | jq '.status'
+```
+
+### Run a DB migration
+Connect via postgres Docker container on compute-1 (see DEPLOYMENT.md).
+
+### Add a new member via bot
+Use `/admin → Add member` as an admin in the Telegram bot.
+
 ## Important Notes
-- Single page application with client-side routing
-- GitHub Pages requires 404.html for SPA support
-- PR preview workflow uses JamesIves/github-pages-deploy-action
-- All content in one component for simplicity
+- **Traefik + Docker Engine 29.2 bug**: New containers won't get auto-routed. Write a static route file to `/data/coolify/proxy/dynamic/`. See DEPLOYMENT.md.
+- **Monorepo standalone path**: `server.js` lives at `apps/web/apps/web/server.js` in the container (double-nested by Next.js standalone + pnpm monorepo). Dockerfile handles this correctly.
+- **RLS**: All tables have Row Level Security. The service role key (bot) bypasses RLS. The anon key (web) is subject to RLS policies.
+- **No GitHub Pages**: Old CI workflows for GH Pages are gone. Deployment is via Coolify webhook.
 
 ## Contact
-For questions about the codebase: boulder.regenhub@gmail.com
+- Location: 1515 Walnut St, Suite 200, Boulder, CO
+- Email: boulder.regenhub@gmail.com
