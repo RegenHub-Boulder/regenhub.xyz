@@ -269,3 +269,26 @@ The `regenhub.xyz` domain is managed in a separate Cloudflare account (not the `
 ---
 
 *Last updated: 2026-03-01 by RegenClaw 🍄*
+
+---
+
+## Post-Deploy Route Update (automated)
+
+Every Coolify redeploy creates a new container with a new Docker IP. A post-deploy hook handles this automatically.
+
+**Script:** `/opt/shipper/update-route.sh` on compute-1  
+**Coolify config:** set as `post_deployment_command` on the web app (already configured)
+
+To set it up on a new app:
+```bash
+# 1. Script usage
+ssh steward@regenhub-compute-1.lan "sudo /opt/shipper/update-route.sh <coolify-name-label> <route-file.yaml> <port>"
+
+# 2. Register with Coolify
+curl -X PATCH "$COOLIFY_URL/api/v1/applications/<app-uuid>" \
+  -H "Authorization: Bearer $COOLIFY_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"post_deployment_command": "sudo /opt/shipper/update-route.sh <name> <route.yaml> <port>", "post_deployment_command_container": "host"}'
+```
+
+**Note on Traefik + Docker Engine 29.2:** Docker's label-based auto-discovery is broken (Traefik v3.x sends API v1.24, Docker 29.2 requires min v1.44). The fix requires upgrading Docker Engine to a version with a lower minimum, or waiting for Coolify to ship a Traefik version that negotiates API version correctly. Until then, static route files + the update script are the workaround.
