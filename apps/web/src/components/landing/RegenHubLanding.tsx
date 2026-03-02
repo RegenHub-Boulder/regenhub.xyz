@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Building2, HandHeart, Lightbulb, Sprout, MapPin, Calendar, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { MemberDirectory } from "@/components/landing/MemberDirectory";
 import forestBackground from "@/assets/forest-background.jpg";
 import forestMascot from "@/assets/forest-mascot.png";
 import regenHubLogo from "@/assets/regenhub-logo.svg";
@@ -92,11 +93,11 @@ export default function RegenHubLanding() {
               A regenerative innovation hub in Boulder, CO
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <a href="https://airtable.com/appccpfHK9zFWYR6g/shrAGo58nsstawTjQ" target="_blank" rel="noopener noreferrer">
+              <Link href="/apply">
                 <Button className="btn-primary-glass px-8 py-3 text-lg font-semibold hover-glow">
                   Apply for Membership
                 </Button>
-              </a>
+              </Link>
               <a href="https://luma.com/regenhub" target="_blank" rel="noopener noreferrer">
                 <Button className="btn-glass px-8 py-3 text-lg">
                   View Events
@@ -161,11 +162,11 @@ export default function RegenHubLanding() {
             ))}
           </div>
           <div className="text-center">
-            <a href="https://airtable.com/appccpfHK9zFWYR6g/shrAGo58nsstawTjQ" target="_blank" rel="noopener noreferrer">
+            <Link href="/apply">
               <Button className="btn-primary-glass px-8 py-3 text-lg font-semibold hover-glow">
                 Apply for Membership
               </Button>
-            </a>
+            </Link>
           </div>
         </div>
       </section>
@@ -177,13 +178,7 @@ export default function RegenHubLanding() {
             <h2 className="text-3xl md:text-4xl font-bold mb-4 text-forest">Our Community</h2>
             <p className="text-xl text-muted max-w-2xl mx-auto">Builders, creators, and changemakers shaping regenerative futures</p>
           </div>
-          <div className="glass-panel p-8 md:p-12">
-            <iframe
-              src="https://airtable.com/embed/appccpfHK9zFWYR6g/shr3xghNk7BTrKhRR?backgroundColor=transparent&viewControls=on"
-              className="w-full min-h-[600px] rounded-lg"
-              frameBorder="0"
-            />
-          </div>
+          <MemberDirectory />
         </div>
       </section>
 
@@ -249,9 +244,9 @@ export default function RegenHubLanding() {
                 </a>
               </div>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <a href="https://airtable.com/appccpfHK9zFWYR6g/shrAGo58nsstawTjQ" target="_blank" rel="noopener noreferrer">
+                <Link href="/apply">
                   <Button className="btn-primary-glass px-6">Apply for Membership</Button>
-                </a>
+                </Link>
                 <a href="https://luma.com/regenhub" target="_blank" rel="noopener noreferrer">
                   <Button className="btn-glass px-6">View All Events</Button>
                 </a>
@@ -278,7 +273,7 @@ export default function RegenHubLanding() {
               {[
                 { label: "Telegram", href: "https://t.me/+Mg1PLuT9pX9mMGVh", external: true },
                 { label: "Email", href: "mailto:boulder.regenhub@gmail.com", external: false },
-                { label: "Apply", href: "https://airtable.com/appccpfHK9zFWYR6g/shrAGo58nsstawTjQ", external: true },
+                { label: "Apply", href: "/apply", external: false },
                 { label: "Events", href: "https://luma.com/regenhub", external: true },
                 { label: "Portal", href: "/portal", external: false },
               ].map(({ label, href, external }) => (

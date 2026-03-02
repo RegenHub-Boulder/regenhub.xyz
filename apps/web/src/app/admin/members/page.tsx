@@ -21,11 +21,15 @@ function memberStatusBadge(member: Member | null) {
 }
 
 function AuthUserRow({ u }: { u: AdminUser }) {
+  const displayName = u.member?.name ?? u.application?.name ?? null;
   return (
     <tr className="border-b border-white/5 hover:bg-white/5 transition-colors">
       <td className="px-4 py-3 font-medium">
-        {u.member?.name ?? <span className="text-muted italic">—</span>}
+        {displayName ?? <span className="text-muted italic">—</span>}
         {u.member?.is_admin && <span className="ml-2 text-xs text-gold">[Admin]</span>}
+        {!u.member && u.application && (
+          <span className="ml-2 text-xs text-muted italic">({u.application.membership_interest})</span>
+        )}
       </td>
       <td className="px-4 py-3 text-muted text-sm">{u.email}</td>
       <td className="px-4 py-3">{memberStatusBadge(u.member)}</td>

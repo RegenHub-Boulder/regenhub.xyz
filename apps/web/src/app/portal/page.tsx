@@ -2,29 +2,53 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
 import Link from "next/link";
-import { Key, Ticket, User } from "lucide-react";
+import { Key, Ticket, User, ClipboardList, CheckCircle, Clock } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default async function PortalPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
-  const { data: member } = await supabase
-    .from("members")
-    .select("*")
-    .eq("supabase_user_id", user.id)
-    .single();
+  const [{ data: member }, { data: application }] = await Promise.all([
+    supabase.from("members").select("*").eq("supabase_user_id", user.id).single(),
+    supabase.from("applications").select("*").eq("supabase_user_id", user.id).single(),
+  ]);
 
   if (!member) {
+    if (application) {
+      const statusColor = application.status === "approved"
+        ? "text-green-400"
+        : application.status === "rejected"
+          ? "text-red-400"
+          : "text-yellow-400";
+      const StatusIcon = application.status === "approved" ? CheckCircle : Clock;
+      return (
+        <div className="glass-panel p-8 text-center max-w-md mx-auto mt-16">
+          <StatusIcon className={`w-10 h-10 ${statusColor} mx-auto mb-4`} />
+          <h2 className="text-xl font-semibold mb-2">Application {application.status === "pending" ? "Under Review" : application.status === "approved" ? "Approved" : "Not Approved"}</h2>
+          <p className="text-muted text-sm mb-4">
+            {application.status === "pending" && "We've received your application and will be in touch soon."}
+            {application.status === "approved" && "Your application was approved! An admin is setting up your access."}
+            {application.status === "rejected" && "Your application wasn't approved this time. Reach out on Telegram to learn more."}
+          </p>
+          <p className="text-xs text-muted mb-1">Submitted as: {application.email}</p>
+          <p className="text-xs text-muted">Membership interest: <span className="capitalize">{application.membership_interest}</span></p>
+        </div>
+      );
+    }
+
     return (
       <div className="glass-panel p-8 text-center max-w-md mx-auto mt-16">
-        <h2 className="text-xl font-semibold mb-3">Membership Pending</h2>
-        <p className="text-muted text-sm">
-          You&apos;re in the system — your account just needs to be set up by an admin.
-          <br /><br />
-          Reach out on Telegram if you haven&apos;t heard back yet.
+        <ClipboardList className="w-10 h-10 text-sage mx-auto mb-4" />
+        <h2 className="text-xl font-semibold mb-3">Complete Your Application</h2>
+        <p className="text-muted text-sm mb-6">
+          You&apos;re signed in as <strong className="text-foreground">{user.email}</strong>.<br />
+          Fill out a short application so we can get you set up.
         </p>
-        <p className="text-xs text-muted mt-4">{user.email}</p>
+        <Link href="/apply">
+          <Button className="btn-primary-glass px-6">Start Application</Button>
+        </Link>
       </div>
     );
   }

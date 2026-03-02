@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import type { Member } from "@/lib/supabase/types";
+import type { Application, Member } from "@/lib/supabase/types";
 
 export type AdminUser = {
   // From auth.users
@@ -12,6 +12,8 @@ export type AdminUser = {
   createdAt: string;
   // From members table (if linked)
   member: Member | null;
+  // From applications table (if submitted)
+  application: Application | null;
 };
 
 export type AdminUsersResponse = {
@@ -37,21 +39,23 @@ export async function GET() {
     return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 });
   }
 
-  // Fetch all member rows
+  // Fetch all member rows + applications in parallel
   const supabase = await createClient();
-  const { data: members } = await supabase
-    .from("members")
-    .select("*")
-    .order("name");
+  const [{ data: members }, { data: applications }] = await Promise.all([
+    supabase.from("members").select("*").order("name"),
+    serviceClient.from("applications").select("*").order("created_at", { ascending: false }),
+  ]);
 
   const memberByAuthId = new Map<string, Member>();
-  const memberIdsWithAuth = new Set<number>();
-
   for (const m of members ?? []) {
-    if (m.supabase_user_id) {
-      memberByAuthId.set(m.supabase_user_id, m);
-      memberIdsWithAuth.add(m.id);
-    }
+    if (m.supabase_user_id) memberByAuthId.set(m.supabase_user_id, m);
+  }
+
+  const appByAuthId = new Map<string, Application>();
+  const appByEmail = new Map<string, Application>();
+  for (const a of (applications as Application[] ?? [])) {
+    if (a.supabase_user_id) appByAuthId.set(a.supabase_user_id, a);
+    appByEmail.set(a.email.toLowerCase(), a);
   }
 
   const users: AdminUser[] = (authData.users ?? []).map((u) => ({
@@ -60,9 +64,10 @@ export async function GET() {
     lastSignIn: u.last_sign_in_at ?? null,
     createdAt: u.created_at,
     member: memberByAuthId.get(u.id) ?? null,
+    application: appByAuthId.get(u.id) ?? appByEmail.get((u.email ?? "").toLowerCase()) ?? null,
   }));
 
-  // Members that have no linked auth account
+  // Members that have no linked auth account (legacy / Telegram-only)
   const legacyMembers = (members ?? []).filter((m) => !m.supabase_user_id);
 
   // Sort: unlinked auth users first (needs attention), then linked, then legacy

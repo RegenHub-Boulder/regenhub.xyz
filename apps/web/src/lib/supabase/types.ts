@@ -1,10 +1,39 @@
 export type MemberType = "full" | "daypass";
+export type ApplicationStatus = "pending" | "approved" | "rejected";
+export type MembershipInterest = "community" | "coworking" | "cooperative";
 export type MembershipTier = "community" | "coworking" | "cooperative";
 export type AccessMethod = "nfc" | "pin" | "daycode";
 
 export interface Database {
   public: {
     Tables: {
+      applications: {
+        Row: {
+          id: number;
+          supabase_user_id: string | null;
+          email: string;
+          name: string;
+          about: string | null;
+          why_join: string | null;
+          membership_interest: MembershipInterest;
+          status: ApplicationStatus;
+          admin_notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          supabase_user_id?: string | null;
+          email: string;
+          name: string;
+          about?: string | null;
+          why_join?: string | null;
+          membership_interest?: MembershipInterest;
+          status?: ApplicationStatus;
+          admin_notes?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["applications"]["Insert"]>;
+        Relationships: [];
+      };
       members: {
         Row: {
           id: number;
@@ -23,6 +52,7 @@ export interface Database {
           bio: string | null;
           skills: string[] | null;
           profile_photo_url: string | null;
+          show_in_directory: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -117,6 +147,7 @@ export interface Database {
 }
 
 // Convenience row types
+export type Application = Database["public"]["Tables"]["applications"]["Row"];
 export type Member = Database["public"]["Tables"]["members"]["Row"];
 export type DayPass = Database["public"]["Tables"]["day_passes"]["Row"];
 export type DayCode = Database["public"]["Tables"]["day_codes"]["Row"];
