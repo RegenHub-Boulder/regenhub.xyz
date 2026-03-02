@@ -24,13 +24,19 @@ async function haPost(endpoint: string, data: Record<string, unknown>) {
   return text ? JSON.parse(text) : null;
 }
 
+const HA_LOCK_ENTITY = process.env.HA_LOCK_ENTITY ?? "lock.front_door_lock";
+
 export async function setUserCode(slot: number, code: string) {
-  return haPost("/services/script/set_user_code", {
-    slot,
-    lock_code: code,
+  return haPost("/services/zwave_js/set_lock_usercode", {
+    entity_id: HA_LOCK_ENTITY,
+    code_slot: slot,
+    usercode: String(code),
   });
 }
 
 export async function clearUserCode(slot: number) {
-  return haPost("/services/script/clear_user_code", { slot });
+  return haPost("/services/zwave_js/clear_lock_usercode", {
+    entity_id: HA_LOCK_ENTITY,
+    code_slot: slot,
+  });
 }
