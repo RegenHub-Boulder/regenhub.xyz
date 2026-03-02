@@ -7,8 +7,17 @@ function generateCode(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
+    const body = await req.json().catch(() => ({}));
+    const customCode: string | undefined = body.code;
+
+    if (customCode !== undefined) {
+      if (!/^\d{4,8}$/.test(customCode)) {
+        return NextResponse.json({ error: "Code must be 4–8 digits" }, { status: 400 });
+      }
+    }
+
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -27,7 +36,7 @@ export async function POST() {
       return NextResponse.json({ error: "No slot assigned — contact an admin" }, { status: 400 });
     }
 
-    const newCode = generateCode();
+    const newCode = customCode ?? generateCode();
 
     try {
       await setUserCode(member.pin_code_slot, newCode);
