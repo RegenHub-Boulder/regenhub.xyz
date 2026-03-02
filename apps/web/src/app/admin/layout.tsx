@@ -13,7 +13,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const { data: member } = await supabase
     .from("members")
     .select("is_admin")
-    .eq("email", user.email!)
+    .eq("supabase_user_id", user.id)
     .single();
 
   if (!member?.is_admin) redirect("/portal");

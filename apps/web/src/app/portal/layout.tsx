@@ -10,6 +10,12 @@ export default async function PortalLayout({ children }: { children: React.React
 
   if (!user) redirect("/auth/login");
 
+  const { data: member } = await supabase
+    .from("members")
+    .select("is_admin")
+    .eq("supabase_user_id", user.id)
+    .single();
+
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-50 px-6 py-3">
@@ -21,6 +27,9 @@ export default async function PortalLayout({ children }: { children: React.React
               <Link href="/portal/my-code" className="text-muted hover:text-foreground transition-colors">My Code</Link>
               <Link href="/portal/passes" className="text-muted hover:text-foreground transition-colors">Day Passes</Link>
               <Link href="/portal/profile" className="text-muted hover:text-foreground transition-colors">Profile</Link>
+              {member?.is_admin && (
+                <Link href="/admin" className="text-gold hover:text-gold/80 transition-colors">Admin</Link>
+              )}
             </div>
           </div>
           <form action="/auth/signout" method="post">

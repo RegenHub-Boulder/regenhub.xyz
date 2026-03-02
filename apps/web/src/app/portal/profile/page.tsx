@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ProfileForm } from "@/components/portal/ProfileForm";
 
@@ -6,11 +7,12 @@ export const metadata = { title: "Profile — RegenHub" };
 export default async function ProfilePage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/auth/login");
 
   const { data: member } = await supabase
     .from("members")
     .select("id, name, email, telegram_username, ethereum_address, bio, skills, membership_tier, member_type")
-    .eq("supabase_user_id", user!.id)
+    .eq("supabase_user_id", user.id)
     .single();
 
   if (!member) return null;

@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
 import Link from "next/link";
@@ -6,12 +7,12 @@ import { Key, Ticket, User } from "lucide-react";
 export default async function PortalPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/auth/login");
 
-  // Look up member record by email
   const { data: member } = await supabase
     .from("members")
     .select("*")
-    .eq("supabase_user_id", user!.id)
+    .eq("supabase_user_id", user.id)
     .single();
 
   if (!member) {

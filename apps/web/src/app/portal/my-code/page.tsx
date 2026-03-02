@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { RegenerateCodeButton } from "@/components/portal/RegenerateCodeButton";
@@ -8,11 +9,12 @@ export const metadata = { title: "My Door Code — RegenHub" };
 export default async function MyCodePage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/auth/login");
 
   const { data: member } = await supabase
     .from("members")
     .select("id, name, pin_code, pin_code_slot, nfc_key_address, member_type")
-    .eq("supabase_user_id", user!.id)
+    .eq("supabase_user_id", user.id)
     .single();
 
   if (!member || member.member_type !== "full") {

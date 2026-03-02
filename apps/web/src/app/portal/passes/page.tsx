@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,11 +10,12 @@ export const metadata = { title: "Day Passes — RegenHub" };
 export default async function PassesPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/auth/login");
 
   const { data: member } = await supabase
     .from("members")
     .select("id, name, member_type")
-    .eq("supabase_user_id", user!.id)
+    .eq("supabase_user_id", user.id)
     .single();
 
   if (!member) return null;

@@ -33,7 +33,7 @@ export async function POST(request: Request) {
   const { data: member } = await supabase
     .from("members")
     .select("id, disabled")
-    .eq("email", user.email!)
+    .eq("supabase_user_id", user.id)
     .single();
 
   if (!member || member.disabled) {
