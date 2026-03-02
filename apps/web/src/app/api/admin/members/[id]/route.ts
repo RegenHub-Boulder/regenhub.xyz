@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/admin";
+import { setUserCode } from "@/lib/homeAssistant";
 
 export async function PATCH(
   request: Request,
@@ -34,6 +35,17 @@ export async function PATCH(
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Sync PIN code to the lock if pin_code or pin_code_slot was updated
+  if (("pin_code" in update || "pin_code_slot" in update) && data.pin_code && data.pin_code_slot) {
+    try {
+      await setUserCode(data.pin_code_slot, data.pin_code);
+    } catch (lockErr) {
+      console.error("[AdminMember PATCH] Lock sync failed:", lockErr);
+      // DB update succeeded — return success with a warning
+      return NextResponse.json({ member: data, warning: "Member updated but lock sync failed" });
+    }
   }
 
   return NextResponse.json({ member: data });
