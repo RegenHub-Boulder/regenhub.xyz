@@ -11,7 +11,7 @@ export default async function PortalPage() {
   const { data: member } = await supabase
     .from("members")
     .select("*")
-    .eq("email", user!.email!)
+    .eq("supabase_user_id", user!.id)
     .single();
 
   if (!member) {

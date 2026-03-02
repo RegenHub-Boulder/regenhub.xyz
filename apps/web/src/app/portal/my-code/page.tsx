@@ -12,7 +12,7 @@ export default async function MyCodePage() {
   const { data: member } = await supabase
     .from("members")
     .select("id, name, pin_code, pin_code_slot, nfc_key_address, member_type")
-    .eq("email", user!.email!)
+    .eq("supabase_user_id", user!.id)
     .single();
 
   if (!member || member.member_type !== "full") {

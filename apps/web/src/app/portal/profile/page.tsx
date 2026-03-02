@@ -10,7 +10,7 @@ export default async function ProfilePage() {
   const { data: member } = await supabase
     .from("members")
     .select("id, name, email, telegram_username, ethereum_address, bio, skills, membership_tier, member_type")
-    .eq("email", user!.email!)
+    .eq("supabase_user_id", user!.id)
     .single();
 
   if (!member) return null;

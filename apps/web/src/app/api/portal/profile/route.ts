@@ -18,7 +18,7 @@ export async function PATCH(request: Request) {
       ...(telegram_username !== undefined && { telegram_username }),
       ...(ethereum_address !== undefined && { ethereum_address }),
     })
-    .eq("email", user.email!);
+    .eq("supabase_user_id", user.id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
