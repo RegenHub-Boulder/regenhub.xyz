@@ -1,29 +1,16 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import type { Member } from "@/lib/supabase/types";
-
-type AdminCheck = Pick<Member, "is_admin">;
-
-async function requireAdmin(supabase: Awaited<ReturnType<typeof createClient>>) {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const { data } = await supabase
-    .from("members")
-    .select("is_admin")
-    .eq("email", user.email!)
-    .single() as { data: AdminCheck | null };
-  return data?.is_admin ? user : null;
-}
+import { requireAdmin } from "@/lib/admin";
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = await createClient();
-  if (!await requireAdmin(supabase)) {
+  if (!await requireAdmin()) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const supabase = await createClient();
   const { id } = await params;
   const body = await request.json();
 
@@ -56,11 +43,11 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = await createClient();
-  if (!await requireAdmin(supabase)) {
+  if (!await requireAdmin()) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const supabase = await createClient();
   const { id } = await params;
 
   const { error } = await supabase

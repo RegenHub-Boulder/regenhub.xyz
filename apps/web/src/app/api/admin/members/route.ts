@@ -1,26 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import type { Member } from "@/lib/supabase/types";
-
-type AdminCheck = Pick<Member, "is_admin">;
-
-async function requireAdmin(supabase: Awaited<ReturnType<typeof createClient>>) {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const { data } = await supabase
-    .from("members")
-    .select("is_admin")
-    .eq("email", user.email!)
-    .single() as { data: AdminCheck | null };
-  return data?.is_admin ? user : null;
-}
+import { requireAdmin } from "@/lib/admin";
+import { setUserCode } from "@/lib/homeAssistant";
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  if (!await requireAdmin(supabase)) {
+  if (!await requireAdmin()) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const supabase = await createClient();
   const body = await request.json();
   const { name, email, member_type, membership_tier, is_admin, telegram_username, pin_code_slot, pin_code } = body;
 
@@ -46,6 +34,16 @@ export async function POST(request: Request) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Sync PIN to lock immediately if slot + code provided
+  if (data.pin_code_slot && data.pin_code) {
+    try {
+      await setUserCode(data.pin_code_slot, data.pin_code);
+    } catch (err) {
+      console.error(`[LockSync] Failed to set code for new member ${data.name}:`, err);
+      // Non-fatal: admin can run Lock Sync to retry
+    }
   }
 
   return NextResponse.json({ member: data }, { status: 201 });
