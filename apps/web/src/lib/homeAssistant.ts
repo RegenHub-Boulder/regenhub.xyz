@@ -20,20 +20,17 @@ async function haPost(endpoint: string, data: Record<string, unknown>) {
     throw new Error(`Home Assistant error: ${res.status} ${await res.text()}`);
   }
 
-  return res.json();
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
 export async function setUserCode(slot: number, code: string) {
-  return haPost("/script/set_user_code", {
-    entity_id: "script.set_user_code",
+  return haPost("/services/script/set_user_code", {
     slot,
     lock_code: code,
   });
 }
 
 export async function clearUserCode(slot: number) {
-  return haPost("/script/clear_user_code", {
-    entity_id: "script.clear_user_code",
-    slot,
-  });
+  return haPost("/services/script/clear_user_code", { slot });
 }

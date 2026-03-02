@@ -15,7 +15,7 @@ async function haPost(endpoint: string, data: Record<string, unknown>) {
 }
 
 export const setUserCode = (slot: number, code: string) =>
-  haPost("/script/set_user_code", { entity_id: "script.set_user_code", slot, lock_code: code });
+  haPost("/services/script/set_user_code", { slot, lock_code: code });
 
 export const clearUserCode = (slot: number) =>
-  haPost("/script/clear_user_code", { entity_id: "script.clear_user_code", slot });
+  haPost("/services/script/clear_user_code", { slot });
