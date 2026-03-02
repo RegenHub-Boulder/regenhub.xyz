@@ -10,7 +10,7 @@ export async function POST(request: Request) {
 
   const supabase = await createClient();
   const body = await request.json();
-  const { name, email, member_type, membership_tier, is_admin, telegram_username, pin_code_slot, pin_code } = body;
+  const { name, email, member_type, membership_tier, is_admin, telegram_username, pin_code_slot, pin_code, supabase_user_id } = body;
 
   if (!name || !member_type || !membership_tier) {
     return NextResponse.json({ error: "name, member_type, and membership_tier are required" }, { status: 400 });
@@ -27,6 +27,7 @@ export async function POST(request: Request) {
       telegram_username: telegram_username || null,
       pin_code_slot: pin_code_slot ? Number(pin_code_slot) : null,
       pin_code: pin_code || null,
+      supabase_user_id: supabase_user_id || null,
       disabled: false,
     })
     .select()

@@ -18,11 +18,13 @@ export default async function PortalPage() {
   if (!member) {
     return (
       <div className="glass-panel p-8 text-center max-w-md mx-auto mt-16">
-        <h2 className="text-xl font-semibold mb-3">Account Not Found</h2>
+        <h2 className="text-xl font-semibold mb-3">Membership Pending</h2>
         <p className="text-muted text-sm">
-          Your email isn't linked to a member account yet.<br />
-          Contact an admin to get set up.
+          You&apos;re in the system — your account just needs to be set up by an admin.
+          <br /><br />
+          Reach out on Telegram if you haven&apos;t heard back yet.
         </p>
+        <p className="text-xs text-muted mt-4">{user.email}</p>
       </div>
     );
   }

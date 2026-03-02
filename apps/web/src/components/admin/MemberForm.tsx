@@ -11,13 +11,15 @@ import type { Member } from "@/lib/supabase/types";
 
 interface Props {
   member?: Member;
+  initialEmail?: string;
+  initialUserId?: string;
 }
 
-export function MemberForm({ member }: Props) {
+export function MemberForm({ member, initialEmail, initialUserId }: Props) {
   const isEdit = !!member;
   const [form, setForm] = useState({
     name: member?.name ?? "",
-    email: member?.email ?? "",
+    email: member?.email ?? initialEmail ?? "",
     member_type: member?.member_type ?? "full",
     membership_tier: member?.membership_tier ?? "community",
     is_admin: member?.is_admin ?? false,
@@ -44,13 +46,17 @@ export function MemberForm({ member }: Props) {
     setLoading(true);
     setError(null);
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       ...form,
       pin_code_slot: form.pin_code_slot ? Number(form.pin_code_slot) : null,
       email: form.email || null,
       telegram_username: form.telegram_username || null,
       pin_code: form.pin_code || null,
     };
+    // On creation, link to the auth user if we came from "Create Profile"
+    if (!isEdit && initialUserId) {
+      payload.supabase_user_id = initialUserId;
+    }
 
     try {
       const url = isEdit
