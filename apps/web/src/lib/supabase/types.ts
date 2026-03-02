@@ -1,6 +1,6 @@
 export type MemberType = "full" | "daypass";
 export type ApplicationStatus = "pending" | "approved" | "rejected";
-export type MembershipInterest = "community" | "coworking" | "cooperative";
+export type MembershipInterest = "daypass_single" | "daypass_5pack" | "hot_desk" | "reserved_desk";
 export type MembershipTier = "community" | "coworking" | "cooperative";
 export type AccessMethod = "nfc" | "pin" | "daycode";
 

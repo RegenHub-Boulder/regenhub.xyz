@@ -45,7 +45,7 @@ export async function POST(req: Request) {
         name: name.trim(),
         about: about?.trim() || null,
         why_join: why_join?.trim() || null,
-        membership_interest: membership_interest ?? "community",
+        membership_interest: membership_interest ?? "daypass_5pack",
         status: "pending",
         updated_at: new Date().toISOString(),
       },

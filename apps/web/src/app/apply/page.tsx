@@ -10,10 +10,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, CheckCircle, ArrowLeft } from "lucide-react";
 import regenHubFull from "@/assets/regenhub-full.svg";
 
-const TIER_OPTIONS = [
-  { value: "community", label: "Community Member", desc: "Event access, resource library, community network" },
-  { value: "coworking", label: "Co-working Member", desc: "Co-working access, shared benefits, project collaboration" },
-  { value: "cooperative", label: "Cooperative Member", desc: "Full ownership rights, governance participation, equity distribution" },
+const ACCESS_OPTIONS = [
+  { value: "daypass_5pack", label: "5-Pack Day Passes", desc: "Flexible drop-in access — buy a 5-pack and use them whenever you need a desk" },
+  { value: "daypass_single", label: "Single Day Passes", desc: "Occasional drop-in access, purchased one at a time" },
+  { value: "hot_desk", label: "Hot Desk Membership", desc: "Regular monthly access — a dedicated place in the community with full membership benefits" },
+  { value: "reserved_desk", label: "Reserved Desk", desc: "Your own dedicated desk, always available, full cooperative membership" },
 ] as const;
 
 export default function ApplyPage() {
@@ -22,7 +23,7 @@ export default function ApplyPage() {
     email: "",
     about: "",
     why_join: "",
-    membership_interest: "community" as "community" | "coworking" | "cooperative",
+    membership_interest: "daypass_5pack" as "daypass_5pack" | "daypass_single" | "hot_desk" | "reserved_desk",
   });
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -124,19 +125,19 @@ export default function ApplyPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="membership_interest">Membership type</Label>
+                <Label htmlFor="membership_interest">What level of access are you interested in?</Label>
                 <select
                   id="membership_interest"
                   value={form.membership_interest}
                   onChange={set("membership_interest")}
                   className="w-full rounded-md px-3 py-2 text-sm glass-input"
                 >
-                  {TIER_OPTIONS.map(({ value, label }) => (
+                  {ACCESS_OPTIONS.map(({ value, label }) => (
                     <option key={value} value={value}>{label}</option>
                   ))}
                 </select>
                 <p className="text-xs text-muted">
-                  {TIER_OPTIONS.find(t => t.value === form.membership_interest)?.desc}
+                  {ACCESS_OPTIONS.find(t => t.value === form.membership_interest)?.desc}
                 </p>
               </div>
 

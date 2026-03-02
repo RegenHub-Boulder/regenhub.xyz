@@ -28,7 +28,7 @@ function AuthUserRow({ u }: { u: AdminUser }) {
         {displayName ?? <span className="text-muted italic">—</span>}
         {u.member?.is_admin && <span className="ml-2 text-xs text-gold">[Admin]</span>}
         {!u.member && u.application && (
-          <span className="ml-2 text-xs text-muted italic">({u.application.membership_interest})</span>
+          <span className="ml-2 text-xs text-muted italic">({u.application.membership_interest.replace(/_/g, " ")})</span>
         )}
       </td>
       <td className="px-4 py-3 text-muted text-sm">{u.email}</td>

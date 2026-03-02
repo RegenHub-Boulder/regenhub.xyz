@@ -33,7 +33,7 @@ export default async function PortalPage() {
             {application.status === "rejected" && "Your application wasn't approved this time. Reach out on Telegram to learn more."}
           </p>
           <p className="text-xs text-muted mb-1">Submitted as: {application.email}</p>
-          <p className="text-xs text-muted">Membership interest: <span className="capitalize">{application.membership_interest}</span></p>
+          <p className="text-xs text-muted">Interested in: <span className="capitalize">{application.membership_interest.replace(/_/g, " ")}</span></p>
         </div>
       );
     }
