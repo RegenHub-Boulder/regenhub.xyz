@@ -24,7 +24,6 @@ export function MemberForm({ member, initialEmail, initialUserId }: Props) {
     membership_tier: member?.membership_tier ?? "community",
     is_admin: member?.is_admin ?? false,
     telegram_username: member?.telegram_username ?? "",
-    pin_code_slot: member?.pin_code_slot?.toString() ?? "",
     pin_code: member?.pin_code ?? "",
     disabled: member?.disabled ?? false,
   });
@@ -48,12 +47,10 @@ export function MemberForm({ member, initialEmail, initialUserId }: Props) {
 
     const payload: Record<string, unknown> = {
       ...form,
-      pin_code_slot: form.pin_code_slot ? Number(form.pin_code_slot) : null,
       email: form.email || null,
       telegram_username: form.telegram_username || null,
       pin_code: form.pin_code || null,
     };
-    // On creation, link to the auth user if we came from "Create Profile"
     if (!isEdit && initialUserId) {
       payload.supabase_user_id = initialUserId;
     }
@@ -142,15 +139,12 @@ export function MemberForm({ member, initialEmail, initialUserId }: Props) {
               <Input id="telegram" value={form.telegram_username} onChange={set("telegram_username")} placeholder="@handle" className="glass-input" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="slot">PIN slot (1–249)</Label>
-              <Input id="slot" type="number" min={1} max={249} value={form.pin_code_slot} onChange={set("pin_code_slot")} className="glass-input" />
+              <Label htmlFor="pin_code">PIN code</Label>
+              <Input id="pin_code" value={form.pin_code} onChange={set("pin_code")} placeholder="Leave blank to auto-generate" className="glass-input font-mono" />
+              {isEdit && member?.pin_code_slot && (
+                <p className="text-xs text-muted">Slot {member.pin_code_slot}</p>
+              )}
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="pin_code">PIN code</Label>
-            <Input id="pin_code" value={form.pin_code} onChange={set("pin_code")} placeholder="4–8 digits" className="glass-input font-mono" />
-            <p className="text-xs text-muted">Leave blank to auto-generate on first login</p>
           </div>
 
           <div className="flex gap-6">
