@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { RevokeCodeButton } from "@/components/admin/RevokeCodeButton";
+import { QuickCodeForm } from "@/components/admin/QuickCodeForm";
 import type { DayCode } from "@/lib/supabase/types";
 
 type CodeWithMember = DayCode & {
@@ -10,11 +11,18 @@ type CodeWithMember = DayCode & {
 export default async function ActiveCodesPage() {
   const supabase = await createClient();
 
-  const { data: codes } = await supabase
-    .from("day_codes")
-    .select("*, members(name, telegram_username)")
-    .eq("is_active", true)
-    .order("expires_at", { ascending: true }) as { data: CodeWithMember[] | null };
+  const [{ data: codes }, { data: members }] = await Promise.all([
+    supabase
+      .from("day_codes")
+      .select("*, members(name, telegram_username)")
+      .eq("is_active", true)
+      .order("expires_at", { ascending: true }) as Promise<{ data: CodeWithMember[] | null }>,
+    supabase
+      .from("members")
+      .select("id, name")
+      .eq("disabled", false)
+      .order("name", { ascending: true }),
+  ]);
 
   const now = new Date();
 
@@ -24,6 +32,8 @@ export default async function ActiveCodesPage() {
         <h1 className="text-2xl font-bold text-forest">Live Door Codes</h1>
         <p className="text-muted text-sm">{codes?.length ?? 0} active</p>
       </div>
+
+      <QuickCodeForm members={members ?? []} />
 
       {!codes?.length ? (
         <div className="glass-panel p-8 text-center text-muted">No active codes right now.</div>

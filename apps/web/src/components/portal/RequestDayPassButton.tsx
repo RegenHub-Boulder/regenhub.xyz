@@ -4,7 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Plus, Settings2 } from "lucide-react";
+
+const EXPIRY_PRESETS = [
+  { label: "4 hrs", hours: 4 },
+  { label: "1 day", hours: 24 },
+  { label: "3 days", hours: 72 },
+  { label: "1 week", hours: 168 },
+];
 
 interface Props {
   memberId: number;
@@ -15,7 +22,8 @@ interface Props {
 export function RequestDayPassButton({ isFullMember, remainingUses }: Props) {
   const [loading, setLoading] = useState(false);
   const [label, setLabel] = useState("");
-  const [showLabel, setShowLabel] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [expiryHours, setExpiryHours] = useState(24);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ code: string; expires_at: string } | null>(null);
   const router = useRouter();
@@ -29,13 +37,13 @@ export function RequestDayPassButton({ isFullMember, remainingUses }: Props) {
       const res = await fetch("/api/portal/request-daypass", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label: label || undefined }),
+        body: JSON.stringify({ label: label || undefined, expires_in_hours: expiryHours }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed");
       setResult(json);
       setLabel("");
-      setShowLabel(false);
+      setShowForm(false);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -67,36 +75,57 @@ export function RequestDayPassButton({ isFullMember, remainingUses }: Props) {
     );
   }
 
+  const canGenerate = isFullMember || remainingUses > 0;
+
   return (
     <div className="flex flex-col items-end gap-2">
-      {showLabel && (
-        <Input
-          placeholder={isFullMember ? "Guest name (optional)" : "Label (optional)"}
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          className="w-48 glass-input text-sm"
-          onKeyDown={(e) => e.key === "Enter" && handleRequest()}
-        />
+      {showForm && (
+        <div className="flex flex-col gap-2 items-end">
+          <div className="flex gap-1 flex-wrap justify-end">
+            {EXPIRY_PRESETS.map((p) => (
+              <button
+                key={p.hours}
+                type="button"
+                onClick={() => setExpiryHours(p.hours)}
+                className={`px-3 py-1 rounded text-xs transition-colors ${
+                  expiryHours === p.hours
+                    ? "bg-gold/20 text-gold border border-gold/40"
+                    : "bg-white/5 text-muted border border-white/10 hover:bg-white/10"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <Input
+            placeholder={isFullMember ? "Guest name (optional)" : "Label (optional)"}
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            className="w-52 glass-input text-sm"
+            onKeyDown={(e) => e.key === "Enter" && handleRequest()}
+            autoFocus
+          />
+        </div>
       )}
       <div className="flex gap-2">
-        {!showLabel && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="btn-glass text-xs"
-            onClick={() => setShowLabel(true)}
-          >
-            Add label
-          </Button>
-        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="btn-glass gap-1.5 text-xs"
+          onClick={() => setShowForm((v) => !v)}
+          disabled={!canGenerate}
+        >
+          <Settings2 className="w-3 h-3" />
+          {showForm ? "Hide" : "Options"}
+        </Button>
         <Button
           onClick={handleRequest}
-          disabled={loading || remainingUses <= 0}
+          disabled={loading || !canGenerate}
           className="btn-primary-glass gap-2"
-          title={remainingUses <= 0 ? "No uses remaining" : undefined}
+          title={!canGenerate ? "No uses remaining" : undefined}
         >
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-          {loading ? "Generating…" : isFullMember ? "Generate code" : "Get today's code"}
+          {loading ? "Generating…" : isFullMember ? "Generate code" : "Get door code"}
         </Button>
       </div>
       {error && <p className="text-xs text-red-400">{error}</p>}

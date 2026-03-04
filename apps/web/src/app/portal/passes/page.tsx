@@ -3,9 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RequestDayPassButton } from "@/components/portal/RequestDayPassButton";
-import { Ticket, Clock, Users } from "lucide-react";
+import { RevokeCodeButton } from "@/components/portal/RevokeCodeButton";
+import { Ticket, Clock, Users, Zap } from "lucide-react";
 
-export const metadata = { title: "Day Passes — RegenHub" };
+export const metadata = { title: "Live Codes — RegenHub" };
 
 export default async function PassesPage() {
   const supabase = await createClient();
@@ -22,23 +23,20 @@ export default async function PassesPage() {
 
   const isFullMember = member.member_type === "full";
 
-  // Fetch day passes for this member
+  // Always fetch active codes by member_id — full members bypass pass pools
+  const { data: activeCodes } = await supabase
+    .from("day_codes")
+    .select("*")
+    .eq("member_id", member.id)
+    .eq("is_active", true)
+    .order("expires_at", { ascending: true });
+
+  // Day-pass pools (relevant for day-pass members)
   const { data: passes } = await supabase
     .from("day_passes")
     .select("*")
     .eq("member_id", member.id)
     .order("created_at", { ascending: false });
-
-  // Fetch active codes issued from this member's passes
-  const passIds = passes?.map((p) => p.id) ?? [];
-  const { data: activeCodes } = passIds.length > 0
-    ? await supabase
-        .from("day_codes")
-        .select("*")
-        .in("day_pass_id", passIds)
-        .eq("is_active", true)
-        .order("expires_at", { ascending: true })
-    : { data: [] };
 
   const totalRemaining = passes?.reduce((sum, p) => {
     const remaining = p.allowed_uses - p.used_count;
@@ -48,10 +46,12 @@ export default async function PassesPage() {
   return (
     <div className="space-y-8 max-w-3xl">
       <div>
-        <h1 className="text-3xl font-bold text-forest">Day Passes</h1>
+        <h1 className="text-3xl font-bold text-forest">
+          {isFullMember ? "Live Codes" : "Day Passes"}
+        </h1>
         <p className="text-muted mt-1">
           {isFullMember
-            ? "Generate single-use door codes for guests"
+            ? "Generate temporary door codes for guests or your own use"
             : "Request a door code for your visit today"}
         </p>
       </div>
@@ -61,21 +61,33 @@ export default async function PassesPage() {
         <CardContent className="p-6">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-6">
-              <div>
-                <div className="flex items-center gap-2 text-sm text-muted mb-1">
-                  <Ticket className="w-4 h-4" />
-                  {isFullMember ? "Remaining uses" : "Passes available"}
-                </div>
-                <p className="text-3xl font-bold text-foreground">{totalRemaining}</p>
-              </div>
-              {activeCodes && activeCodes.length > 0 && (
+              {isFullMember ? (
                 <div>
                   <div className="flex items-center gap-2 text-sm text-muted mb-1">
-                    <Users className="w-4 h-4" />
+                    <Zap className="w-4 h-4" />
                     Active codes
                   </div>
-                  <p className="text-3xl font-bold text-gold">{activeCodes.length}</p>
+                  <p className="text-3xl font-bold text-gold">{activeCodes?.length ?? 0}</p>
                 </div>
+              ) : (
+                <>
+                  <div>
+                    <div className="flex items-center gap-2 text-sm text-muted mb-1">
+                      <Ticket className="w-4 h-4" />
+                      Passes available
+                    </div>
+                    <p className="text-3xl font-bold text-foreground">{totalRemaining}</p>
+                  </div>
+                  {activeCodes && activeCodes.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-2 text-sm text-muted mb-1">
+                        <Users className="w-4 h-4" />
+                        Active codes
+                      </div>
+                      <p className="text-3xl font-bold text-gold">{activeCodes.length}</p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
             <RequestDayPassButton
@@ -94,22 +106,30 @@ export default async function PassesPage() {
           <div className="space-y-3">
             {activeCodes.map((code) => {
               const expiresAt = new Date(code.expires_at);
-              const hoursLeft = Math.max(0, Math.ceil((expiresAt.getTime() - Date.now()) / 3600000));
+              const msLeft = expiresAt.getTime() - Date.now();
+              const hoursLeft = Math.max(0, Math.ceil(msLeft / 3600000));
+              const timeLabel = hoursLeft < 24
+                ? `${hoursLeft}h left`
+                : `${Math.ceil(hoursLeft / 24)}d left`;
+
               return (
                 <div key={code.id} className="glass-panel p-4 flex items-center justify-between gap-4">
                   <div>
                     <p className="font-mono font-bold text-gold text-xl">{code.code}</p>
                     {code.label && <p className="text-xs text-muted mt-0.5">{code.label}</p>}
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-muted">
-                    <Clock className="w-4 h-4" />
-                    <span>{hoursLeft}h left</span>
-                    <Badge variant="outline" className="text-xs border-white/20">
-                      {expiresAt.toLocaleDateString("en-US", {
-                        month: "short", day: "numeric",
-                        timeZone: "America/Denver",
-                      })}
-                    </Badge>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 text-sm text-muted">
+                      <Clock className="w-4 h-4" />
+                      <span>{timeLabel}</span>
+                      <Badge variant="outline" className="text-xs border-white/20">
+                        {expiresAt.toLocaleDateString("en-US", {
+                          month: "short", day: "numeric",
+                          timeZone: "America/Denver",
+                        })}
+                      </Badge>
+                    </div>
+                    <RevokeCodeButton codeId={code.id} />
                   </div>
                 </div>
               );
@@ -118,8 +138,8 @@ export default async function PassesPage() {
         </div>
       )}
 
-      {/* Pass pools */}
-      {passes && passes.length > 0 && (
+      {/* Pass pools — only for day-pass members */}
+      {!isFullMember && passes && passes.length > 0 && (
         <div>
           <h2 className="text-lg font-semibold mb-4">Pass pools</h2>
           <div className="glass-panel overflow-hidden">
@@ -156,7 +176,7 @@ export default async function PassesPage() {
         </div>
       )}
 
-      {(!passes || passes.length === 0) && (
+      {!isFullMember && (!passes || passes.length === 0) && (
         <div className="glass-panel p-8 text-center text-muted">
           <Ticket className="w-8 h-8 mx-auto mb-3 opacity-40" />
           <p>No day passes yet. Contact an admin to get set up.</p>

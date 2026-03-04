@@ -25,7 +25,7 @@ export default async function PortalLayout({ children }: { children: React.React
             <div className="hidden sm:flex gap-4 text-sm">
               <Link href="/portal" className="text-muted hover:text-foreground transition-colors">Dashboard</Link>
               <Link href="/portal/my-code" className="text-muted hover:text-foreground transition-colors">My Code</Link>
-              <Link href="/portal/passes" className="text-muted hover:text-foreground transition-colors">Day Passes</Link>
+              <Link href="/portal/passes" className="text-muted hover:text-foreground transition-colors">Live Codes</Link>
               <Link href="/portal/profile" className="text-muted hover:text-foreground transition-colors">Profile</Link>
               {member?.is_admin && (
                 <Link href="/admin" className="text-gold hover:text-gold/80 transition-colors">Admin</Link>

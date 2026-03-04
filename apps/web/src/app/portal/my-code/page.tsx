@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { RegenerateCodeButton } from "@/components/portal/RegenerateCodeButton";
-import { Key, Nfc, AlertCircle } from "lucide-react";
+import { Key, Nfc, AlertCircle, Zap } from "lucide-react";
 
 export const metadata = { title: "My Door Code — RegenHub" };
 
@@ -72,6 +73,18 @@ export default async function MyCodePage() {
           </CardContent>
         </Card>
       )}
+
+      <Link
+        href="/portal/passes"
+        className="glass-panel p-5 flex items-center gap-4 hover:bg-white/5 transition-colors group"
+      >
+        <Zap className="w-5 h-5 text-gold shrink-0" />
+        <div>
+          <p className="font-medium text-sm">Generate a live code for a guest</p>
+          <p className="text-xs text-muted mt-0.5">Temporary codes with custom expiry — 4 hours to 1 week</p>
+        </div>
+        <span className="ml-auto text-muted group-hover:text-foreground text-sm">Live Codes →</span>
+      </Link>
 
       <div className="glass-panel p-6 space-y-3">
         <h3 className="font-semibold">How to use the keypad</h3>
