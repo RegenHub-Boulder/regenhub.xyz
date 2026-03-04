@@ -29,7 +29,7 @@ export async function POST(request: Request) {
 
   const supabase = await createClient();
   const body = await request.json();
-  const { name, email, member_type, is_coop_member, is_admin, telegram_username, pin_code, supabase_user_id } = body;
+  const { name, email, member_type, is_coop_member, is_admin, telegram_username, pin_code, supabase_user_id, initial_day_passes } = body;
 
   if (!name || !member_type) {
     return NextResponse.json({ error: "name and member_type are required" }, { status: 400 });
@@ -56,6 +56,7 @@ export async function POST(request: Request) {
       member_type,
       is_coop_member: is_coop_member ?? false,
       is_admin: is_admin ?? false,
+      day_passes_balance: Math.max(0, parseInt(initial_day_passes) || 0),
       telegram_username: telegram_username || null,
       pin_code_slot: slot,
       pin_code: assignedPin,

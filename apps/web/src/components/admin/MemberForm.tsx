@@ -26,6 +26,7 @@ export function MemberForm({ member, initialEmail, initialUserId }: Props) {
     telegram_username: member?.telegram_username ?? "",
     pin_code: member?.pin_code ?? "",
     disabled: member?.disabled ?? false,
+    initial_day_passes: "10",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -139,6 +140,21 @@ export function MemberForm({ member, initialEmail, initialUserId }: Props) {
               {isEdit && member?.pin_code_slot && (
                 <p className="text-xs text-muted">Slot {member.pin_code_slot}</p>
               )}
+            </div>
+          )}
+
+          {!isEdit && (
+            <div className="space-y-2">
+              <Label htmlFor="initial_day_passes">Initial day passes</Label>
+              <Input
+                id="initial_day_passes"
+                type="number"
+                min="0"
+                value={form.initial_day_passes}
+                onChange={set("initial_day_passes")}
+                className="glass-input w-32"
+              />
+              <p className="text-xs text-muted">Starting balance for generating live door codes</p>
             </div>
           )}
 

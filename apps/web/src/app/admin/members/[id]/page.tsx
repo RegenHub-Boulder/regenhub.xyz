@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { MemberForm } from "@/components/admin/MemberForm";
+import { AddPassesCard } from "@/components/admin/AddPassesCard";
 
 export const metadata = { title: "Edit Member — Admin" };
 
@@ -23,6 +24,7 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
         <p className="text-muted mt-1">{member.name}</p>
       </div>
       <MemberForm member={member} />
+      <AddPassesCard memberId={member.id} initialBalance={member.day_passes_balance} />
     </div>
   );
 }

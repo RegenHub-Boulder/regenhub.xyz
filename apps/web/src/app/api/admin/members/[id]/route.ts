@@ -18,7 +18,7 @@ export async function PATCH(
   const allowed = [
     "name", "email", "member_type", "is_coop_member", "is_admin",
     "telegram_username", "ethereum_address", "pin_code_slot", "pin_code",
-    "nfc_key_address", "bio", "skills", "disabled",
+    "nfc_key_address", "bio", "skills", "disabled", "day_passes_balance",
   ] as const;
 
   const update: Record<string, unknown> = {};

@@ -97,69 +97,27 @@ async function handleDayPass(msg: TelegramBot.Message) {
   const user = await findMemberByTelegram(msg.from?.username ?? "");
   if (!user) return bot.sendMessage(msg.chat.id, "Not registered. Contact an admin.");
 
+  if (user.day_passes_balance <= 0) {
+    return bot.sendMessage(msg.chat.id, "No day passes remaining. Contact an admin to top up.");
+  }
+
   const slot = await findNextAvailableDayPassSlot();
   if (!slot) return bot.sendMessage(msg.chat.id, "All slots in use. Try again later or contact an admin.");
 
-  if (user.member_type === "day_pass") {
-    // Day pass member: check existing active code first
-    const { data: existing } = await db
-      .from("day_codes")
-      .select("code, expires_at")
-      .eq("member_id", user.id)
-      .eq("is_active", true)
-      .gt("expires_at", new Date().toISOString())
-      .single();
-
-    if (existing) {
-      return bot.sendMessage(msg.chat.id,
-        `You already have an active code!\n\n🔑 *${existing.code}*\n\nValid until: ${fmt(new Date(existing.expires_at))}`,
-        { parse_mode: "Markdown" }
-      );
-    }
-
-    // Find valid day pass
-    const { data: dayPass } = await db
-      .from("day_passes")
-      .select("*")
-      .eq("member_id", user.id)
-      .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
-      .order("expires_at", { ascending: true })
-      .limit(1)
-      .single();
-
-    if (!dayPass || dayPass.used_count >= dayPass.allowed_uses) {
-      return bot.sendMessage(msg.chat.id, "No day passes remaining. Contact an admin to purchase more.");
-    }
-
-    const code = generateRandomCode();
-    const expiresAt = calculateDayPassExpiration();
-
-    await setUserCode(slot, code);
-    await db.from("day_codes").insert({
-      day_pass_id: dayPass.id, member_id: user.id,
-      code, pin_slot: slot, expires_at: expiresAt.toISOString(), is_active: true,
-    });
-    await db.from("day_passes").update({ used_count: dayPass.used_count + 1 }).eq("id", dayPass.id);
-
-    const remaining = dayPass.allowed_uses - dayPass.used_count - 1;
-    return bot.sendMessage(msg.chat.id,
-      `Today's code!\n\n🔑 *${code}*\n\nValid until: ${fmt(expiresAt)}\nPasses remaining: ${remaining}`,
-      { parse_mode: "Markdown" }
-    );
-  }
-
-  // Full member guest code
   const code = generateRandomCode();
   const expiresAt = calculateDayPassExpiration();
 
   await setUserCode(slot, code);
   await db.from("day_codes").insert({
-    member_id: user.id, label: `Guest by ${user.name}`,
+    member_id: user.id,
+    label: user.member_type === "day_pass" ? null : `Guest by ${user.name}`,
     code, pin_slot: slot, expires_at: expiresAt.toISOString(), is_active: true,
   });
+  await db.from("members").update({ day_passes_balance: user.day_passes_balance - 1 }).eq("id", user.id);
 
+  const remaining = user.day_passes_balance - 1;
   return bot.sendMessage(msg.chat.id,
-    `Guest code!\n\n🔑 *${code}*\n\nValid until: ${fmt(expiresAt)}\nShare with your guest.`,
+    `${user.member_type === "day_pass" ? "Today's code" : "Guest code"}!\n\n🔑 *${code}*\n\nValid until: ${fmt(expiresAt)}\nPasses remaining: ${remaining}`,
     { parse_mode: "Markdown" }
   );
 }
@@ -495,9 +453,11 @@ async function handleAddPassesFlow(chatId: number, text: string, p: PendingActio
   if (p.step === "awaiting_count") {
     const count = parseInt(text);
     if (!count || count < 1) return bot.sendMessage(chatId, "Enter a number (1 or more):");
-    await db.from("day_passes").insert({ member_id: p.data.memberId as number, allowed_uses: count });
+    const { data: m } = await db.from("members").select("day_passes_balance").eq("id", p.data.memberId as number).single();
+    const newBalance = (m?.day_passes_balance ?? 0) + count;
+    await db.from("members").update({ day_passes_balance: newBalance }).eq("id", p.data.memberId as number);
     pending.delete(chatId);
-    return bot.sendMessage(chatId, `Added ${count} day pass${count > 1 ? "es" : ""} to ${p.data.memberName}.`);
+    return bot.sendMessage(chatId, `Added ${count} day pass${count > 1 ? "es" : ""} to ${p.data.memberName}. New balance: ${newBalance}`);
   }
 }
 

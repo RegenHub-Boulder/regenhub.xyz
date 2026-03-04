@@ -36,7 +36,7 @@ export async function POST(request: Request) {
 
   const { data: member } = await supabase
     .from("members")
-    .select("id, member_type, disabled")
+    .select("id, member_type, disabled, day_passes_balance")
     .eq("supabase_user_id", user.id)
     .single();
 
@@ -44,37 +44,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Account not found or disabled" }, { status: 403 });
   }
 
-  const isFullMember = member.member_type !== "day_pass";
-  let dayPassId: number | null = null;
-
-  if (!isFullMember) {
-    // Day-pass members need a pool with remaining uses
-    const { data: pass } = await supabase
-      .from("day_passes")
-      .select("id, allowed_uses, used_count, expires_at")
-      .eq("member_id", member.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .single();
-
-    if (!pass) {
-      return NextResponse.json({ error: "No day passes available" }, { status: 400 });
-    }
-
-    if (pass.expires_at && new Date(pass.expires_at) < new Date()) {
-      return NextResponse.json({ error: "Day pass pool has expired" }, { status: 400 });
-    }
-
-    const remaining = pass.allowed_uses - pass.used_count;
-    if (remaining <= 0) {
-      return NextResponse.json({ error: "No uses remaining" }, { status: 400 });
-    }
-
-    dayPassId = pass.id;
-    await supabase
-      .from("day_passes")
-      .update({ used_count: pass.used_count + 1 })
-      .eq("id", pass.id);
+  if (member.day_passes_balance <= 0) {
+    return NextResponse.json({ error: "No day passes remaining — contact an admin to top up" }, { status: 400 });
   }
 
   const slot = await findAvailableSlot(supabase);
@@ -91,10 +62,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Failed to program lock" }, { status: 502 });
   }
 
+  // Decrement balance atomically
+  const { error: balanceError } = await supabase
+    .from("members")
+    .update({ day_passes_balance: member.day_passes_balance - 1 })
+    .eq("id", member.id);
+
+  if (balanceError) {
+    console.error("[DB] Failed to decrement balance:", balanceError);
+    // Non-fatal — code is already programmed, log but continue
+  }
+
   const { error: insertError } = await supabase
     .from("day_codes")
     .insert({
-      day_pass_id: dayPassId,
       member_id: member.id,
       label: label ?? null,
       code,
@@ -109,5 +90,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Code set but DB save failed" }, { status: 500 });
   }
 
-  return NextResponse.json({ code, expires_at: expiresAt });
+  return NextResponse.json({
+    code,
+    expires_at: expiresAt,
+    balance_remaining: member.day_passes_balance - 1,
+  });
 }

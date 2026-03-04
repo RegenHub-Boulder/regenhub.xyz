@@ -48,6 +48,7 @@ export interface Database {
           is_coop_member: boolean;
           is_admin: boolean;
           disabled: boolean;
+          day_passes_balance: number;
           bio: string | null;
           skills: string[] | null;
           profile_photo_url: string | null;
@@ -69,6 +70,7 @@ export interface Database {
           is_coop_member?: boolean;
           is_admin?: boolean;
           disabled?: boolean;
+          day_passes_balance?: number;
           bio?: string | null;
           skills?: string[] | null;
           profile_photo_url?: string | null;
