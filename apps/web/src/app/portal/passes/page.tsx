@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RequestDayPassButton } from "@/components/portal/RequestDayPassButton";
 import { RevokeCodeButton } from "@/components/portal/RevokeCodeButton";
-import { Ticket, Clock } from "lucide-react";
+import { Ticket, Clock, ShoppingCart } from "lucide-react";
 
 export const metadata = { title: "Live Codes — RegenHub" };
 
@@ -15,11 +15,20 @@ export default async function PassesPage() {
 
   const { data: member } = await supabase
     .from("members")
-    .select("id, name, member_type, day_passes_balance")
+    .select("id, name, email, member_type, day_passes_balance")
     .eq("supabase_user_id", user.id)
     .single();
 
   if (!member) return null;
+
+  // Build Stripe payment link URLs with member context pre-filled
+  const stripeParams = `?client_reference_id=${member.id}&prefilled_email=${encodeURIComponent(member.email ?? "")}`;
+  const daypassUrl = process.env.NEXT_PUBLIC_STRIPE_DAYPASS_LINK
+    ? `${process.env.NEXT_PUBLIC_STRIPE_DAYPASS_LINK}${stripeParams}`
+    : null;
+  const fivepackUrl = process.env.NEXT_PUBLIC_STRIPE_FIVEPACK_LINK
+    ? `${process.env.NEXT_PUBLIC_STRIPE_FIVEPACK_LINK}${stripeParams}`
+    : null;
 
   const { data: activeCodes } = await supabase
     .from("day_codes")
@@ -109,6 +118,49 @@ export default async function PassesPage() {
         <div className="glass-panel p-8 text-center text-muted">
           <Ticket className="w-8 h-8 mx-auto mb-3 opacity-40" />
           <p>No active codes. Generate one above.</p>
+        </div>
+      )}
+
+      {/* Buy more passes */}
+      {(daypassUrl || fivepackUrl) && (
+        <div>
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <ShoppingCart className="w-5 h-5 text-sage" />
+            Buy more passes
+          </h2>
+          <div className="grid sm:grid-cols-2 gap-4">
+            {daypassUrl && (
+              <a
+                href={daypassUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="glass-panel p-5 hover:bg-white/5 transition-colors group block"
+              >
+                <p className="font-semibold mb-1">Single Day Pass</p>
+                <p className="text-3xl font-bold text-gold mb-3">$25</p>
+                <p className="text-xs text-muted group-hover:text-foreground transition-colors">
+                  1 live code → opens the door →
+                </p>
+              </a>
+            )}
+            {fivepackUrl && (
+              <a
+                href={fivepackUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="glass-panel p-5 hover:bg-white/5 transition-colors group block"
+              >
+                <div className="flex items-start justify-between">
+                  <p className="font-semibold mb-1">5-Pack</p>
+                  <span className="text-xs bg-sage/20 text-sage px-2 py-0.5 rounded-full">Save $25</span>
+                </div>
+                <p className="text-3xl font-bold text-gold mb-3">$100</p>
+                <p className="text-xs text-muted group-hover:text-foreground transition-colors">
+                  5 live codes → best value →
+                </p>
+              </a>
+            )}
+          </div>
         </div>
       )}
     </div>

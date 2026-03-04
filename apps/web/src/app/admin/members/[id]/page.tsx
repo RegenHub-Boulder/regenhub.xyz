@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { MemberForm } from "@/components/admin/MemberForm";
 import { AddPassesCard } from "@/components/admin/AddPassesCard";
+import { PaymentLinkCard } from "@/components/admin/PaymentLinkCard";
 
 export const metadata = { title: "Edit Member — Admin" };
 
@@ -25,6 +26,15 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
       </div>
       <MemberForm member={member} />
       <AddPassesCard memberId={member.id} initialBalance={member.day_passes_balance} />
+      <PaymentLinkCard
+        memberName={member.name}
+        daypassUrl={process.env.NEXT_PUBLIC_STRIPE_DAYPASS_LINK
+          ? `${process.env.NEXT_PUBLIC_STRIPE_DAYPASS_LINK}?client_reference_id=${member.id}&prefilled_email=${encodeURIComponent(member.email ?? "")}`
+          : null}
+        fivepackUrl={process.env.NEXT_PUBLIC_STRIPE_FIVEPACK_LINK
+          ? `${process.env.NEXT_PUBLIC_STRIPE_FIVEPACK_LINK}?client_reference_id=${member.id}&prefilled_email=${encodeURIComponent(member.email ?? "")}`
+          : null}
+      />
     </div>
   );
 }
