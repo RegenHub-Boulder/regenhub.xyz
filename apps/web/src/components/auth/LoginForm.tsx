@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,8 +8,10 @@ import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 
 export function LoginForm() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
+  const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,14 +36,59 @@ export function LoginForm() {
     setLoading(false);
   };
 
+  const handleOtpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    const supabase = createClient();
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: otp,
+      type: "email",
+    });
+
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+    } else {
+      router.push("/portal");
+    }
+  };
+
   if (sent) {
     return (
-      <div className="text-center space-y-4">
-        <div className="text-4xl">📬</div>
-        <h2 className="text-xl font-semibold">Check your email</h2>
-        <p className="text-muted text-sm">
-          We sent a magic link to <strong>{email}</strong>.<br />
-          Click it to sign in.
+      <div className="space-y-6">
+        <div className="text-center space-y-2">
+          <div className="text-4xl">📬</div>
+          <h2 className="text-xl font-semibold">Check your email</h2>
+          <p className="text-muted text-sm">
+            We sent a link and 6-digit code to <strong>{email}</strong>.
+          </p>
+        </div>
+        <form onSubmit={handleOtpSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="otp">Enter code</Label>
+            <Input
+              id="otp"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              value={otp}
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+              placeholder="123456"
+              className="bg-white/10 border-white/20 text-foreground placeholder:text-muted text-center text-lg tracking-widest"
+              autoFocus
+            />
+          </div>
+          {error && <p className="text-red-400 text-sm">{error}</p>}
+          <Button type="submit" disabled={loading || otp.length !== 6} className="btn-primary-glass w-full">
+            {loading ? "Verifying…" : "Sign in"}
+          </Button>
+        </form>
+        <p className="text-center text-xs text-muted">
+          Or click the magic link in the email instead.
         </p>
       </div>
     );
