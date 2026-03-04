@@ -105,12 +105,12 @@ export default async function PassesPage() {
           <h2 className="text-lg font-semibold mb-4">Active codes</h2>
           <div className="space-y-3">
             {activeCodes.map((code) => {
-              const expiresAt = new Date(code.expires_at);
-              const msLeft = expiresAt.getTime() - Date.now();
-              const hoursLeft = Math.max(0, Math.ceil(msLeft / 3600000));
-              const timeLabel = hoursLeft < 24
-                ? `${hoursLeft}h left`
-                : `${Math.ceil(hoursLeft / 24)}d left`;
+              const expiresAt = code.expires_at ? new Date(code.expires_at) : null;
+              const msLeft = expiresAt ? expiresAt.getTime() - Date.now() : null;
+              const hoursLeft = msLeft != null ? Math.max(0, Math.ceil(msLeft / 3600000)) : null;
+              const timeLabel = hoursLeft == null
+                ? null
+                : hoursLeft < 24 ? `${hoursLeft}h left` : `${Math.ceil(hoursLeft / 24)}d left`;
 
               return (
                 <div key={code.id} className="glass-panel p-4 flex items-center justify-between gap-4">
@@ -121,13 +121,19 @@ export default async function PassesPage() {
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2 text-sm text-muted">
                       <Clock className="w-4 h-4" />
-                      <span>{timeLabel}</span>
-                      <Badge variant="outline" className="text-xs border-white/20">
-                        {expiresAt.toLocaleDateString("en-US", {
-                          month: "short", day: "numeric",
-                          timeZone: "America/Denver",
-                        })}
-                      </Badge>
+                      {timeLabel != null ? (
+                        <>
+                          <span>{timeLabel}</span>
+                          <Badge variant="outline" className="text-xs border-white/20">
+                            {expiresAt!.toLocaleDateString("en-US", {
+                              month: "short", day: "numeric",
+                              timeZone: "America/Denver",
+                            })}
+                          </Badge>
+                        </>
+                      ) : (
+                        <span>No expiry</span>
+                      )}
                     </div>
                     <RevokeCodeButton codeId={code.id} />
                   </div>

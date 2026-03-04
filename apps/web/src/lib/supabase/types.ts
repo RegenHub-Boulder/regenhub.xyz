@@ -100,7 +100,7 @@ export interface Database {
           code: string;
           pin_slot: number;
           issued_at: string;
-          expires_at: string;
+          expires_at: string | null;
           revoked_at: string | null;
           is_active: boolean;
           created_at: string;
@@ -113,7 +113,7 @@ export interface Database {
           code: string;
           pin_slot: number;
           issued_at?: string;
-          expires_at: string;
+          expires_at?: string | null;
           revoked_at?: string | null;
           is_active?: boolean;
         };

@@ -54,8 +54,10 @@ export default async function ActiveCodesPage() {
             </thead>
             <tbody>
               {codes.map((c) => {
-                const expiresAt = new Date(c.expires_at);
-                const expiringSoon = (expiresAt.getTime() - now.getTime()) < 60 * 60 * 1000;
+                const expiresAt = c.expires_at ? new Date(c.expires_at) : null;
+                const expiringSoon = expiresAt
+                  ? (expiresAt.getTime() - now.getTime()) < 60 * 60 * 1000
+                  : false;
                 const member = c.members;
                 return (
                   <tr key={c.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
@@ -65,16 +67,20 @@ export default async function ActiveCodesPage() {
                       {c.label ?? member?.name ?? <span className="text-muted">anonymous</span>}
                     </td>
                     <td className="px-4 py-3">
-                      <Badge
-                        variant="outline"
-                        className={`text-xs ${expiringSoon ? "border-orange-400/50 text-orange-400" : "border-white/20 text-muted"}`}
-                      >
-                        {expiresAt.toLocaleString("en-US", {
-                          timeZone: "America/Denver",
-                          month: "short", day: "numeric",
-                          hour: "numeric", minute: "2-digit", hour12: true,
-                        })}
-                      </Badge>
+                      {expiresAt ? (
+                        <Badge
+                          variant="outline"
+                          className={`text-xs ${expiringSoon ? "border-orange-400/50 text-orange-400" : "border-white/20 text-muted"}`}
+                        >
+                          {expiresAt.toLocaleString("en-US", {
+                            timeZone: "America/Denver",
+                            month: "short", day: "numeric",
+                            hour: "numeric", minute: "2-digit", hour12: true,
+                          })}
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted">No expiry</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <RevokeCodeButton codeId={c.id} code={c.code} />

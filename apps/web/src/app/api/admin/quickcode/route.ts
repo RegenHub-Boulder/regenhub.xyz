@@ -30,10 +30,11 @@ export async function POST(request: Request) {
 
   const supabase = await createClient();
   const body = await request.json().catch(() => ({}));
-  const { label, expires_in_hours = 24, member_id = null } = body;
+  const { label, expires_in_hours, member_id = null } = body;
 
-  // Clamp expiry: 1 hour min, 30 days max
-  const clampedHours = Math.min(Math.max(Number(expires_in_hours) || 24, 1), 720);
+  const expiresAt = expires_in_hours == null
+    ? null
+    : new Date(Date.now() + Math.min(Math.max(Number(expires_in_hours) || 24, 1), 720) * 60 * 60 * 1000).toISOString();
 
   // Validate member_id if provided
   if (member_id !== null) {
@@ -53,7 +54,6 @@ export async function POST(request: Request) {
   }
 
   const code = generateCode();
-  const expiresAt = new Date(Date.now() + clampedHours * 60 * 60 * 1000).toISOString();
 
   try {
     await setUserCode(slot, code);
