@@ -9,6 +9,7 @@ export async function createClient() {
     process.env.SUPABASE_INTERNAL_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      cookieOptions: { name: "sb-regenhub" },
       cookies: {
         getAll() {
           return cookieStore.getAll();
