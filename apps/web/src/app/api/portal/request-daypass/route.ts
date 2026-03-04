@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Account not found or disabled" }, { status: 403 });
   }
 
-  const isFullMember = member.member_type === "full";
+  const isFullMember = member.member_type !== "day_pass";
   let dayPassId: number | null = null;
 
   if (!isFullMember) {

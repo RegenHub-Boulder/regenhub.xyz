@@ -1,7 +1,6 @@
-export type MemberType = "full" | "daypass";
+export type MemberType = "cold_desk" | "hot_desk" | "day_pass";
 export type ApplicationStatus = "pending" | "approved" | "rejected";
 export type MembershipInterest = "daypass_single" | "daypass_5pack" | "hot_desk" | "reserved_desk";
-export type MembershipTier = "community" | "coworking" | "cooperative";
 export type AccessMethod = "nfc" | "pin" | "daycode";
 
 export interface Database {
@@ -46,7 +45,7 @@ export interface Database {
           pin_code: string | null;
           pin_code_slot: number | null;
           member_type: MemberType;
-          membership_tier: MembershipTier;
+          is_coop_member: boolean;
           is_admin: boolean;
           disabled: boolean;
           bio: string | null;
@@ -67,7 +66,7 @@ export interface Database {
           pin_code?: string | null;
           pin_code_slot?: number | null;
           member_type: MemberType;
-          membership_tier: MembershipTier;
+          is_coop_member?: boolean;
           is_admin?: boolean;
           disabled?: boolean;
           bio?: string | null;
@@ -140,7 +139,6 @@ export interface Database {
     CompositeTypes: { [_ in never]: never };
     Enums: {
       member_type: MemberType;
-      membership_tier: MembershipTier;
       access_method: AccessMethod;
     };
   };

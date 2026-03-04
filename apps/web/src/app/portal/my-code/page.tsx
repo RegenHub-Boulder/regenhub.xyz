@@ -18,12 +18,12 @@ export default async function MyCodePage() {
     .eq("supabase_user_id", user.id)
     .single();
 
-  if (!member || member.member_type !== "full") {
+  if (!member || member.member_type === "day_pass") {
     return (
       <div className="glass-panel p-8 text-center max-w-md mx-auto mt-8">
         <AlertCircle className="w-8 h-8 text-muted mx-auto mb-3" />
-        <h2 className="font-semibold mb-2">Full membership required</h2>
-        <p className="text-sm text-muted">Permanent door codes are for full members. Day pass members use the Passes page.</p>
+        <h2 className="font-semibold mb-2">Cold/hot desk membership required</h2>
+        <p className="text-sm text-muted">Permanent door codes are for cold and hot desk members. Day pass members use the Passes page.</p>
       </div>
     );
   }

@@ -53,13 +53,14 @@ export default async function PortalPage() {
     );
   }
 
-  const isFullMember = member.member_type === "full";
+  const isFullMember = member.member_type !== "day_pass";
+  const typeLabel = member.member_type === "cold_desk" ? "Cold Desk" : member.member_type === "hot_desk" ? "Hot Desk" : "Day Pass";
 
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold text-forest">Welcome back, {member.name.split(" ")[0]}</h1>
-        <p className="text-muted mt-1 capitalize">{member.membership_tier.replace("_", " ")} Member</p>
+        <p className="text-muted mt-1">{typeLabel} Member</p>
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">

@@ -14,8 +14,11 @@ function memberStatusBadge(member: Member | null) {
   if (member.disabled) {
     return <Badge variant="destructive" className="text-xs">Disabled</Badge>;
   }
-  if (member.member_type === "full") {
-    return <Badge className="text-xs bg-green-500/20 text-green-400 border-green-500/30">Full Member</Badge>;
+  if (member.member_type === "cold_desk") {
+    return <Badge className="text-xs bg-green-500/20 text-green-400 border-green-500/30">Cold Desk</Badge>;
+  }
+  if (member.member_type === "hot_desk") {
+    return <Badge className="text-xs bg-emerald-500/20 text-emerald-400 border-emerald-500/30">Hot Desk</Badge>;
   }
   return <Badge className="text-xs bg-blue-500/20 text-blue-400 border-blue-500/30">Day Pass</Badge>;
 }
@@ -139,7 +142,7 @@ export default function UsersPage() {
       <div className="flex gap-4 text-xs text-muted">
         <span className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-green-400/60 inline-block" />
-          Full Member / Day Pass — linked account
+          Cold Desk / Hot Desk / Day Pass — linked account
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-yellow-400/60 inline-block" />

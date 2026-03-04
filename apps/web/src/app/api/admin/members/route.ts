@@ -29,18 +29,24 @@ export async function POST(request: Request) {
 
   const supabase = await createClient();
   const body = await request.json();
-  const { name, email, member_type, membership_tier, is_admin, telegram_username, pin_code, supabase_user_id } = body;
+  const { name, email, member_type, is_coop_member, is_admin, telegram_username, pin_code, supabase_user_id } = body;
 
-  if (!name || !member_type || !membership_tier) {
-    return NextResponse.json({ error: "name, member_type, and membership_tier are required" }, { status: 400 });
+  if (!name || !member_type) {
+    return NextResponse.json({ error: "name and member_type are required" }, { status: 400 });
   }
 
-  const slot = await nextFreeSlot(supabase);
-  if (slot === null) {
-    return NextResponse.json({ error: "No free PIN slots available (all 100 member slots in use)" }, { status: 409 });
-  }
+  const isDayPass = member_type === "day_pass";
 
-  const assignedPin = pin_code || randomPin();
+  let slot: number | null = null;
+  let assignedPin: string | null = null;
+
+  if (!isDayPass) {
+    slot = await nextFreeSlot(supabase);
+    if (slot === null) {
+      return NextResponse.json({ error: "No free PIN slots available (all 100 member slots in use)" }, { status: 409 });
+    }
+    assignedPin = pin_code || randomPin();
+  }
 
   const { data, error } = await supabase
     .from("members")
@@ -48,7 +54,7 @@ export async function POST(request: Request) {
       name,
       email: email || null,
       member_type,
-      membership_tier,
+      is_coop_member: is_coop_member ?? false,
       is_admin: is_admin ?? false,
       telegram_username: telegram_username || null,
       pin_code_slot: slot,
@@ -63,12 +69,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Sync PIN to lock immediately
-  try {
-    await setUserCode(data.pin_code_slot!, data.pin_code!);
-  } catch (err) {
-    console.error(`[LockSync] Failed to set code for new member ${data.name}:`, err);
-    // Non-fatal: admin can run Lock Sync to retry
+  // Sync PIN to lock immediately (only for non-day_pass members)
+  if (!isDayPass && data.pin_code_slot && data.pin_code) {
+    try {
+      await setUserCode(data.pin_code_slot, data.pin_code);
+    } catch (err) {
+      console.error(`[LockSync] Failed to set code for new member ${data.name}:`, err);
+      // Non-fatal: admin can run Lock Sync to retry
+    }
   }
 
   return NextResponse.json({ member: data }, { status: 201 });

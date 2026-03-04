@@ -21,7 +21,7 @@ export default async function PassesPage() {
 
   if (!member) return null;
 
-  const isFullMember = member.member_type === "full";
+  const isFullMember = member.member_type !== "day_pass";
 
   // Always fetch active codes by member_id — full members bypass pass pools
   const { data: activeCodes } = await supabase

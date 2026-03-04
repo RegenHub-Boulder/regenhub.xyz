@@ -16,7 +16,6 @@ interface Member {
   ethereum_address: string | null;
   bio: string | null;
   skills: string[] | null;
-  membership_tier: string;
   member_type: string;
 }
 

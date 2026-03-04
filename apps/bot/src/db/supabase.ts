@@ -17,7 +17,8 @@ export type MemberRow = {
   telegram_username: string | null;
   pin_code: string | null;
   pin_code_slot: number | null;
-  member_type: "full" | "daypass";
+  member_type: "cold_desk" | "hot_desk" | "day_pass";
+  is_coop_member: boolean;
   is_admin: boolean;
   disabled: boolean;
 };

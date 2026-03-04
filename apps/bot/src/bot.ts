@@ -44,7 +44,7 @@ async function handleStart(msg: TelegramBot.Message) {
   const user = await findMemberByTelegram(msg.from?.username ?? "");
   if (!user) return bot.sendMessage(msg.chat.id, `Your Telegram (@${msg.from?.username}) isn't registered. Contact an admin to get set up.`);
 
-  const isFull = user.member_type === "full";
+  const isFull = user.member_type !== "day_pass";
   let text = `Welcome back, ${user.name}!\n\n`;
   text += isFull
     ? `/mycode — Your door code\n/newcode — Change your code\n/daypass — Guest code\n/help — Help`
@@ -58,7 +58,7 @@ async function handleMyCode(msg: TelegramBot.Message) {
   await react(msg);
   const user = await findMemberByTelegram(msg.from?.username ?? "");
   if (!user) return bot.sendMessage(msg.chat.id, "Not registered. Contact an admin.");
-  if (user.member_type !== "full") return bot.sendMessage(msg.chat.id, "Full members only. Use /daypass for a temporary code.");
+  if (user.member_type === "day_pass") return bot.sendMessage(msg.chat.id, "Cold/hot desk members only. Use /daypass for a temporary code.");
   if (!user.pin_code) return bot.sendMessage(msg.chat.id, "No code set yet. Use /newcode to set one.");
   return bot.sendMessage(msg.chat.id, `Your door code:\n\n🔑 *${user.pin_code}*\n\nSlot: ${user.pin_code_slot}`, { parse_mode: "Markdown" });
 }
@@ -67,7 +67,7 @@ async function handleNewCode(msg: TelegramBot.Message, match: RegExpExecArray | 
   await react(msg);
   const user = await findMemberByTelegram(msg.from?.username ?? "");
   if (!user) return bot.sendMessage(msg.chat.id, "Not registered. Contact an admin.");
-  if (user.member_type !== "full") return bot.sendMessage(msg.chat.id, "Full members only.");
+  if (user.member_type === "day_pass") return bot.sendMessage(msg.chat.id, "Cold/hot desk members only.");
   if (!user.pin_code_slot) return bot.sendMessage(msg.chat.id, "No slot assigned. Contact an admin.");
 
   const arg = match?.[1]?.trim();
@@ -100,7 +100,7 @@ async function handleDayPass(msg: TelegramBot.Message) {
   const slot = await findNextAvailableDayPassSlot();
   if (!slot) return bot.sendMessage(msg.chat.id, "All slots in use. Try again later or contact an admin.");
 
-  if (user.member_type !== "full") {
+  if (user.member_type === "day_pass") {
     // Day pass member: check existing active code first
     const { data: existing } = await db
       .from("day_codes")
@@ -207,7 +207,7 @@ async function sendCodesList(chatId: number, offset: number) {
   for (const [i, c] of (codes ?? []).entries()) {
     const member = c.members as { name: string } | null;
     const desc = c.label ?? member?.name ?? "(anonymous)";
-    text += `${offset + i + 1}. ${c.code} — ${desc} — expires ${fmt(new Date(c.expires_at))}\n`;
+    text += `${offset + i + 1}. ${c.code} — ${desc} — ${c.expires_at ? `expires ${fmt(new Date(c.expires_at))}` : "no expiry"}\n`;
     buttons.push([{ text: `Revoke ${c.code}`, callback_data: `revoke_${c.id}` }]);
   }
 
@@ -302,8 +302,11 @@ async function handleAdminMenu(chatId: number, data: string, admin: MemberRow) {
   switch (data) {
     case "admin_addmember":
       pending.set(chatId, { type: "addmember", step: "awaiting_type", data: {}, timestamp: Date.now() });
-      return bot.sendMessage(chatId, "Member type?", {
-        reply_markup: { inline_keyboard: [[{ text: "Full Member", callback_data: "membertype_full" }, { text: "Day Pass", callback_data: "membertype_daypass" }]] },
+      return bot.sendMessage(chatId, "Coworking membership type?", {
+        reply_markup: { inline_keyboard: [
+          [{ text: "Cold Desk", callback_data: "membertype_cold_desk" }, { text: "Hot Desk", callback_data: "membertype_hot_desk" }],
+          [{ text: "Day Pass", callback_data: "membertype_day_pass" }],
+        ]},
       });
 
     case "admin_addpasses":
@@ -409,7 +412,7 @@ async function handleAddMemberFlow(chatId: number, text: string, p: PendingActio
   switch (p.step) {
     case "awaiting_name":
       p.data.name = text;
-      p.step = p.data.memberType === "full" ? "awaiting_telegram" : "awaiting_telegram";
+      p.step = "awaiting_telegram";
       p.timestamp = Date.now();
       pending.set(chatId, p);
       return bot.sendMessage(chatId, "Enter Telegram username (@username) or 'skip':");
@@ -420,7 +423,7 @@ async function handleAddMemberFlow(chatId: number, text: string, p: PendingActio
         if (!/^@[a-zA-Z0-9_]{5,32}$/.test(tg)) return bot.sendMessage(chatId, "Invalid format. Try @username (5-32 chars) or 'skip':");
         p.data.telegram = tg;
       }
-      if (p.data.memberType === "full") {
+      if (p.data.memberType !== "day_pass") {
         p.step = "awaiting_pincode";
         p.timestamp = Date.now();
         pending.set(chatId, p);
@@ -450,16 +453,15 @@ async function handleAddMemberFlow(chatId: number, text: string, p: PendingActio
 }
 
 async function createMember(chatId: number, d: Record<string, unknown>) {
-  const isFull = d.memberType === "full";
+  const isFull = d.memberType !== "day_pass";
   if (isFull && d.pinCode && d.pinSlot) await setUserCode(d.pinSlot as number, d.pinCode as string);
 
   const { data: member, error } = await db.from("members").insert({
     name: d.name as string,
-    member_type: d.memberType as "full" | "daypass",
+    member_type: d.memberType as "cold_desk" | "hot_desk" | "day_pass",
     telegram_username: (d.telegram as string | undefined) ?? null,
     pin_code: isFull ? (d.pinCode as string) : null,
     pin_code_slot: isFull ? (d.pinSlot as number) : null,
-    membership_tier: "coworking",
   }).select().single();
 
   if (error) return bot.sendMessage(chatId, `Error: ${error.message}`);
@@ -468,7 +470,8 @@ async function createMember(chatId: number, d: Record<string, unknown>) {
     await db.from("day_passes").insert({ member_id: member.id, allowed_uses: d.passes as number });
   }
 
-  let text = `Member created!\n\nName: ${member.name}\nType: ${isFull ? "Full" : "Day Pass"}`;
+  const typeLabel = d.memberType === "cold_desk" ? "Cold Desk" : d.memberType === "hot_desk" ? "Hot Desk" : "Day Pass";
+  let text = `Member created!\n\nName: ${member.name}\nType: ${typeLabel}`;
   if (d.telegram) text += `\nTelegram: ${d.telegram}`;
   if (isFull) text += `\nSlot: ${d.pinSlot}\nCode: ${d.pinCode}`;
   else text += `\nDay Passes: ${d.passes ?? 10}`;

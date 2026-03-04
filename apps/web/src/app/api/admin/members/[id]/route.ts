@@ -16,7 +16,7 @@ export async function PATCH(
   const body = await request.json();
 
   const allowed = [
-    "name", "email", "member_type", "membership_tier", "is_admin",
+    "name", "email", "member_type", "is_coop_member", "is_admin",
     "telegram_username", "ethereum_address", "pin_code_slot", "pin_code",
     "nfc_key_address", "bio", "skills", "disabled",
   ] as const;

@@ -20,8 +20,8 @@ export function MemberForm({ member, initialEmail, initialUserId }: Props) {
   const [form, setForm] = useState({
     name: member?.name ?? "",
     email: member?.email ?? initialEmail ?? "",
-    member_type: member?.member_type ?? "full",
-    membership_tier: member?.membership_tier ?? "community",
+    member_type: member?.member_type ?? "cold_desk",
+    is_coop_member: member?.is_coop_member ?? false,
     is_admin: member?.is_admin ?? false,
     telegram_username: member?.telegram_username ?? "",
     pin_code: member?.pin_code ?? "",
@@ -90,6 +90,8 @@ export function MemberForm({ member, initialEmail, initialUserId }: Props) {
     }
   }
 
+  const isDayPass = form.member_type === "day_pass";
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <Card className="glass-panel">
@@ -107,37 +109,30 @@ export function MemberForm({ member, initialEmail, initialUserId }: Props) {
 
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="member_type">Member type *</Label>
+              <Label htmlFor="member_type">Coworking membership *</Label>
               <select
                 id="member_type"
                 value={form.member_type}
                 onChange={set("member_type")}
                 className="w-full rounded-md px-3 py-2 text-sm glass-input"
               >
-                <option value="full">Full</option>
-                <option value="daypass">Day pass</option>
+                <option value="cold_desk">Cold Desk</option>
+                <option value="hot_desk">Hot Desk</option>
+                <option value="day_pass">Day Pass</option>
               </select>
+              <p className="text-xs text-muted">
+                {form.member_type === "cold_desk" && "Dedicated desk — permanent PIN, full access"}
+                {form.member_type === "hot_desk" && "Flexible desk — permanent PIN, full access"}
+                {form.member_type === "day_pass" && "Drop-in — access via day pass pool, no permanent PIN"}
+              </p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="membership_tier">Tier *</Label>
-              <select
-                id="membership_tier"
-                value={form.membership_tier}
-                onChange={set("membership_tier")}
-                className="w-full rounded-md px-3 py-2 text-sm glass-input"
-              >
-                <option value="community">Community</option>
-                <option value="coworking">Coworking</option>
-                <option value="cooperative">Cooperative</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="telegram">Telegram username</Label>
               <Input id="telegram" value={form.telegram_username} onChange={set("telegram_username")} placeholder="@handle" className="glass-input" />
             </div>
+          </div>
+
+          {!isDayPass && (
             <div className="space-y-2">
               <Label htmlFor="pin_code">PIN code</Label>
               <Input id="pin_code" value={form.pin_code} onChange={set("pin_code")} placeholder="Leave blank to auto-generate" className="glass-input font-mono" />
@@ -145,9 +140,13 @@ export function MemberForm({ member, initialEmail, initialUserId }: Props) {
                 <p className="text-xs text-muted">Slot {member.pin_code_slot}</p>
               )}
             </div>
-          </div>
+          )}
 
-          <div className="flex gap-6">
+          <div className="flex gap-6 flex-wrap">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={form.is_coop_member} onChange={set("is_coop_member")} className="accent-gold" />
+              Co-op member
+            </label>
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input type="checkbox" checked={form.is_admin} onChange={set("is_admin")} className="accent-gold" />
               Admin

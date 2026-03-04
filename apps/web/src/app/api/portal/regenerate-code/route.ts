@@ -28,7 +28,7 @@ export async function POST(req: Request) {
       .eq("supabase_user_id", user.id)
       .single();
 
-    if (!member || member.disabled || member.member_type !== "full") {
+    if (!member || member.disabled || member.member_type === "day_pass") {
       return NextResponse.json({ error: "Not eligible" }, { status: 403 });
     }
 
