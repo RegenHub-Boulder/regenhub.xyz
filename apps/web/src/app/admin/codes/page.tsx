@@ -11,18 +11,21 @@ type CodeWithMember = DayCode & {
 export default async function ActiveCodesPage() {
   const supabase = await createClient();
 
-  const [{ data: codes }, { data: members }] = await Promise.all([
+  const [codesResult, membersResult] = await Promise.all([
     supabase
       .from("day_codes")
       .select("*, members(name, telegram_username)")
       .eq("is_active", true)
-      .order("expires_at", { ascending: true }) as Promise<{ data: CodeWithMember[] | null }>,
+      .order("expires_at", { ascending: true }),
     supabase
       .from("members")
       .select("id, name")
       .eq("disabled", false)
       .order("name", { ascending: true }),
   ]);
+
+  const codes = codesResult.data as CodeWithMember[] | null;
+  const members = membersResult.data;
 
   const now = new Date();
 
