@@ -28,14 +28,16 @@ pnpm --filter web lint
 ## Environment Variables
 `NEXT_PUBLIC_*` vars are baked at **build time** — changing them requires a full redeploy.
 
-| Variable | Where |
-|----------|-------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Web app (build-time) |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Web app (build-time) |
-| `SUPABASE_URL` | Bot (runtime) |
-| `SUPABASE_SERVICE_ROLE_KEY` | Bot (runtime) |
-| `TELEGRAM_BOT_TOKEN` | Bot (runtime) |
-| `HA_URL` / `HA_TOKEN` | Bot (runtime, Home Assistant door control) |
+| Variable | Where | Notes |
+|----------|-------|-------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Web (build-time) | |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Web (build-time) | |
+| `HA_URL` | Web + Bot (runtime) | HA base URL e.g. `http://homeassistant.local:8123/api` |
+| `HA_TOKEN` | Web + Bot (runtime) | Long-lived HA access token |
+| `HA_LOCK_ENTITIES` | Web + Bot (runtime) | Comma-separated Z-Wave entity IDs, e.g. `lock.front_door_lock,lock.back_door_lock` |
+| `SUPABASE_URL` | Bot (runtime) | |
+| `SUPABASE_SERVICE_ROLE_KEY` | Bot (runtime) | Bypasses RLS |
+| `TELEGRAM_BOT_TOKEN` | Bot (runtime) | |
 
 ## Project Structure
 ```
@@ -50,7 +52,15 @@ apps/
 │   └── Dockerfile
 supabase/
 └── migrations/             # SQL migrations (apply in order)
-    └── 001_initial_schema.sql
+    ├── 001_initial_schema.sql
+    ├── 002_fix_rls_admin_recursion.sql
+    ├── 003_members_update_own.sql
+    ├── 004_link_member_on_auth.sql
+    ├── 005_applications.sql
+    ├── 006_pin_slot_ranges.sql       # slots: members 1-100, day codes 101-200
+    ├── 007_nullable_expires_at.sql
+    ├── 008_membership_model.sql      # cold_desk/hot_desk/day_pass types
+    └── 009_day_passes_balance.sql
 DEPLOYMENT.md               # Full infra guide for agents + humans
 ```
 
@@ -63,14 +73,16 @@ DEPLOYMENT.md               # Full infra guide for agents + humans
 ## Common Tasks
 
 ### Trigger a redeploy
+Coolify runs on LAN only (`http://192.168.1.228:8000`) — `admin.regenhub.build` DNS is not configured yet.
 ```bash
-curl -X GET "https://admin.regenhub.build/api/v1/deploy?uuid=ew848c4os44sw0wowwk0ksk8&force=true" \
+# From compute-2 or any LAN machine:
+curl -X GET "http://192.168.1.228:8000/api/v1/deploy?uuid=ew848c4os44sw0wowwk0ksk8&force=true" \
   -H "Authorization: Bearer <coolify-api-key>"
 ```
 
 ### Check deployment status
 ```bash
-curl "https://admin.regenhub.build/api/v1/deployments/<dep-uuid>" \
+curl "http://192.168.1.228:8000/api/v1/deployments/<dep-uuid>" \
   -H "Authorization: Bearer <coolify-api-key>" | jq '.status'
 ```
 
@@ -79,6 +91,19 @@ Connect via postgres Docker container on compute-1 (see DEPLOYMENT.md).
 
 ### Add a new member via bot
 Use `/admin → Add member` as an admin in the Telegram bot.
+
+### Fix a member's type (if they can't access /mycode)
+The bot gates `/mycode` and `/newcode` to `cold_desk` and `hot_desk` members only.
+If a member reports "Cold/hot desk members only", their `member_type` in the DB is wrong.
+Fix via the admin web panel at `https://site.regenhub.build/admin/members`, or SQL:
+```sql
+update members set member_type = 'cold_desk' where telegram_username = '@username';
+```
+
+### Add HA env vars in Coolify
+Both web and bot need `HA_URL`, `HA_TOKEN`, and `HA_LOCK_ENTITIES` at runtime.
+Set `HA_LOCK_ENTITIES=lock.front_door_lock,lock.back_door_lock` (comma-separated) to
+target multiple Z-Wave locks. Changing bot env vars doesn't require a full image rebuild.
 
 ## Important Notes
 - **Traefik + Docker Engine 29.2 bug**: New containers won't get auto-routed. Write a static route file to `/data/coolify/proxy/dynamic/`. See DEPLOYMENT.md.
