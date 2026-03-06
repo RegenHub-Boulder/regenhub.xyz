@@ -41,6 +41,7 @@ To manage deployments, you need:
 | Resource | ID/UUID |
 |----------|---------|
 | Coolify web app | `ew848c4os44sw0wowwk0ksk8` |
+| Coolify bot app | `t84sosw40088kokwco80kksw` |
 | Supabase instance | `w8gw0wc80o80c0c8g88kk8og` |
 | Cloudflare zone (`regenhub.build`) | `01424a7ad7c85fcfef84033ca540da79` |
 | Cloudflare account | `e94c43925ef19151277047a39e65f22d` |
@@ -209,11 +210,27 @@ ssh steward@regenhub-compute-1.lan "sudo /opt/shipper/tunnel.sh list"
 
 ## Telegram Bot
 
-The bot (`apps/bot`) runs as a standalone Docker container on compute-1.
+The bot (`apps/bot`) runs as a standalone Docker container on compute-1 (`regenhub-bot`).
 
-**Status:** Not yet deployed — waiting on `TELEGRAM_BOT_TOKEN` and `HA_TOKEN` from Aaron.
+**Coolify app UUID:** `t84sosw40088kokwco80kksw` (created, pending `SUPABASE_SERVICE_ROLE_KEY` + `TELEGRAM_BOT_TOKEN` in Coolify UI)
 
-When ready:
+### Rebuild the bot (standard procedure)
+
+A rebuild script on compute-1 reads env vars from the existing container and rebuilds with latest code:
+
+```bash
+sudo bash /home/steward/rebuild-bot.sh
+```
+
+This script:
+1. Reads all env vars from the running `regenhub-bot` container
+2. Adds `HA_LOCK_ENTITIES` if missing
+3. `git pull` the latest code
+4. `docker build -f apps/bot/Dockerfile -t regenhub-bot:latest .`
+5. Stops + removes the old container, starts the new one
+
+### First-time setup (if regenhub-bot doesn't exist)
+
 ```bash
 # On compute-1
 sudo docker run -d \
@@ -225,10 +242,18 @@ sudo docker run -d \
   -e TELEGRAM_BOT_TOKEN=<from-aaron> \
   -e HA_URL=http://homeassistant.lan:8123/api \
   -e HA_TOKEN=<from-aaron> \
+  -e HA_LOCK_ENTITIES=lock.front_door_lock,lock.back_door_lock \
+  -e TIMEZONE=America/Denver \
   regenhub-bot:latest
 ```
 
-Build image first: `docker build -f apps/bot/Dockerfile -t regenhub-bot .` from repo root.
+Get `SUPABASE_SERVICE_ROLE_KEY` from the running Supabase container:
+```bash
+sudo docker inspect supabase-analytics-w8gw0wc80o80c0c8g88kk8og \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' | grep SERVICE_ROLE
+```
+
+Build image first: `docker build -f apps/bot/Dockerfile -t regenhub-bot:latest .` from repo root.
 
 ---
 
