@@ -64,7 +64,7 @@ export function MemberDirectory() {
               )}
               <div>
                 <p className="font-semibold text-sm">{m.name}</p>
-                <p className="text-xs text-muted capitalize">{m.member_type.replace("_", " ")} Member</p>
+                <p className="text-xs text-muted">Co-op Member</p>
               </div>
             </div>
             {m.bio && (

@@ -15,7 +15,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("members")
     .select("name, bio, skills, profile_photo_url, member_type")
-    .eq("show_in_directory", true)
+    .eq("is_coop_member", true)
     .eq("disabled", false)
     .order("name");
 
