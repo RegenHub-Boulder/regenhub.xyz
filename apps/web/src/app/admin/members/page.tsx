@@ -59,12 +59,13 @@ function AuthUserRow({ u }: { u: AdminUser }) {
 
 function LegacyMemberRow({ m }: { m: Member }) {
   return (
-    <tr className="border-b border-white/5 hover:bg-white/5 transition-colors opacity-70">
-      <td className="px-4 py-3 font-medium">{m.name}</td>
-      <td className="px-4 py-3 text-muted text-sm">{m.email ?? "—"}</td>
-      <td className="px-4 py-3">
-        <Badge variant="outline" className="text-xs border-white/20 text-muted">No Account</Badge>
+    <tr className="border-b border-white/5 hover:bg-white/5 transition-colors">
+      <td className="px-4 py-3 font-medium">
+        {m.name}
+        {m.is_admin && <span className="ml-2 text-xs text-gold">[Admin]</span>}
       </td>
+      <td className="px-4 py-3 text-muted text-sm">{m.email ?? "—"}</td>
+      <td className="px-4 py-3">{memberStatusBadge(m)}</td>
       <td className="px-4 py-3 text-muted text-sm">{m.telegram_username ?? "—"}</td>
       <td className="px-4 py-3 text-muted font-mono text-sm">{m.pin_code_slot ?? "—"}</td>
       <td className="px-4 py-3 text-muted text-sm">{m.day_passes_balance}</td>

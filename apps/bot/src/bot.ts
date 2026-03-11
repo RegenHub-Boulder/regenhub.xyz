@@ -47,8 +47,8 @@ async function handleStart(msg: TelegramBot.Message) {
   const isFull = user.member_type !== "day_pass";
   let text = `Welcome back, ${user.name}!\n\n`;
   text += isFull
-    ? `/mycode — Your door code\n/newcode — Change your code\n/daypass — Guest code\n/help — Help`
-    : `/daypass — Get today's code\n/help — Help`;
+    ? `/mycode — Your door code\n/newcode — Change your code\n/daypass — Guest code\n/email — Update your email\n/help — Help`
+    : `/daypass — Get today's code\n/email — Update your email\n/help — Help`;
 
   if (user.is_admin) text += `\n\nAdmin:\n/quickcode — Quick code\n/codes — Active codes\n/admin — Manage members`;
   return bot.sendMessage(msg.chat.id, text);
@@ -126,6 +126,25 @@ async function handleDayPass(msg: TelegramBot.Message) {
     `${user.member_type === "day_pass" ? "Today's code" : "Guest code"}!\n\n🔑 *${code}*\n\nValid until: ${fmt(expiresAt)}\nPasses remaining: ${remaining}`,
     { parse_mode: "Markdown" }
   );
+}
+
+async function handleEmail(msg: TelegramBot.Message, match: RegExpExecArray | null) {
+  await react(msg);
+  const user = await findMemberByTelegram(msg.from?.username ?? "");
+  if (!user) return bot.sendMessage(msg.chat.id, "Not registered. Contact an admin.");
+
+  const email = match?.[1]?.trim();
+  if (!email) {
+    const current = user.email ? `Current email: ${user.email}\n\n` : "";
+    return bot.sendMessage(msg.chat.id, `${current}Send your email:\n/email you@example.com`);
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return bot.sendMessage(msg.chat.id, "Invalid email format. Try: /email you@example.com");
+  }
+
+  await db.from("members").update({ email }).eq("id", user.id);
+  return bot.sendMessage(msg.chat.id, `Email updated to: ${email}`);
 }
 
 // ── Admin commands ──────────────────────────────────────────
@@ -524,6 +543,7 @@ export function startBot() {
   bot.onText(/\/mycode/, handleMyCode);
   bot.onText(/\/newcode(?:\s+(.+))?/, handleNewCode);
   bot.onText(/\/daypass/, handleDayPass);
+  bot.onText(/\/email(?:\s+(.+))?/, handleEmail);
   bot.onText(/\/help/, handleStart);
   bot.onText(/\/quickcode(?:\s+(.+))?/, handleQuickCode);
   bot.onText(/\/codes/, handleCodes);
