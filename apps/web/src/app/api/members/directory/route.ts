@@ -17,7 +17,6 @@ export async function GET() {
     .select("name, bio, skills, profile_photo_url, member_type")
     .eq("show_in_directory", true)
     .eq("disabled", false)
-    .neq("member_type", "day_pass")
     .order("name");
 
   if (error) {
