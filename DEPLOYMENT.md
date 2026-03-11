@@ -212,22 +212,29 @@ ssh steward@regenhub-compute-1.lan "sudo /opt/shipper/tunnel.sh list"
 
 The bot (`apps/bot`) runs as a standalone Docker container on compute-1 (`regenhub-bot`).
 
-**Coolify app UUID:** `t84sosw40088kokwco80kksw` (created, pending `SUPABASE_SERVICE_ROLE_KEY` + `TELEGRAM_BOT_TOKEN` in Coolify UI)
+**Coolify app UUID:** `t84sosw40088kokwco80kksw` (created, but Coolify deploys fail due to git source config — use rebuild script instead)
 
 ### Rebuild the bot (standard procedure)
 
 A rebuild script on compute-1 reads env vars from the existing container and rebuilds with latest code:
 
 ```bash
-sudo bash /home/steward/rebuild-bot.sh
+# From compute-1 (script uses sudo internally — steward has NOPASSWD)
+bash /home/steward/rebuild-bot.sh
+
+# Or remotely via SSH:
+ssh steward@regenhub-compute-1.lan "bash /home/steward/rebuild-bot.sh"
 ```
 
 This script:
-1. Reads all env vars from the running `regenhub-bot` container
+1. Reads all env vars from the running `regenhub-bot` container via `sudo docker inspect`
 2. Adds `HA_LOCK_ENTITIES` if missing
-3. `git pull` the latest code
-4. `docker build -f apps/bot/Dockerfile -t regenhub-bot:latest .`
-5. Stops + removes the old container, starts the new one
+3. `git pull` the latest code into `/home/steward/regenhub.xyz/`
+4. `sudo docker build -f apps/bot/Dockerfile -t regenhub-bot:latest .`
+5. Stops + removes the old container, starts the new one with transferred env vars
+6. Shows container status and recent logs for verification
+
+Takes ~30 seconds (most of it is `npm install` in the Docker build).
 
 ### First-time setup (if regenhub-bot doesn't exist)
 
@@ -293,7 +300,7 @@ The `regenhub.xyz` domain is managed in a separate Cloudflare account (not the `
 
 ---
 
-*Last updated: 2026-03-01 by RegenClaw 🍄*
+*Last updated: 2026-03-11*
 
 ---
 

@@ -32,8 +32,10 @@ export async function expireOldCodes() {
 }
 
 export function startScheduler() {
-  // 3 AM daily
-  cron.schedule("0 3 * * *", () => expireOldCodes(), { timezone: TIMEZONE });
+  // Cleanup on startup
+  expireOldCodes().then(({ expired, errors }) => {
+    if (expired > 0) console.log(`[Scheduler] Startup cleanup: expired ${expired} codes (${errors} errors).`);
+  }).catch(err => console.error("[Scheduler] Startup cleanup failed:", err));
 
   // Every 5 minutes cleanup sweep
   cron.schedule("*/5 * * * *", async () => {
@@ -46,5 +48,5 @@ export function startScheduler() {
     if (count && count > 0) await expireOldCodes();
   }, { timezone: TIMEZONE });
 
-  console.log(`[Scheduler] Running. Expires codes at 3 AM ${TIMEZONE}.`);
+  console.log(`[Scheduler] Running. Cleanup every 5 min (${TIMEZONE}).`);
 }

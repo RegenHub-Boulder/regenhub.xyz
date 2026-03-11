@@ -107,7 +107,13 @@ async function handleDayPass(msg: TelegramBot.Message) {
   const code = generateRandomCode();
   const expiresAt = calculateDayPassExpiration();
 
-  await setUserCode(slot, code);
+  try {
+    await setUserCode(slot, code);
+  } catch (err) {
+    console.error("[DayPass] Failed to program lock:", err);
+    return bot.sendMessage(msg.chat.id, "Failed to program door lock. Please contact an admin.");
+  }
+
   await db.from("day_codes").insert({
     member_id: user.id,
     label: user.member_type === "day_pass" ? null : `Guest by ${user.name}`,
@@ -135,8 +141,8 @@ async function handleQuickCode(msg: TelegramBot.Message, match: RegExpExecArray 
   return bot.sendMessage(msg.chat.id, `Quick code${label ? ` for "${label}"` : ""}. Choose expiration:`, {
     reply_markup: {
       inline_keyboard: [
-        [{ text: "6 PM", callback_data: "expire_6pm" }, { text: "9 PM", callback_data: "expire_9pm" }, { text: "3 AM", callback_data: "expire_3am" }],
-        [{ text: "Custom", callback_data: "expire_custom" }],
+        [{ text: "6 PM", callback_data: "expire_6pm" }, { text: "9 PM", callback_data: "expire_9pm" }],
+        [{ text: "Friday 9 PM", callback_data: "expire_friday" }, { text: "Custom", callback_data: "expire_custom" }],
       ],
     },
   });
@@ -237,7 +243,14 @@ async function createQuickCode(chatId: number, expiresAt: Date, label: string | 
   if (!slot) return bot.sendMessage(chatId, "All slots full. Use /codes to revoke unused ones.");
 
   const code = generateRandomCode();
-  await setUserCode(slot, code);
+
+  try {
+    await setUserCode(slot, code);
+  } catch (err) {
+    console.error("[QuickCode] Failed to program lock:", err);
+    return bot.sendMessage(chatId, "Failed to program door lock. Check HA connection.");
+  }
+
   await db.from("day_codes").insert({ label, code, pin_slot: slot, expires_at: expiresAt.toISOString(), is_active: true });
 
   let text = `Quick code created!\n\n🔑 *${code}*\n\nExpires: ${fmt(expiresAt)}`;
@@ -412,7 +425,16 @@ async function handleAddMemberFlow(chatId: number, text: string, p: PendingActio
 
 async function createMember(chatId: number, d: Record<string, unknown>) {
   const isFull = d.memberType !== "day_pass";
-  if (isFull && d.pinCode && d.pinSlot) await setUserCode(d.pinSlot as number, d.pinCode as string);
+  if (isFull && d.pinCode && d.pinSlot) {
+    try {
+      await setUserCode(d.pinSlot as number, d.pinCode as string);
+    } catch (err) {
+      console.error("[CreateMember] Failed to program lock:", err);
+      return bot.sendMessage(chatId, "Failed to program door lock. Member not created. Check HA connection.");
+    }
+  }
+
+  const passCount = !isFull ? ((d.passes as number | undefined) ?? 10) : 0;
 
   const { data: member, error } = await db.from("members").insert({
     name: d.name as string,
@@ -420,13 +442,10 @@ async function createMember(chatId: number, d: Record<string, unknown>) {
     telegram_username: (d.telegram as string | undefined) ?? null,
     pin_code: isFull ? (d.pinCode as string) : null,
     pin_code_slot: isFull ? (d.pinSlot as number) : null,
+    day_passes_balance: passCount,
   }).select().single();
 
   if (error) return bot.sendMessage(chatId, `Error: ${error.message}`);
-
-  if (!isFull && d.passes) {
-    await db.from("day_passes").insert({ member_id: member.id, allowed_uses: d.passes as number });
-  }
 
   const typeLabel = d.memberType === "cold_desk" ? "Cold Desk" : d.memberType === "hot_desk" ? "Hot Desk" : "Day Pass";
   let text = `Member created!\n\nName: ${member.name}\nType: ${typeLabel}`;

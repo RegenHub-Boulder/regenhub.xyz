@@ -26,7 +26,7 @@ export type MemberRow = {
 
 export async function findMemberByTelegram(username: string): Promise<MemberRow | null> {
   const handle = username.startsWith("@") ? username : `@${username}`;
-  const { data } = await db.from("members").select("*").eq("telegram_username", handle).single();
+  const { data } = await db.from("members").select("*").ilike("telegram_username", handle).single();
   return data ?? null;
 }
 
