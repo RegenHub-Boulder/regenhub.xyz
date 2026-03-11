@@ -201,6 +201,31 @@ async function handleAdmin(msg: TelegramBot.Message) {
   });
 }
 
+async function sendMembersList(chatId: number, offset: number) {
+  const { data: members, count } = await db
+    .from("members")
+    .select("name, member_type, telegram_username, is_admin, day_passes_balance", { count: "exact" })
+    .order("name")
+    .range(offset, offset + ITEMS_PER_PAGE - 1);
+
+  if (!count) return bot.sendMessage(chatId, "No members.");
+
+  let text = `Members (${count}):\n\n`;
+  (members ?? []).forEach((m, i) => {
+    const type = m.member_type === "cold_desk" ? "🧊" : m.member_type === "hot_desk" ? "🔥" : "🎫";
+    text += `${offset + i + 1}. ${m.name} ${type} ${m.telegram_username ?? ""}${m.is_admin ? " [Admin]" : ""}`;
+    if (m.member_type === "day_pass") text += ` (${m.day_passes_balance} passes)`;
+    text += "\n";
+  });
+
+  const nav = [];
+  if (offset > 0) nav.push({ text: "< Prev", callback_data: `page_members_${offset - ITEMS_PER_PAGE}` });
+  if (offset + ITEMS_PER_PAGE < (count ?? 0)) nav.push({ text: "Next >", callback_data: `page_members_${offset + ITEMS_PER_PAGE}` });
+
+  const opts = nav.length ? { reply_markup: { inline_keyboard: [nav] } } : {};
+  return bot.sendMessage(chatId, text, opts);
+}
+
 // ── Callback queries ────────────────────────────────────────
 
 async function handleCallback(query: TelegramBot.CallbackQuery) {
@@ -215,6 +240,7 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
   if (data.startsWith("expire_")) return handleExpirationCallback(chatId, data);
   if (data.startsWith("revoke_")) return handleRevokeCallback(chatId, parseInt(data.replace("revoke_", "")));
   if (data.startsWith("page_codes_")) return sendCodesList(chatId, parseInt(data.replace("page_codes_", "")));
+  if (data.startsWith("page_members_")) return sendMembersList(chatId, parseInt(data.replace("page_members_", "")));
   if (data.startsWith("admin_")) return handleAdminMenu(chatId, data, admin);
   if (data.startsWith("membertype_")) return handleMemberType(chatId, data);
   if (data.startsWith("confirm_removeadmin_")) return handleRemoveAdmin(chatId, parseInt(data.replace("confirm_removeadmin_", "")));
@@ -295,14 +321,8 @@ async function handleAdminMenu(chatId: number, data: string, admin: MemberRow) {
       return bot.sendMessage(chatId, "Select admin to remove:", { reply_markup: { inline_keyboard: buttons } });
     }
 
-    case "admin_listmembers": {
-      const { data: members, count } = await db.from("members").select("name, member_type, telegram_username, is_admin", { count: "exact" }).order("name").range(0, ITEMS_PER_PAGE - 1);
-      let text = `Members (${count ?? 0}):\n\n`;
-      (members ?? []).forEach((m, i) => {
-        text += `${i + 1}. ${m.name} — ${m.member_type} ${m.telegram_username ?? ""}${m.is_admin ? " [Admin]" : ""}\n`;
-      });
-      return bot.sendMessage(chatId, text);
-    }
+    case "admin_listmembers":
+      return sendMembersList(chatId, 0);
   }
 }
 
