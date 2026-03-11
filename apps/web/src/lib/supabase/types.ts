@@ -1,4 +1,4 @@
-export type MemberType = "cold_desk" | "hot_desk" | "day_pass";
+export type MemberType = "cold_desk" | "hot_desk" | "hub_friend" | "day_pass";
 export type ApplicationStatus = "pending" | "approved" | "rejected";
 export type MembershipInterest = "daypass_single" | "daypass_5pack" | "hot_desk" | "reserved_desk";
 export type AccessMethod = "nfc" | "pin" | "daycode";

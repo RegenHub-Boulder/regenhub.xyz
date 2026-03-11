@@ -20,6 +20,9 @@ function memberStatusBadge(member: Member | null) {
   if (member.member_type === "hot_desk") {
     return <Badge className="text-xs bg-emerald-500/20 text-emerald-400 border-emerald-500/30">Hot Desk</Badge>;
   }
+  if (member.member_type === "hub_friend") {
+    return <Badge className="text-xs bg-purple-500/20 text-purple-400 border-purple-500/30">Hub Friend</Badge>;
+  }
   return <Badge className="text-xs bg-blue-500/20 text-blue-400 border-blue-500/30">Day Pass</Badge>;
 }
 

@@ -235,7 +235,7 @@ async function sendMembersList(chatId: number, offset: number) {
 
   let text = `Members (${count}):\n\n`;
   (members ?? []).forEach((m, i) => {
-    const type = m.member_type === "cold_desk" ? "🧊" : m.member_type === "hot_desk" ? "🔥" : "🎫";
+    const type = m.member_type === "cold_desk" ? "🧊" : m.member_type === "hot_desk" ? "🔥" : m.member_type === "hub_friend" ? "🤝" : "🎫";
     text += `${offset + i + 1}. ${m.name} ${type} ${m.telegram_username ?? ""}${m.is_admin ? " [Admin]" : ""}`;
     if (m.member_type === "day_pass") text += ` (${m.day_passes_balance} passes)`;
     text += "\n";
@@ -342,7 +342,7 @@ async function handleAdminMenu(chatId: number, data: string, admin: MemberRow) {
       return bot.sendMessage(chatId, "Coworking membership type?", {
         reply_markup: { inline_keyboard: [
           [{ text: "Cold Desk", callback_data: "membertype_cold_desk" }, { text: "Hot Desk", callback_data: "membertype_hot_desk" }],
-          [{ text: "Day Pass", callback_data: "membertype_day_pass" }],
+          [{ text: "Hub Friend", callback_data: "membertype_hub_friend" }, { text: "Day Pass", callback_data: "membertype_day_pass" }],
         ]},
       });
 
@@ -498,7 +498,7 @@ async function createMember(chatId: number, d: Record<string, unknown>) {
 
   const { data: member, error } = await db.from("members").insert({
     name: d.name as string,
-    member_type: d.memberType as "cold_desk" | "hot_desk" | "day_pass",
+    member_type: d.memberType as "cold_desk" | "hot_desk" | "hub_friend" | "day_pass",
     telegram_username: (d.telegram as string | undefined) ?? null,
     pin_code: isFull ? (d.pinCode as string) : null,
     pin_code_slot: isFull ? (d.pinSlot as number) : null,
@@ -507,7 +507,7 @@ async function createMember(chatId: number, d: Record<string, unknown>) {
 
   if (error) return bot.sendMessage(chatId, `Error: ${error.message}`);
 
-  const typeLabel = d.memberType === "cold_desk" ? "Cold Desk" : d.memberType === "hot_desk" ? "Hot Desk" : "Day Pass";
+  const typeLabel = d.memberType === "cold_desk" ? "Cold Desk" : d.memberType === "hot_desk" ? "Hot Desk" : d.memberType === "hub_friend" ? "Hub Friend" : "Day Pass";
   let text = `Member created!\n\nName: ${member.name}\nType: ${typeLabel}`;
   if (d.telegram) text += `\nTelegram: ${d.telegram}`;
   if (isFull) text += `\nSlot: ${d.pinSlot}\nCode: ${d.pinCode}`;

@@ -54,7 +54,7 @@ export default async function PortalPage() {
   }
 
   const isFullMember = member.member_type !== "day_pass";
-  const typeLabel = member.member_type === "cold_desk" ? "Cold Desk" : member.member_type === "hot_desk" ? "Hot Desk" : "Day Pass";
+  const typeLabel = member.member_type === "cold_desk" ? "Cold Desk" : member.member_type === "hot_desk" ? "Hot Desk" : member.member_type === "hub_friend" ? "Hub Friend" : "Day Pass";
 
   return (
     <div className="space-y-8">
