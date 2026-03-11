@@ -38,6 +38,7 @@ function AuthUserRow({ u }: { u: AdminUser }) {
       <td className="px-4 py-3">{memberStatusBadge(u.member)}</td>
       <td className="px-4 py-3 text-muted text-sm">{u.member?.telegram_username ?? "—"}</td>
       <td className="px-4 py-3 text-muted font-mono text-sm">{u.member?.pin_code_slot ?? "—"}</td>
+      <td className="px-4 py-3 text-muted text-sm">{u.member ? u.member.day_passes_balance : "—"}</td>
       <td className="px-4 py-3 text-muted text-xs">
         {u.lastSignIn ? new Date(u.lastSignIn).toLocaleDateString() : "Never"}
       </td>
@@ -66,6 +67,7 @@ function LegacyMemberRow({ m }: { m: Member }) {
       </td>
       <td className="px-4 py-3 text-muted text-sm">{m.telegram_username ?? "—"}</td>
       <td className="px-4 py-3 text-muted font-mono text-sm">{m.pin_code_slot ?? "—"}</td>
+      <td className="px-4 py-3 text-muted text-sm">{m.day_passes_balance}</td>
       <td className="px-4 py-3 text-muted text-xs">—</td>
       <td className="px-4 py-3">
         <Link href={`/admin/members/${m.id}`}>
@@ -119,6 +121,7 @@ export default function UsersPage() {
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Telegram</th>
                 <th className="px-4 py-3 font-medium">Slot</th>
+                <th className="px-4 py-3 font-medium">Passes</th>
                 <th className="px-4 py-3 font-medium">Last sign-in</th>
                 <th className="px-4 py-3 font-medium"></th>
               </tr>
