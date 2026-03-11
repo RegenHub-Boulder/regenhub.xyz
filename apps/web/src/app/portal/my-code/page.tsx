@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { RegenerateCodeButton } from "@/components/portal/RegenerateCodeButton";
+import { RevealPin } from "@/components/portal/RevealPin";
 import { Key, Nfc, AlertCircle, Zap } from "lucide-react";
 
 export const metadata = { title: "My Door Code — RegenHub" };
@@ -44,14 +45,9 @@ export default async function MyCodePage() {
                 <span className="text-sm text-muted">Current PIN</span>
               </div>
               {member.pin_code ? (
-                <p className="text-5xl font-mono font-bold text-gold tracking-widest mt-3">
-                  {member.pin_code}
-                </p>
+                <RevealPin code={member.pin_code} slot={member.pin_code_slot} />
               ) : (
                 <p className="text-muted text-sm mt-2">No code assigned yet. Generate one below.</p>
-              )}
-              {member.pin_code_slot && (
-                <p className="text-xs text-muted mt-3">Slot {member.pin_code_slot}</p>
               )}
             </div>
             <RegenerateCodeButton

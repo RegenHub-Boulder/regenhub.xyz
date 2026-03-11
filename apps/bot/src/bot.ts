@@ -60,7 +60,11 @@ async function handleMyCode(msg: TelegramBot.Message) {
   if (!user) return bot.sendMessage(msg.chat.id, "Not registered. Contact an admin.");
   if (user.member_type === "day_pass") return bot.sendMessage(msg.chat.id, "Cold/hot desk members only. Use /daypass for a temporary code.");
   if (!user.pin_code) return bot.sendMessage(msg.chat.id, "No code set yet. Use /newcode to set one.");
-  return bot.sendMessage(msg.chat.id, `Your door code:\n\n🔑 *${user.pin_code}*\n\nSlot: ${user.pin_code_slot}`, { parse_mode: "Markdown" });
+  return bot.sendMessage(msg.chat.id, `Your door code is set. Tap below to reveal.`, {
+    reply_markup: {
+      inline_keyboard: [[{ text: "🔑 Reveal code", callback_data: `reveal_pin_${user.id}` }]],
+    },
+  });
 }
 
 async function handleNewCode(msg: TelegramBot.Message, match: RegExpExecArray | null) {
@@ -253,6 +257,23 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
   await bot.answerCallbackQuery(query.id).catch(() => {});
 
   const username = query.from.username ?? "";
+
+  // ── Member callbacks (no admin required) ──
+  if (data.startsWith("reveal_pin_")) {
+    const member = await findMemberByTelegram(username);
+    if (!member) return bot.sendMessage(chatId, "Not registered.");
+    const memberId = parseInt(data.replace("reveal_pin_", ""));
+    if (member.id !== memberId) return; // Ignore if not the owner
+    if (!member.pin_code) return bot.sendMessage(chatId, "No code set.");
+    // Edit the original message to show the code, auto-hide after revealing
+    return bot.editMessageText(`Your door code:\n\n🔑 *${member.pin_code}*`, {
+      chat_id: chatId,
+      message_id: query.message!.message_id,
+      parse_mode: "Markdown",
+    });
+  }
+
+  // ── Admin callbacks ──
   const admin = await findAdminByTelegram(username);
   if (!admin) return bot.sendMessage(chatId, "Admins only.");
 

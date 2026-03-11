@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, Save, Trash2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, Save, Trash2 } from "lucide-react";
 import type { Member } from "@/lib/supabase/types";
 
 interface Props {
@@ -29,6 +29,7 @@ export function MemberForm({ member, initialEmail, initialUserId }: Props) {
     initial_day_passes: "10",
   });
   const [loading, setLoading] = useState(false);
+  const [showPin, setShowPin] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
@@ -136,7 +137,24 @@ export function MemberForm({ member, initialEmail, initialUserId }: Props) {
           {!isDayPass && (
             <div className="space-y-2">
               <Label htmlFor="pin_code">PIN code</Label>
-              <Input id="pin_code" value={form.pin_code} onChange={set("pin_code")} placeholder="Leave blank to auto-generate" className="glass-input font-mono" />
+              <div className="relative">
+                <Input
+                  id="pin_code"
+                  type={showPin ? "text" : "password"}
+                  value={form.pin_code}
+                  onChange={set("pin_code")}
+                  placeholder="Leave blank to auto-generate"
+                  className="glass-input font-mono pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPin((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-foreground p-1"
+                  aria-label={showPin ? "Hide PIN" : "Reveal PIN"}
+                >
+                  {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
               {isEdit && member?.pin_code_slot && (
                 <p className="text-xs text-muted">Slot {member.pin_code_slot}</p>
               )}
