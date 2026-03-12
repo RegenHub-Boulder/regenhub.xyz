@@ -137,7 +137,16 @@ export interface Database {
       };
     };
     Views: { [_ in never]: never };
-    Functions: { [_ in never]: never };
+    Functions: {
+      decrement_day_pass_balance: {
+        Args: { p_member_id: number; p_amount?: number };
+        Returns: number;
+      };
+      increment_day_pass_balance: {
+        Args: { p_member_id: number; p_amount: number };
+        Returns: number;
+      };
+    };
     CompositeTypes: { [_ in never]: never };
     Enums: {
       member_type: MemberType;

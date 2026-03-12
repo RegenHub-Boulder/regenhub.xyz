@@ -19,28 +19,19 @@ export async function POST(
     return NextResponse.json({ error: "count must be 1–1000" }, { status: 400 });
   }
 
-  const { data: member } = await supabase
-    .from("members")
-    .select("id, name, day_passes_balance")
-    .eq("id", Number(id))
-    .single();
-
-  if (!member) {
-    return NextResponse.json({ error: "Member not found" }, { status: 404 });
-  }
-
-  const newBalance = member.day_passes_balance + count;
-
-  const { data, error } = await supabase
-    .from("members")
-    .update({ day_passes_balance: newBalance })
-    .eq("id", Number(id))
-    .select("id, name, day_passes_balance")
-    .single();
+  // Atomic increment — prevents lost updates from concurrent admin operations
+  const { data: newBalance, error } = await supabase.rpc(
+    "increment_day_pass_balance",
+    { p_member_id: Number(id), p_amount: count }
+  );
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ balance: data.day_passes_balance });
+  if (newBalance === -1) {
+    return NextResponse.json({ error: "Member not found" }, { status: 404 });
+  }
+
+  return NextResponse.json({ balance: newBalance });
 }

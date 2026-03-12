@@ -44,12 +44,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Account not found or disabled" }, { status: 403 });
   }
 
-  if (member.day_passes_balance <= 0) {
-    return NextResponse.json({ error: "No day passes remaining — contact an admin to top up" }, { status: 400 });
+  // Atomic decrement — prevents double-spend race condition
+  const { data: newBalance, error: rpcError } = await supabase.rpc(
+    "decrement_day_pass_balance",
+    { p_member_id: member.id, p_amount: 1 }
+  );
+
+  if (rpcError || newBalance === -1) {
+    return NextResponse.json(
+      { error: "No day passes remaining — contact an admin to top up" },
+      { status: 400 }
+    );
   }
 
   const slot = await findAvailableSlot(supabase);
   if (!slot) {
+    // Refund — no slot available
+    await supabase.rpc("increment_day_pass_balance", { p_member_id: member.id, p_amount: 1 });
     return NextResponse.json({ error: "No available door code slots" }, { status: 503 });
   }
 
@@ -61,21 +72,12 @@ export async function POST(request: Request) {
     lockWarning = formatLockWarning(lockResults);
   } catch (err) {
     console.error("[Lock] Failed to set day code:", err);
+    // Refund — couldn't program lock
+    await supabase.rpc("increment_day_pass_balance", { p_member_id: member.id, p_amount: 1 });
     return NextResponse.json(
       { error: "Couldn't reach the door locks. This is usually temporary — try again in a moment." },
       { status: 502 }
     );
-  }
-
-  // Decrement balance atomically
-  const { error: balanceError } = await supabase
-    .from("members")
-    .update({ day_passes_balance: member.day_passes_balance - 1 })
-    .eq("id", member.id);
-
-  if (balanceError) {
-    console.error("[DB] Failed to decrement balance:", balanceError);
-    // Non-fatal — code is already programmed, log but continue
   }
 
   const { error: insertError } = await supabase
@@ -98,7 +100,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     code,
     expires_at: expiresAt,
-    balance_remaining: member.day_passes_balance - 1,
+    balance_remaining: newBalance as number,
     lock_warning: lockWarning,
   });
 }

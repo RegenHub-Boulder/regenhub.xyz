@@ -105,12 +105,22 @@ async function handleDayPass(msg: TelegramBot.Message) {
   const user = await findMemberByTelegram(msg.from?.username ?? "");
   if (!user) return bot.sendMessage(msg.chat.id, "Not registered. Contact an admin.");
 
-  if (user.day_passes_balance <= 0) {
+  // Atomic decrement — prevents double-spend race condition
+  const { data: newBalance, error: rpcError } = await db.rpc("decrement_day_pass_balance", {
+    p_member_id: user.id,
+    p_amount: 1,
+  });
+
+  if (rpcError || newBalance === -1) {
     return bot.sendMessage(msg.chat.id, "No day passes remaining. Contact an admin to top up.");
   }
 
   const slot = await findNextAvailableDayPassSlot();
-  if (!slot) return bot.sendMessage(msg.chat.id, "All slots in use. Try again later or contact an admin.");
+  if (!slot) {
+    // Refund the pass since we can't issue a code
+    await db.rpc("increment_day_pass_balance", { p_member_id: user.id, p_amount: 1 });
+    return bot.sendMessage(msg.chat.id, "All slots in use. Try again later or contact an admin.");
+  }
 
   const code = generateRandomCode();
   const expiresAt = calculateDayPassExpiration();
@@ -120,6 +130,8 @@ async function handleDayPass(msg: TelegramBot.Message) {
     lockResults = await setUserCode(slot, code);
   } catch (err) {
     console.error("[DayPass] Failed to program lock:", err);
+    // Refund the pass since we couldn't program the lock
+    await db.rpc("increment_day_pass_balance", { p_member_id: user.id, p_amount: 1 });
     return bot.sendMessage(msg.chat.id, "⚠️ Couldn't reach the door locks. This is usually temporary — try again in a moment.");
   }
 
@@ -128,9 +140,8 @@ async function handleDayPass(msg: TelegramBot.Message) {
     label: user.member_type === "day_pass" ? null : `Guest by ${user.name}`,
     code, pin_slot: slot, expires_at: expiresAt.toISOString(), is_active: true,
   });
-  await db.from("members").update({ day_passes_balance: user.day_passes_balance - 1 }).eq("id", user.id);
 
-  const remaining = user.day_passes_balance - 1;
+  const remaining = newBalance as number;
   const warning = formatLockWarning(lockResults);
   let text = `${user.member_type === "day_pass" ? "Today's code" : "Guest code"}!\n\n🔑 *${code}*\n\nValid until: ${fmt(expiresAt)}\nPasses remaining: ${remaining}`;
   if (warning) text += `\n\n${warning}`;
@@ -557,10 +568,15 @@ async function handleAddPassesFlow(chatId: number, text: string, p: PendingActio
   if (p.step === "awaiting_count") {
     const count = parseInt(text);
     if (!count || count < 1) return bot.sendMessage(chatId, "Enter a number (1 or more):");
-    const { data: m } = await db.from("members").select("day_passes_balance").eq("id", p.data.memberId as number).single();
-    const newBalance = (m?.day_passes_balance ?? 0) + count;
-    await db.from("members").update({ day_passes_balance: newBalance }).eq("id", p.data.memberId as number);
+    // Atomic increment — prevents lost updates from concurrent admin operations
+    const { data: newBalance, error } = await db.rpc("increment_day_pass_balance", {
+      p_member_id: p.data.memberId as number,
+      p_amount: count,
+    });
     pending.delete(chatId);
+    if (error || newBalance === -1) {
+      return bot.sendMessage(chatId, "Failed to update balance. Member may have been deleted.");
+    }
     return bot.sendMessage(chatId, `Added ${count} day pass${count > 1 ? "es" : ""} to ${p.data.memberName}. New balance: ${newBalance}`);
   }
 }
