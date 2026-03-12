@@ -1,8 +1,17 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
+import { MobileNav, type NavLink } from "@/components/nav/MobileNav";
 
 export const metadata = { title: "Admin — RegenHub" };
+
+const links: NavLink[] = [
+  { href: "/admin", label: "Overview" },
+  { href: "/admin/members", label: "Members" },
+  { href: "/admin/codes", label: "Live Codes" },
+  { href: "/admin/lock", label: "Lock Sync" },
+  { href: "/portal", label: "Portal", accent: true },
+];
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -23,6 +32,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <header className="sticky top-0 z-50 px-6 py-3">
         <nav className="glass-panel-subtle max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-6">
+            <MobileNav links={links} />
             <Link href="/" className="text-forest font-bold text-lg">RegenHub</Link>
             <span className="text-xs bg-gold/20 text-gold px-2 py-0.5 rounded-full font-medium">Admin</span>
             <div className="hidden sm:flex gap-4 text-sm">
