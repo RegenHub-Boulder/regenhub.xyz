@@ -19,7 +19,17 @@ export default async function PassesPage() {
     .eq("supabase_user_id", user.id)
     .single();
 
-  if (!member) return null;
+  if (!member) {
+    return (
+      <div className="glass-panel p-8 text-center max-w-md mx-auto mt-16">
+        <Ticket className="w-8 h-8 text-muted mx-auto mb-3" />
+        <h2 className="text-xl font-semibold mb-2">Account Not Found</h2>
+        <p className="text-muted text-sm">
+          Your login isn&apos;t linked to a member profile yet. Contact an admin to get set up.
+        </p>
+      </div>
+    );
+  }
 
   // Build Stripe payment link URLs with member context pre-filled
   const stripeParams = `?client_reference_id=${member.id}&prefilled_email=${encodeURIComponent(member.email ?? "")}`;

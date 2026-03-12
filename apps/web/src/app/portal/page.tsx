@@ -71,8 +71,10 @@ export default async function PortalPage() {
                 <Key className="w-8 h-8 text-sage mb-3" />
                 <h3 className="font-semibold mb-1">My Door Code</h3>
                 <p className="text-sm text-muted">View or change your permanent door code</p>
-                {member.pin_code && (
-                  <p className="text-xl font-mono font-bold text-gold mt-3">{member.pin_code}</p>
+                {member.pin_code ? (
+                  <p className="text-sm text-sage mt-3">Code active</p>
+                ) : (
+                  <p className="text-sm text-amber-400 mt-3">No code set</p>
                 )}
               </CardContent>
             </Card>
