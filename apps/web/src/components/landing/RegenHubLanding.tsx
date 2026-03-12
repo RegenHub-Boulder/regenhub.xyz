@@ -1,61 +1,16 @@
-"use client";
-
-import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Building2, HandHeart, Lightbulb, Sprout, MapPin, Calendar, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { MemberDirectory } from "@/components/landing/MemberDirectory";
+import { ForestMascot } from "@/components/landing/ForestMascot";
 import forestBackground from "@/assets/forest-background.jpg";
-import forestMascot from "@/assets/forest-mascot.png";
 import regenHubLogo from "@/assets/regenhub-logo.svg";
 import regenHubText from "@/assets/regenhub-text.svg";
 import regenHubFull from "@/assets/regenhub-full.svg";
 
-const MASCOT_SAYINGS = [
-  "Scenius emerges! 🌿",
-  "Collective genius activated! ✨",
-  "1 + 1 = 11 here! 🚀",
-  "We build the future together! 💚",
-  "Ideas compound daily! 🧠",
-  "Innovation through cooperation! 🤝",
-  "Regenerating community wealth! 🌱",
-  "Aligned action creates magic! ⚡",
-  "Your potential amplified! 🎯",
-  "Together we go far! 🌍",
-];
-
 export default function RegenHubLanding() {
-  const [mascotX, setMascotX] = useState(-200);
-  const [mascotDir, setMascotDir] = useState(1);
-  const [mascotClicks, setMascotClicks] = useState(0);
-  const [scrollOpacity, setScrollOpacity] = useState(1);
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      setMascotX((x) => {
-        const w = window.innerWidth;
-        const nx = x + 2 * mascotDir;
-        if (nx > w) return -200;
-        if (nx < -200) return w;
-        return nx;
-      });
-    }, 50);
-    return () => clearInterval(id);
-  }, [mascotDir]);
-
-  useEffect(() => {
-    const onScroll = () => {
-      const y = window.scrollY;
-      if (y <= 50) setScrollOpacity(1);
-      else if (y >= 300) setScrollOpacity(0);
-      else setScrollOpacity(1 - (y - 50) / 250);
-    };
-    window.addEventListener("scroll", onScroll);
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
   return (
     <div className="min-h-screen relative overflow-x-hidden">
       {/* Forest background */}
@@ -76,7 +31,7 @@ export default function RegenHubLanding() {
             <Image src={regenHubText} alt="RegenHub" height={32} className="h-8 w-auto" />
           </div>
           <div className="flex items-center gap-4">
-            <p className="text-sm text-muted hidden sm:block">Boulder's Regenerative Workspace</p>
+            <p className="text-sm text-muted hidden sm:block">Boulder&apos;s Regenerative Workspace</p>
             <Link href="/portal">
               <Button size="sm" className="btn-glass">Member Portal</Button>
             </Link>
@@ -98,7 +53,7 @@ export default function RegenHubLanding() {
                   Apply for Membership
                 </Button>
               </Link>
-              <a href="https://luma.com/regenhub" target="_blank" rel="noopener noreferrer">
+              <a href="https://lu.ma/regenhub" target="_blank" rel="noopener noreferrer">
                 <Button className="btn-glass px-8 py-3 text-lg">
                   View Events
                 </Button>
@@ -120,7 +75,7 @@ export default function RegenHubLanding() {
               { icon: Building2, title: "Community Infrastructure", body: "Affordable co-working and event space for regenerative builders and changemakers." },
               { icon: HandHeart, title: "Economic Democracy", body: "Meaningful ownership and governance through profit-sharing and equity." },
               { icon: Sprout, title: "Regenerative Tech Incubation", body: "Mentorship and support for climate, social equity, and sustainability projects." },
-              { icon: Lightbulb, title: "Collective Intelligence", body: "Building 'scenius' — collective intelligence through sustained collaboration." },
+              { icon: Lightbulb, title: "Collective Intelligence", body: "Building 'scenius' \u2014 collective intelligence through sustained collaboration." },
             ].map(({ icon: Icon, title, body }) => (
               <Card key={title} className="glass-panel hover-lift">
                 <CardContent className="p-6 text-center">
@@ -155,7 +110,7 @@ export default function RegenHubLanding() {
                 <CardContent className="p-6">
                   <h3 className="text-lg font-semibold mb-3">{tier}</h3>
                   <ul className="text-sm text-muted space-y-1">
-                    {items.map((i) => <li key={i}>• {i}</li>)}
+                    {items.map((i) => <li key={i}>&bull; {i}</li>)}
                   </ul>
                 </CardContent>
               </Card>
@@ -193,7 +148,7 @@ export default function RegenHubLanding() {
             <div className="glass-panel-subtle rounded-lg overflow-hidden">
               <div className="relative w-full" style={{ paddingBottom: "75%" }}>
                 <iframe
-                  src="https://luma.com/embed/calendar/cal-ZCWMKx1NMCXGd7v/events?lt=light"
+                  src="https://lu.ma/embed/calendar/cal-ZCWMKx1NMCXGd7v/events?lt=dark"
                   className="absolute top-0 left-0 w-full h-full"
                   frameBorder="0"
                   allowFullScreen
@@ -213,7 +168,7 @@ export default function RegenHubLanding() {
               <div className="glass-panel-subtle p-6 mb-8">
                 <h3 className="text-lg font-semibold mb-3">Important Note</h3>
                 <p className="text-muted mb-2">
-                  RegenHub Boulder is an <strong>invite-only space</strong>. You're welcome to attend our public events
+                  RegenHub Boulder is an <strong>invite-only space</strong>. You&apos;re welcome to attend our public events
                   and inquire about membership and day passes in our community channels.
                 </p>
               </div>
@@ -223,7 +178,7 @@ export default function RegenHubLanding() {
                     <MapPin className="w-5 h-5 text-sage" />
                     <span className="font-medium">Location</span>
                   </div>
-                  <p className="text-muted">Downtown Boulder, Colorado</p>
+                  <p className="text-muted">1515 Walnut St, Suite 200<br />Boulder, Colorado</p>
                 </div>
                 <div className="space-y-3">
                   <div className="flex items-center justify-center gap-2">
@@ -240,14 +195,14 @@ export default function RegenHubLanding() {
                 </a>
                 <a href="https://t.me/+Mg1PLuT9pX9mMGVh" target="_blank" rel="noopener noreferrer"
                   className="flex items-center justify-center gap-2 hover:text-sage transition-colors">
-                  <span>📱</span> Community Telegram
+                  <span>Telegram</span> Community Chat
                 </a>
               </div>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Link href="/apply">
                   <Button className="btn-primary-glass px-6">Apply for Membership</Button>
                 </Link>
-                <a href="https://luma.com/regenhub" target="_blank" rel="noopener noreferrer">
+                <a href="https://lu.ma/regenhub" target="_blank" rel="noopener noreferrer">
                   <Button className="btn-glass px-6">View All Events</Button>
                 </a>
               </div>
@@ -266,7 +221,7 @@ export default function RegenHubLanding() {
             </div>
             <p className="text-lg font-medium mb-2">Building economic democracy and regenerative livelihoods</p>
             <div className="text-sm text-muted space-y-1 mb-6">
-              <p>© 2025 RegenHub Limited Cooperative Association</p>
+              <p>&copy; 2026 RegenHub Limited Cooperative Association</p>
               <p>A Colorado Public Benefit Corporation</p>
             </div>
             <div className="flex justify-center gap-4 flex-wrap">
@@ -274,7 +229,7 @@ export default function RegenHubLanding() {
                 { label: "Telegram", href: "https://t.me/+Mg1PLuT9pX9mMGVh", external: true },
                 { label: "Email", href: "mailto:boulder.regenhub@gmail.com", external: false },
                 { label: "Apply", href: "/apply", external: false },
-                { label: "Events", href: "https://luma.com/regenhub", external: true },
+                { label: "Events", href: "https://lu.ma/regenhub", external: true },
                 { label: "Portal", href: "/portal", external: false },
               ].map(({ label, href, external }) => (
                 <Button key={label} variant="ghost" size="sm" className="btn-glass" asChild>
@@ -290,31 +245,8 @@ export default function RegenHubLanding() {
         </div>
       </footer>
 
-      {/* Hopping mascot */}
-      {typeof window !== "undefined" && (
-        <div
-          className="fixed hidden lg:block z-50 cursor-pointer"
-          style={{
-            left: `${mascotX}px`,
-            bottom: "60px",
-            transform: `scaleX(${mascotDir})`,
-            opacity: scrollOpacity,
-            pointerEvents: scrollOpacity === 0 ? "none" : "auto",
-            transition: "opacity 0.3s",
-          }}
-          onClick={() => {
-            setMascotDir((d) => d * -1);
-            setMascotClicks((c) => c + 1);
-          }}
-        >
-          <Image src={forestMascot} alt="RegenHub Mascot" width={128} height={128} className="animate-hop opacity-80 hover:opacity-100 hover:scale-110 transition-all duration-300" />
-          {mascotClicks > 0 && (
-            <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-white/90 px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap shadow-lg text-forest">
-              {MASCOT_SAYINGS[mascotClicks % MASCOT_SAYINGS.length]}
-            </div>
-          )}
-        </div>
-      )}
+      {/* Hopping mascot — client component */}
+      <ForestMascot />
     </div>
   );
 }
