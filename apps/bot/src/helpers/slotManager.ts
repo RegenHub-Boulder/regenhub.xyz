@@ -1,5 +1,10 @@
 import { db } from "../db/supabase.js";
 
+// Member permanent codes: slots 1–100
+const MEMBER_SLOT_MIN = 1;
+const MEMBER_SLOT_MAX = 100;
+
+// Day codes (quick codes, day passes): slots 101–200
 const SLOT_MIN = parseInt(process.env.DAY_PASS_SLOT_MIN ?? "101");
 const SLOT_MAX = parseInt(process.env.DAY_PASS_SLOT_MAX ?? "200");
 const TIMEZONE = process.env.TIMEZONE ?? "America/Denver";
@@ -22,15 +27,23 @@ export async function findNextAvailableDayPassSlot(): Promise<number | null> {
   return null;
 }
 
-export async function findNextMemberSlot(): Promise<number> {
+/**
+ * Find the next available member slot (1–100).
+ * Scans for gaps so freed slots are reused.
+ * Returns null if all 100 slots are occupied.
+ */
+export async function findNextMemberSlot(): Promise<number | null> {
   const { data } = await db
     .from("members")
     .select("pin_code_slot")
-    .not("pin_code_slot", "is", null)
-    .order("pin_code_slot", { ascending: false })
-    .limit(1);
+    .not("pin_code_slot", "is", null);
 
-  return data?.[0]?.pin_code_slot ? data[0].pin_code_slot + 1 : 1;
+  const used = new Set((data ?? []).map((m) => m.pin_code_slot));
+
+  for (let slot = MEMBER_SLOT_MIN; slot <= MEMBER_SLOT_MAX; slot++) {
+    if (!used.has(slot)) return slot;
+  }
+  return null;
 }
 
 /**

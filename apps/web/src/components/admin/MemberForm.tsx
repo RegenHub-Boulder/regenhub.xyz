@@ -79,11 +79,15 @@ export function MemberForm({ member, initialEmail, initialUserId }: Props) {
 
   async function handleDelete() {
     if (!isEdit) return;
-    if (!confirm(`Delete ${member!.name}? This cannot be undone.`)) return;
+    if (!confirm(`Delete ${member!.name}? This will also clear their door code. This cannot be undone.`)) return;
     setLoading(true);
     try {
       const res = await fetch(`/api/admin/members/${member!.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Delete failed");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Delete failed");
+      if (json.lock_warning) {
+        alert(`Member deleted, but: ${json.lock_warning}`);
+      }
       router.push("/admin/members");
       router.refresh();
     } catch (err) {

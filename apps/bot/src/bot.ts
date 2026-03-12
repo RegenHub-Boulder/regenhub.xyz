@@ -488,7 +488,12 @@ async function handleAddMemberFlow(chatId: number, text: string, p: PendingActio
       const pin = text.toLowerCase() === "random" ? String(Math.floor(100000 + Math.random() * 900000)) : /^\d{4,6}$/.test(text) ? text : null;
       if (!pin) return bot.sendMessage(chatId, "Invalid. Enter 4-6 digits or 'random':");
       p.data.pinCode = pin;
-      p.data.pinSlot = await findNextMemberSlot();
+      const slot = await findNextMemberSlot();
+      if (!slot) {
+        pending.delete(chatId);
+        return bot.sendMessage(chatId, "All member slots (1–100) are full. Free up a slot or contact an admin.");
+      }
+      p.data.pinSlot = slot;
       pending.delete(chatId);
       return createMember(chatId, p.data);
     }
