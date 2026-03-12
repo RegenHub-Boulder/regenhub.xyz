@@ -7,8 +7,8 @@
 The regenhub.xyz stack is self-hosted on RegenHub's local compute cluster and exposed publicly via Cloudflare Tunnels. No cloud provider — everything runs at the space.
 
 **Domains:**
-- `site.regenhub.build` → Next.js web app (live, internal)
-- `regenhub.xyz` → DNS not yet flipped (still GitHub Pages) — needs Cloudflare zone access
+- `regenhub.xyz` → Next.js web app (production, via Cloudflare Tunnel)
+- `site.regenhub.build` → same app, internal hostname (also works)
 - `supabasekong-w8gw0wc80o80c0c8g88kk8og.regenhub.build` → Supabase API (Kong gateway)
 
 **Repo:** `https://github.com/RegenHub-Boulder/regenhub.xyz`  
@@ -45,7 +45,7 @@ To manage deployments, you need:
 | Supabase instance | `w8gw0wc80o80c0c8g88kk8og` |
 | Cloudflare zone (`regenhub.build`) | `01424a7ad7c85fcfef84033ca540da79` |
 | Cloudflare account | `e94c43925ef19151277047a39e65f22d` |
-| Site tunnel ID | `48f43c33-153d-4105-aa0e-f214f8c58961` |
+| Site tunnel ID | `9afe98a9-34e0-4e56-835a-a59b31f9a61e` |
 
 ---
 

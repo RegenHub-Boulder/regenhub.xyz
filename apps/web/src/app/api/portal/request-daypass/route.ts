@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { setUserCode } from "@/lib/homeAssistant";
+import { setUserCode, formatLockWarning } from "@/lib/homeAssistant";
 
 const DAY_CODE_SLOT_MIN = 101;
 const DAY_CODE_SLOT_MAX = 200;
@@ -55,11 +55,16 @@ export async function POST(request: Request) {
 
   const code = generateCode();
 
+  let lockWarning: string | null = null;
   try {
-    await setUserCode(slot, code);
+    const lockResults = await setUserCode(slot, code);
+    lockWarning = formatLockWarning(lockResults);
   } catch (err) {
     console.error("[Lock] Failed to set day code:", err);
-    return NextResponse.json({ error: "Failed to program lock" }, { status: 502 });
+    return NextResponse.json(
+      { error: "Couldn't reach the door locks. This is usually temporary — try again in a moment." },
+      { status: 502 }
+    );
   }
 
   // Decrement balance atomically
@@ -94,5 +99,6 @@ export async function POST(request: Request) {
     code,
     expires_at: expiresAt,
     balance_remaining: member.day_passes_balance - 1,
+    lock_warning: lockWarning,
   });
 }

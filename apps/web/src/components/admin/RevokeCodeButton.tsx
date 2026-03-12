@@ -20,9 +20,14 @@ export function RevokeCodeButton({ codeId, code }: { codeId: number; code: strin
     });
 
     if (res.ok) {
+      const json = await res.json();
+      if (json.lock_warning) {
+        alert(`Code revoked, but: ${json.lock_warning}`);
+      }
       router.refresh();
     } else {
-      alert("Failed to revoke code. Try again.");
+      const json = await res.json().catch(() => ({}));
+      alert(json.error ?? "Failed to revoke code. Try again.");
     }
     setLoading(false);
   };

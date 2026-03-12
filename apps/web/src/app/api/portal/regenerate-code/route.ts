@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { setUserCode } from "@/lib/homeAssistant";
+import { setUserCode, formatLockWarning } from "@/lib/homeAssistant";
 
 function generateCode(): string {
   // 6-digit code, never starts with 0
@@ -38,11 +38,16 @@ export async function POST(req: Request) {
 
     const newCode = customCode ?? generateCode();
 
+    let lockWarning: string | null = null;
     try {
-      await setUserCode(member.pin_code_slot, newCode);
+      const lockResults = await setUserCode(member.pin_code_slot, newCode);
+      lockWarning = formatLockWarning(lockResults);
     } catch (err) {
       console.error("[Lock] Failed to set code:", err);
-      return NextResponse.json({ error: "Failed to update lock" }, { status: 502 });
+      return NextResponse.json(
+        { error: "Couldn't reach the door locks. This is usually temporary — try again in a moment." },
+        { status: 502 }
+      );
     }
 
     const { error } = await supabase
@@ -55,7 +60,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Lock updated but DB save failed" }, { status: 500 });
     }
 
-    return NextResponse.json({ code: newCode });
+    return NextResponse.json({ code: newCode, lock_warning: lockWarning });
   } catch (err) {
     console.error("[regenerate-code] Unhandled error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

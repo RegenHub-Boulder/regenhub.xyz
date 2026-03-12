@@ -1,6 +1,6 @@
 import TelegramBot from "node-telegram-bot-api";
 import { db, findMemberByTelegram, findAdminByTelegram, type MemberRow } from "./db/supabase.js";
-import { setUserCode, clearUserCode } from "./helpers/homeAssistant.js";
+import { setUserCode, clearUserCode, formatLockWarning } from "./helpers/homeAssistant.js";
 import {
   findNextAvailableDayPassSlot,
   findNextMemberSlot,
@@ -84,11 +84,15 @@ async function handleNewCode(msg: TelegramBot.Message, match: RegExpExecArray | 
     if (!newCode) return bot.sendMessage(msg.chat.id, "Invalid code. Use 4-6 digits or 'random'.");
 
     try {
-      await setUserCode(user.pin_code_slot, newCode);
+      const lockResults = await setUserCode(user.pin_code_slot, newCode);
       await db.from("members").update({ pin_code: newCode }).eq("id", user.id);
-      return bot.sendMessage(msg.chat.id, `Code updated!\n\n🔑 *${newCode}*`, { parse_mode: "Markdown" });
-    } catch {
-      return bot.sendMessage(msg.chat.id, "Error updating code. Try again.");
+      const warning = formatLockWarning(lockResults);
+      let reply = `Code updated!\n\n🔑 *${newCode}*`;
+      if (warning) reply += `\n\n${warning}`;
+      return bot.sendMessage(msg.chat.id, reply, { parse_mode: "Markdown" });
+    } catch (err) {
+      console.error("[NewCode] Failed to program lock:", err);
+      return bot.sendMessage(msg.chat.id, "⚠️ Couldn't reach the door locks. This is usually temporary — try again in a moment.");
     }
   }
 
@@ -111,11 +115,12 @@ async function handleDayPass(msg: TelegramBot.Message) {
   const code = generateRandomCode();
   const expiresAt = calculateDayPassExpiration();
 
+  let lockResults;
   try {
-    await setUserCode(slot, code);
+    lockResults = await setUserCode(slot, code);
   } catch (err) {
     console.error("[DayPass] Failed to program lock:", err);
-    return bot.sendMessage(msg.chat.id, "Failed to program door lock. Please contact an admin.");
+    return bot.sendMessage(msg.chat.id, "⚠️ Couldn't reach the door locks. This is usually temporary — try again in a moment.");
   }
 
   await db.from("day_codes").insert({
@@ -126,10 +131,10 @@ async function handleDayPass(msg: TelegramBot.Message) {
   await db.from("members").update({ day_passes_balance: user.day_passes_balance - 1 }).eq("id", user.id);
 
   const remaining = user.day_passes_balance - 1;
-  return bot.sendMessage(msg.chat.id,
-    `${user.member_type === "day_pass" ? "Today's code" : "Guest code"}!\n\n🔑 *${code}*\n\nValid until: ${fmt(expiresAt)}\nPasses remaining: ${remaining}`,
-    { parse_mode: "Markdown" }
-  );
+  const warning = formatLockWarning(lockResults);
+  let text = `${user.member_type === "day_pass" ? "Today's code" : "Guest code"}!\n\n🔑 *${code}*\n\nValid until: ${fmt(expiresAt)}\nPasses remaining: ${remaining}`;
+  if (warning) text += `\n\n${warning}`;
+  return bot.sendMessage(msg.chat.id, text, { parse_mode: "Markdown" });
 }
 
 async function handleEmail(msg: TelegramBot.Message, match: RegExpExecArray | null) {
@@ -310,17 +315,20 @@ async function createQuickCode(chatId: number, expiresAt: Date, label: string | 
 
   const code = generateRandomCode();
 
+  let lockResults;
   try {
-    await setUserCode(slot, code);
+    lockResults = await setUserCode(slot, code);
   } catch (err) {
     console.error("[QuickCode] Failed to program lock:", err);
-    return bot.sendMessage(chatId, "Failed to program door lock. Check HA connection.");
+    return bot.sendMessage(chatId, "⚠️ Couldn't reach the door locks. This is usually temporary — try again in a moment.");
   }
 
   await db.from("day_codes").insert({ label, code, pin_slot: slot, expires_at: expiresAt.toISOString(), is_active: true });
 
+  const warning = formatLockWarning(lockResults);
   let text = `Quick code created!\n\n🔑 *${code}*\n\nExpires: ${fmt(expiresAt)}`;
   if (label) text += `\nLabel: ${label}`;
+  if (warning) text += `\n\n${warning}`;
   return bot.sendMessage(chatId, text, { parse_mode: "Markdown" });
 }
 
@@ -425,10 +433,19 @@ async function handleNewCodeFlow(chatId: number, text: string, p: PendingAction)
 
   if (!code) return bot.sendMessage(chatId, "Send 4-6 digits or 'random'. Type 'cancel' to abort.");
 
-  await setUserCode(p.data.slot as number, code);
-  await db.from("members").update({ pin_code: code }).eq("id", p.data.userId as number);
-  pending.delete(chatId);
-  return bot.sendMessage(chatId, `Code updated!\n\n🔑 *${code}*`, { parse_mode: "Markdown" });
+  try {
+    const lockResults = await setUserCode(p.data.slot as number, code);
+    await db.from("members").update({ pin_code: code }).eq("id", p.data.userId as number);
+    pending.delete(chatId);
+    const warning = formatLockWarning(lockResults);
+    let reply = `Code updated!\n\n🔑 *${code}*`;
+    if (warning) reply += `\n\n${warning}`;
+    return bot.sendMessage(chatId, reply, { parse_mode: "Markdown" });
+  } catch (err) {
+    console.error("[NewCode] Failed to program lock:", err);
+    pending.delete(chatId);
+    return bot.sendMessage(chatId, "⚠️ Couldn't reach the door locks. This is usually temporary — try again in a moment.");
+  }
 }
 
 async function handleQuickCodeFlow(chatId: number, text: string, p: PendingAction) {
@@ -485,12 +502,14 @@ async function handleAddMemberFlow(chatId: number, text: string, p: PendingActio
 
 async function createMember(chatId: number, d: Record<string, unknown>) {
   const isFull = d.memberType !== "day_pass";
+  let memberLockWarning: string | null = null;
   if (isFull && d.pinCode && d.pinSlot) {
     try {
-      await setUserCode(d.pinSlot as number, d.pinCode as string);
+      const lockResults = await setUserCode(d.pinSlot as number, d.pinCode as string);
+      memberLockWarning = formatLockWarning(lockResults);
     } catch (err) {
       console.error("[CreateMember] Failed to program lock:", err);
-      return bot.sendMessage(chatId, "Failed to program door lock. Member not created. Check HA connection.");
+      return bot.sendMessage(chatId, "⚠️ Couldn't reach the door locks. Member not created. This is usually temporary — try again in a moment.");
     }
   }
 
@@ -512,6 +531,7 @@ async function createMember(chatId: number, d: Record<string, unknown>) {
   if (d.telegram) text += `\nTelegram: ${d.telegram}`;
   if (isFull) text += `\nSlot: ${d.pinSlot}\nCode: ${d.pinCode}`;
   else text += `\nDay Passes: ${d.passes ?? 10}`;
+  if (memberLockWarning) text += `\n\n${memberLockWarning}`;
 
   return bot.sendMessage(chatId, text);
 }

@@ -12,9 +12,9 @@ Self-hosted on local infrastructure (compute-1), not deployed to cloud providers
 - **Deployment**: Coolify on compute-1, exposed via Cloudflare Tunnels
 
 ## Live URLs
-- `https://site.regenhub.build` — web app (live)
+- `https://regenhub.xyz` — production web app (public domain, via Cloudflare Tunnel)
+- `https://site.regenhub.build` — same app, internal hostname (also works)
 - `https://supabasekong-w8gw0wc80o80c0c8g88kk8og.regenhub.build` — Supabase API
-- `regenhub.xyz` — DNS not yet flipped (still GitHub Pages)
 
 ## Development Commands
 ```bash
@@ -28,10 +28,14 @@ pnpm --filter web lint
 ## Environment Variables
 `NEXT_PUBLIC_*` vars are baked at **build time** — changing them requires a full redeploy.
 
+Build-time vars live in `apps/web/.env.production` (committed to git — anon key is public by design).
+The `.dockerignore` has an exception (`!**/.env.production`) so the file is available during Docker builds.
+
 | Variable | Where | Notes |
 |----------|-------|-------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Web (build-time) | |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Web (build-time) | |
+| `NEXT_PUBLIC_SUPABASE_URL` | Web (build-time) | In `.env.production` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Web (build-time) | In `.env.production` |
+| `NEXT_PUBLIC_SITE_URL` | Web (build-time) | In `.env.production` — used for auth redirects |
 | `HA_URL` | Web + Bot (runtime) | HA base URL e.g. `http://homeassistant.local:8123/api` |
 | `HA_TOKEN` | Web + Bot (runtime) | Long-lived HA access token |
 | `HA_LOCK_ENTITIES` | Web + Bot (runtime) | Comma-separated Z-Wave entity IDs, e.g. `lock.front_door_lock,lock.back_door_lock` |
@@ -60,12 +64,14 @@ supabase/
     ├── 006_pin_slot_ranges.sql       # slots: members 1-100, day codes 101-200
     ├── 007_nullable_expires_at.sql
     ├── 008_membership_model.sql      # cold_desk/hot_desk/day_pass types
-    └── 009_day_passes_balance.sql
+    ├── 009_day_passes_balance.sql
+    ├── 010_fix_member_types.sql      # day_pass slot range fix
+    └── 011_hub_friend.sql            # hub_friend member type
 DEPLOYMENT.md               # Full infra guide for agents + humans
 ```
 
 ## Database Schema (Supabase)
-- `members` — RegenHub members (full + daypass), linked to `auth.users`
+- `members` — RegenHub members, linked to `auth.users`. `member_type` enum: `cold_desk`, `hot_desk`, `hub_friend`, `day_pass`
 - `day_passes` — pool of N-use guest passes per member
 - `day_codes` — temporary door codes (PIN slots 125-249) issued against a pass
 - `access_logs` — every door access event
@@ -93,9 +99,9 @@ Connect via postgres Docker container on compute-1 (see DEPLOYMENT.md).
 Use `/admin → Add member` as an admin in the Telegram bot.
 
 ### Fix a member's type (if they can't access /mycode)
-The bot gates `/mycode` and `/newcode` to `cold_desk` and `hot_desk` members only.
-If a member reports "Cold/hot desk members only", their `member_type` in the DB is wrong.
-Fix via the admin web panel at `https://site.regenhub.build/admin/members`, or SQL:
+The bot gates `/mycode` and `/newcode` to permanent members (`cold_desk`, `hot_desk`, `hub_friend`).
+If a member reports "Cold/hot desk members only", their `member_type` is `day_pass` and needs changing.
+Fix via the admin web panel at `https://regenhub.xyz/admin/members`, or SQL:
 ```sql
 update members set member_type = 'cold_desk' where telegram_username = '@username';
 ```
@@ -106,10 +112,12 @@ Set `HA_LOCK_ENTITIES=lock.front_door_lock,lock.back_door_lock` (comma-separated
 target multiple Z-Wave locks. Changing bot env vars doesn't require a full image rebuild.
 
 ## Important Notes
-- **Traefik + Docker Engine 29.2 bug**: New containers won't get auto-routed. Write a static route file to `/data/coolify/proxy/dynamic/`. See DEPLOYMENT.md.
+- **NEVER restart Supabase via Coolify.** Coolify regenerates ALL `SERVICE_PASSWORD_*` values on restart — but the DB volume retains the old passwords. This breaks every service. If it happens, see the password fix procedure in DEPLOYMENT.md.
+- **Kong key rotation:** If Supabase containers are recreated, Coolify may generate JWT keys that don't match the JWT secret (a timing bug). You'll need to generate correctly-signed keys and patch Kong's `kong.yml`. See DEPLOYMENT.md.
+- **Traefik + Docker Engine 29.2 bug**: New containers won't get auto-routed. A route-sync daemon and cron watchdog handle this automatically. See DEPLOYMENT.md.
 - **Monorepo standalone path**: `server.js` lives at `apps/web/apps/web/server.js` in the container (double-nested by Next.js standalone + pnpm monorepo). Dockerfile handles this correctly.
 - **RLS**: All tables have Row Level Security. The service role key (bot) bypasses RLS. The anon key (web) is subject to RLS policies.
-- **No GitHub Pages**: Old CI workflows for GH Pages are gone. Deployment is via Coolify webhook.
+- **Build-time env vars**: `NEXT_PUBLIC_*` vars are in `apps/web/.env.production` (committed). Changing them requires a commit + redeploy.
 
 ## Contact
 - Location: 1515 Walnut St, Suite 200, Boulder, CO

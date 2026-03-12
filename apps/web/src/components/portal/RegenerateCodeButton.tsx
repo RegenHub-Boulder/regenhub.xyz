@@ -14,6 +14,7 @@ interface Props {
 export function RegenerateCodeButton({ hasSlot }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [customCode, setCustomCode] = useState("");
   const router = useRouter();
 
@@ -32,6 +33,7 @@ export function RegenerateCodeButton({ hasSlot }: Props) {
 
     setLoading(true);
     setError(null);
+    setWarning(null);
 
     try {
       const res = await fetch("/api/portal/regenerate-code", {
@@ -42,6 +44,7 @@ export function RegenerateCodeButton({ hasSlot }: Props) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed");
       setCustomCode("");
+      if (json.lock_warning) setWarning(json.lock_warning);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -78,6 +81,7 @@ export function RegenerateCodeButton({ hasSlot }: Props) {
         </Button>
       </div>
       {error && <p className="text-xs text-red-400">{error}</p>}
+      {warning && <p className="text-xs text-amber-400">⚠️ {warning}</p>}
       {!hasSlot && <p className="text-xs text-muted">No slot assigned</p>}
       {hasSlot && !loading && (
         <p className="text-xs text-muted">Leave blank to auto-generate</p>

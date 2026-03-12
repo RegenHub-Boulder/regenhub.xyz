@@ -30,7 +30,7 @@ export function RequestDayPassButton({ isFullMember, remainingUses }: Props) {
   const [expiryHours, setExpiryHours] = useState<number | null>(24);
   const [customHours, setCustomHours] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ code: string; expires_at: string | null } | null>(null);
+  const [result, setResult] = useState<{ code: string; expires_at: string | null; lock_warning?: string | null } | null>(null);
   const router = useRouter();
 
   const isCustom = expiryHours === -1;
@@ -75,6 +75,9 @@ export function RequestDayPassButton({ isFullMember, remainingUses }: Props) {
               })}</>
             : "No expiry — revoke manually to remove"}
         </p>
+        {result.lock_warning && (
+          <p className="text-xs text-amber-400 mt-2">⚠️ {result.lock_warning}</p>
+        )}
         <Button variant="ghost" className="btn-glass mt-3 text-xs" onClick={() => setResult(null)}>
           Generate another
         </Button>

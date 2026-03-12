@@ -33,7 +33,7 @@ export function QuickCodeForm({ members }: Props) {
   const [memberId, setMemberId] = useState<number | "">("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ code: string; expires_at: string | null; pin_slot: number } | null>(null);
+  const [result, setResult] = useState<{ code: string; expires_at: string | null; pin_slot: number; lock_warning?: string | null } | null>(null);
   const router = useRouter();
 
   const isCustom = expiryHours === -1;
@@ -86,6 +86,9 @@ export function QuickCodeForm({ members }: Props) {
                   })}</>
                 : "No expiry — revoke manually"}
             </p>
+            {result.lock_warning && (
+              <p className="text-sm text-amber-400 mt-2">⚠️ {result.lock_warning}</p>
+            )}
           </div>
           <Button variant="ghost" size="sm" className="btn-glass text-xs" onClick={() => setResult(null)}>
             <Zap className="w-3.5 h-3.5 mr-1.5" />

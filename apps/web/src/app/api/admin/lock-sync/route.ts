@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/admin";
-import { setUserCode, clearUserCode } from "@/lib/homeAssistant";
+import { setUserCode, clearUserCode, type LockResult } from "@/lib/homeAssistant";
 
 export async function POST() {
   if (!await requireAdmin()) {
@@ -18,17 +18,20 @@ export async function POST() {
     return NextResponse.json({ error: "Failed to fetch members" }, { status: 500 });
   }
 
-  const results: Array<{ name: string; slot: number; action: string; ok: boolean }> = [];
+  const results: Array<{ name: string; slot: number; action: string; ok: boolean; partial?: string[] }> = [];
 
   for (const m of members) {
     const slot = m.pin_code_slot!;
     try {
+      let lockResults: LockResult[];
       if (!m.disabled && m.pin_code) {
-        await setUserCode(slot, m.pin_code);
-        results.push({ name: m.name, slot, action: "set", ok: true });
+        lockResults = await setUserCode(slot, m.pin_code);
+        const partialFails = lockResults.filter((r) => !r.ok).map((r) => r.entity);
+        results.push({ name: m.name, slot, action: "set", ok: true, partial: partialFails.length ? partialFails : undefined });
       } else {
-        await clearUserCode(slot);
-        results.push({ name: m.name, slot, action: "clear", ok: true });
+        lockResults = await clearUserCode(slot);
+        const partialFails = lockResults.filter((r) => !r.ok).map((r) => r.entity);
+        results.push({ name: m.name, slot, action: "clear", ok: true, partial: partialFails.length ? partialFails : undefined });
       }
     } catch (err) {
       console.error(`[LockSync] Failed for slot ${slot}:`, err);
@@ -37,5 +40,6 @@ export async function POST() {
   }
 
   const failed = results.filter((r) => !r.ok).length;
-  return NextResponse.json({ synced: results.length - failed, failed, results });
+  const partial = results.filter((r) => r.ok && r.partial).length;
+  return NextResponse.json({ synced: results.length - failed, failed, partial, results });
 }

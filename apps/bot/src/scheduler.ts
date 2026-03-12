@@ -16,7 +16,11 @@ export async function expireOldCodes() {
   let errors = 0;
   for (const code of expired) {
     try {
-      await clearUserCode(code.pin_slot);
+      const lockResults = await clearUserCode(code.pin_slot);
+      const failed = lockResults.filter((r) => !r.ok);
+      if (failed.length > 0) {
+        console.warn(`[Scheduler] Partial clear for code ${code.id} — failed on: ${failed.map((r) => r.entity).join(", ")}`);
+      }
       await db
         .from("day_codes")
         .update({ is_active: false, revoked_at: new Date().toISOString() })

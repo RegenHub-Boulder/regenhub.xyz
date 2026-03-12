@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/admin";
-import { clearUserCode } from "@/lib/homeAssistant";
+import { clearUserCode, formatLockWarning } from "@/lib/homeAssistant";
 
 export async function POST(request: Request) {
   if (!await requireAdmin()) {
@@ -21,11 +21,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Code not found or already revoked" }, { status: 404 });
   }
 
+  let lockWarning: string | null = null;
   try {
-    await clearUserCode(code.pin_slot);
+    const lockResults = await clearUserCode(code.pin_slot);
+    lockWarning = formatLockWarning(lockResults);
   } catch (err) {
     console.error("[Lock] Failed to clear code from HA:", err);
-    return NextResponse.json({ error: "Failed to clear code from lock" }, { status: 502 });
+    return NextResponse.json(
+      { error: "Couldn't reach the door locks. This is usually temporary — try again in a moment." },
+      { status: 502 }
+    );
   }
 
   const { error } = await supabase
@@ -38,5 +43,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Lock cleared but DB update failed" }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, lock_warning: lockWarning });
 }
