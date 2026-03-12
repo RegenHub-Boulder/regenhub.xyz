@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Zap, X, Infinity } from "lucide-react";
+import { Loader2, Zap, X, Infinity, Copy, Check } from "lucide-react";
 
 type ExpiryOption = { label: string; hours: number | null };
 
@@ -34,6 +34,7 @@ export function QuickCodeForm({ members }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ code: string; expires_at: string | null; pin_slot: number; lock_warning?: string | null } | null>(null);
+  const [copied, setCopied] = useState(false);
   const router = useRouter();
 
   const isCustom = expiryHours === -1;
@@ -70,12 +71,38 @@ export function QuickCodeForm({ members }: Props) {
   }
 
   if (result) {
+    const handleCopy = async () => {
+      try {
+        await navigator.clipboard.writeText(result.code);
+      } catch {
+        const el = document.createElement("textarea");
+        el.value = result.code;
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand("copy");
+        document.body.removeChild(el);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    };
+
     return (
       <div className="glass-panel p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs text-muted mb-1">Code ready — share with guest</p>
-            <p className="text-5xl font-mono font-bold text-gold tracking-widest">{result.code}</p>
+            <div className="flex items-center gap-3">
+              <p className="text-5xl font-mono font-bold text-gold tracking-widest">{result.code}</p>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCopy}
+                className="text-muted hover:text-foreground mt-1"
+                aria-label="Copy code"
+              >
+                {copied ? <Check className="w-5 h-5 text-sage" /> : <Copy className="w-5 h-5" />}
+              </Button>
+            </div>
             <p className="text-sm text-muted mt-2">
               Slot {result.pin_slot} ·{" "}
               {result.expires_at
@@ -86,11 +113,12 @@ export function QuickCodeForm({ members }: Props) {
                   })}</>
                 : "No expiry — revoke manually"}
             </p>
+            {copied && <p className="text-xs text-sage mt-1">Copied to clipboard</p>}
             {result.lock_warning && (
-              <p className="text-sm text-amber-400 mt-2">⚠️ {result.lock_warning}</p>
+              <p className="text-sm text-amber-400 mt-2">{result.lock_warning}</p>
             )}
           </div>
-          <Button variant="ghost" size="sm" className="btn-glass text-xs" onClick={() => setResult(null)}>
+          <Button variant="ghost" size="sm" className="btn-glass text-xs" onClick={() => { setResult(null); setCopied(false); }}>
             <Zap className="w-3.5 h-3.5 mr-1.5" />
             Another
           </Button>
