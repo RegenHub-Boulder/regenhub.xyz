@@ -44,14 +44,69 @@ async function handleStart(msg: TelegramBot.Message) {
   const user = await findMemberByTelegram(msg.from?.username ?? "");
   if (!user) return bot.sendMessage(msg.chat.id, `Your Telegram (@${msg.from?.username}) isn't registered. Contact an admin to get set up.`);
 
-  const isFull = user.member_type !== "day_pass";
-  let text = `Welcome back, ${user.name}!\n\n`;
-  text += isFull
-    ? `/mycode — Your door code\n/newcode — Change your code\n/daypass — Guest code\n/email — Update your email\n/help — Help`
-    : `/daypass — Get today's code\n/email — Update your email\n/help — Help`;
+  const typeLabel =
+    user.member_type === "cold_desk" ? "Cold Desk" :
+    user.member_type === "hot_desk" ? "Hot Desk" :
+    user.member_type === "hub_friend" ? "Hub Friend" : "Day Pass";
 
-  if (user.is_admin) text += `\n\nAdmin:\n/quickcode — Quick code\n/codes — Active codes\n/admin — Manage members`;
-  return bot.sendMessage(msg.chat.id, text);
+  let text = `Hey ${user.name}! 👋\n\nYou're a *${typeLabel}* member at RegenHub.`;
+  text += `\n\nType /help to see available commands.`;
+
+  return bot.sendMessage(msg.chat.id, text, { parse_mode: "Markdown" });
+}
+
+async function handleHelp(msg: TelegramBot.Message) {
+  await react(msg);
+  const user = await findMemberByTelegram(msg.from?.username ?? "");
+  if (!user) return bot.sendMessage(msg.chat.id, `Your Telegram (@${msg.from?.username}) isn't registered. Contact an admin to get set up.`);
+
+  const isFull = user.member_type !== "day_pass";
+  let text = `*RegenHub Bot Commands*\n\n`;
+  text += `🔑 *Door Access*\n`;
+  if (isFull) {
+    text += `/mycode — Reveal your door code\n`;
+    text += `/newcode — Set a new code (4-6 digits or 'random')\n`;
+    text += `/daypass — Issue a guest day pass\n`;
+  } else {
+    text += `/daypass — Get a temporary door code\n`;
+  }
+  text += `\n📋 *Account*\n`;
+  text += `/status — Your profile & pass balance\n`;
+  text += `/email — View or update your email\n`;
+
+  if (user.is_admin) {
+    text += `\n🛡️ *Admin*\n`;
+    text += `/quickcode — Create a quick door code\n`;
+    text += `/codes — List & revoke active codes\n`;
+    text += `/admin — Member management\n`;
+  }
+
+  text += `\n💡 _Tip: You can set a custom code with_ /newcode 1234`;
+  return bot.sendMessage(msg.chat.id, text, { parse_mode: "Markdown" });
+}
+
+async function handleStatus(msg: TelegramBot.Message) {
+  await react(msg);
+  const user = await findMemberByTelegram(msg.from?.username ?? "");
+  if (!user) return bot.sendMessage(msg.chat.id, `Your Telegram (@${msg.from?.username}) isn't registered. Contact an admin to get set up.`);
+
+  const typeLabel =
+    user.member_type === "cold_desk" ? "Cold Desk" :
+    user.member_type === "hot_desk" ? "Hot Desk" :
+    user.member_type === "hub_friend" ? "Hub Friend" : "Day Pass";
+
+  let text = `📋 *Your Profile*\n\n`;
+  text += `Name: ${user.name}\n`;
+  text += `Type: ${typeLabel}\n`;
+  if (user.email) text += `Email: ${user.email}\n`;
+  if (user.member_type !== "day_pass") {
+    text += `PIN slot: ${user.pin_code_slot ?? "not assigned"}\n`;
+    text += `Code set: ${user.pin_code ? "yes" : "no"}\n`;
+  }
+  text += `Day passes: ${user.day_passes_balance}\n`;
+  if (user.is_admin) text += `\n🛡️ Admin`;
+
+  return bot.sendMessage(msg.chat.id, text, { parse_mode: "Markdown" });
 }
 
 async function handleMyCode(msg: TelegramBot.Message) {
@@ -347,9 +402,20 @@ async function handleRevokeCallback(chatId: number, codeId: number) {
   const { data: code } = await db.from("day_codes").select("code, pin_slot, is_active").eq("id", codeId).single();
   if (!code || !code.is_active) return bot.sendMessage(chatId, "Code not found or already revoked.");
 
-  await clearUserCode(code.pin_slot);
+  let lockWarning: string | null = null;
+  try {
+    const lockResults = await clearUserCode(code.pin_slot);
+    lockWarning = formatLockWarning(lockResults);
+  } catch (err) {
+    console.error("[Revoke] Failed to clear lock code:", err);
+    // Still revoke in DB even if locks are unreachable — admin can re-sync later
+    lockWarning = "⚠️ Couldn't reach the door locks — code may still work on the physical locks until they reconnect.";
+  }
+
   await db.from("day_codes").update({ is_active: false, revoked_at: new Date().toISOString() }).eq("id", codeId);
-  return bot.sendMessage(chatId, `Code ${code.code} revoked.`);
+  let reply = `Code ${code.code} revoked.`;
+  if (lockWarning) reply += `\n\n${lockWarning}`;
+  return bot.sendMessage(chatId, reply);
 }
 
 async function handleAdminMenu(chatId: number, data: string, admin: MemberRow) {
@@ -602,11 +668,12 @@ export function startBot() {
   console.log("[Bot] Started.");
 
   bot.onText(/\/start/, handleStart);
+  bot.onText(/\/help/, handleHelp);
+  bot.onText(/\/status/, handleStatus);
   bot.onText(/\/mycode/, handleMyCode);
   bot.onText(/\/newcode(?:\s+(.+))?/, handleNewCode);
   bot.onText(/\/daypass/, handleDayPass);
   bot.onText(/\/email(?:\s+(.+))?/, handleEmail);
-  bot.onText(/\/help/, handleStart);
   bot.onText(/\/quickcode(?:\s+(.+))?/, handleQuickCode);
   bot.onText(/\/codes/, handleCodes);
   bot.onText(/\/admin/, handleAdmin);
@@ -614,4 +681,18 @@ export function startBot() {
   bot.on("callback_query", handleCallback);
   bot.on("message", handleMessage);
   bot.on("polling_error", (e) => console.error("[Bot] Polling error:", e.message));
+
+  // Graceful shutdown — stop polling cleanly on container stop
+  const shutdown = async (signal: string) => {
+    console.log(`[Bot] ${signal} received — shutting down…`);
+    try {
+      await bot.stopPolling();
+      console.log("[Bot] Polling stopped. Bye!");
+    } catch (err) {
+      console.error("[Bot] Error stopping polling:", err);
+    }
+    process.exit(0);
+  };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 }
