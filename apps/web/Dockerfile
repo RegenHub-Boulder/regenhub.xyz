@@ -21,10 +21,11 @@ COPY package.json pnpm-workspace.yaml ./
 # Build shared package first
 WORKDIR /app/packages/shared
 RUN pnpm build
-# Copy built shared dist into web's node_modules (symlinks don't survive Docker COPY)
-RUN mkdir -p /app/apps/web/node_modules/@regenhub/shared && \
-    cp -r /app/packages/shared/dist /app/apps/web/node_modules/@regenhub/shared/dist && \
-    cp /app/packages/shared/package.json /app/apps/web/node_modules/@regenhub/shared/package.json
+# Copy built shared dist into root node_modules (shamefully-hoist puts it there, and
+# Docker COPY dereferences the pnpm workspace symlink so dist/ is missing)
+RUN mkdir -p /app/node_modules/@regenhub/shared && \
+    cp -r /app/packages/shared/dist /app/node_modules/@regenhub/shared/dist && \
+    cp /app/packages/shared/package.json /app/node_modules/@regenhub/shared/package.json
 # Build web
 WORKDIR /app/apps/web
 ENV NEXT_TELEMETRY_DISABLED=1
