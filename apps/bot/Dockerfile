@@ -36,7 +36,9 @@ COPY --from=builder /app/apps/bot/package.json ./
 COPY --from=builder /app/packages/shared/dist ./node_modules/@regenhub/shared/dist
 COPY --from=builder /app/packages/shared/package.json ./node_modules/@regenhub/shared/package.json
 
-RUN npm install --omit=dev --ignore-scripts
+# Strip workspace:* dep (shared is already in node_modules via COPY above)
+RUN sed -i '/"@regenhub\/shared"/d' package.json && \
+    npm install --omit=dev --ignore-scripts
 
 USER botuser
 CMD ["node", "dist/index.js"]
