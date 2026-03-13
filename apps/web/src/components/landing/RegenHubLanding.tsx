@@ -178,7 +178,7 @@ export default function RegenHubLanding() {
                     <MapPin className="w-5 h-5 text-sage" />
                     <span className="font-medium">Location</span>
                   </div>
-                  <p className="text-muted">1515 Walnut St, Suite 200<br />Boulder, Colorado</p>
+                  <p className="text-muted">Boulder, Colorado</p>
                 </div>
                 <div className="space-y-3">
                   <div className="flex items-center justify-center gap-2">
