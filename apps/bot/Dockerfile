@@ -32,13 +32,14 @@ RUN addgroup --system --gid 1001 botgroup && \
 
 COPY --from=builder /app/apps/bot/dist ./dist
 COPY --from=builder /app/apps/bot/package.json ./
-# Include shared package for runtime imports
-COPY --from=builder /app/packages/shared/dist ./node_modules/@regenhub/shared/dist
-COPY --from=builder /app/packages/shared/package.json ./node_modules/@regenhub/shared/package.json
 
-# Strip workspace:* dep (shared is already in node_modules via COPY above)
+# Install runtime deps first (strip workspace:* dep that npm can't resolve)
 RUN sed -i '/"@regenhub\/shared"/d' package.json && \
     npm install --omit=dev --ignore-scripts
+
+# Add shared package AFTER npm install (npm prunes unknown packages)
+COPY --from=builder /app/packages/shared/dist ./node_modules/@regenhub/shared/dist
+COPY --from=builder /app/packages/shared/package.json ./node_modules/@regenhub/shared/package.json
 
 USER botuser
 CMD ["node", "dist/index.js"]
