@@ -7,6 +7,7 @@ export const metadata = { title: "Admin — RegenHub" };
 
 const links: NavLink[] = [
   { href: "/admin", label: "Overview" },
+  { href: "/admin/applications", label: "Applications" },
   { href: "/admin/members", label: "Members" },
   { href: "/admin/codes", label: "Live Codes" },
   { href: "/admin/lock", label: "Lock Sync" },
@@ -37,6 +38,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <span className="text-xs bg-gold/20 text-gold px-2 py-0.5 rounded-full font-medium">Admin</span>
             <div className="hidden sm:flex gap-4 text-sm">
               <Link href="/admin" className="text-muted hover:text-foreground transition-colors">Overview</Link>
+              <Link href="/admin/applications" className="text-muted hover:text-foreground transition-colors">Applications</Link>
               <Link href="/admin/members" className="text-muted hover:text-foreground transition-colors">Members</Link>
               <Link href="/admin/codes" className="text-muted hover:text-foreground transition-colors">Live Codes</Link>
               <Link href="/admin/lock" className="text-muted hover:text-foreground transition-colors">Lock Sync</Link>

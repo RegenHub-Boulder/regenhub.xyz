@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Users, Key, Activity, Zap, UserPlus, AlertTriangle } from "lucide-react";
+import { Users, Key, Activity, Zap, UserPlus, AlertTriangle, ClipboardList } from "lucide-react";
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -14,6 +14,7 @@ export default async function AdminPage() {
     { count: activeCodeCount },
     { count: expiringSoonCount },
     { count: disabledCount },
+    { count: pendingAppCount },
   ] = await Promise.all([
     supabase.from("members").select("*", { count: "exact", head: true }).eq("disabled", false),
     supabase.from("day_codes").select("*", { count: "exact", head: true }).eq("is_active", true),
@@ -22,6 +23,7 @@ export default async function AdminPage() {
       .lt("expires_at", oneHourFromNow)
       .gt("expires_at", new Date().toISOString()),
     supabase.from("members").select("*", { count: "exact", head: true }).eq("disabled", true),
+    supabase.from("applications").select("*", { count: "exact", head: true }).eq("status", "pending"),
   ]);
 
   return (
@@ -32,7 +34,7 @@ export default async function AdminPage() {
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         <Link href="/admin/members">
           <Card className="glass-panel hover-lift cursor-pointer">
             <CardContent className="p-5">
@@ -57,6 +59,19 @@ export default async function AdminPage() {
                   <AlertTriangle className="w-3 h-3" />
                   {expiringSoonCount} expiring within 1hr
                 </p>
+              )}
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/admin/applications">
+          <Card className="glass-panel hover-lift cursor-pointer">
+            <CardContent className="p-5">
+              <ClipboardList className="w-6 h-6 text-sage mb-2" />
+              <p className="text-xs text-muted mb-1">Applications</p>
+              <p className="text-3xl font-bold text-foreground">{pendingAppCount ?? 0}</p>
+              {(pendingAppCount ?? 0) > 0 && (
+                <p className="text-xs text-amber-400 mt-1">pending review</p>
               )}
             </CardContent>
           </Card>
