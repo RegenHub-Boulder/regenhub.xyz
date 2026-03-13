@@ -45,106 +45,59 @@ export default async function ApplicationsPage() {
         </div>
       ) : (
         <>
-          {/* Desktop table */}
-          <div className="glass-panel overflow-hidden hidden sm:block">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-white/10 text-left text-muted">
-                  <th className="px-4 py-3 font-medium">Name</th>
-                  <th className="px-4 py-3 font-medium">Email</th>
-                  <th className="px-4 py-3 font-medium">Interest</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Applied</th>
-                  <th className="px-4 py-3 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {apps.map((app) => (
-                  <tr key={app.id} className="border-b border-white/5">
-                    <td className="px-4 py-3">
-                      <div>
-                        <p className="font-medium">{app.name}</p>
-                        {app.about && (
-                          <p className="text-xs text-muted mt-0.5 line-clamp-1">{app.about}</p>
-                        )}
-                        {app.why_join && (
-                          <p className="text-xs text-muted/70 mt-0.5 line-clamp-1 italic">
-                            &ldquo;{app.why_join}&rdquo;
-                          </p>
-                        )}
-                        {app.admin_notes && (
-                          <p className="text-xs text-sage mt-1">
-                            Note: {app.admin_notes}
-                          </p>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-muted text-xs">{app.email}</td>
-                    <td className="px-4 py-3">
-                      <Badge variant="outline" className="text-xs border-white/20 text-muted">
-                        {interestLabels[app.membership_interest] ?? app.membership_interest}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge variant="outline" className={`text-xs ${statusStyle[app.status]}`}>
-                        {app.status}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-muted text-xs whitespace-nowrap">
+          {/* Application cards */}
+          <div className="space-y-4">
+            {apps.map((app) => (
+              <div key={app.id} className="glass-panel p-5 space-y-4">
+                {/* Header: name, meta, status */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <h3 className="font-semibold text-lg">{app.name}</h3>
+                    <Badge variant="outline" className={`text-xs ${statusStyle[app.status]}`}>
+                      {app.status}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-muted">
+                    <span>{app.email}</span>
+                    <Badge variant="outline" className="text-xs border-white/20 text-muted">
+                      {interestLabels[app.membership_interest] ?? app.membership_interest}
+                    </Badge>
+                    <span>
                       {new Date(app.created_at).toLocaleDateString("en-US", {
                         timeZone: "America/Denver",
                         month: "short",
                         day: "numeric",
                       })}
-                    </td>
-                    <td className="px-4 py-3">
-                      <ApplicationActions
-                        applicationId={app.id}
-                        currentStatus={app.status}
-                        adminNotes={app.admin_notes}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mobile card list */}
-          <div className="space-y-3 sm:hidden">
-            {apps.map((app) => (
-              <div key={app.id} className="glass-panel p-4 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium">{app.name}</p>
-                    <p className="text-xs text-muted mt-0.5">{app.email}</p>
+                    </span>
                   </div>
-                  <Badge variant="outline" className={`text-xs shrink-0 ${statusStyle[app.status]}`}>
-                    {app.status}
-                  </Badge>
                 </div>
-                {app.about && (
-                  <p className="text-sm text-muted">{app.about}</p>
+
+                {/* Questions & answers */}
+                {(app.about || app.why_join) && (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {app.about && (
+                      <div>
+                        <p className="text-xs text-muted mb-1 font-medium">What are you working on?</p>
+                        <p className="text-sm text-foreground/80">{app.about}</p>
+                      </div>
+                    )}
+                    {app.why_join && (
+                      <div>
+                        <p className="text-xs text-muted mb-1 font-medium">Why do you want to join?</p>
+                        <p className="text-sm text-foreground/80">{app.why_join}</p>
+                      </div>
+                    )}
+                  </div>
                 )}
-                {app.why_join && (
-                  <p className="text-sm text-muted/70 italic">&ldquo;{app.why_join}&rdquo;</p>
-                )}
-                <div className="flex items-center gap-2 text-xs text-muted">
-                  <Badge variant="outline" className="text-xs border-white/20 text-muted">
-                    {interestLabels[app.membership_interest] ?? app.membership_interest}
-                  </Badge>
-                  <span>·</span>
-                  <span>
-                    {new Date(app.created_at).toLocaleDateString("en-US", {
-                      timeZone: "America/Denver",
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </span>
-                </div>
+
+                {/* Admin notes */}
                 {app.admin_notes && (
-                  <p className="text-xs text-sage">Note: {app.admin_notes}</p>
+                  <p className="text-xs text-sage border-l-2 border-sage/30 pl-3">
+                    {app.admin_notes}
+                  </p>
                 )}
+
+                {/* Actions */}
                 <ApplicationActions
                   applicationId={app.id}
                   currentStatus={app.status}
