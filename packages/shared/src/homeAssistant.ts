@@ -62,9 +62,9 @@ async function haPostWithRetry(
  * Set a user code on all locks. Uses allSettled so one flaky lock
  * doesn't block the other. Retries each lock up to 2 times.
  *
- * - If ALL locks fail → throws (nothing worked).
- * - If some fail → returns LockResult[] with partial success.
- * - If all succeed → returns LockResult[] with all ok.
+ * - If ALL locks fail -> throws (nothing worked).
+ * - If some fail -> returns LockResult[] with partial success.
+ * - If all succeed -> returns LockResult[] with all ok.
  */
 export async function setUserCode(slot: number, code: string): Promise<LockResult[]> {
   const results = await Promise.allSettled(

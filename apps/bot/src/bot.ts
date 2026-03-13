@@ -1,10 +1,9 @@
 import TelegramBot from "node-telegram-bot-api";
 import { db, findMemberByTelegram, findAdminByTelegram, type MemberRow } from "./db/supabase.js";
-import { setUserCode, clearUserCode, formatLockWarning } from "./helpers/homeAssistant.js";
+import { setUserCode, clearUserCode, formatLockWarning, generateRandomCode } from "@regenhub/shared";
 import {
   findNextAvailableDayPassSlot,
   findNextMemberSlot,
-  generateRandomCode,
   calculateDayPassExpiration,
   calculateExpiration,
 } from "./helpers/slotManager.js";

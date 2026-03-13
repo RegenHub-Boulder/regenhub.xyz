@@ -1,14 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/admin";
-import { setUserCode, formatLockWarning } from "@/lib/homeAssistant";
-
-const DAY_CODE_SLOT_MIN = 101;
-const DAY_CODE_SLOT_MAX = 200;
-
-function generateCode(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
-}
+import { setUserCode, formatLockWarning, generateRandomCode, DAY_CODE_SLOT_MIN, DAY_CODE_SLOT_MAX } from "@regenhub/shared";
 
 async function findAvailableSlot(supabase: Awaited<ReturnType<typeof createClient>>): Promise<number | null> {
   const { data: usedSlots } = await supabase
@@ -53,7 +46,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No available door code slots" }, { status: 503 });
   }
 
-  const code = generateCode();
+  const code = generateRandomCode();
 
   let lockWarning: string | null = null;
   try {

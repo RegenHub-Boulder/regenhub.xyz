@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { setUserCode, formatLockWarning } from "@/lib/homeAssistant";
-
-function generateCode(): string {
-  // 6-digit code, never starts with 0
-  return String(Math.floor(100000 + Math.random() * 900000));
-}
+import { setUserCode, formatLockWarning, generateRandomCode } from "@regenhub/shared";
 
 export async function POST(req: Request) {
   try {
@@ -36,7 +31,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No slot assigned — contact an admin" }, { status: 400 });
     }
 
-    const newCode = customCode ?? generateCode();
+    const newCode = customCode ?? generateRandomCode();
 
     let lockWarning: string | null = null;
     try {

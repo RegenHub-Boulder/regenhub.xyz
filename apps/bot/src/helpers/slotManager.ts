@@ -1,17 +1,12 @@
 import { db } from "../db/supabase.js";
+import {
+  MEMBER_SLOT_MIN,
+  MEMBER_SLOT_MAX,
+  DAY_CODE_SLOT_MIN,
+  DAY_CODE_SLOT_MAX,
+} from "@regenhub/shared";
 
-// Member permanent codes: slots 1–100
-const MEMBER_SLOT_MIN = 1;
-const MEMBER_SLOT_MAX = 100;
-
-// Day codes (quick codes, day passes): slots 101–200
-const SLOT_MIN = parseInt(process.env.DAY_PASS_SLOT_MIN ?? "101");
-const SLOT_MAX = parseInt(process.env.DAY_PASS_SLOT_MAX ?? "200");
 const TIMEZONE = process.env.TIMEZONE ?? "America/Denver";
-
-export function generateRandomCode(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
-}
 
 export async function findNextAvailableDayPassSlot(): Promise<number | null> {
   const { data: activeCodes } = await db
@@ -21,7 +16,7 @@ export async function findNextAvailableDayPassSlot(): Promise<number | null> {
 
   const usedSlots = new Set((activeCodes ?? []).map((c) => c.pin_slot));
 
-  for (let slot = SLOT_MIN; slot <= SLOT_MAX; slot++) {
+  for (let slot = DAY_CODE_SLOT_MIN; slot <= DAY_CODE_SLOT_MAX; slot++) {
     if (!usedSlots.has(slot)) return slot;
   }
   return null;

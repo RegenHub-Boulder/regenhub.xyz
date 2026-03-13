@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/admin";
-import { setUserCode } from "@/lib/homeAssistant";
-
-const MEMBER_SLOT_MIN = 1;
-const MEMBER_SLOT_MAX = 100;
+import { setUserCode, generateRandomCode, MEMBER_SLOT_MIN, MEMBER_SLOT_MAX } from "@regenhub/shared";
 
 async function nextFreeSlot(supabase: Awaited<ReturnType<typeof createClient>>): Promise<number | null> {
   const { data } = await supabase
@@ -16,10 +13,6 @@ async function nextFreeSlot(supabase: Awaited<ReturnType<typeof createClient>>):
     if (!used.has(s)) return s;
   }
   return null;
-}
-
-function randomPin(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
 }
 
 export async function POST(request: Request) {
@@ -45,7 +38,7 @@ export async function POST(request: Request) {
     if (slot === null) {
       return NextResponse.json({ error: "No free PIN slots available (all 100 member slots in use)" }, { status: 409 });
     }
-    assignedPin = pin_code || randomPin();
+    assignedPin = pin_code || generateRandomCode();
   }
 
   const { data, error } = await supabase

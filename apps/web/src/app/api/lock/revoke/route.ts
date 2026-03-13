@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/admin";
-import { clearUserCode, formatLockWarning } from "@/lib/homeAssistant";
+import { clearUserCode, formatLockWarning } from "@regenhub/shared";
 
 export async function POST(request: Request) {
   if (!await requireAdmin()) {

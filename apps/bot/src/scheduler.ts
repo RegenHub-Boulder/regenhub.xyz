@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import { db } from "./db/supabase.js";
-import { clearUserCode } from "./helpers/homeAssistant.js";
+import { clearUserCode } from "@regenhub/shared";
 
 const TIMEZONE = process.env.TIMEZONE ?? "America/Denver";
 
