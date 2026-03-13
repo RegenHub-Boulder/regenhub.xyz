@@ -6,14 +6,26 @@ FROM base AS deps
 WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 COPY apps/web/package.json ./apps/web/
-RUN pnpm install --frozen-lockfile
+COPY packages/shared/package.json ./packages/shared/
+RUN pnpm install --frozen-lockfile --filter web --filter @regenhub/shared
 
 # --- build ---
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
-COPY . .
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
+COPY packages/shared ./packages/shared
+COPY apps/web ./apps/web
+COPY package.json pnpm-workspace.yaml ./
+# Build shared package first
+WORKDIR /app/packages/shared
+RUN pnpm build
+# Copy built shared dist into web's node_modules (symlinks don't survive Docker COPY)
+RUN mkdir -p /app/apps/web/node_modules/@regenhub/shared && \
+    cp -r /app/packages/shared/dist /app/apps/web/node_modules/@regenhub/shared/dist && \
+    cp /app/packages/shared/package.json /app/apps/web/node_modules/@regenhub/shared/package.json
+# Build web
 WORKDIR /app/apps/web
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm build
