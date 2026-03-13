@@ -7,13 +7,14 @@ WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 COPY apps/bot/package.json ./apps/bot/
 COPY packages/shared/package.json ./packages/shared/
-RUN pnpm install --frozen-lockfile --filter bot
+RUN pnpm install --frozen-lockfile --filter bot --filter @regenhub/shared
 
 # --- build ---
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/bot/node_modules ./apps/bot/node_modules
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
 COPY packages/shared ./packages/shared
 COPY apps/bot ./apps/bot
 # Build shared package first, then bot
