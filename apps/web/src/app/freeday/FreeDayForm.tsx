@@ -19,6 +19,7 @@ import {
   Coffee,
   MapPin,
   ArrowRight,
+  Clock,
 } from "lucide-react";
 import HubEssentials from "@/components/portal/HubEssentials";
 import regenHubFull from "@/assets/regenhub-full.svg";
@@ -29,7 +30,7 @@ export type FreeDayClaim = {
   name: string;
   claimed_date: string;
   day_code_id: number | null;
-  status: "reserved" | "activated" | "expired" | "cancelled";
+  status: "pending" | "reserved" | "activated" | "expired" | "cancelled";
 };
 
 type Props = {
@@ -94,10 +95,14 @@ export default function FreeDayForm({
   const [name, setName] = useState("");
   const [email, setEmail] = useState(authenticatedEmail ?? "");
   const [claimedDate, setClaimedDate] = useState(getNextWeekday());
+  const [promoCode, setPromoCode] = useState("");
+  const [about, setAbout] = useState("");
+  const [whyJoin, setWhyJoin] = useState("");
 
   // UI state
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submittedStatus, setSubmittedStatus] = useState<string | null>(null);
   const [activating, setActivating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -109,6 +114,8 @@ export default function FreeDayForm({
     existingCode?.expires_at ?? null
   );
   const [lockWarning, setLockWarning] = useState<string | null>(null);
+
+  const hasPromo = promoCode.trim().length > 0;
 
   // ── Handlers ────────────────────────────────────────────────
 
@@ -125,6 +132,9 @@ export default function FreeDayForm({
           name,
           email: authenticatedEmail ?? email,
           claimed_date: claimedDate,
+          promo_code: promoCode.trim() || undefined,
+          about: about.trim() || undefined,
+          why_join: whyJoin.trim() || undefined,
         }),
       });
       const json = await res.json();
@@ -135,6 +145,7 @@ export default function FreeDayForm({
         router.refresh();
       } else {
         setSubmitted(true);
+        setSubmittedStatus(json.status ?? null);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -165,21 +176,27 @@ export default function FreeDayForm({
   // ── Render: Email sent ──────────────────────────────────────
 
   if (submitted) {
+    const isPending = submittedStatus === "pending";
     return (
       <div className="min-h-screen flex items-center justify-center px-6">
         <Card className="glass-panel-strong max-w-md w-full">
           <CardContent className="p-10 text-center">
-            <CheckCircle className="w-12 h-12 text-sage mx-auto mb-4" />
+            {isPending ? (
+              <Clock className="w-12 h-12 text-sage mx-auto mb-4" />
+            ) : (
+              <CheckCircle className="w-12 h-12 text-sage mx-auto mb-4" />
+            )}
             <h1 className="text-2xl font-bold text-forest mb-3">
-              Check Your Email!
+              {isPending ? "Application Submitted!" : "Check Your Email!"}
             </h1>
             <p className="text-muted mb-2">
               We&apos;ve sent a sign-in link to{" "}
               <strong className="text-foreground">{email}</strong>.
             </p>
             <p className="text-sm text-muted mb-8">
-              Click the link to confirm your email and get your free day pass
-              code.
+              {isPending
+                ? "A community member will review your application shortly. Click the email link to check your status."
+                : "Click the link to confirm your email and get your free day pass code."}
             </p>
             <Link href="/">
               <Button variant="ghost" className="btn-glass gap-2">
@@ -187,6 +204,44 @@ export default function FreeDayForm({
                 Back to homepage
               </Button>
             </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // ── Render: Pending approval ────────────────────────────────
+
+  if (claim?.status === "pending") {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6">
+        <Card className="glass-panel-strong max-w-md w-full">
+          <CardContent className="p-10 text-center">
+            <Clock className="w-12 h-12 text-sage mx-auto mb-4" />
+            <h1 className="text-2xl font-bold text-forest mb-3">
+              Application Under Review
+            </h1>
+            <p className="text-muted mb-2">
+              Your free day application for{" "}
+              <strong className="text-foreground">
+                {formatDate(claim.claimed_date)}
+              </strong>{" "}
+              is being reviewed.
+            </p>
+            <p className="text-sm text-muted mb-6">
+              A community member will approve your visit shortly. Check back
+              here or watch your email for updates.
+            </p>
+            <div className="glass-panel-subtle p-4 rounded-lg text-left space-y-2">
+              <div className="flex items-center gap-2 text-sm text-muted">
+                <MapPin className="w-4 h-4 text-sage" />
+                1515 Walnut St, Suite 200, Boulder
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted">
+                <Coffee className="w-4 h-4 text-sage" />
+                Hours: 9 AM – 5 PM
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -385,7 +440,7 @@ export default function FreeDayForm({
               className="h-20 w-auto mx-auto mb-6 hover:opacity-80 transition-opacity"
             />
           </Link>
-<h1 className="text-3xl md:text-4xl font-bold text-forest mb-3">
+          <h1 className="text-3xl md:text-4xl font-bold text-forest mb-3">
             Try RegenHub for a Day — On Us
           </h1>
           <p className="text-muted max-w-lg mx-auto">
@@ -474,6 +529,49 @@ export default function FreeDayForm({
                 </p>
               </div>
 
+              {/* Promo code */}
+              <div className="space-y-2">
+                <Label htmlFor="promo">Promo code</Label>
+                <Input
+                  id="promo"
+                  value={promoCode}
+                  onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                  placeholder="Have a code? Enter it here"
+                  className="glass-input"
+                />
+              </div>
+
+              {/* Application questions — shown when no promo code */}
+              {!hasPromo && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="about">What are you working on? *</Label>
+                    <textarea
+                      id="about"
+                      value={about}
+                      onChange={(e) => setAbout(e.target.value)}
+                      rows={3}
+                      required={!hasPromo}
+                      placeholder="Projects, interests, skills — give us a feel for what you bring to the community"
+                      className="w-full rounded-md px-3 py-2 text-sm glass-input resize-none"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="why_join">Why do you want to visit RegenHub? *</Label>
+                    <textarea
+                      id="why_join"
+                      value={whyJoin}
+                      onChange={(e) => setWhyJoin(e.target.value)}
+                      rows={3}
+                      required={!hasPromo}
+                      placeholder="What draws you to regenerative community? What are you hoping to find here?"
+                      className="w-full rounded-md px-3 py-2 text-sm glass-input resize-none"
+                    />
+                  </div>
+                </>
+              )}
+
               {error && <p className="text-sm text-red-400">{error}</p>}
 
               <Button
@@ -486,7 +584,11 @@ export default function FreeDayForm({
                 ) : (
                   <Zap className="w-4 h-4" />
                 )}
-                {loading ? "Submitting…" : "Claim Your Free Day"}
+                {loading
+                  ? "Submitting…"
+                  : hasPromo
+                    ? "Claim Your Free Day"
+                    : "Apply for a Free Day"}
               </Button>
 
               <p className="text-xs text-center text-muted">
@@ -509,8 +611,8 @@ export default function FreeDayForm({
           </h3>
           <div className="grid grid-cols-3 gap-4 text-center">
             {[
-              { step: "1", text: "Confirm your email" },
-              { step: "2", text: "Get your door code" },
+              { step: "1", text: hasPromo ? "Confirm your email" : "Apply & confirm email" },
+              { step: "2", text: hasPromo ? "Get your door code" : "Get approved" },
               { step: "3", text: "Show up & co-work!" },
             ].map(({ step, text }) => (
               <div key={step}>

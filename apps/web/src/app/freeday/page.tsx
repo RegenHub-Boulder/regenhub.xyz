@@ -100,7 +100,7 @@ export default async function FreeDayPage() {
         name: claim.name,
         claimed_date: claim.claimed_date,
         day_code_id: claim.day_code_id,
-        status: claim.status as "reserved" | "activated" | "expired" | "cancelled",
+        status: claim.status as "pending" | "reserved" | "activated" | "expired" | "cancelled",
       }}
       existingCode={existingCode}
     />

@@ -343,6 +343,35 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
     });
   }
 
+  // ── Free day approval (any group member can approve) ──
+  if (data.startsWith("freeday_approve_")) {
+    const claimId = parseInt(data.replace("freeday_approve_", ""));
+    const { data: claim } = await db
+      .from("free_day_claims")
+      .select("id, name, status")
+      .eq("id", claimId)
+      .single();
+    if (!claim) return bot.sendMessage(chatId, "Claim not found.");
+    if (claim.status !== "pending") {
+      return bot.sendMessage(chatId, `Already ${claim.status}.`);
+    }
+    const approver = username ? `@${username}` : query.from.first_name;
+    await db
+      .from("free_day_claims")
+      .update({ status: "reserved", approved_by: approver })
+      .eq("id", claimId);
+    // Edit the original message to show who approved
+    const originalText = query.message?.text ?? "";
+    return bot.editMessageText(
+      `✅ *Approved* by ${approver}\n\n${originalText}`,
+      {
+        chat_id: chatId,
+        message_id: query.message!.message_id,
+        parse_mode: "Markdown",
+      }
+    );
+  }
+
   // ── Admin callbacks ──
   const admin = await findAdminByTelegram(username);
   if (!admin) return bot.sendMessage(chatId, "Admins only.");
