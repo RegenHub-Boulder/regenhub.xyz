@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid email address" }, { status: 400 });
   }
 
-  // Validate date: must be today or up to 30 days out
+  // Validate date: must be today or up to 30 days out, weekdays only
   const dateVal = new Date(claimed_date + "T12:00:00");
   if (isNaN(dateVal.getTime())) {
     return NextResponse.json({ error: "Invalid date" }, { status: 400 });
@@ -75,6 +75,15 @@ export async function POST(req: Request) {
   if (dateVal < today || dateVal > maxDate) {
     return NextResponse.json(
       { error: "Date must be today or within the next 30 days" },
+      { status: 400 }
+    );
+  }
+
+  // Free day passes are only available Monday–Friday
+  const dayOfWeek = dateVal.getDay(); // 0=Sun, 6=Sat
+  if (dayOfWeek === 0 || dayOfWeek === 6) {
+    return NextResponse.json(
+      { error: "Free day passes are available Monday through Friday only" },
       { status: 400 }
     );
   }

@@ -46,10 +46,24 @@ function getTodayString(): string {
   return d.toISOString().split("T")[0];
 }
 
+/** Get the next weekday (Mon-Fri) as YYYY-MM-DD, starting from today */
+function getNextWeekday(): string {
+  const d = new Date();
+  const day = d.getDay();
+  if (day === 0) d.setDate(d.getDate() + 1); // Sun → Mon
+  if (day === 6) d.setDate(d.getDate() + 2); // Sat → Mon
+  return d.toISOString().split("T")[0];
+}
+
 function getMaxDateString(): string {
   const d = new Date();
   d.setDate(d.getDate() + 30);
   return d.toISOString().split("T")[0];
+}
+
+function isWeekend(dateStr: string): boolean {
+  const day = new Date(dateStr + "T12:00:00").getDay();
+  return day === 0 || day === 6;
 }
 
 function formatDate(dateStr: string): string {
@@ -79,7 +93,7 @@ export default function FreeDayForm({
   // Form state (for signup / date picker)
   const [name, setName] = useState("");
   const [email, setEmail] = useState(authenticatedEmail ?? "");
-  const [claimedDate, setClaimedDate] = useState(today);
+  const [claimedDate, setClaimedDate] = useState(getNextWeekday());
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -376,8 +390,8 @@ export default function FreeDayForm({
           </h1>
           <p className="text-muted max-w-lg mx-auto">
             Experience Boulder&apos;s regenerative coworking space with a free
-            day pass. No commitment — just show up and see if it&apos;s right
-            for you.
+            day pass, Monday through Friday. No commitment — just show up and
+            see if it&apos;s right for you.
           </p>
         </div>
 
@@ -437,16 +451,26 @@ export default function FreeDayForm({
                   id="date"
                   type="date"
                   value={claimedDate}
-                  onChange={(e) => setClaimedDate(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setClaimedDate(val);
+                    if (isWeekend(val)) {
+                      setError("Free day passes are available Monday through Friday only");
+                    } else {
+                      setError(null);
+                    }
+                  }}
                   min={today}
                   max={getMaxDateString()}
                   required
                   className="glass-input"
                 />
                 <p className="text-xs text-muted">
-                  {claimedDate === today
-                    ? "Today — you'll get your door code right away after confirming your email."
-                    : `${formatDate(claimedDate)} — come back to this page on that day to get your code.`}
+                  {isWeekend(claimedDate)
+                    ? "⚠️ Weekends are not available — please select a weekday (Mon–Fri)."
+                    : claimedDate === today
+                      ? "Today — you'll get your door code right away after confirming your email."
+                      : `${formatDate(claimedDate)} — come back to this page on that day to get your code.`}
                 </p>
               </div>
 
