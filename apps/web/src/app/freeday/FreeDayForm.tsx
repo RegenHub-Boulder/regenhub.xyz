@@ -1,0 +1,504 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Image from "next/image";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Loader2,
+  CheckCircle,
+  ArrowLeft,
+  Calendar,
+  Zap,
+  Users,
+  Wifi,
+  Coffee,
+  MapPin,
+  ArrowRight,
+} from "lucide-react";
+import HubEssentials from "@/components/portal/HubEssentials";
+import regenHubFull from "@/assets/regenhub-full.svg";
+
+export type FreeDayClaim = {
+  id: number;
+  email: string;
+  name: string;
+  claimed_date: string;
+  day_code_id: number | null;
+  status: "reserved" | "activated" | "expired" | "cancelled";
+};
+
+type Props = {
+  /** Set when user is authenticated but has no claim yet */
+  authenticatedEmail?: string;
+  /** Existing claim data */
+  claim?: FreeDayClaim;
+  /** Code from an already-activated claim */
+  existingCode?: { code: string; expires_at: string | null };
+};
+
+function getTodayString(): string {
+  const d = new Date();
+  return d.toISOString().split("T")[0];
+}
+
+function getMaxDateString(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 30);
+  return d.toISOString().split("T")[0];
+}
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function formatTime(isoStr: string): string {
+  return new Date(isoStr).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+}
+
+export default function FreeDayForm({
+  authenticatedEmail,
+  claim,
+  existingCode,
+}: Props) {
+  const router = useRouter();
+  const today = getTodayString();
+
+  // Form state (for signup / date picker)
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState(authenticatedEmail ?? "");
+  const [claimedDate, setClaimedDate] = useState(today);
+
+  // UI state
+  const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [activating, setActivating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Activation result (set after successful activation)
+  const [doorCode, setDoorCode] = useState<string | null>(
+    existingCode?.code ?? null
+  );
+  const [expiresAt, setExpiresAt] = useState<string | null>(
+    existingCode?.expires_at ?? null
+  );
+  const [lockWarning, setLockWarning] = useState<string | null>(null);
+
+  // ── Handlers ────────────────────────────────────────────────
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/freeday", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          email: authenticatedEmail ?? email,
+          claimed_date: claimedDate,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to submit");
+
+      if (json.authenticated) {
+        // Already signed in — reload to see the updated state
+        router.refresh();
+      } else {
+        setSubmitted(true);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleActivate() {
+    setActivating(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/freeday/activate", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Activation failed");
+
+      setDoorCode(json.code);
+      setExpiresAt(json.expires_at);
+      setLockWarning(json.lock_warning ?? null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setActivating(false);
+    }
+  }
+
+  // ── Render: Email sent ──────────────────────────────────────
+
+  if (submitted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6">
+        <Card className="glass-panel-strong max-w-md w-full">
+          <CardContent className="p-10 text-center">
+            <CheckCircle className="w-12 h-12 text-sage mx-auto mb-4" />
+            <h1 className="text-2xl font-bold text-forest mb-3">
+              Check Your Email!
+            </h1>
+            <p className="text-muted mb-2">
+              We&apos;ve sent a sign-in link to{" "}
+              <strong className="text-foreground">{email}</strong>.
+            </p>
+            <p className="text-sm text-muted mb-8">
+              Click the link to confirm your email and get your free day pass
+              code.
+            </p>
+            <Link href="/">
+              <Button variant="ghost" className="btn-glass gap-2">
+                <ArrowLeft className="w-4 h-4" />
+                Back to homepage
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // ── Render: Expired claim ───────────────────────────────────
+
+  if (claim?.status === "expired") {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6">
+        <Card className="glass-panel-strong max-w-md w-full">
+          <CardContent className="p-10 text-center">
+            <Calendar className="w-12 h-12 text-muted mx-auto mb-4" />
+            <h1 className="text-2xl font-bold text-forest mb-3">
+              Free Day Expired
+            </h1>
+            <p className="text-muted mb-6">
+              Your free day reservation for{" "}
+              <strong className="text-foreground">
+                {formatDate(claim.claimed_date)}
+              </strong>{" "}
+              has passed. Interested in joining RegenHub?
+            </p>
+            <Link href="/apply">
+              <Button className="btn-primary-glass gap-2">
+                Apply for Membership
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // ── Render: Activated — show door code ──────────────────────
+
+  if (claim?.status === "activated" || doorCode) {
+    return (
+      <div className="min-h-screen px-6 py-12">
+        <div className="max-w-2xl mx-auto space-y-8">
+          <div className="text-center">
+            <Link href="/">
+              <Image
+                src={regenHubFull}
+                alt="RegenHub"
+                height={80}
+                className="h-20 w-auto mx-auto mb-6 hover:opacity-80 transition-opacity"
+              />
+            </Link>
+            <h1 className="text-3xl md:text-4xl font-bold text-forest mb-2">
+              You&apos;re All Set!
+            </h1>
+            <p className="text-muted">
+              Your free day at RegenHub is ready. Here&apos;s your door code.
+            </p>
+          </div>
+
+          <Card className="glass-panel-strong">
+            <CardContent className="p-8 text-center">
+              <p className="text-sm text-muted mb-2 uppercase tracking-wider">
+                Your Door Code
+              </p>
+              <p className="text-5xl md:text-6xl font-mono font-bold text-gold tracking-[0.2em] mb-4">
+                {doorCode}
+              </p>
+              {expiresAt && (
+                <p className="text-sm text-muted">
+                  Valid until{" "}
+                  <strong className="text-foreground">
+                    {formatTime(expiresAt)}
+                  </strong>
+                </p>
+              )}
+              {lockWarning && (
+                <p className="text-sm text-amber-400 mt-2">{lockWarning}</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <HubEssentials defaultExpanded freeDay />
+
+          <div className="text-center">
+            <p className="text-sm text-muted mb-4">
+              Enjoyed your day? Consider joining the community!
+            </p>
+            <Link href="/apply">
+              <Button className="btn-primary-glass gap-2">
+                Apply for Membership
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render: Reserved for a future date ──────────────────────
+
+  if (claim?.status === "reserved" && claim.claimed_date !== today) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6">
+        <Card className="glass-panel-strong max-w-md w-full">
+          <CardContent className="p-10 text-center">
+            <Calendar className="w-12 h-12 text-sage mx-auto mb-4" />
+            <h1 className="text-2xl font-bold text-forest mb-3">
+              You&apos;re Booked!
+            </h1>
+            <p className="text-muted mb-2">
+              Your free day is reserved for
+            </p>
+            <p className="text-xl font-semibold text-gold mb-6">
+              {formatDate(claim.claimed_date)}
+            </p>
+            <div className="glass-panel-subtle p-4 rounded-lg text-left space-y-2 mb-6">
+              <div className="flex items-center gap-2 text-sm text-muted">
+                <MapPin className="w-4 h-4 text-sage" />
+                1515 Walnut St, Suite 200, Boulder
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted">
+                <Coffee className="w-4 h-4 text-sage" />
+                Hours: 9 AM – 5 PM
+              </div>
+            </div>
+            <p className="text-xs text-muted">
+              Come back to this page on your reserved day to get your door code.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // ── Render: Reserved for today — activate button ────────────
+
+  if (claim?.status === "reserved" && claim.claimed_date === today) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6">
+        <Card className="glass-panel-strong max-w-md w-full">
+          <CardContent className="p-10 text-center">
+            <Zap className="w-12 h-12 text-gold mx-auto mb-4" />
+            <h1 className="text-2xl font-bold text-forest mb-3">
+              Your Free Day is Today!
+            </h1>
+            <p className="text-muted mb-6">
+              Ready to get your door code for RegenHub?
+            </p>
+
+            {error && (
+              <p className="text-sm text-red-400 mb-4">{error}</p>
+            )}
+
+            <Button
+              onClick={handleActivate}
+              disabled={activating}
+              className="btn-primary-glass w-full py-4 text-lg font-semibold gap-2"
+            >
+              {activating ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Zap className="w-5 h-5" />
+              )}
+              {activating ? "Setting up your code…" : "Get My Door Code"}
+            </Button>
+
+            <div className="glass-panel-subtle p-4 rounded-lg text-left space-y-2 mt-6">
+              <div className="flex items-center gap-2 text-sm text-muted">
+                <MapPin className="w-4 h-4 text-sage" />
+                1515 Walnut St, Suite 200, Boulder
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted">
+                <Coffee className="w-4 h-4 text-sage" />
+                Hours: 9 AM – 5 PM
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // ── Render: Landing page / signup form ──────────────────────
+
+  return (
+    <div className="min-h-screen px-6 py-12">
+      <div className="max-w-2xl mx-auto space-y-8">
+        {/* Hero */}
+        <div className="text-center">
+          <Link href="/">
+            <Image
+              src={regenHubFull}
+              alt="RegenHub"
+              height={80}
+              className="h-20 w-auto mx-auto mb-6 hover:opacity-80 transition-opacity"
+            />
+          </Link>
+<h1 className="text-3xl md:text-4xl font-bold text-forest mb-3">
+            Try RegenHub for a Day — On Us
+          </h1>
+          <p className="text-muted max-w-lg mx-auto">
+            Experience Boulder&apos;s regenerative coworking space with a free
+            day pass. No commitment — just show up and see if it&apos;s right
+            for you.
+          </p>
+        </div>
+
+        {/* Value props */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { icon: Wifi, label: "High-speed fiber" },
+            { icon: Coffee, label: "Coffee & kitchen" },
+            { icon: Users, label: "Community vibes" },
+            { icon: MapPin, label: "Downtown Boulder" },
+          ].map(({ icon: Icon, label }) => (
+            <div
+              key={label}
+              className="glass-panel-subtle p-4 text-center rounded-xl"
+            >
+              <Icon className="w-6 h-6 text-sage mx-auto mb-2" />
+              <p className="text-xs text-muted">{label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Form */}
+        <Card className="glass-panel">
+          <CardContent className="p-8">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Your name *</Label>
+                  <Input
+                    id="name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    placeholder="Full name"
+                    className="glass-input"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email *</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    placeholder="you@example.com"
+                    className="glass-input"
+                    readOnly={!!authenticatedEmail}
+                    disabled={!!authenticatedEmail}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="date">When would you like to come in? *</Label>
+                <Input
+                  id="date"
+                  type="date"
+                  value={claimedDate}
+                  onChange={(e) => setClaimedDate(e.target.value)}
+                  min={today}
+                  max={getMaxDateString()}
+                  required
+                  className="glass-input"
+                />
+                <p className="text-xs text-muted">
+                  {claimedDate === today
+                    ? "Today — you'll get your door code right away after confirming your email."
+                    : `${formatDate(claimedDate)} — come back to this page on that day to get your code.`}
+                </p>
+              </div>
+
+              {error && <p className="text-sm text-red-400">{error}</p>}
+
+              <Button
+                type="submit"
+                disabled={loading}
+                className="btn-primary-glass w-full py-3 text-base font-semibold gap-2"
+              >
+                {loading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Zap className="w-4 h-4" />
+                )}
+                {loading ? "Submitting…" : "Claim Your Free Day"}
+              </Button>
+
+              <p className="text-xs text-center text-muted">
+                Already a member?{" "}
+                <Link
+                  href="/portal"
+                  className="underline hover:text-sage transition-colors"
+                >
+                  Sign in to your portal
+                </Link>
+              </p>
+            </form>
+          </CardContent>
+        </Card>
+
+        {/* How it works */}
+        <div className="glass-panel-subtle p-6 rounded-xl">
+          <h3 className="text-sm font-semibold text-forest mb-3 text-center">
+            How it works
+          </h3>
+          <div className="grid grid-cols-3 gap-4 text-center">
+            {[
+              { step: "1", text: "Confirm your email" },
+              { step: "2", text: "Get your door code" },
+              { step: "3", text: "Show up & co-work!" },
+            ].map(({ step, text }) => (
+              <div key={step}>
+                <div className="w-8 h-8 rounded-full bg-forest/30 border border-sage/30 flex items-center justify-center mx-auto mb-2">
+                  <span className="text-sm font-bold text-sage">{step}</span>
+                </div>
+                <p className="text-xs text-muted">{text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

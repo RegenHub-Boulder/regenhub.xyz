@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import Link from "next/link";
 import { Key, Ticket, User, ClipboardList, CheckCircle, Clock, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import HubEssentials from "@/components/portal/HubEssentials";
 
 export default async function PortalPage() {
   const supabase = await createClient();
@@ -95,6 +96,10 @@ export default async function PortalPage() {
   const isFullMember = member.member_type !== "day_pass";
   const typeLabel = member.member_type === "cold_desk" ? "Cold Desk" : member.member_type === "hot_desk" ? "Hot Desk" : member.member_type === "hub_friend" ? "Hub Friend" : "Day Pass";
 
+  // Show onboarding expanded for new members (no pin code set or account < 7 days old)
+  const isNewMember = !member.pin_code ||
+    (Date.now() - new Date(member.created_at).getTime() < 7 * 24 * 60 * 60 * 1000);
+
   return (
     <div className="space-y-8">
       <div>
@@ -142,6 +147,8 @@ export default async function PortalPage() {
           </Card>
         </Link>
       </div>
+
+      <HubEssentials defaultExpanded={isNewMember} />
     </div>
   );
 }
