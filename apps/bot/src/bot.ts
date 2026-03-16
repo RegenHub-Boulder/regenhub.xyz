@@ -686,6 +686,44 @@ async function handleAddAdminFlow(chatId: number, text: string) {
   return bot.sendMessage(chatId, `${member.name} (${tg}) is now an admin.`);
 }
 
+// ── Invite link ─────────────────────────────────────────────
+
+async function handleInvite(msg: TelegramBot.Message) {
+  const chatId = msg.chat.id;
+  const username = msg.from?.username ?? "";
+  await react(msg);
+
+  const member = await findMemberByTelegram(username);
+  if (!member) return bot.sendMessage(chatId, "You're not registered. Ask an admin to add you first.");
+  if (!member.is_coop_member) return bot.sendMessage(chatId, "Only cooperative members can send invites.");
+
+  let inviteCode: string | null = (member as MemberRow & { invite_code?: string | null }).invite_code ?? null;
+
+  // Need to fetch invite_code since MemberRow type may not include it
+  if (!inviteCode) {
+    const { data: fresh } = await db.from("members").select("invite_code").eq("id", member.id).single();
+    inviteCode = fresh?.invite_code ?? null;
+  }
+
+  // Generate one if they don't have it yet
+  if (!inviteCode) {
+    const crypto = await import("crypto");
+    inviteCode = crypto.randomBytes(5).toString("base64url").slice(0, 8).toUpperCase();
+    await db.from("members").update({ invite_code: inviteCode }).eq("id", member.id);
+  }
+
+  const siteUrl = process.env.SITE_URL ?? "https://regenhub.xyz";
+  const inviteUrl = `${siteUrl}/freeday?ref=${inviteCode}`;
+
+  return bot.sendMessage(chatId,
+    `🔗 *Your Invite Link*\n\n` +
+    `Share this to give someone a free day at RegenHub:\n\n` +
+    `\`${inviteUrl}\`\n\n` +
+    `_Anyone who signs up with this link gets instant approval — no waiting._`,
+    { parse_mode: "Markdown" }
+  );
+}
+
 // ── Start ───────────────────────────────────────────────────
 
 export function startBot() {
@@ -702,6 +740,7 @@ export function startBot() {
   bot.onText(/\/newcode(?:\s+(.+))?/, handleNewCode);
   bot.onText(/\/daypass/, handleDayPass);
   bot.onText(/\/email(?:\s+(.+))?/, handleEmail);
+  bot.onText(/\/invite/, handleInvite);
   bot.onText(/\/quickcode(?:\s+(.+))?/, handleQuickCode);
   bot.onText(/\/codes/, handleCodes);
   bot.onText(/\/admin/, handleAdmin);

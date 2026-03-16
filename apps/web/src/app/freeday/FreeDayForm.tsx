@@ -20,6 +20,7 @@ import {
   MapPin,
   ArrowRight,
   Clock,
+  UserCheck,
 } from "lucide-react";
 import HubEssentials from "@/components/portal/HubEssentials";
 import regenHubFull from "@/assets/regenhub-full.svg";
@@ -40,6 +41,8 @@ type Props = {
   claim?: FreeDayClaim;
   /** Code from an already-activated claim */
   existingCode?: { code: string; expires_at: string | null };
+  /** Inviter info from ?ref= query param */
+  inviter?: { name: string; invite_code: string };
 };
 
 function getTodayString(): string {
@@ -87,15 +90,15 @@ export default function FreeDayForm({
   authenticatedEmail,
   claim,
   existingCode,
+  inviter,
 }: Props) {
   const router = useRouter();
   const today = getTodayString();
 
-  // Form state (for signup / date picker)
+  // Form state
   const [name, setName] = useState("");
   const [email, setEmail] = useState(authenticatedEmail ?? "");
   const [claimedDate, setClaimedDate] = useState(getNextWeekday());
-  const [promoCode, setPromoCode] = useState("");
   const [about, setAbout] = useState("");
   const [whyJoin, setWhyJoin] = useState("");
 
@@ -106,7 +109,7 @@ export default function FreeDayForm({
   const [activating, setActivating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Activation result (set after successful activation)
+  // Activation result
   const [doorCode, setDoorCode] = useState<string | null>(
     existingCode?.code ?? null
   );
@@ -115,7 +118,7 @@ export default function FreeDayForm({
   );
   const [lockWarning, setLockWarning] = useState<string | null>(null);
 
-  const hasPromo = promoCode.trim().length > 0;
+  const isInvited = !!inviter;
 
   // ── Handlers ────────────────────────────────────────────────
 
@@ -132,7 +135,7 @@ export default function FreeDayForm({
           name,
           email: authenticatedEmail ?? email,
           claimed_date: claimedDate,
-          promo_code: promoCode.trim() || undefined,
+          invite_code: inviter?.invite_code || undefined,
           about: about.trim() || undefined,
           why_join: whyJoin.trim() || undefined,
         }),
@@ -141,7 +144,6 @@ export default function FreeDayForm({
       if (!res.ok) throw new Error(json.error ?? "Failed to submit");
 
       if (json.authenticated) {
-        // Already signed in — reload to see the updated state
         router.refresh();
       } else {
         setSubmitted(true);
@@ -218,7 +220,7 @@ export default function FreeDayForm({
         <Card className="glass-panel-strong max-w-md w-full">
           <CardContent className="p-10 text-center">
             <Clock className="w-12 h-12 text-sage mx-auto mb-4" />
-            <h1 className="text-2xl font-bold text-forest mb-3">
+<h1 className="text-2xl font-bold text-forest mb-3">
               Application Under Review
             </h1>
             <p className="text-muted mb-2">
@@ -264,11 +266,11 @@ export default function FreeDayForm({
               <strong className="text-foreground">
                 {formatDate(claim.claimed_date)}
               </strong>{" "}
-              has passed. Interested in joining RegenHub?
+              has passed. Ready to come back?
             </p>
-            <Link href="/apply">
+            <Link href="/portal/passes">
               <Button className="btn-primary-glass gap-2">
-                Apply for Membership
+                Get Day Passes
                 <ArrowRight className="w-4 h-4" />
               </Button>
             </Link>
@@ -327,11 +329,11 @@ export default function FreeDayForm({
 
           <div className="text-center">
             <p className="text-sm text-muted mb-4">
-              Enjoyed your day? Consider joining the community!
+              Enjoyed your day? Come back anytime with a day pass!
             </p>
-            <Link href="/apply">
+            <Link href="/portal/passes">
               <Button className="btn-primary-glass gap-2">
-                Apply for Membership
+                Get Day Passes
                 <ArrowRight className="w-4 h-4" />
               </Button>
             </Link>
@@ -450,6 +452,18 @@ export default function FreeDayForm({
           </p>
         </div>
 
+        {/* Invite badge */}
+        {isInvited && (
+          <div className="flex items-center justify-center gap-2 text-sm">
+            <div className="glass-panel-subtle px-4 py-2 rounded-full flex items-center gap-2">
+              <UserCheck className="w-4 h-4 text-sage" />
+              <span className="text-muted">
+                Invited by <strong className="text-foreground">{inviter.name}</strong>
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Value props */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
@@ -529,20 +543,8 @@ export default function FreeDayForm({
                 </p>
               </div>
 
-              {/* Promo code */}
-              <div className="space-y-2">
-                <Label htmlFor="promo">Promo code</Label>
-                <Input
-                  id="promo"
-                  value={promoCode}
-                  onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
-                  placeholder="Have a code? Enter it here"
-                  className="glass-input"
-                />
-              </div>
-
-              {/* Application questions — shown when no promo code */}
-              {!hasPromo && (
+              {/* Application questions — shown when no invite */}
+              {!isInvited && (
                 <>
                   <div className="space-y-2">
                     <Label htmlFor="about">What are you working on? *</Label>
@@ -551,7 +553,7 @@ export default function FreeDayForm({
                       value={about}
                       onChange={(e) => setAbout(e.target.value)}
                       rows={3}
-                      required={!hasPromo}
+                      required
                       placeholder="Projects, interests, skills — give us a feel for what you bring to the community"
                       className="w-full rounded-md px-3 py-2 text-sm glass-input resize-none"
                     />
@@ -564,7 +566,7 @@ export default function FreeDayForm({
                       value={whyJoin}
                       onChange={(e) => setWhyJoin(e.target.value)}
                       rows={3}
-                      required={!hasPromo}
+                      required
                       placeholder="What draws you to regenerative community? What are you hoping to find here?"
                       className="w-full rounded-md px-3 py-2 text-sm glass-input resize-none"
                     />
@@ -586,7 +588,7 @@ export default function FreeDayForm({
                 )}
                 {loading
                   ? "Submitting…"
-                  : hasPromo
+                  : isInvited
                     ? "Claim Your Free Day"
                     : "Apply for a Free Day"}
               </Button>
@@ -610,12 +612,19 @@ export default function FreeDayForm({
             How it works
           </h3>
           <div className="grid grid-cols-3 gap-4 text-center">
-            {[
-              { step: "1", text: hasPromo ? "Confirm your email" : "Apply & confirm email" },
-              { step: "2", text: hasPromo ? "Get your door code" : "Get approved" },
-              { step: "3", text: "Show up & co-work!" },
-            ].map(({ step, text }) => (
-              <div key={step}>
+            {(isInvited
+              ? [
+                  { step: "1", text: "Confirm your email" },
+                  { step: "2", text: "Get your door code" },
+                  { step: "3", text: "Show up & co-work!" },
+                ]
+              : [
+                  { step: "1", text: "Apply & confirm email" },
+                  { step: "2", text: "Get approved" },
+                  { step: "3", text: "Show up & co-work!" },
+                ]
+            ).map(({ step, text }) => (
+<div key={step}>
                 <div className="w-8 h-8 rounded-full bg-forest/30 border border-sage/30 flex items-center justify-center mx-auto mb-2">
                   <span className="text-sm font-bold text-sage">{step}</span>
                 </div>

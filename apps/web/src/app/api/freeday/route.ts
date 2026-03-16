@@ -2,21 +2,12 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 
-/** Check if a promo code is valid (case-insensitive) */
-function isValidPromoCode(code: string): boolean {
-  const validCodes = (process.env.FREE_DAY_PROMO_CODES ?? "")
-    .split(",")
-    .map((c) => c.trim().toUpperCase())
-    .filter(Boolean);
-  return validCodes.length > 0 && validCodes.includes(code.trim().toUpperCase());
-}
-
-/** Post a notification to the RegenHub Telegram group */
-async function notifyTelegramPromo(claim: {
+/** Post an informational notification for invited free days */
+async function notifyTelegramInvited(claim: {
   name: string;
   email: string;
   claimed_date: string;
-  promo_code: string;
+  inviter_name: string;
 }) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_GROUP_CHAT_ID;
@@ -28,10 +19,11 @@ async function notifyTelegramPromo(claim: {
   );
 
   const lines = [
-    `🎟️ *Free Day Claimed* _(promo: ${claim.promo_code})_`,
+    `🎟️ *Free Day*`,
     ``,
     `*${claim.name}*  ·  ${claim.email}`,
     `Date: ${dateStr}`,
+    `Invited by: *${claim.inviter_name}*`,
   ];
 
   try {
@@ -111,11 +103,11 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
 
-  const { name, email, claimed_date, promo_code, about, why_join } = body as {
+  const { name, email, claimed_date, invite_code, about, why_join } = body as {
     name?: string;
     email?: string;
     claimed_date?: string;
-    promo_code?: string;
+    invite_code?: string;
     about?: string;
     why_join?: string;
   };
@@ -158,30 +150,36 @@ export async function POST(req: Request) {
     );
   }
 
-  // Determine path: promo code vs application
-  const hasPromo = !!promo_code?.trim();
-  let validPromo = false;
+  const admin = createServiceClient();
+  const normalizedEmail = email.trim().toLowerCase();
 
-  if (hasPromo) {
-    if (!isValidPromoCode(promo_code!)) {
+  // Determine path: invite code vs application
+  let inviter: { id: number; name: string } | null = null;
+  const hasInvite = !!invite_code?.trim();
+
+  if (hasInvite) {
+    const { data: inviterData } = await admin
+      .from("members")
+      .select("id, name, is_coop_member")
+      .eq("invite_code", invite_code!.trim().toUpperCase())
+      .single();
+
+    if (!inviterData || !inviterData.is_coop_member) {
       return NextResponse.json(
-        { error: "Invalid promo code" },
+        { error: "Invalid invite link" },
         { status: 400 }
       );
     }
-    validPromo = true;
+    inviter = { id: inviterData.id, name: inviterData.name };
   }
 
-  // Without promo code, about and why_join are required
-  if (!validPromo && (!about?.trim() || !why_join?.trim())) {
+  // Without invite code, about and why_join are required
+  if (!inviter && (!about?.trim() || !why_join?.trim())) {
     return NextResponse.json(
       { error: "Please tell us about yourself and why you want to visit" },
       { status: 400 }
     );
   }
-
-  const admin = createServiceClient();
-  const normalizedEmail = email.trim().toLowerCase();
 
   // Check if email already has a claim
   const { data: existing } = await admin
@@ -197,12 +195,12 @@ export async function POST(req: Request) {
     );
   }
 
-  // Check if user is already authenticated (they might be on the date picker step)
+  // Check if user is already authenticated
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   // Insert the claim
-  const status = validPromo ? "reserved" : "pending";
+  const status = inviter ? "reserved" : "pending";
   const { data: inserted, error: dbError } = await admin
     .from("free_day_claims")
     .insert({
@@ -211,7 +209,7 @@ export async function POST(req: Request) {
       claimed_date,
       status,
       supabase_user_id: user?.id ?? null,
-      promo_code: validPromo ? promo_code!.trim().toUpperCase() : null,
+      invited_by_member_id: inviter?.id ?? null,
       about: about?.trim() || null,
       why_join: why_join?.trim() || null,
     })
@@ -231,12 +229,12 @@ export async function POST(req: Request) {
   }
 
   // Notify Telegram (fire-and-forget)
-  if (validPromo) {
-    notifyTelegramPromo({
+  if (inviter) {
+    notifyTelegramInvited({
       name: name.trim(),
       email: normalizedEmail,
       claimed_date,
-      promo_code: promo_code!.trim().toUpperCase(),
+      inviter_name: inviter.name,
     });
   } else {
     notifyTelegramApplication({
@@ -249,7 +247,7 @@ export async function POST(req: Request) {
     });
   }
 
-  // If already authenticated, no need for magic link — they can activate directly
+  // If already authenticated, no need for magic link
   if (user) {
     return NextResponse.json({ submitted: true, authenticated: true, status });
   }
@@ -265,7 +263,6 @@ export async function POST(req: Request) {
 
   if (authError) {
     console.error("[FreeDay] Magic link error:", authError);
-    // Claim saved — not fatal. They can sign in manually later.
   }
 
   return NextResponse.json({ submitted: true, authenticated: false, status });

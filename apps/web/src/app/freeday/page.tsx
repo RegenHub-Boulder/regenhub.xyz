@@ -1,7 +1,12 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import FreeDayForm from "./FreeDayForm";
 import type { Metadata } from "next";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { CheckCircle, ArrowRight } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Try RegenHub Free for a Day — Boulder Coworking",
@@ -15,7 +20,32 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function FreeDayPage() {
+export default async function FreeDayPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ref?: string }>;
+}) {
+  const { ref } = await searchParams;
+
+  const admin = createServiceClient();
+
+  // Look up inviter if ref code is present
+  let inviter: { name: string; invite_code: string } | undefined;
+  if (ref) {
+    const { data: inviterData } = await admin
+      .from("members")
+      .select("name, invite_code, is_coop_member")
+      .eq("invite_code", ref.toUpperCase())
+      .single();
+
+    if (inviterData?.is_coop_member && inviterData.invite_code) {
+      inviter = {
+        name: inviterData.name,
+        invite_code: inviterData.invite_code,
+      };
+    }
+  }
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -23,12 +53,44 @@ export default async function FreeDayPage() {
 
   if (!user) {
     // Not authenticated — show the full landing page / signup form
-    return <FreeDayForm />;
+    return <FreeDayForm inviter={inviter} />;
+  }
+
+  // Check if user is already a full member (cold_desk/hot_desk/hub_friend)
+  const { data: existingMember } = await admin
+    .from("members")
+    .select("id, member_type")
+    .eq("supabase_user_id", user.id)
+    .single();
+
+  if (
+    existingMember &&
+    existingMember.member_type !== "day_pass"
+  ) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6">
+        <Card className="glass-panel-strong max-w-md w-full">
+          <CardContent className="p-10 text-center">
+            <CheckCircle className="w-12 h-12 text-sage mx-auto mb-4" />
+            <h1 className="text-2xl font-bold text-forest mb-3">
+              You&apos;re Already a Member!
+            </h1>
+            <p className="text-muted mb-6">
+              No need for a free day pass — you have full access to RegenHub.
+            </p>
+            <Link href="/portal">
+              <Button className="btn-primary-glass gap-2">
+                Go to Your Portal
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   // Authenticated — check for an existing claim
-  const admin = createServiceClient();
-
   // Try by supabase_user_id first
   let { data: claim } = await admin
     .from("free_day_claims")
@@ -56,7 +118,12 @@ export default async function FreeDayPage() {
 
   if (!claim) {
     // Authenticated but no claim — show the date picker form with email locked
-    return <FreeDayForm authenticatedEmail={user.email ?? undefined} />;
+    return (
+      <FreeDayForm
+        authenticatedEmail={user.email ?? undefined}
+        inviter={inviter}
+      />
+    );
   }
 
   // If activated, fetch the existing door code

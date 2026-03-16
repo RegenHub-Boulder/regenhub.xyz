@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Key, Ticket, User, ClipboardList, CheckCircle, Clock, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import HubEssentials from "@/components/portal/HubEssentials";
+import InviteCard from "@/components/portal/InviteCard";
 
 export default async function PortalPage() {
   const supabase = await createClient();
@@ -71,8 +72,8 @@ export default async function PortalPage() {
             You&apos;re signed in as <strong className="text-foreground">{user.email}</strong>.<br />
             Fill out a short application so we can get you set up.
           </p>
-          <Link href="/apply">
-            <Button className="btn-primary-glass px-6">Start Application</Button>
+          <Link href="/freeday">
+            <Button className="btn-primary-glass px-6">Get Your Free Day</Button>
           </Link>
         </div>
 
@@ -146,6 +147,8 @@ export default async function PortalPage() {
             </CardContent>
           </Card>
         </Link>
+
+        {member.is_coop_member && <InviteCard />}
       </div>
 
       <HubEssentials defaultExpanded={isNewMember} />
