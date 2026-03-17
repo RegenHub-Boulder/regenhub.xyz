@@ -209,7 +209,7 @@ export default async function PortalPage() {
                 <h3 className="font-semibold mb-1">Want your own desk?</h3>
                 <p className="text-sm text-muted mb-3">
                   Desk members get a permanent door code, 24/7 access, and a path to co-op ownership.
-                  Hot desks start at $200/month.
+                  Desks are $250/month.
                 </p>
                 <a href="mailto:boulder.regenhub@gmail.com?subject=Interested in desk membership">
                   <Button className="btn-glass gap-2 text-sm">

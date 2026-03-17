@@ -324,7 +324,7 @@ export default function FreeDayForm({
               <CardContent className="p-6">
                 <Key className="w-8 h-8 text-sage mb-3" />
                 <h3 className="font-semibold mb-1">Desk Membership</h3>
-                <p className="text-2xl font-bold text-gold mb-2">From $200/mo</p>
+                <p className="text-2xl font-bold text-gold mb-2">$250/mo</p>
                 <p className="text-sm text-muted mb-4">
                   Get your own desk, a permanent door code, 24/7 access, and a path to co-op ownership.
                 </p>
@@ -412,7 +412,7 @@ export default function FreeDayForm({
               </div>
               <div className="text-center">
                 <Key className="w-6 h-6 text-sage mx-auto mb-2" />
-                <p className="text-sm font-medium mb-1">Desk — from $200/mo</p>
+                <p className="text-sm font-medium mb-1">Desk — $250/mo</p>
                 <p className="text-xs text-muted mb-3">Your own desk + 24/7 access</p>
                 <a href="mailto:boulder.regenhub@gmail.com?subject=Interested in desk membership">
                   <Button size="sm" className="btn-glass gap-1.5 text-xs">

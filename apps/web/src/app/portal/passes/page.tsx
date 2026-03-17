@@ -62,7 +62,7 @@ export default async function PassesPage() {
         <p className="text-muted mt-1">
           {isFullMember
             ? "Generate temporary door codes for guests"
-            : "Get a door code to co-work at RegenHub for the day"}
+            : "Get a door code for the day (8 AM \u2013 6 PM, Mon\u2013Fri)"}
         </p>
       </div>
 
@@ -200,7 +200,7 @@ export default async function PassesPage() {
                 <h3 className="font-semibold mb-1">Ready for your own desk?</h3>
                 <p className="text-sm text-muted mb-4">
                   Desk members get a permanent door code, 24/7 access, and a path to co-op ownership.
-                  Hot desks start at $200/month.
+                  Desks are $250/month.
                 </p>
                 <a href="mailto:boulder.regenhub@gmail.com?subject=Interested in desk membership">
                   <Button className="btn-glass gap-2 text-sm">
