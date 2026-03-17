@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     const supabase = createServiceClient();
     const { data: member } = await supabase
       .from("members")
-      .select("id, name, day_passes_balance")
+      .select("id, name")
       .eq("id", parseInt(memberId))
       .single();
 
@@ -63,11 +63,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ received: true });
     }
 
-    const newBalance = member.day_passes_balance + passCount;
-    await supabase
-      .from("members")
-      .update({ day_passes_balance: newBalance })
-      .eq("id", member.id);
+    // Atomic increment — prevents lost updates from concurrent webhook calls
+    const { data: newBalance, error: rpcError } = await supabase.rpc(
+      "increment_day_pass_balance",
+      { p_member_id: member.id, p_amount: passCount }
+    );
+
+    if (rpcError) {
+      console.error("[Stripe] Failed to increment balance:", rpcError);
+      return NextResponse.json({ error: "Balance update failed" }, { status: 500 });
+    }
 
     console.log(`[Stripe] +${passCount} passes for ${member.name} (id=${member.id}) → balance=${newBalance}`);
   }

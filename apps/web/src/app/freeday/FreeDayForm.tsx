@@ -45,24 +45,46 @@ type Props = {
   inviter?: { name: string; invite_code: string };
 };
 
-function getTodayString(): string {
-  const d = new Date();
-  return d.toISOString().split("T")[0];
+/** Format a Date as YYYY-MM-DD in Mountain Time (matches server) */
+function toMountainDateString(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Denver",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d); // en-CA gives YYYY-MM-DD
 }
 
-/** Get the next weekday (Mon-Fri) as YYYY-MM-DD, starting from today */
+function getTodayString(): string {
+  return toMountainDateString(new Date());
+}
+
+/** Get the next weekday (Mon-Fri) as YYYY-MM-DD in Mountain Time */
 function getNextWeekday(): string {
-  const d = new Date();
-  const day = d.getDay();
-  if (day === 0) d.setDate(d.getDate() + 1); // Sun → Mon
-  if (day === 6) d.setDate(d.getDate() + 2); // Sat → Mon
-  return d.toISOString().split("T")[0];
+  const now = new Date();
+  // Get current day-of-week in Mountain Time
+  const mtDay = parseInt(
+    new Intl.DateTimeFormat("en-US", { timeZone: "America/Denver", weekday: "narrow" })
+      .formatToParts(now)
+      .find((p) => p.type === "weekday")?.value ?? "0"
+  );
+  // Intl weekday "narrow" isn't numeric — use a different approach
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const mtDayName = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Denver",
+    weekday: "short",
+  }).format(now);
+  const dayIndex = dayNames.indexOf(mtDayName);
+  const d = new Date(now);
+  if (dayIndex === 0) d.setDate(d.getDate() + 1); // Sun → Mon
+  if (dayIndex === 6) d.setDate(d.getDate() + 2); // Sat → Mon
+  return toMountainDateString(d);
 }
 
 function getMaxDateString(): string {
   const d = new Date();
   d.setDate(d.getDate() + 30);
-  return d.toISOString().split("T")[0];
+  return toMountainDateString(d);
 }
 
 function isWeekend(dateStr: string): boolean {
@@ -578,7 +600,7 @@ export default function FreeDayForm({
 
               <Button
                 type="submit"
-                disabled={loading}
+                disabled={loading || isWeekend(claimedDate)}
                 className="btn-primary-glass w-full py-3 text-base font-semibold gap-2"
               >
                 {loading ? (
