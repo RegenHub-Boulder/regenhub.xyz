@@ -230,10 +230,10 @@ export default function UsersPage() {
       ) : (
         <>
           {/* Desktop table */}
-          <div className="glass-panel overflow-hidden hidden sm:block">
+          <div className="glass-panel overflow-x-auto hidden sm:block">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/10 text-left text-muted">
+                <tr className="border-b border-white/10 text-left text-muted whitespace-nowrap">
                   <th className="px-4 py-3 font-medium">Name</th>
                   <th className="px-4 py-3 font-medium">Email</th>
                   <th className="px-4 py-3 font-medium">Status</th>

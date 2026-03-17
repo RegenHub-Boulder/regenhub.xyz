@@ -43,7 +43,7 @@ export default async function ActiveCodesPage() {
       ) : (
         <>
           {/* Desktop table */}
-          <div className="glass-panel overflow-hidden hidden sm:block">
+          <div className="glass-panel overflow-x-auto hidden sm:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/10 text-left text-muted">
