@@ -11,7 +11,7 @@ import {
 let bot: TelegramBot;
 
 type PendingAction = {
-  type: "newcode" | "quickcode" | "addmember" | "addpasses" | "addadmin";
+  type: "newcode" | "quickcode" | "addmember" | "addpasses" | "addadmin" | "changetype";
   step: string;
   data: Record<string, unknown>;
   timestamp: number;
@@ -77,6 +77,8 @@ async function handleHelp(msg: TelegramBot.Message) {
     text += `\n🛡️ *Admin*\n`;
     text += `/quickcode — Create a quick door code\n`;
     text += `/codes — List & revoke active codes\n`;
+    text += `/changetype — Change a member's type\n`;
+    text += `/coop — Toggle co-op member status\n`;
     text += `/admin — Member management\n`;
   }
 
@@ -287,6 +289,7 @@ async function handleAdmin(msg: TelegramBot.Message) {
     reply_markup: {
       inline_keyboard: [
         [{ text: "Add Member", callback_data: "admin_addmember" }, { text: "Add Day Passes", callback_data: "admin_addpasses" }],
+        [{ text: "Change Type", callback_data: "admin_changetype" }, { text: "Toggle Co-op", callback_data: "admin_togglecoop" }],
         [{ text: "Add Admin", callback_data: "admin_addadmin" }, { text: "Remove Admin", callback_data: "admin_removeadmin" }],
         [{ text: "List Members", callback_data: "admin_listmembers" }],
       ],
@@ -382,6 +385,7 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
   if (data.startsWith("page_members_")) return sendMembersList(chatId, parseInt(data.replace("page_members_", "")));
   if (data.startsWith("admin_")) return handleAdminMenu(chatId, data, admin);
   if (data.startsWith("membertype_")) return handleMemberType(chatId, data);
+  if (data.startsWith("changeto_")) return handleChangeToCallback(chatId, data);
   if (data.startsWith("confirm_removeadmin_")) return handleRemoveAdmin(chatId, parseInt(data.replace("confirm_removeadmin_", "")));
 }
 
@@ -463,6 +467,13 @@ async function handleAdminMenu(chatId: number, data: string, admin: MemberRow) {
       pending.set(chatId, { type: "addpasses", step: "awaiting_username", data: {}, timestamp: Date.now() });
       return bot.sendMessage(chatId, "Enter member's Telegram username (@username). Type 'cancel' to abort.");
 
+    case "admin_changetype":
+      pending.set(chatId, { type: "changetype", step: "awaiting_username", data: {}, timestamp: Date.now() });
+      return bot.sendMessage(chatId, "Enter member's Telegram username (@username). Type 'cancel' to abort.");
+
+    case "admin_togglecoop":
+      return bot.sendMessage(chatId, "Use /coop @username to toggle co-op member status.\n\nExample: /coop @johndoe");
+
     case "admin_addadmin":
       pending.set(chatId, { type: "addadmin", step: "awaiting_username", data: {}, timestamp: Date.now() });
       return bot.sendMessage(chatId, "Enter Telegram username of new admin. Type 'cancel' to abort.");
@@ -528,6 +539,7 @@ async function handleMessage(msg: TelegramBot.Message) {
     case "addmember": return handleAddMemberFlow(chatId, text, p);
     case "addpasses": return handleAddPassesFlow(chatId, text, p);
     case "addadmin": return handleAddAdminFlow(chatId, text);
+    case "changetype": return handleChangeTypeFlow(chatId, text, p);
   }
 }
 
@@ -686,6 +698,149 @@ async function handleAddAdminFlow(chatId: number, text: string) {
   return bot.sendMessage(chatId, `${member.name} (${tg}) is now an admin.`);
 }
 
+// ── Change member type ──────────────────────────────────────
+
+async function handleChangeType(msg: TelegramBot.Message) {
+  await react(msg);
+  const admin = await findAdminByTelegram(msg.from?.username ?? "");
+  if (!admin) return bot.sendMessage(msg.chat.id, "Admins only.");
+
+  pending.set(msg.chat.id, { type: "changetype", step: "awaiting_username", data: {}, timestamp: Date.now() });
+  return bot.sendMessage(msg.chat.id, "Enter member's Telegram username (@username). Type 'cancel' to abort.");
+}
+
+async function handleChangeTypeFlow(chatId: number, text: string, p: PendingAction) {
+  if (p.step !== "awaiting_username") return;
+
+  const tg = text.startsWith("@") ? text : `@${text}`;
+  const member = await findMemberByTelegram(tg.replace("@", ""));
+  if (!member) return bot.sendMessage(chatId, `${tg} not found. Try again or 'cancel':`);
+
+  const typeLabel =
+    member.member_type === "cold_desk" ? "Cold Desk" :
+    member.member_type === "hot_desk" ? "Hot Desk" :
+    member.member_type === "hub_friend" ? "Hub Friend" : "Day Pass";
+
+  p.data.memberId = member.id;
+  p.data.memberName = member.name;
+  p.data.currentType = member.member_type;
+  p.data.currentSlot = member.pin_code_slot;
+  p.data.currentCode = member.pin_code;
+  p.step = "awaiting_type";
+  p.timestamp = Date.now();
+  pending.set(chatId, p);
+
+  return bot.sendMessage(chatId, `${member.name} is currently: *${typeLabel}*\n\nSelect new type:`, {
+    parse_mode: "Markdown",
+    reply_markup: { inline_keyboard: [
+      [{ text: "Cold Desk", callback_data: "changeto_cold_desk" }, { text: "Hot Desk", callback_data: "changeto_hot_desk" }],
+      [{ text: "Hub Friend", callback_data: "changeto_hub_friend" }, { text: "Day Pass", callback_data: "changeto_day_pass" }],
+    ]},
+  });
+}
+
+async function handleChangeToCallback(chatId: number, data: string) {
+  const p = pending.get(chatId);
+  if (!p || p.type !== "changetype") return;
+
+  const newType = data.replace("changeto_", "") as "cold_desk" | "hot_desk" | "hub_friend" | "day_pass";
+  const memberId = p.data.memberId as number;
+  const memberName = p.data.memberName as string;
+  const currentType = p.data.currentType as string;
+  const currentSlot = p.data.currentSlot as number | null;
+
+  pending.delete(chatId);
+
+  if (newType === currentType) {
+    return bot.sendMessage(chatId, `${memberName} is already ${newType}. No changes made.`);
+  }
+
+  const PERMANENT = ["cold_desk", "hot_desk", "hub_friend"];
+  const isPermanent = PERMANENT.includes(newType);
+  const wasPermanent = PERMANENT.includes(currentType);
+
+  const update: Record<string, unknown> = { member_type: newType };
+  let lockWarning: string | null = null;
+
+  if (isPermanent && !wasPermanent && !currentSlot) {
+    // Upgrading from day_pass to permanent — assign slot + code
+    const slot = await findNextMemberSlot();
+    if (!slot) return bot.sendMessage(chatId, "No member slots available (1–100 all in use).");
+    const code = generateRandomCode();
+    update.pin_code_slot = slot;
+    update.pin_code = code;
+
+    try {
+      const lockResults = await setUserCode(slot, code);
+      lockWarning = formatLockWarning(lockResults);
+    } catch (err) {
+      console.error("[ChangeType] Failed to program lock:", err);
+      return bot.sendMessage(chatId, "Couldn't reach the door locks. Type not changed. Try again later.");
+    }
+  } else if (!isPermanent && wasPermanent && currentSlot) {
+    // Downgrading from permanent to day_pass — clear lock code
+    try {
+      const lockResults = await clearUserCode(currentSlot);
+      lockWarning = formatLockWarning(lockResults);
+    } catch (err) {
+      console.error("[ChangeType] Failed to clear lock:", err);
+      lockWarning = "Lock code could not be cleared — run Lock Sync";
+    }
+    update.pin_code_slot = null;
+    update.pin_code = null;
+  }
+
+  const { error } = await db.from("members").update(update).eq("id", memberId);
+  if (error) return bot.sendMessage(chatId, `Error: ${error.message}`);
+
+  const typeLabel =
+    newType === "cold_desk" ? "Cold Desk" :
+    newType === "hot_desk" ? "Hot Desk" :
+    newType === "hub_friend" ? "Hub Friend" : "Day Pass";
+
+  let text = `${memberName} is now: *${typeLabel}*`;
+  if (update.pin_code_slot) text += `\nSlot: ${update.pin_code_slot}\nCode: ${update.pin_code}`;
+  if (lockWarning) text += `\n\n${lockWarning}`;
+
+  return bot.sendMessage(chatId, text, { parse_mode: "Markdown" });
+}
+
+// ── Toggle co-op member ─────────────────────────────────────
+
+async function handleCoop(msg: TelegramBot.Message, match: RegExpExecArray | null) {
+  await react(msg);
+  const admin = await findAdminByTelegram(msg.from?.username ?? "");
+  if (!admin) return bot.sendMessage(msg.chat.id, "Admins only.");
+
+  const arg = match?.[1]?.trim();
+  if (!arg) {
+    return bot.sendMessage(msg.chat.id, "Usage: /coop @username\n\nToggles co-op member status.");
+  }
+
+  const tg = arg.startsWith("@") ? arg : `@${arg}`;
+  const member = await findMemberByTelegram(tg.replace("@", ""));
+  if (!member) return bot.sendMessage(msg.chat.id, `${tg} not found.`);
+
+  const newStatus = !member.is_coop_member;
+  await db.from("members").update({ is_coop_member: newStatus }).eq("id", member.id);
+
+  let text = `${member.name} is ${newStatus ? "now" : "no longer"} a co-op member.`;
+
+  if (newStatus) {
+    // Generate invite code if they don't have one
+    let inviteCode = member.invite_code;
+    if (!inviteCode) {
+      const crypto = await import("crypto");
+      inviteCode = crypto.randomBytes(5).toString("base64url").slice(0, 8).toUpperCase();
+      await db.from("members").update({ invite_code: inviteCode }).eq("id", member.id);
+    }
+    const siteUrl = process.env.SITE_URL ?? "https://regenhub.xyz";
+    text += `\nInvite link: ${siteUrl}/freeday?ref=${inviteCode}`;
+  }
+
+  return bot.sendMessage(msg.chat.id, text);
+}
+
 // ── Invite link ─────────────────────────────────────────────
 
 async function handleInvite(msg: TelegramBot.Message) {
@@ -697,13 +852,7 @@ async function handleInvite(msg: TelegramBot.Message) {
   if (!member) return bot.sendMessage(chatId, "You're not registered. Ask an admin to add you first.");
   if (!member.is_coop_member) return bot.sendMessage(chatId, "Only cooperative members can send invites.");
 
-  let inviteCode: string | null = (member as MemberRow & { invite_code?: string | null }).invite_code ?? null;
-
-  // Need to fetch invite_code since MemberRow type may not include it
-  if (!inviteCode) {
-    const { data: fresh } = await db.from("members").select("invite_code").eq("id", member.id).single();
-    inviteCode = fresh?.invite_code ?? null;
-  }
+  let inviteCode = member.invite_code;
 
   // Generate one if they don't have it yet
   if (!inviteCode) {
@@ -743,6 +892,8 @@ export function startBot() {
   bot.onText(/\/invite/, handleInvite);
   bot.onText(/\/quickcode(?:\s+(.+))?/, handleQuickCode);
   bot.onText(/\/codes/, handleCodes);
+  bot.onText(/\/changetype/, handleChangeType);
+  bot.onText(/\/coop(?:\s+(.+))?/, handleCoop);
   bot.onText(/\/admin/, handleAdmin);
 
   bot.on("callback_query", handleCallback);

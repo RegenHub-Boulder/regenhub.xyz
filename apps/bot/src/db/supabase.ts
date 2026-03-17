@@ -22,6 +22,7 @@ export type MemberRow = {
   is_admin: boolean;
   disabled: boolean;
   day_passes_balance: number;
+  invite_code: string | null;
 };
 
 export async function findMemberByTelegram(username: string): Promise<MemberRow | null> {
