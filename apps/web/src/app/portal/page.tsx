@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import Link from "next/link";
-import { Key, Ticket, User, ClipboardList, CheckCircle, Clock, MessageCircle, Zap, Calendar } from "lucide-react";
+import { Key, Ticket, User, ClipboardList, CheckCircle, Clock, MessageCircle, Zap, Calendar, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import HubEssentials from "@/components/portal/HubEssentials";
 import InviteCard from "@/components/portal/InviteCard";
@@ -198,6 +198,30 @@ export default async function PortalPage() {
 
         {member.is_coop_member && <InviteCard />}
       </div>
+
+      {/* Membership upgrade prompt for day_pass members */}
+      {!isFullMember && (
+        <Card className="glass-panel border border-forest/20">
+          <CardContent className="p-6">
+            <div className="flex items-start gap-4">
+              <Key className="w-7 h-7 text-sage shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-semibold mb-1">Want your own desk?</h3>
+                <p className="text-sm text-muted mb-3">
+                  Desk members get a permanent door code, 24/7 access, and a path to co-op ownership.
+                  Hot desks start at $200/month.
+                </p>
+                <a href="mailto:boulder.regenhub@gmail.com?subject=Interested in desk membership">
+                  <Button className="btn-glass gap-2 text-sm">
+                    <Mail className="w-4 h-4" />
+                    Inquire about membership
+                  </Button>
+                </a>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <HubEssentials defaultExpanded={isNewMember} />
     </div>

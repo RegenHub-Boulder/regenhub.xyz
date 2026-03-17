@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Building2, HandHeart, Lightbulb, Sprout, MapPin, Calendar, Mail } from "lucide-react";
+import { Building2, HandHeart, Lightbulb, Sprout, MapPin, Calendar, Mail, Zap, Ticket, Key, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { MemberDirectory } from "@/components/landing/MemberDirectory";
@@ -44,13 +44,18 @@ export default function RegenHubLanding() {
         <div className="max-w-4xl mx-auto text-center">
           <div className="glass-panel-strong p-8 md:p-12 hover-lift animate-fade-in-up">
             <Image src={regenHubFull} alt="RegenHub" height={160} className="h-32 md:h-40 w-auto mx-auto mb-6" />
-            <p className="text-xl md:text-2xl mb-8 text-muted max-w-2xl mx-auto leading-relaxed">
-              A regenerative innovation hub in Boulder, CO
+            <p className="text-xl md:text-2xl mb-3 text-muted max-w-2xl mx-auto leading-relaxed">
+              Boulder&apos;s regenerative coworking space
+            </p>
+            <p className="text-base text-muted/80 mb-8 max-w-lg mx-auto">
+              A cooperative workspace for builders and changemakers.
+              Your first day is free.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/apply">
-                <Button className="btn-primary-glass px-8 py-3 text-lg font-semibold hover-glow">
-                  Apply for Membership
+              <Link href="/freeday">
+                <Button className="btn-primary-glass px-8 py-3 text-lg font-semibold hover-glow gap-2">
+                  <Zap className="w-5 h-5" />
+                  Try a Free Day
                 </Button>
               </Link>
               <a href="https://lu.ma/regenhub" target="_blank" rel="noopener noreferrer">
@@ -91,24 +96,48 @@ export default function RegenHubLanding() {
         </div>
       </section>
 
-      {/* Membership Tiers */}
+      {/* How to Co-work With Us */}
       <section className="relative px-6 py-16">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-forest">Become Part of the Cooperative</h2>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-forest">Co-work With Us</h2>
             <p className="text-xl text-muted max-w-3xl mx-auto">
-              Tiered membership with participation-based governance and economic sharing.
+              Start with a free day, come back with day passes, or get your own desk.
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-6 mb-8">
             {[
-              { tier: "Community Members", color: "var(--sage)", items: ["Event access", "Resource library", "Community network"] },
-              { tier: "Co-working Members", color: "var(--gold)", items: ["Co-working access", "Shared benefits", "Project collaboration"] },
-              { tier: "Cooperative Members", color: "var(--forest-light)", items: ["Full ownership rights", "Governance participation", "Equity distribution"] },
-            ].map(({ tier, color, items }) => (
+              {
+                icon: Zap,
+                tier: "Free Day",
+                price: "Free",
+                color: "var(--sage)",
+                desc: "Try the space with no commitment",
+                items: ["Full day access (8 AM \u2013 6 PM)", "WiFi, coffee, and community", "One free day per person"],
+              },
+              {
+                icon: Ticket,
+                tier: "Day Pass",
+                price: "$25/day",
+                color: "var(--gold)",
+                desc: "Come back whenever you want",
+                items: ["Same-day door code access", "5-pack available ($100)", "No commitment or contract"],
+              },
+              {
+                icon: Key,
+                tier: "Desk Membership",
+                price: "From $200/mo",
+                color: "var(--forest-light)",
+                desc: "Your own desk and 24/7 access",
+                items: ["Permanent door code", "Hot desk or cold desk options", "Co-op ownership pathway"],
+              },
+            ].map(({ icon: Icon, tier, price, color, desc, items }) => (
               <Card key={tier} className="glass-panel hover-lift" style={{ borderLeft: `4px solid ${color}` }}>
                 <CardContent className="p-6">
-                  <h3 className="text-lg font-semibold mb-3">{tier}</h3>
+                  <Icon className="w-7 h-7 text-sage mb-3" />
+                  <h3 className="text-lg font-semibold mb-1">{tier}</h3>
+                  <p className="text-xl font-bold text-gold mb-2">{price}</p>
+                  <p className="text-sm text-muted mb-3">{desc}</p>
                   <ul className="text-sm text-muted space-y-1">
                     {items.map((i) => <li key={i}>&bull; {i}</li>)}
                   </ul>
@@ -117,9 +146,10 @@ export default function RegenHubLanding() {
             ))}
           </div>
           <div className="text-center">
-            <Link href="/apply">
-              <Button className="btn-primary-glass px-8 py-3 text-lg font-semibold hover-glow">
-                Apply for Membership
+            <Link href="/freeday">
+              <Button className="btn-primary-glass px-8 py-3 text-lg font-semibold hover-glow gap-2">
+                Get Your Free Day
+                <ArrowRight className="w-5 h-5" />
               </Button>
             </Link>
           </div>
@@ -165,13 +195,6 @@ export default function RegenHubLanding() {
           <Card className="glass-panel-strong hover-lift">
             <CardContent className="p-8 md:p-12 text-center">
               <h2 className="text-3xl md:text-4xl font-bold mb-8 text-forest">Find Us in Boulder</h2>
-              <div className="glass-panel-subtle p-6 mb-8">
-                <h3 className="text-lg font-semibold mb-3">Important Note</h3>
-                <p className="text-muted mb-2">
-                  RegenHub Boulder is an <strong>invite-only space</strong>. You&apos;re welcome to attend our public events
-                  and inquire about membership and day passes in our community channels.
-                </p>
-              </div>
               <div className="grid md:grid-cols-2 gap-8 mb-8">
                 <div className="space-y-3">
                   <div className="flex items-center justify-center gap-2">
@@ -199,8 +222,8 @@ export default function RegenHubLanding() {
                 </a>
               </div>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link href="/apply">
-                  <Button className="btn-primary-glass px-6">Apply for Membership</Button>
+                <Link href="/freeday">
+                  <Button className="btn-primary-glass px-6">Try a Free Day</Button>
                 </Link>
                 <a href="https://lu.ma/regenhub" target="_blank" rel="noopener noreferrer">
                   <Button className="btn-glass px-6">View All Events</Button>
@@ -228,7 +251,7 @@ export default function RegenHubLanding() {
               {[
                 { label: "Telegram", href: "https://t.me/+Mg1PLuT9pX9mMGVh", external: true },
                 { label: "Email", href: "mailto:boulder.regenhub@gmail.com", external: false },
-                { label: "Apply", href: "/apply", external: false },
+                { label: "Free Day", href: "/freeday", external: false },
                 { label: "Events", href: "https://lu.ma/regenhub", external: true },
                 { label: "Portal", href: "/portal", external: false },
               ].map(({ label, href, external }) => (

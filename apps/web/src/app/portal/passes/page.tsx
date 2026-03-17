@@ -4,7 +4,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RequestDayPassButton } from "@/components/portal/RequestDayPassButton";
 import { RevokeCodeButton } from "@/components/portal/RevokeCodeButton";
-import { Ticket, Clock, ShoppingCart } from "lucide-react";
+import { Ticket, Clock, ShoppingCart, Key, ArrowRight, Mail } from "lucide-react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 export const metadata = { title: "Live Codes — RegenHub" };
 
@@ -40,6 +42,8 @@ export default async function PassesPage() {
     ? `${process.env.NEXT_PUBLIC_STRIPE_FIVEPACK_LINK}${stripeParams}`
     : null;
 
+  const isFullMember = member.member_type !== "day_pass";
+
   const { data: activeCodes } = await supabase
     .from("day_codes")
     .select("*")
@@ -47,11 +51,19 @@ export default async function PassesPage() {
     .eq("is_active", true)
     .order("expires_at", { ascending: true, nullsFirst: false });
 
+  const hasStripe = !!(daypassUrl || fivepackUrl);
+
   return (
     <div className="space-y-8 max-w-3xl">
       <div>
-        <h1 className="text-3xl font-bold text-forest">Live Codes</h1>
-        <p className="text-muted mt-1">Generate temporary door codes for guests or your own use</p>
+        <h1 className="text-3xl font-bold text-forest">
+          {isFullMember ? "Guest Day Passes" : "Day Passes"}
+        </h1>
+        <p className="text-muted mt-1">
+          {isFullMember
+            ? "Generate temporary door codes for guests"
+            : "Get a door code to co-work at RegenHub for the day"}
+        </p>
       </div>
 
       {/* Balance + action */}
@@ -69,12 +81,16 @@ export default async function PassesPage() {
             </div>
             <RequestDayPassButton
               memberId={member.id}
-              isFullMember={member.member_type !== "day_pass"}
+              isFullMember={isFullMember}
               remainingUses={member.day_passes_balance}
             />
           </div>
           {member.day_passes_balance === 0 && (
-            <p className="text-sm text-muted mt-4">No passes remaining — contact an admin to top up.</p>
+            <p className="text-sm text-muted mt-4">
+              {hasStripe
+                ? "No passes remaining \u2014 grab one below to get a door code."
+                : "No passes remaining \u2014 day pass purchasing will be available soon."}
+            </p>
           )}
         </CardContent>
       </Card>
@@ -136,7 +152,7 @@ export default async function PassesPage() {
         <div>
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <ShoppingCart className="w-5 h-5 text-sage" />
-            Buy more passes
+            {isFullMember ? "Buy guest passes" : "Get day passes"}
           </h2>
           <div className="grid sm:grid-cols-2 gap-4">
             {daypassUrl && (
@@ -149,7 +165,7 @@ export default async function PassesPage() {
                 <p className="font-semibold mb-1">Single Day Pass</p>
                 <p className="text-3xl font-bold text-gold mb-3">$25</p>
                 <p className="text-xs text-muted group-hover:text-foreground transition-colors">
-                  1 live code → opens the door →
+                  1 door code &rarr; full day access &rarr;
                 </p>
               </a>
             )}
@@ -166,12 +182,36 @@ export default async function PassesPage() {
                 </div>
                 <p className="text-3xl font-bold text-gold mb-3">$100</p>
                 <p className="text-xs text-muted group-hover:text-foreground transition-colors">
-                  5 live codes → best value →
+                  5 door codes &rarr; best value &rarr;
                 </p>
               </a>
             )}
           </div>
         </div>
+      )}
+
+      {/* Membership upgrade prompt for day_pass members */}
+      {!isFullMember && (
+        <Card className="glass-panel border border-forest/20">
+          <CardContent className="p-6">
+            <div className="flex items-start gap-4">
+              <Key className="w-7 h-7 text-sage shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="font-semibold mb-1">Ready for your own desk?</h3>
+                <p className="text-sm text-muted mb-4">
+                  Desk members get a permanent door code, 24/7 access, and a path to co-op ownership.
+                  Hot desks start at $200/month.
+                </p>
+                <a href="mailto:boulder.regenhub@gmail.com?subject=Interested in desk membership">
+                  <Button className="btn-glass gap-2 text-sm">
+                    <Mail className="w-4 h-4" />
+                    Inquire about membership
+                  </Button>
+                </a>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

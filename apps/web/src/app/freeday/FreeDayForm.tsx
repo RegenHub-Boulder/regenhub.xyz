@@ -21,6 +21,9 @@ import {
   ArrowRight,
   Clock,
   UserCheck,
+  Ticket,
+  Key,
+  Mail,
 } from "lucide-react";
 import HubEssentials from "@/components/portal/HubEssentials";
 import regenHubFull from "@/assets/regenhub-full.svg";
@@ -276,28 +279,71 @@ export default function FreeDayForm({
 
   if (claim?.status === "expired") {
     return (
-      <div className="min-h-screen flex items-center justify-center px-6">
-        <Card className="glass-panel-strong max-w-md w-full">
-          <CardContent className="p-10 text-center">
-            <Calendar className="w-12 h-12 text-muted mx-auto mb-4" />
-            <h1 className="text-2xl font-bold text-forest mb-3">
-              Free Day Expired
+      <div className="min-h-screen px-6 py-12">
+        <div className="max-w-2xl mx-auto space-y-8">
+          <div className="text-center">
+            <Link href="/">
+              <Image
+                src={regenHubFull}
+                alt="RegenHub"
+                height={80}
+                className="h-20 w-auto mx-auto mb-6 hover:opacity-80 transition-opacity"
+              />
+            </Link>
+            <h1 className="text-3xl md:text-4xl font-bold text-forest mb-2">
+              Hope You Enjoyed Your Day!
             </h1>
-            <p className="text-muted mb-6">
-              Your free day reservation for{" "}
+            <p className="text-muted">
+              Your free day on{" "}
               <strong className="text-foreground">
                 {formatDate(claim.claimed_date)}
               </strong>{" "}
-              has passed. Ready to come back?
+              has passed. Here&apos;s how to come back.
             </p>
-            <Link href="/portal/passes">
-              <Button className="btn-primary-glass gap-2">
-                Get Day Passes
-                <ArrowRight className="w-4 h-4" />
-              </Button>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-4">
+            <Card className="glass-panel hover-lift">
+              <CardContent className="p-6">
+                <Ticket className="w-8 h-8 text-gold mb-3" />
+                <h3 className="font-semibold mb-1">Day Passes</h3>
+                <p className="text-2xl font-bold text-gold mb-2">$25/day</p>
+                <p className="text-sm text-muted mb-4">
+                  Come back anytime with a day pass. No commitment, just buy a pass and get a door code.
+                </p>
+                <Link href="/portal/passes">
+                  <Button className="btn-primary-glass w-full gap-2">
+                    Get Day Passes
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+
+            <Card className="glass-panel hover-lift">
+              <CardContent className="p-6">
+                <Key className="w-8 h-8 text-sage mb-3" />
+                <h3 className="font-semibold mb-1">Desk Membership</h3>
+                <p className="text-2xl font-bold text-gold mb-2">From $200/mo</p>
+                <p className="text-sm text-muted mb-4">
+                  Get your own desk, a permanent door code, 24/7 access, and a path to co-op ownership.
+                </p>
+                <a href="mailto:boulder.regenhub@gmail.com?subject=Interested in desk membership">
+                  <Button className="btn-glass w-full gap-2">
+                    <Mail className="w-4 h-4" />
+                    Inquire
+                  </Button>
+                </a>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="text-center">
+            <Link href="/portal" className="text-sm text-muted hover:text-sage transition-colors underline">
+              Go to your portal
             </Link>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     );
   }
@@ -349,16 +395,32 @@ export default function FreeDayForm({
 
           <HubEssentials defaultExpanded freeDay />
 
-          <div className="text-center">
-            <p className="text-sm text-muted mb-4">
-              Enjoyed your day? Come back anytime with a day pass!
-            </p>
-            <Link href="/portal/passes">
-              <Button className="btn-primary-glass gap-2">
-                Get Day Passes
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-            </Link>
+          <div className="glass-panel-subtle p-6 rounded-xl">
+            <h3 className="text-sm font-semibold text-forest mb-4 text-center">
+              Want to come back?
+            </h3>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="text-center">
+                <Ticket className="w-6 h-6 text-gold mx-auto mb-2" />
+                <p className="text-sm font-medium mb-1">Day Pass — $25</p>
+                <p className="text-xs text-muted mb-3">No commitment, just show up</p>
+                <Link href="/portal/passes">
+                  <Button size="sm" className="btn-primary-glass gap-1.5 text-xs">
+                    Get passes <ArrowRight className="w-3 h-3" />
+                  </Button>
+                </Link>
+              </div>
+              <div className="text-center">
+                <Key className="w-6 h-6 text-sage mx-auto mb-2" />
+                <p className="text-sm font-medium mb-1">Desk — from $200/mo</p>
+                <p className="text-xs text-muted mb-3">Your own desk + 24/7 access</p>
+                <a href="mailto:boulder.regenhub@gmail.com?subject=Interested in desk membership">
+                  <Button size="sm" className="btn-glass gap-1.5 text-xs">
+                    <Mail className="w-3 h-3" /> Inquire
+                  </Button>
+                </a>
+              </div>
+            </div>
           </div>
         </div>
       </div>

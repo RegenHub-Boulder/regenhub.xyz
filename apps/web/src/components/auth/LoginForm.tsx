@@ -113,9 +113,11 @@ export function LoginForm() {
         {loading ? "Sending…" : "Send Magic Link"}
       </Button>
       <p className="text-center text-xs text-muted">
-        Only registered members can sign in.
-        <br />
-        Contact an admin if you need access.
+        New here?{" "}
+        <a href="/freeday" className="underline hover:text-sage transition-colors">
+          Try a free day
+        </a>{" "}
+        to get started.
       </p>
     </form>
   );
