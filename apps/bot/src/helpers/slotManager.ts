@@ -74,13 +74,13 @@ function todayParts(): { year: number; month: number; day: number; dayOfWeek: nu
 }
 
 export function calculateDayPassExpiration(): Date {
-  // Day passes expire at 9 PM Mountain Time today (or tomorrow if already past 9 PM)
+  // Day passes expire at 6 PM Mountain Time today (or tomorrow if already past 6 PM)
   const now = new Date();
   const { year, month, day } = todayParts();
-  const exp = dateAtLocalTime(year, month, day, 21, 0);
+  const exp = dateAtLocalTime(year, month, day, 18, 0);
 
   if (exp <= now) {
-    // Already past 9 PM — expire tomorrow at 9 PM
+    // Already past 6 PM — expire tomorrow at 6 PM
     const tomorrow = new Date(exp.getTime() + 24 * 60 * 60 * 1000);
     return tomorrow;
   }

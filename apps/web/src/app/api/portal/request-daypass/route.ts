@@ -2,6 +2,44 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { setUserCode, formatLockWarning, generateRandomCode, DAY_CODE_SLOT_MIN, DAY_CODE_SLOT_MAX } from "@regenhub/shared";
 
+const TIMEZONE = "America/Denver";
+
+/** Create a Date for a specific local time in Mountain Time. */
+function dateAtLocalTime(year: number, month: number, day: number, hour: number, minute: number): Date {
+  const guess = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
+  const localStr = guess.toLocaleString("en-US", { timeZone: TIMEZONE });
+  const localAsUtc = new Date(localStr);
+  const offsetMs = guess.getTime() - localAsUtc.getTime();
+  return new Date(guess.getTime() + offsetMs);
+}
+
+/** Get today's date parts and day of week in Mountain Time. */
+function todayParts(): { year: number; month: number; day: number; dayOfWeek: number } {
+  const now = new Date();
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: TIMEZONE,
+    year: "numeric", month: "2-digit", day: "2-digit", weekday: "short",
+  });
+  const parts = fmt.formatToParts(now);
+  const year = parseInt(parts.find(p => p.type === "year")!.value);
+  const month = parseInt(parts.find(p => p.type === "month")!.value);
+  const day = parseInt(parts.find(p => p.type === "day")!.value);
+  const weekdayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const dayOfWeek = weekdayMap[parts.find(p => p.type === "weekday")!.value] ?? 0;
+  return { year, month, day, dayOfWeek };
+}
+
+/** Calculate 6 PM Mountain Time today (or tomorrow if past 6 PM). */
+function calculateDayPassExpiry(): string {
+  const now = new Date();
+  const { year, month, day } = todayParts();
+  const exp = dateAtLocalTime(year, month, day, 18, 0);
+  if (exp <= now) {
+    exp.setTime(exp.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return exp.toISOString();
+}
+
 async function findAvailableSlot(supabase: Awaited<ReturnType<typeof createClient>>): Promise<number | null> {
   const { data: usedSlots } = await supabase
     .from("day_codes")
@@ -23,10 +61,6 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const { label, expires_in_hours } = body;
 
-  const expiresAt = expires_in_hours == null
-    ? null
-    : new Date(Date.now() + Math.min(Math.max(Number(expires_in_hours) || 24, 1), 720) * 60 * 60 * 1000).toISOString();
-
   const { data: member } = await supabase
     .from("members")
     .select("id, member_type, disabled, day_passes_balance")
@@ -35,6 +69,27 @@ export async function POST(request: Request) {
 
   if (!member || member.disabled) {
     return NextResponse.json({ error: "Account not found or disabled" }, { status: 403 });
+  }
+
+  const isFullMember = member.member_type !== "day_pass";
+
+  // Day pass members: enforce 6 PM Mountain Time expiry and block weekends
+  let expiresAt: string | null;
+  if (isFullMember) {
+    // Full members get flexible expiry (as sent by client)
+    expiresAt = expires_in_hours == null
+      ? null
+      : new Date(Date.now() + Math.min(Math.max(Number(expires_in_hours) || 24, 1), 720) * 60 * 60 * 1000).toISOString();
+  } else {
+    // Day pass members: always expires at 6 PM Mountain Time, block weekends
+    const { dayOfWeek } = todayParts();
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      return NextResponse.json(
+        { error: "Day passes are available Monday–Friday. See you next week!" },
+        { status: 400 }
+      );
+    }
+    expiresAt = calculateDayPassExpiry();
   }
 
   // Atomic decrement — prevents double-spend race condition

@@ -45,7 +45,11 @@ export function RequestDayPassButton({ isFullMember, remainingUses }: Props) {
       const res = await fetch("/api/portal/request-daypass", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label: label || undefined, expires_in_hours: effectiveHours }),
+        body: JSON.stringify({
+          label: label || undefined,
+          // Day pass members: server enforces 6 PM expiry, no client-side hours needed
+          ...(isFullMember ? { expires_in_hours: effectiveHours } : {}),
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed");
@@ -87,6 +91,26 @@ export function RequestDayPassButton({ isFullMember, remainingUses }: Props) {
 
   const canGenerate = isFullMember || remainingUses > 0;
 
+  // Day pass members get a simple "Get door code" button — no options
+  if (!isFullMember) {
+    return (
+      <div className="flex flex-col items-end gap-2">
+        <Button
+          onClick={handleRequest}
+          disabled={loading || !canGenerate}
+          className="btn-primary-glass gap-2"
+          title={!canGenerate ? "No passes remaining" : undefined}
+        >
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+          {loading ? "Generating…" : "Get door code"}
+        </Button>
+        <p className="text-xs text-muted">Code expires at 6 PM today</p>
+        {error && <p className="text-xs text-red-400">{error}</p>}
+      </div>
+    );
+  }
+
+  // Full members get the full options panel
   return (
     <div className="flex flex-col items-end gap-2">
       {showForm && (
@@ -126,7 +150,7 @@ export function RequestDayPassButton({ isFullMember, remainingUses }: Props) {
             </div>
           )}
           <Input
-            placeholder={isFullMember ? "Guest name (optional)" : "Label (optional)"}
+            placeholder="Guest name (optional)"
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             className="w-52 glass-input text-sm"
@@ -152,7 +176,7 @@ export function RequestDayPassButton({ isFullMember, remainingUses }: Props) {
           title={!canGenerate ? "No uses remaining" : undefined}
         >
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-          {loading ? "Generating…" : isFullMember ? "Generate code" : "Get door code"}
+          {loading ? "Generating…" : "Generate code"}
         </Button>
       </div>
       {error && <p className="text-xs text-red-400">{error}</p>}
