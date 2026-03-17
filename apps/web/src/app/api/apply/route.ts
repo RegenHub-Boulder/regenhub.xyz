@@ -101,10 +101,12 @@ export async function POST(req: Request) {
   });
 
   // Send magic link so they can sign in and track their application
-  const { error: authError } = await supabase.auth.admin.generateLink({
-    type: "magiclink",
+  const { error: authError } = await supabase.auth.signInWithOtp({
     email: email.trim().toLowerCase(),
-    options: { redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/auth/callback?next=/portal` },
+    options: {
+      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/auth/callback?next=/portal`,
+      shouldCreateUser: true,
+    },
   });
 
   if (authError) {

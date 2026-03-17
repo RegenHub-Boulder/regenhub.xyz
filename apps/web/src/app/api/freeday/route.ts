@@ -253,11 +253,11 @@ export async function POST(req: Request) {
   }
 
   // Send magic link so they can sign in and activate
-  const { error: authError } = await admin.auth.admin.generateLink({
-    type: "magiclink",
+  const { error: authError } = await admin.auth.signInWithOtp({
     email: normalizedEmail,
     options: {
-      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/auth/callback?next=/freeday`,
+      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/auth/callback?next=/freeday`,
+      shouldCreateUser: true,
     },
   });
 
