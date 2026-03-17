@@ -263,7 +263,7 @@ export default function FreeDayForm({
               </div>
               <div className="flex items-center gap-2 text-sm text-muted">
                 <Coffee className="w-4 h-4 text-sage" />
-                Hours: 9 AM – 5 PM
+                Hours: 8 AM – 6 PM
               </div>
             </div>
           </CardContent>
@@ -389,7 +389,7 @@ export default function FreeDayForm({
               </div>
               <div className="flex items-center gap-2 text-sm text-muted">
                 <Coffee className="w-4 h-4 text-sage" />
-                Hours: 9 AM – 5 PM
+                Hours: 8 AM – 6 PM
               </div>
             </div>
             <p className="text-xs text-muted">
@@ -440,7 +440,7 @@ export default function FreeDayForm({
               </div>
               <div className="flex items-center gap-2 text-sm text-muted">
                 <Coffee className="w-4 h-4 text-sage" />
-                Hours: 9 AM – 5 PM
+                Hours: 8 AM – 6 PM
               </div>
             </div>
           </CardContent>

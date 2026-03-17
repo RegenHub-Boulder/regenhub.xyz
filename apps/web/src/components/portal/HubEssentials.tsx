@@ -75,7 +75,7 @@ export default function HubEssentials({
             {freeDay ? (
               <p>
                 Your free day pass is valid{" "}
-                <strong className="text-foreground">9 AM – 5 PM</strong>.
+                <strong className="text-foreground">8 AM – 6 PM</strong>.
                 <br />
                 Full members enjoy 24/7 access.
               </p>
@@ -83,7 +83,7 @@ export default function HubEssentials({
               <p>
                 Members have 24/7 access with their door code.
                 <br />
-                Core community hours: 9 AM – 5 PM weekdays.
+                Core community hours: 8 AM – 6 PM weekdays.
               </p>
             )}
           </Section>

@@ -22,7 +22,7 @@ function getTodayMountain(): string {
   return fmt.format(new Date()); // en-CA gives YYYY-MM-DD
 }
 
-/** Calculate 5 PM Mountain Time today (free day passes end at 5 PM) */
+/** Calculate 6 PM Mountain Time today (free day passes end at 6 PM) */
 function calculateFreeDayExpiration(): Date {
   const now = new Date();
   const fmt = new Intl.DateTimeFormat("en-US", {
@@ -36,15 +36,15 @@ function calculateFreeDayExpiration(): Date {
   const month = parseInt(parts.find((p) => p.type === "month")!.value);
   const day = parseInt(parts.find((p) => p.type === "day")!.value);
 
-  // Build 5 PM local time via UTC offset calculation
-  const guess = new Date(Date.UTC(year, month - 1, day, 17, 0, 0));
+  // Build 6 PM local time via UTC offset calculation
+  const guess = new Date(Date.UTC(year, month - 1, day, 18, 0, 0));
   const localStr = guess.toLocaleString("en-US", { timeZone: TIMEZONE });
   const localAsUtc = new Date(localStr);
   const offsetMs = guess.getTime() - localAsUtc.getTime();
   const exp = new Date(guess.getTime() + offsetMs);
 
   if (exp <= now) {
-    // Already past 5 PM — expire tomorrow at 5 PM
+    // Already past 6 PM — expire tomorrow at 6 PM
     return new Date(exp.getTime() + 24 * 60 * 60 * 1000);
   }
   return exp;

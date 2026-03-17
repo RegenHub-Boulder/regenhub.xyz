@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import Link from "next/link";
-import { Key, Ticket, User, ClipboardList, CheckCircle, Clock, MessageCircle } from "lucide-react";
+import { Key, Ticket, User, ClipboardList, CheckCircle, Clock, MessageCircle, Zap, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import HubEssentials from "@/components/portal/HubEssentials";
 import InviteCard from "@/components/portal/InviteCard";
@@ -38,6 +38,22 @@ export default async function PortalPage() {
         .eq("id", matched.id);
       member = { ...matched, supabase_user_id: user.id };
     }
+  }
+
+  // Look up free day claim for this user (used for day_pass members auto-created from free day)
+  // Uses service client since free_day_claims isn't in the typed RLS schema
+  let freeDayClaim: { id: number; claimed_date: string; status: string } | null = null;
+  if (member?.member_type === "day_pass") {
+    const admin = createServiceClient();
+    const { data } = await admin
+      .from("free_day_claims")
+      .select("id, claimed_date, status")
+      .eq("supabase_user_id", user.id)
+      .in("status", ["pending", "reserved", "activated"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+    freeDayClaim = data;
   }
 
   if (!member) {
@@ -126,13 +142,45 @@ export default async function PortalPage() {
           </Link>
         )}
 
+        {freeDayClaim && !isFullMember && (
+          <Link href="/freeday">
+            <Card className="glass-panel hover-lift cursor-pointer border border-gold/20">
+              <CardContent className="p-6">
+                {freeDayClaim.status === "activated" ? (
+                  <>
+                    <Zap className="w-8 h-8 text-gold mb-3" />
+                    <h3 className="font-semibold mb-1">Free Day Active</h3>
+                    <p className="text-sm text-muted">View your door code</p>
+                  </>
+                ) : freeDayClaim.status === "reserved" ? (
+                  <>
+                    <Calendar className="w-8 h-8 text-gold mb-3" />
+                    <h3 className="font-semibold mb-1">Free Day Reserved</h3>
+                    <p className="text-sm text-muted">
+                      {freeDayClaim.claimed_date === new Intl.DateTimeFormat("en-CA", { timeZone: "America/Denver" }).format(new Date())
+                        ? "Today! Tap to get your door code"
+                        : `Reserved for ${new Date(freeDayClaim.claimed_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Clock className="w-8 h-8 text-sage mb-3" />
+                    <h3 className="font-semibold mb-1">Application Pending</h3>
+                    <p className="text-sm text-muted">Your free day is being reviewed</p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </Link>
+        )}
+
         <Link href="/portal/passes">
           <Card className="glass-panel hover-lift cursor-pointer">
             <CardContent className="p-6">
               <Ticket className="w-8 h-8 text-sage mb-3" />
               <h3 className="font-semibold mb-1">Day Passes</h3>
               <p className="text-sm text-muted">
-                {isFullMember ? "Generate guest day pass codes" : "Request a door code for today"}
+                {isFullMember ? "Generate guest day pass codes" : "Buy day passes for door access"}
               </p>
             </CardContent>
           </Card>
