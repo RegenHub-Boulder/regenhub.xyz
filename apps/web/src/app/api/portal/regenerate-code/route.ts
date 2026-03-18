@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { setUserCode, formatLockWarning, generateRandomCode } from "@regenhub/shared";
+import { setUserCode, formatLockStatus, generateRandomCode, LOCK_FAILURE_MSG } from "@regenhub/shared";
 
 export async function POST(req: Request) {
   try {
@@ -33,14 +33,14 @@ export async function POST(req: Request) {
 
     const newCode = customCode ?? generateRandomCode();
 
-    let lockWarning: string | null = null;
+    let lockStatus: string;
     try {
       const lockResults = await setUserCode(member.pin_code_slot, newCode);
-      lockWarning = formatLockWarning(lockResults);
+      lockStatus = formatLockStatus(lockResults);
     } catch (err) {
       console.error("[Lock] Failed to set code:", err);
       return NextResponse.json(
-        { error: "Couldn't reach the door locks. This is usually temporary — try again in a moment." },
+        { error: LOCK_FAILURE_MSG },
         { status: 502 }
       );
     }
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Lock updated but DB save failed" }, { status: 500 });
     }
 
-    return NextResponse.json({ code: newCode, lock_warning: lockWarning });
+    return NextResponse.json({ code: newCode, lock_status: lockStatus });
   } catch (err) {
     console.error("[regenerate-code] Unhandled error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

@@ -33,7 +33,7 @@ export function QuickCodeForm({ members }: Props) {
   const [memberId, setMemberId] = useState<number | "">("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ code: string; expires_at: string | null; pin_slot: number; lock_warning?: string | null } | null>(null);
+  const [result, setResult] = useState<{ code: string; expires_at: string | null; pin_slot: number; lock_status?: string | null } | null>(null);
   const [copied, setCopied] = useState(false);
   const router = useRouter();
 
@@ -114,8 +114,10 @@ export function QuickCodeForm({ members }: Props) {
                 : "No expiry — revoke manually"}
             </p>
             {copied && <p className="text-xs text-sage mt-1">Copied to clipboard</p>}
-            {result.lock_warning && (
-              <p className="text-sm text-amber-400 mt-2">{result.lock_warning}</p>
+            {result.lock_status && (
+              <p className={`text-sm mt-2 ${result.lock_status.includes("didn't respond") ? "text-amber-400" : "text-emerald-400"}`}>
+                {result.lock_status}
+              </p>
             )}
           </div>
           <Button variant="ghost" size="sm" className="btn-glass text-xs" onClick={() => { setResult(null); setCopied(false); }}>

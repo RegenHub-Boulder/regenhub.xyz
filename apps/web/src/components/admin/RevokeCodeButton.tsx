@@ -24,8 +24,8 @@ export function RevokeCodeButton({ codeId, code }: { codeId: number; code: strin
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error ?? "Failed to revoke");
       setRevoked(true);
-      if (json.lock_warning) {
-        setError(json.lock_warning);
+      if (json.lock_status) {
+        setError(json.lock_status);
       }
       setTimeout(() => router.refresh(), 1000);
     } catch (err) {

@@ -85,8 +85,8 @@ export function MemberForm({ member, initialEmail, initialUserId }: Props) {
       const res = await fetch(`/api/admin/members/${member!.id}`, { method: "DELETE" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Delete failed");
-      if (json.lock_warning) {
-        alert(`Member deleted, but: ${json.lock_warning}`);
+      if (json.lock_status) {
+        alert(`Member deleted. Lock status: ${json.lock_status}`);
       }
       router.push("/admin/members");
       router.refresh();

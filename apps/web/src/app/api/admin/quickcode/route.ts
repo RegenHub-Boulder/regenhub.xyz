@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/admin";
-import { setUserCode, formatLockWarning, generateRandomCode, DAY_CODE_SLOT_MIN, DAY_CODE_SLOT_MAX } from "@regenhub/shared";
+import { setUserCode, formatLockStatus, generateRandomCode, DAY_CODE_SLOT_MIN, DAY_CODE_SLOT_MAX, LOCK_FAILURE_MSG } from "@regenhub/shared";
 
 async function findAvailableSlot(supabase: Awaited<ReturnType<typeof createClient>>): Promise<number | null> {
   const { data: usedSlots } = await supabase
@@ -48,14 +48,14 @@ export async function POST(request: Request) {
 
   const code = generateRandomCode();
 
-  let lockWarning: string | null = null;
+  let lockStatus: string;
   try {
     const lockResults = await setUserCode(slot, code);
-    lockWarning = formatLockWarning(lockResults);
+    lockStatus = formatLockStatus(lockResults);
   } catch (err) {
     console.error("[Lock] Failed to set quick code:", err);
     return NextResponse.json(
-      { error: "Couldn't reach the door locks. This is usually temporary — try again in a moment." },
+      { error: LOCK_FAILURE_MSG },
       { status: 502 }
     );
   }
@@ -78,5 +78,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Code set but DB save failed" }, { status: 500 });
   }
 
-  return NextResponse.json({ code, expires_at: expiresAt, pin_slot: slot, lock_warning: lockWarning });
+  return NextResponse.json({ code, expires_at: expiresAt, pin_slot: slot, lock_status: lockStatus });
 }

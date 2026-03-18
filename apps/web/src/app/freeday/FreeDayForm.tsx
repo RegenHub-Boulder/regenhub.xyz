@@ -141,7 +141,7 @@ export default function FreeDayForm({
   const [expiresAt, setExpiresAt] = useState<string | null>(
     existingCode?.expires_at ?? null
   );
-  const [lockWarning, setLockWarning] = useState<string | null>(null);
+  const [lockStatus, setLockStatus] = useState<string | null>(null);
 
   const isInvited = !!inviter;
 
@@ -192,7 +192,7 @@ export default function FreeDayForm({
 
       setDoorCode(json.code);
       setExpiresAt(json.expires_at);
-      setLockWarning(json.lock_warning ?? null);
+      setLockStatus(json.lock_status ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -387,8 +387,10 @@ export default function FreeDayForm({
                   </strong>
                 </p>
               )}
-              {lockWarning && (
-                <p className="text-sm text-amber-400 mt-2">{lockWarning}</p>
+              {lockStatus && (
+                <p className={`text-sm mt-2 ${lockStatus.includes("didn't respond") ? "text-amber-400" : "text-emerald-400"}`}>
+                  {lockStatus}
+                </p>
               )}
             </CardContent>
           </Card>

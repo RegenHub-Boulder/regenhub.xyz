@@ -4,10 +4,11 @@ import { requireAdmin } from "@/lib/admin";
 import {
   setUserCode,
   clearUserCode,
-  formatLockWarning,
+  formatLockStatus,
   generateRandomCode,
   MEMBER_SLOT_MIN,
   MEMBER_SLOT_MAX,
+  LOCK_FAILURE_MSG,
 } from "@regenhub/shared";
 
 const PERMANENT_TYPES = ["cold_desk", "hot_desk", "hub_friend"];
@@ -98,17 +99,16 @@ export async function PATCH(
   }
 
   // Sync lock
-  let lockWarning: string | null = null;
+  let lockStatus: string | null = null;
 
   if ("disabled" in update && data.disabled && data.pin_code_slot) {
     // Member was just disabled — clear their lock code
     try {
       const lockResults = await clearUserCode(data.pin_code_slot);
-      lockWarning = formatLockWarning(lockResults);
+      lockStatus = formatLockStatus(lockResults);
     } catch (lockErr) {
       console.error("[AdminMember PATCH] Lock clear failed:", lockErr);
-      lockWarning =
-        "Member disabled but lock code could not be cleared — run Lock Sync";
+      lockStatus = `Member disabled but lock code could not be cleared — run Lock Sync. ${LOCK_FAILURE_MSG}`;
     }
   } else if (
     data.pin_code &&
@@ -119,14 +119,14 @@ export async function PATCH(
     // PIN was updated or member was upgraded — sync to lock
     try {
       const lockResults = await setUserCode(data.pin_code_slot, data.pin_code);
-      lockWarning = formatLockWarning(lockResults);
+      lockStatus = formatLockStatus(lockResults);
     } catch (lockErr) {
       console.error("[AdminMember PATCH] Lock sync failed:", lockErr);
-      lockWarning = "Member updated but lock sync failed — run Lock Sync";
+      lockStatus = `Member updated but lock sync failed — run Lock Sync. ${LOCK_FAILURE_MSG}`;
     }
   }
 
-  return NextResponse.json({ member: data, warning: lockWarning });
+  return NextResponse.json({ member: data, lock_status: lockStatus });
 }
 
 export async function DELETE(
@@ -148,15 +148,14 @@ export async function DELETE(
     .single();
 
   // Clear the lock code if they have a slot assigned
-  let lockWarning: string | null = null;
+  let lockStatus: string | null = null;
   if (member?.pin_code_slot) {
     try {
       const lockResults = await clearUserCode(member.pin_code_slot);
-      lockWarning = formatLockWarning(lockResults);
+      lockStatus = formatLockStatus(lockResults);
     } catch (err) {
       console.error("[AdminMember DELETE] Failed to clear lock code:", err);
-      lockWarning =
-        "Could not clear door code from lock — run Lock Sync after deleting";
+      lockStatus = `Could not clear door code from lock — run Lock Sync after deleting. ${LOCK_FAILURE_MSG}`;
     }
   }
 
@@ -169,5 +168,5 @@ export async function DELETE(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true, lock_warning: lockWarning });
+  return NextResponse.json({ success: true, lock_status: lockStatus });
 }

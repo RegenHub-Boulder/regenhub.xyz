@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Plus, Settings2, Infinity } from "lucide-react";
+import { Loader2, Plus, Settings2, Infinity, CheckCircle2, AlertTriangle } from "lucide-react";
 
 type ExpiryOption = { label: string; hours: number | null };
 
@@ -30,7 +30,11 @@ export function RequestDayPassButton({ isFullMember, remainingUses }: Props) {
   const [expiryHours, setExpiryHours] = useState<number | null>(24);
   const [customHours, setCustomHours] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ code: string; expires_at: string | null; lock_warning?: string | null } | null>(null);
+  const [result, setResult] = useState<{
+    code: string;
+    expires_at: string | null;
+    lock_status?: string | null;
+  } | null>(null);
   const router = useRouter();
 
   const isCustom = expiryHours === -1;
@@ -65,6 +69,9 @@ export function RequestDayPassButton({ isFullMember, remainingUses }: Props) {
     }
   }
 
+  // Lock status has a warning if it contains "didn't respond" or "contact"
+  const hasLockWarning = result?.lock_status?.toLowerCase().includes("didn't respond");
+
   if (result) {
     return (
       <div className="text-center">
@@ -79,8 +86,14 @@ export function RequestDayPassButton({ isFullMember, remainingUses }: Props) {
               })}</>
             : "No expiry — revoke manually to remove"}
         </p>
-        {result.lock_warning && (
-          <p className="text-xs text-amber-400 mt-2">⚠️ {result.lock_warning}</p>
+        {result.lock_status && (
+          <div className={`flex items-center justify-center gap-1.5 mt-2 text-xs ${hasLockWarning ? "text-amber-400" : "text-emerald-400"}`}>
+            {hasLockWarning
+              ? <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+            }
+            <span>{result.lock_status}</span>
+          </div>
         )}
         <Button variant="ghost" className="btn-glass mt-3 text-xs" onClick={() => setResult(null)}>
           Generate another
@@ -102,9 +115,10 @@ export function RequestDayPassButton({ isFullMember, remainingUses }: Props) {
           title={!canGenerate ? "No passes remaining" : undefined}
         >
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-          {loading ? "Generating…" : "Get door code"}
+          {loading ? "Setting code on locks…" : "Get door code"}
         </Button>
-        <p className="text-xs text-muted">Code expires at 6 PM today</p>
+        {loading && <p className="text-xs text-muted animate-pulse">Programming front and back door locks...</p>}
+        {!loading && <p className="text-xs text-muted">Code expires at 6 PM today</p>}
         {error && <p className="text-xs text-red-400">{error}</p>}
       </div>
     );
@@ -176,9 +190,10 @@ export function RequestDayPassButton({ isFullMember, remainingUses }: Props) {
           title={!canGenerate ? "No uses remaining" : undefined}
         >
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-          {loading ? "Generating…" : "Generate code"}
+          {loading ? "Setting code on locks…" : "Generate code"}
         </Button>
       </div>
+      {loading && <p className="text-xs text-muted animate-pulse">Programming front and back door locks...</p>}
       {error && <p className="text-xs text-red-400">{error}</p>}
     </div>
   );

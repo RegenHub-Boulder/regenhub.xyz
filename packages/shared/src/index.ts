@@ -10,5 +10,8 @@ export {
   setUserCode,
   clearUserCode,
   formatLockWarning,
+  formatLockStatus,
+  LOCK_FAILURE_MSG,
+  SUPPORT_CONTACT,
   type LockResult,
 } from "./homeAssistant.js";

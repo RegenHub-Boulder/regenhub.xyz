@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { clearUserCode, formatLockWarning } from "@regenhub/shared";
+import { clearUserCode, formatLockStatus, LOCK_FAILURE_MSG } from "@regenhub/shared";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -31,14 +31,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  let lockWarning: string | null = null;
+  let lockStatus: string;
   try {
     const lockResults = await clearUserCode(code.pin_slot);
-    lockWarning = formatLockWarning(lockResults);
+    lockStatus = formatLockStatus(lockResults);
   } catch (err) {
     console.error("[Lock] Failed to clear code from HA:", err);
     return NextResponse.json(
-      { error: "Couldn't reach the door locks. This is usually temporary — try again in a moment." },
+      { error: LOCK_FAILURE_MSG },
       { status: 502 }
     );
   }
@@ -53,5 +53,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Lock cleared but DB update failed" }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true, lock_warning: lockWarning });
+  return NextResponse.json({ success: true, lock_status: lockStatus });
 }

@@ -3,10 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import {
   setUserCode,
-  formatLockWarning,
+  formatLockStatus,
   generateRandomCode,
   DAY_CODE_SLOT_MIN,
   DAY_CODE_SLOT_MAX,
+  LOCK_FAILURE_MSG,
 } from "@regenhub/shared";
 
 const TIMEZONE = process.env.TIMEZONE ?? "America/Denver";
@@ -150,7 +151,7 @@ export async function POST() {
       return NextResponse.json({
         code: existingCode.code,
         expires_at: existingCode.expires_at,
-        lock_warning: null,
+        lock_status: null,
         already_activated: true,
       });
     }
@@ -197,17 +198,14 @@ export async function POST() {
   const expiresAt = calculateFreeDayExpiration();
 
   // Set code on the physical locks
-  let lockWarning: string | null = null;
+  let lockStatus: string;
   try {
     const lockResults = await setUserCode(slot, code);
-    lockWarning = formatLockWarning(lockResults);
+    lockStatus = formatLockStatus(lockResults);
   } catch (err) {
     console.error("[FreeDay] Lock error:", err);
     return NextResponse.json(
-      {
-        error:
-          "Couldn't reach the door locks. This is usually temporary — try again in a moment.",
-      },
+      { error: LOCK_FAILURE_MSG },
       { status: 502 }
     );
   }
@@ -252,6 +250,6 @@ export async function POST() {
   return NextResponse.json({
     code,
     expires_at: expiresAt.toISOString(),
-    lock_warning: lockWarning,
+    lock_status: lockStatus,
   });
 }

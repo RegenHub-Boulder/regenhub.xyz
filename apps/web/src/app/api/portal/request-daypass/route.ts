@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { setUserCode, formatLockWarning, generateRandomCode, DAY_CODE_SLOT_MIN, DAY_CODE_SLOT_MAX } from "@regenhub/shared";
+import { setUserCode, formatLockStatus, generateRandomCode, DAY_CODE_SLOT_MIN, DAY_CODE_SLOT_MAX, LOCK_FAILURE_MSG } from "@regenhub/shared";
 
 const TIMEZONE = "America/Denver";
 
@@ -114,16 +114,16 @@ export async function POST(request: Request) {
 
   const code = generateRandomCode();
 
-  let lockWarning: string | null = null;
+  let lockStatus: string;
   try {
     const lockResults = await setUserCode(slot, code);
-    lockWarning = formatLockWarning(lockResults);
+    lockStatus = formatLockStatus(lockResults);
   } catch (err) {
     console.error("[Lock] Failed to set day code:", err);
     // Refund — couldn't program lock
     await supabase.rpc("increment_day_pass_balance", { p_member_id: member.id, p_amount: 1 });
     return NextResponse.json(
-      { error: "Couldn't reach the door locks. This is usually temporary — try again in a moment." },
+      { error: LOCK_FAILURE_MSG },
       { status: 502 }
     );
   }
@@ -149,6 +149,6 @@ export async function POST(request: Request) {
     code,
     expires_at: expiresAt,
     balance_remaining: newBalance as number,
-    lock_warning: lockWarning,
+    lock_status: lockStatus,
   });
 }

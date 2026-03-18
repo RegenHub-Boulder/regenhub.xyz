@@ -48,7 +48,7 @@ export function RegenerateCodeButton({ hasSlot }: Props) {
       if (!res.ok) throw new Error(json.error ?? "Failed");
       setCustomCode("");
       setConfirming(false);
-      if (json.lock_warning) setWarning(json.lock_warning);
+      if (json.lock_status) setWarning(json.lock_status);
       setSuccess(true);
       setTimeout(() => {
         setSuccess(false);
