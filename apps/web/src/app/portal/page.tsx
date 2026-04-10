@@ -116,9 +116,8 @@ export default async function PortalPage() {
   const typeLabel = member.member_type === "cold_desk" ? "Cold Desk" : member.member_type === "hot_desk" ? "Hot Desk" : member.member_type === "hub_friend" ? "Hub Friend" : "Day Pass";
 
   // Show onboarding expanded for new members (no pin code set or account < 7 days old)
-  const accountAgeMs =
-    // eslint-disable-next-line react-hooks/purity -- server component, renders once
-    Date.now() - new Date(member.created_at).getTime();
+  // eslint-disable-next-line react-hooks/purity -- server component, renders once
+  const accountAgeMs = Date.now() - new Date(member.created_at).getTime();
   const isNewMember = !member.pin_code || accountAgeMs < 7 * 24 * 60 * 60 * 1000;
 
   return (
