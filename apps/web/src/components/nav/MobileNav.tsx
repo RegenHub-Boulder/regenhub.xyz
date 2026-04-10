@@ -21,10 +21,10 @@ export function MobileNav({ links, trailing }: MobileNavProps) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
-  // Close drawer on route change
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
+  // Close drawer on route change — links already call setOpen(false) on click,
+  // but this catches programmatic navigation and browser back/forward.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: sync UI state with external navigation
+  useEffect(() => { setOpen(false); }, [pathname]);
 
   // Prevent body scroll when drawer is open
   useEffect(() => {
