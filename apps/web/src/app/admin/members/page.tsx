@@ -65,6 +65,7 @@ function AuthUserRow({ u }: { u: AdminUser }) {
     <>
       {displayName ?? <span className="text-muted italic">—</span>}
       {u.member?.is_admin && <span className="ml-2 text-xs text-gold">[Admin]</span>}
+      {u.member?.is_coop_member && <span className="ml-1 text-xs text-sage">[Co-op]</span>}
       {!u.member && u.application && (
         <span className="ml-2 text-xs text-muted italic">({u.application.membership_interest.replace(/_/g, " ")})</span>
       )}
@@ -115,6 +116,7 @@ function LegacyMemberRow({ m }: { m: Member }) {
     <>
       {m.name}
       {m.is_admin && <span className="ml-2 text-xs text-gold">[Admin]</span>}
+      {m.is_coop_member && <span className="ml-1 text-xs text-sage">[Co-op]</span>}
     </>
   );
   const action = (
@@ -153,6 +155,8 @@ export default function UsersPage() {
   const [data, setData] = useState<AdminUsersResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
 
   useEffect(() => {
     fetch("/api/admin/users")
@@ -163,28 +167,69 @@ export default function UsersPage() {
 
   const noProfileCount = data?.users.filter((u) => !u.member).length ?? 0;
 
-  // Client-side search filter
+  // Client-side search + filter
   const filteredUsers = useMemo(() => {
-    if (!data || !search.trim()) return data?.users ?? [];
-    const q = search.toLowerCase();
-    return data.users.filter((u) => {
-      const name = (u.member?.name ?? u.application?.name ?? "").toLowerCase();
-      const email = u.email.toLowerCase();
-      const tg = (u.member?.telegram_username ?? "").toLowerCase();
-      return name.includes(q) || email.includes(q) || tg.includes(q);
-    });
-  }, [data, search]);
+    if (!data) return [];
+    let result = data.users;
+
+    // Type filter
+    if (typeFilter === "no_profile") {
+      result = result.filter((u) => !u.member);
+    } else if (typeFilter !== "all") {
+      result = result.filter((u) => u.member?.member_type === typeFilter);
+    }
+
+    // Status filter
+    if (statusFilter === "active") {
+      result = result.filter((u) => u.member && !u.member.disabled);
+    } else if (statusFilter === "disabled") {
+      result = result.filter((u) => u.member?.disabled);
+    }
+
+    // Search
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter((u) => {
+        const name = (u.member?.name ?? u.application?.name ?? "").toLowerCase();
+        const email = u.email.toLowerCase();
+        const tg = (u.member?.telegram_username ?? "").toLowerCase();
+        return name.includes(q) || email.includes(q) || tg.includes(q);
+      });
+    }
+
+    return result;
+  }, [data, search, typeFilter, statusFilter]);
 
   const filteredLegacy = useMemo(() => {
-    if (!data || !search.trim()) return data?.legacyMembers ?? [];
-    const q = search.toLowerCase();
-    return data.legacyMembers.filter((m) => {
-      const name = m.name.toLowerCase();
-      const email = (m.email ?? "").toLowerCase();
-      const tg = (m.telegram_username ?? "").toLowerCase();
-      return name.includes(q) || email.includes(q) || tg.includes(q);
-    });
-  }, [data, search]);
+    if (!data) return [];
+    let result = data.legacyMembers;
+
+    // Type filter
+    if (typeFilter === "no_profile") return [];
+    if (typeFilter !== "all") {
+      result = result.filter((m) => m.member_type === typeFilter);
+    }
+
+    // Status filter
+    if (statusFilter === "active") {
+      result = result.filter((m) => !m.disabled);
+    } else if (statusFilter === "disabled") {
+      result = result.filter((m) => m.disabled);
+    }
+
+    // Search
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter((m) => {
+        const name = m.name.toLowerCase();
+        const email = (m.email ?? "").toLowerCase();
+        const tg = (m.telegram_username ?? "").toLowerCase();
+        return name.includes(q) || email.includes(q) || tg.includes(q);
+      });
+    }
+
+    return result;
+  }, [data, search, typeFilter, statusFilter]);
 
   return (
     <div className="space-y-6">
@@ -202,24 +247,47 @@ export default function UsersPage() {
         </Link>
       </div>
 
-      {/* Search bar */}
+      {/* Search + filters */}
       {data && (
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
-          <Input
-            placeholder="Search by name, email, or Telegram..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="glass-input pl-9 pr-8"
-          />
-          {search && (
-            <button
-              onClick={() => setSearch("")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-foreground"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
+        <div className="flex flex-wrap gap-3 items-center">
+          <div className="relative max-w-sm flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
+            <Input
+              placeholder="Search by name, email, or Telegram..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="glass-input pl-9 pr-8"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-foreground"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="rounded-md px-3 py-2 text-sm glass-input"
+          >
+            <option value="all">All types</option>
+            <option value="cold_desk">Cold Desk</option>
+            <option value="hot_desk">Hot Desk</option>
+            <option value="hub_friend">Hub Friend</option>
+            <option value="day_pass">Day Pass</option>
+            <option value="no_profile">No Profile</option>
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="rounded-md px-3 py-2 text-sm glass-input"
+          >
+            <option value="all">All statuses</option>
+            <option value="active">Active</option>
+            <option value="disabled">Disabled</option>
+          </select>
         </div>
       )}
 
