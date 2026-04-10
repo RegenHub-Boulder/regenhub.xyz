@@ -4,6 +4,8 @@ import { ClaimsFilter } from "@/components/admin/ClaimsFilter";
 export const metadata = { title: "Free Day Claims — Admin" };
 
 export default async function ClaimsPage() {
+  // Service client needed because free_day_claims isn't in the typed schema.
+  // Auth is enforced by the admin layout (session + is_admin check).
   const admin = createServiceClient();
 
   const { data: claims } = await admin

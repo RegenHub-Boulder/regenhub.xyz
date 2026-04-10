@@ -13,16 +13,24 @@ interface Props {
 export function ClaimActions({ claimId, currentStatus }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function updateStatus(status: string) {
     setBusy(true);
+    setError(null);
     try {
       const res = await fetch("/api/admin/claims", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: claimId, status }),
       });
-      if (res.ok) router.refresh();
+      if (!res.ok) {
+        const json = await res.json();
+        throw new Error(json.error ?? "Failed to update claim");
+      }
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setBusy(false);
     }
@@ -70,6 +78,7 @@ export function ClaimActions({ claimId, currentStatus }: Props) {
           Revert to Pending
         </Button>
       )}
+      {error && <p className="text-sm text-red-400">{error}</p>}
     </div>
   );
 }
