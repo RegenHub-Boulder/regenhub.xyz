@@ -4,8 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RequestDayPassButton } from "@/components/portal/RequestDayPassButton";
 import { RevokeCodeButton } from "@/components/portal/RevokeCodeButton";
-import { Ticket, Clock, ShoppingCart, Key, ArrowRight, Mail } from "lucide-react";
-import Link from "next/link";
+import { Ticket, Clock, ShoppingCart, Key, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export const metadata = { title: "Live Codes — RegenHub" };
@@ -102,6 +101,7 @@ export default async function PassesPage() {
           <div className="space-y-3">
             {activeCodes.map((code) => {
               const expiresAt = code.expires_at ? new Date(code.expires_at) : null;
+              // eslint-disable-next-line react-hooks/purity -- server component, renders once
               const msLeft = expiresAt ? expiresAt.getTime() - Date.now() : null;
               const hoursLeft = msLeft != null ? Math.max(0, Math.ceil(msLeft / 3600000)) : null;
               const timeLabel = hoursLeft == null

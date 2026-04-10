@@ -7,6 +7,7 @@ import { Users, Key, Activity, Zap, UserPlus, AlertTriangle, ClipboardList } fro
 export default async function AdminPage() {
   const supabase = await createClient();
 
+  // eslint-disable-next-line react-hooks/purity -- server component, renders once
   const oneHourFromNow = new Date(Date.now() + 60 * 60 * 1000).toISOString();
 
   const [

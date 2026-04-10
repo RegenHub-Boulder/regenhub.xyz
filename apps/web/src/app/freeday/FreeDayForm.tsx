@@ -65,13 +65,6 @@ function getTodayString(): string {
 /** Get the next weekday (Mon-Fri) as YYYY-MM-DD in Mountain Time */
 function getNextWeekday(): string {
   const now = new Date();
-  // Get current day-of-week in Mountain Time
-  const mtDay = parseInt(
-    new Intl.DateTimeFormat("en-US", { timeZone: "America/Denver", weekday: "narrow" })
-      .formatToParts(now)
-      .find((p) => p.type === "weekday")?.value ?? "0"
-  );
-  // Intl weekday "narrow" isn't numeric — use a different approach
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const mtDayName = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/Denver",

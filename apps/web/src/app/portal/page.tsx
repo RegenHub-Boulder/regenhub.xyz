@@ -13,10 +13,12 @@ export default async function PortalPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
-  let [{ data: member }, { data: application }] = await Promise.all([
+  const [memberResult, applicationResult] = await Promise.all([
     supabase.from("members").select("*").eq("supabase_user_id", user.id).single(),
     supabase.from("applications").select("*").eq("supabase_user_id", user.id).single(),
   ]);
+  let member = memberResult.data;
+  const application = applicationResult.data;
 
   // Auto-link: if no member found by supabase_user_id, try matching by verified email.
   // This handles the case where a member was created via Telegram bot (no supabase_user_id)
@@ -114,8 +116,10 @@ export default async function PortalPage() {
   const typeLabel = member.member_type === "cold_desk" ? "Cold Desk" : member.member_type === "hot_desk" ? "Hot Desk" : member.member_type === "hub_friend" ? "Hub Friend" : "Day Pass";
 
   // Show onboarding expanded for new members (no pin code set or account < 7 days old)
-  const isNewMember = !member.pin_code ||
-    (Date.now() - new Date(member.created_at).getTime() < 7 * 24 * 60 * 60 * 1000);
+  const accountAgeMs =
+    // eslint-disable-next-line react-hooks/purity -- server component, renders once
+    Date.now() - new Date(member.created_at).getTime();
+  const isNewMember = !member.pin_code || accountAgeMs < 7 * 24 * 60 * 60 * 1000;
 
   return (
     <div className="space-y-8">
