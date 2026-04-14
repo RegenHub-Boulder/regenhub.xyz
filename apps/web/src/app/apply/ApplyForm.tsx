@@ -28,6 +28,7 @@ export default function ApplyForm({ authenticatedEmail }: Props) {
   const [form, setForm] = useState({
     name: "",
     email: authenticatedEmail ?? "",
+    telegram: "",
     about: "",
     why_join: "",
     membership_interest: "daypass_5pack" as "daypass_5pack" | "daypass_single" | "hot_desk" | "reserved_desk",
@@ -55,6 +56,7 @@ export default function ApplyForm({ authenticatedEmail }: Props) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: form.name,
+            telegram: form.telegram,
             about: form.about,
             why_join: form.why_join,
             membership_interest: form.membership_interest,
@@ -152,6 +154,20 @@ export default function ApplyForm({ authenticatedEmail }: Props) {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="telegram">Telegram username (optional)</Label>
+                <Input
+                  id="telegram"
+                  value={form.telegram}
+                  onChange={set("telegram")}
+                  placeholder="@yourhandle"
+                  className="glass-input"
+                />
+                <p className="text-xs text-muted">
+                  We use Telegram for member coordination and access codes. Adding your handle helps us reach you faster.
+                </p>
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="membership_interest">What level of access are you interested in?</Label>
                 <select
                   id="membership_interest"
@@ -212,6 +228,24 @@ export default function ApplyForm({ authenticatedEmail }: Props) {
                 </p>
               )}
             </form>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-panel">
+          <CardContent className="p-6 text-sm text-muted text-center">
+            <p className="text-foreground font-medium mb-1">Need support with anything?</p>
+            <p>
+              Reach out to <span className="text-foreground">Aaron Gabriel</span>, our member coordinator.
+              Email{" "}
+              <a href="mailto:ag@unforced.org" className="underline hover:text-sage transition-colors">
+                ag@unforced.org
+              </a>{" "}
+              or message{" "}
+              <a href="https://t.me/unforcedAG" target="_blank" rel="noopener noreferrer" className="underline hover:text-sage transition-colors">
+                @unforcedAG
+              </a>{" "}
+              on Telegram.
+            </p>
           </CardContent>
         </Card>
       </div>
