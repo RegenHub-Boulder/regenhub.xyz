@@ -42,4 +42,5 @@ COPY --from=builder /app/packages/shared/dist ./node_modules/@regenhub/shared/di
 COPY --from=builder /app/packages/shared/package.json ./node_modules/@regenhub/shared/package.json
 
 USER botuser
+EXPOSE 3000
 CMD ["node", "dist/index.js"]
