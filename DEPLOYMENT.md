@@ -22,7 +22,7 @@ The regenhub.xyz stack is self-hosted on RegenHub's local compute cluster and ex
 
 | Host | IP | Role |
 |------|----|------|
-| `regenhub-compute-1.lan` | 192.168.1.228 | Compute: Docker, Coolify, all services |
+| `regenhub-compute-1.lan` | 192.168.1.200 | Compute: Docker, Coolify, all services |
 | `regenhub-compute-2.lan` | 192.168.1.201 | Agent host (OpenClaw runs here) |
 
 Both machines must be on the RegenHub LAN (`192.168.1.x`). Compute-2 can SSH into compute-1 via `steward@regenhub-compute-1.lan` using an ed25519 key.
@@ -66,7 +66,7 @@ Migrations live in `supabase/migrations/`. To apply:
 ```bash
 # From compute-2 (has LAN access)
 PGPASSWORD=<db-password> psql \
-  -h 192.168.1.228 -p <exposed-port> \
+  -h 192.168.1.200 -p <exposed-port> \
   -U postgres -d postgres \
   -f supabase/migrations/001_initial_schema.sql
 ```
@@ -210,57 +210,47 @@ ssh steward@regenhub-compute-1.lan "sudo /opt/shipper/tunnel.sh list"
 
 ## Telegram Bot
 
-The bot (`apps/bot`) runs as a standalone Docker container on compute-1 (`regenhub-bot`).
+The bot (`apps/bot`) is **Coolify-managed** since 2026-04-28 (migrated off bare-metal `docker run`). It runs as a normal Coolify application alongside the web app, with env vars stored durably in Coolify's DB.
 
-**Coolify app UUID:** `t84sosw40088kokwco80kksw` (created, but Coolify deploys fail due to git source config — use rebuild script instead)
+**Coolify app UUID:** `t84sosw40088kokwco80kksw` (`regenhub-bot`, build_pack: dockerfile, dockerfile: `/apps/bot/Dockerfile`, port: 3000)
 
-### Rebuild the bot (standard procedure)
-
-A rebuild script on compute-1 reads env vars from the existing container and rebuilds with latest code:
+### Redeploy / rebuild
 
 ```bash
-# From compute-1 (script uses sudo internally — steward has NOPASSWD)
-bash /home/steward/rebuild-bot.sh
-
-# Or remotely via SSH:
-ssh steward@regenhub-compute-1.lan "bash /home/steward/rebuild-bot.sh"
+COOLIFY_TOKEN="<from credentials.json>"
+curl -X GET "http://192.168.1.200:8000/api/v1/deploy?uuid=t84sosw40088kokwco80kksw&force=true" \
+  -H "Authorization: Bearer $COOLIFY_TOKEN"
 ```
 
-This script:
-1. Reads all env vars from the running `regenhub-bot` container via `sudo docker inspect`
-2. Adds `HA_LOCK_ENTITIES` if missing
-3. `git pull` the latest code into `/home/steward/regenhub.xyz/`
-4. `sudo docker build -f apps/bot/Dockerfile -t regenhub-bot:latest .`
-5. Stops + removes the old container, starts the new one with transferred env vars
-6. Shows container status and recent logs for verification
+Or via the Coolify UI — same workflow as the web app. Deploys take ~45s (Dockerfile build).
 
-Takes ~30 seconds (most of it is `npm install` in the Docker build).
+### Health check
 
-### First-time setup (if regenhub-bot doesn't exist)
+The bot exposes `GET /health` on port 3000 returning `200 {"ok":true,"ts":...}`. Used by Coolify/Traefik to consider the container healthy. The actual bot work (Telegram polling, scheduler) runs in parallel — `/health` doesn't represent Telegram connectivity, just process liveness.
 
-```bash
-# On compute-1
-sudo docker run -d \
-  --name regenhub-bot \
-  --network host \
-  --restart unless-stopped \
-  -e SUPABASE_URL=https://supabasekong-w8gw0wc80o80c0c8g88kk8og.regenhub.build \
-  -e SUPABASE_SERVICE_ROLE_KEY=<from-supabase-container> \
-  -e TELEGRAM_BOT_TOKEN=<from-aaron> \
-  -e HA_URL=http://homeassistant.lan:8123/api \
-  -e HA_TOKEN=<from-aaron> \
-  -e HA_LOCK_ENTITIES=lock.front_door_lock,lock.back_door_lock \
-  -e TIMEZONE=America/Denver \
-  regenhub-bot:latest
-```
+### Required env vars (set in Coolify UI for `t84sosw40088kokwco80kksw`)
 
-Get `SUPABASE_SERVICE_ROLE_KEY` from the running Supabase container:
+| Variable | Source / Value |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | BotFather → `/mybots` → API Token |
+| `SUPABASE_URL` | `https://supabasekong-w8gw0wc80o80c0c8g88kk8og.regenhub.build` |
+| `SUPABASE_SERVICE_ROLE_KEY` | From running Supabase auth container env (`SERVICE_PASSWORD_JWT`-signed JWT for `service_role`) |
+| `HA_URL` | `http://192.168.1.141:8123/api` (direct IP — `homeassistant.lan` does not resolve) |
+| `HA_TOKEN` | Long-lived HA access token |
+| `HA_LOCK_ENTITIES` | `lock.front_door_lock,lock.back_door_lock` |
+| `TIMEZONE` | `America/Denver` |
+| `HEALTH_PORT` | `3000` (default; only set to override) |
+
+Get `SUPABASE_SERVICE_ROLE_KEY` from the running Supabase container if needed:
 ```bash
 sudo docker inspect supabase-analytics-w8gw0wc80o80c0c8g88kk8og \
   --format '{{range .Config.Env}}{{println .}}{{end}}' | grep SERVICE_ROLE
 ```
+Verify the JWT signature matches the live `JWT_SECRET` (see #38 appendix) — Kong will reject keys signed with a stale secret.
 
-Build image first: `docker build -f apps/bot/Dockerfile -t regenhub-bot:latest .` from repo root.
+### Legacy bare-metal fallback (deprecated)
+
+A `rebuild-bot.sh` script exists at `/home/steward/rebuild-bot.sh` on compute-1 from the bare-metal era. It is **deprecated** and should not be used in normal operation — Coolify is now the source of truth. Kept on disk only as an emergency fallback if Coolify itself is unhealthy and the bot needs to come back up via a hand-rolled `docker run`.
 
 ---
 

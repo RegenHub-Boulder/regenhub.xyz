@@ -36,7 +36,7 @@ The `.dockerignore` has an exception (`!**/.env.production`) so the file is avai
 | `NEXT_PUBLIC_SUPABASE_URL` | Web (build-time) | In `.env.production` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Web (build-time) | In `.env.production` |
 | `NEXT_PUBLIC_SITE_URL` | Web (build-time) | In `.env.production` — used for auth redirects |
-| `HA_URL` | Web + Bot (runtime) | HA base URL e.g. `http://homeassistant.local:8123/api` |
+| `HA_URL` | Web + Bot (runtime) | HA base URL — use direct IP (`http://192.168.1.141:8123/api`). `homeassistant.lan` does not resolve from compute-1; mDNS `homeassistant.local` is unreliable from inside Docker bridge networks. |
 | `HA_TOKEN` | Web + Bot (runtime) | Long-lived HA access token |
 | `HA_LOCK_ENTITIES` | Web + Bot (runtime) | Comma-separated Z-Wave entity IDs, e.g. `lock.front_door_lock,lock.back_door_lock` |
 | `SUPABASE_URL` | Bot (runtime) | |
@@ -79,16 +79,20 @@ DEPLOYMENT.md               # Full infra guide for agents + humans
 ## Common Tasks
 
 ### Trigger a redeploy
-Coolify runs on LAN only (`http://192.168.1.228:8000`) — `admin.regenhub.build` DNS is not configured yet.
+Coolify runs on LAN only (`http://192.168.1.200:8000`) — `admin.regenhub.build` DNS is not configured yet. Compute-1's IP was changed from `.228` to `.200` (DHCP reservation, 2026-04).
 ```bash
-# From compute-2 or any LAN machine:
-curl -X GET "http://192.168.1.228:8000/api/v1/deploy?uuid=ew848c4os44sw0wowwk0ksk8&force=true" \
+# From any LAN machine:
+# Web app:
+curl -X GET "http://192.168.1.200:8000/api/v1/deploy?uuid=ew848c4os44sw0wowwk0ksk8&force=true" \
+  -H "Authorization: Bearer <coolify-api-key>"
+# Bot (Coolify-managed since 2026-04 — see DEPLOYMENT.md "Telegram Bot"):
+curl -X GET "http://192.168.1.200:8000/api/v1/deploy?uuid=t84sosw40088kokwco80kksw&force=true" \
   -H "Authorization: Bearer <coolify-api-key>"
 ```
 
 ### Check deployment status
 ```bash
-curl "http://192.168.1.228:8000/api/v1/deployments/<dep-uuid>" \
+curl "http://192.168.1.200:8000/api/v1/deployments/<dep-uuid>" \
   -H "Authorization: Bearer <coolify-api-key>" | jq '.status'
 ```
 
@@ -107,9 +111,9 @@ update members set member_type = 'cold_desk' where telegram_username = '@usernam
 ```
 
 ### Add HA env vars in Coolify
-Both web and bot need `HA_URL`, `HA_TOKEN`, and `HA_LOCK_ENTITIES` at runtime.
+Both web and bot are Coolify-managed and need `HA_URL`, `HA_TOKEN`, and `HA_LOCK_ENTITIES` at runtime.
 Set `HA_LOCK_ENTITIES=lock.front_door_lock,lock.back_door_lock` (comma-separated) to
-target multiple Z-Wave locks. Changing bot env vars doesn't require a full image rebuild.
+target multiple Z-Wave locks. Update env via Coolify UI for the relevant app and redeploy.
 
 ## Important Notes
 - **NEVER restart Supabase via Coolify.** Coolify regenerates ALL `SERVICE_PASSWORD_*` values on restart — but the DB volume retains the old passwords. This breaks every service. If it happens, see the password fix procedure in DEPLOYMENT.md.
