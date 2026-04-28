@@ -24,8 +24,9 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
 
-  const { name, about, why_join, membership_interest } = body as {
+  const { name, telegram, about, why_join, membership_interest } = body as {
     name?: string;
+    telegram?: string;
     about?: string;
     why_join?: string;
     membership_interest?: MembershipInterest;
@@ -35,6 +36,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
 
+  const telegramHandle = telegram?.trim().replace(/^@+/, "") || null;
+
   // Upsert by supabase_user_id — authenticated user updating their own application
   const { data, error } = await supabase
     .from("applications")
@@ -43,6 +46,7 @@ export async function POST(req: Request) {
         supabase_user_id: user.id,
         email: user.email!,
         name: name.trim(),
+        telegram: telegramHandle,
         about: about?.trim() || null,
         why_join: why_join?.trim() || null,
         membership_interest: membership_interest ?? "daypass_5pack",

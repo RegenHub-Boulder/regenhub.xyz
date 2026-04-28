@@ -14,6 +14,7 @@ const interestLabels: Record<string, string> = {
 async function notifyTelegram(app: {
   name: string;
   email: string;
+  telegram?: string | null;
   about?: string | null;
   why_join?: string | null;
   membership_interest: string;
@@ -28,6 +29,7 @@ async function notifyTelegram(app: {
     `*${app.name}*  ·  ${app.email}`,
     `Interest: ${interestLabels[app.membership_interest] ?? app.membership_interest}`,
   ];
+  if (app.telegram) lines.push(`Telegram: @${app.telegram}`);
   if (app.about) lines.push(``, `_Working on:_ ${app.about}`);
   if (app.why_join) lines.push(``, `_Why join:_ ${app.why_join}`);
   lines.push(``, `[Review →](https://regenhub.xyz/admin/applications)`);
@@ -52,9 +54,10 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
 
-  const { name, email, about, why_join, membership_interest } = body as {
+  const { name, email, telegram, about, why_join, membership_interest } = body as {
     name?: string;
     email?: string;
+    telegram?: string;
     about?: string;
     why_join?: string;
     membership_interest?: MembershipInterest;
@@ -68,6 +71,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid email address" }, { status: 400 });
   }
 
+  // Normalize telegram: strip leading @s, treat empty as null
+  const telegramHandle = telegram?.trim().replace(/^@+/, "") || null;
+
   const supabase = createServiceClient();
 
   // Upsert application by email (allows re-submission to update details)
@@ -77,6 +83,7 @@ export async function POST(req: Request) {
       {
         email: email.trim().toLowerCase(),
         name: name.trim(),
+        telegram: telegramHandle,
         about: about?.trim() || null,
         why_join: why_join?.trim() || null,
         membership_interest: membership_interest ?? "daypass_5pack",
@@ -95,6 +102,7 @@ export async function POST(req: Request) {
   notifyTelegram({
     name: name.trim(),
     email: email.trim().toLowerCase(),
+    telegram: telegramHandle,
     about: about?.trim() || null,
     why_join: why_join?.trim() || null,
     membership_interest: membership_interest ?? "daypass_5pack",
