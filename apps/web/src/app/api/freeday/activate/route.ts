@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { allocateSlotWithRetry } from "@/lib/slotAllocation";
 import {
   setUserCode,
   formatLockStatus,
@@ -49,22 +50,6 @@ function calculateFreeDayExpiration(): Date {
     return new Date(exp.getTime() + 24 * 60 * 60 * 1000);
   }
   return exp;
-}
-
-/** Find the next available day code slot (101-200) */
-async function findAvailableSlot(
-  supabase: ReturnType<typeof createServiceClient>
-): Promise<number | null> {
-  const { data: usedSlots } = await supabase
-    .from("day_codes")
-    .select("pin_slot")
-    .eq("is_active", true);
-
-  const used = new Set(usedSlots?.map((r) => r.pin_slot) ?? []);
-  for (let slot = DAY_CODE_SLOT_MIN; slot <= DAY_CODE_SLOT_MAX; slot++) {
-    if (!used.has(slot)) return slot;
-  }
-  return null;
 }
 
 /** Post activation notification to Telegram */
@@ -182,55 +167,66 @@ export async function POST() {
     );
   }
 
-  // Find available slot
-  const slot = await findAvailableSlot(admin);
-  if (!slot) {
-    return NextResponse.json(
-      {
-        error:
-          "All temporary door code slots are in use right now. Please try again in a bit.",
-      },
-      { status: 503 }
-    );
-  }
-
   const code = generateRandomCode();
   const expiresAt = calculateFreeDayExpiration();
+
+  // Atomic slot claim: INSERT-with-retry against the partial unique index.
+  // If a concurrent request claims the chosen slot first, retry with the
+  // next free one.
+  const allocation = await allocateSlotWithRetry<{ id: number }>({
+    min: DAY_CODE_SLOT_MIN,
+    max: DAY_CODE_SLOT_MAX,
+    getUsedSlots: async () => {
+      const { data } = await admin
+        .from("day_codes")
+        .select("pin_slot")
+        .eq("is_active", true);
+      return new Set(data?.map((r) => r.pin_slot) ?? []);
+    },
+    tryInsert: (slot) =>
+      admin
+        .from("day_codes")
+        .insert({
+          day_pass_id: null,
+          member_id: null,
+          label: `Free Day: ${claim.name}`,
+          code,
+          pin_slot: slot,
+          issued_at: new Date().toISOString(),
+          expires_at: expiresAt.toISOString(),
+          is_active: true,
+        })
+        .select("id")
+        .single(),
+  });
+
+  if (!allocation.ok) {
+    if (!allocation.exhausted) console.error("[FreeDay] DB insert error:", allocation.error);
+    return NextResponse.json(
+      {
+        error: allocation.exhausted
+          ? "All temporary door code slots are in use right now. Please try again in a bit."
+          : "Code could not be saved",
+      },
+      { status: allocation.exhausted ? 503 : 500 }
+    );
+  }
 
   // Set code on the physical locks
   let lockStatus: string;
   try {
-    const lockResults = await setUserCode(slot, code);
+    const lockResults = await setUserCode(allocation.slot, code);
     lockStatus = formatLockStatus(lockResults);
   } catch (err) {
     console.error("[FreeDay] Lock error:", err);
+    // Roll back the day_code so its slot frees up for another attempt.
+    await admin
+      .from("day_codes")
+      .update({ is_active: false, revoked_at: new Date().toISOString() })
+      .eq("id", allocation.data.id);
     return NextResponse.json(
       { error: LOCK_FAILURE_MSG },
       { status: 502 }
-    );
-  }
-
-  // Insert day_code record
-  const { data: dayCode, error: insertError } = await admin
-    .from("day_codes")
-    .insert({
-      day_pass_id: null,
-      member_id: null,
-      label: `Free Day: ${claim.name}`,
-      code,
-      pin_slot: slot,
-      issued_at: new Date().toISOString(),
-      expires_at: expiresAt.toISOString(),
-      is_active: true,
-    })
-    .select("id")
-    .single();
-
-  if (insertError || !dayCode) {
-    console.error("[FreeDay] DB insert error:", insertError);
-    return NextResponse.json(
-      { error: "Code set on lock but database save failed" },
-      { status: 500 }
     );
   }
 
@@ -239,7 +235,7 @@ export async function POST() {
     .from("free_day_claims")
     .update({
       status: "activated",
-      day_code_id: dayCode.id,
+      day_code_id: allocation.data.id,
       activated_at: new Date().toISOString(),
     })
     .eq("id", claim.id);
