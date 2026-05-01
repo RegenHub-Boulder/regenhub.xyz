@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { allocateSlotWithRetry } from "@/lib/slotAllocation";
 import { setUserCode, formatLockStatus, generateRandomCode, DAY_CODE_SLOT_MIN, DAY_CODE_SLOT_MAX, LOCK_FAILURE_MSG } from "@regenhub/shared";
 
 const TIMEZONE = "America/Denver";
@@ -38,19 +39,6 @@ function calculateDayPassExpiry(): string {
     exp.setTime(exp.getTime() + 24 * 60 * 60 * 1000);
   }
   return exp.toISOString();
-}
-
-async function findAvailableSlot(supabase: Awaited<ReturnType<typeof createClient>>): Promise<number | null> {
-  const { data: usedSlots } = await supabase
-    .from("day_codes")
-    .select("pin_slot")
-    .eq("is_active", true);
-
-  const used = new Set(usedSlots?.map((r) => r.pin_slot) ?? []);
-  for (let slot = DAY_CODE_SLOT_MIN; slot <= DAY_CODE_SLOT_MAX; slot++) {
-    if (!used.has(slot)) return slot;
-  }
-  return null;
 }
 
 export async function POST(request: Request) {
@@ -105,44 +93,60 @@ export async function POST(request: Request) {
     );
   }
 
-  const slot = await findAvailableSlot(supabase);
-  if (!slot) {
-    // Refund — no slot available
-    await supabase.rpc("increment_day_pass_balance", { p_member_id: member.id, p_amount: 1 });
-    return NextResponse.json({ error: "No available door code slots" }, { status: 503 });
-  }
-
   const code = generateRandomCode();
+
+  // Atomic slot claim: INSERT, retry on unique-violation if a concurrent
+  // request beat us to this slot. Combined with migration 018's partial
+  // unique index, this prevents two day-codes from sharing a slot.
+  const allocation = await allocateSlotWithRetry<{ id: number; pin_slot: number }>({
+    min: DAY_CODE_SLOT_MIN,
+    max: DAY_CODE_SLOT_MAX,
+    getUsedSlots: async () => {
+      const { data } = await supabase
+        .from("day_codes")
+        .select("pin_slot")
+        .eq("is_active", true);
+      return new Set(data?.map((r) => r.pin_slot) ?? []);
+    },
+    tryInsert: (slot) =>
+      supabase
+        .from("day_codes")
+        .insert({
+          member_id: member.id,
+          label: label ?? null,
+          code,
+          pin_slot: slot,
+          issued_at: new Date().toISOString(),
+          expires_at: expiresAt,
+          is_active: true,
+        })
+        .select("id, pin_slot")
+        .single(),
+  });
+
+  if (!allocation.ok) {
+    // Refund — couldn't allocate a slot
+    await supabase.rpc("increment_day_pass_balance", { p_member_id: member.id, p_amount: 1 });
+    const status = allocation.exhausted ? 503 : 500;
+    const msg = allocation.exhausted ? "No available door code slots" : "Could not save day code";
+    if (!allocation.exhausted) console.error("[DB] Day code insert failed:", allocation.error);
+    return NextResponse.json({ error: msg }, { status });
+  }
 
   let lockStatus: string;
   try {
-    const lockResults = await setUserCode(slot, code);
+    const lockResults = await setUserCode(allocation.slot, code);
     lockStatus = formatLockStatus(lockResults);
   } catch (err) {
     console.error("[Lock] Failed to set day code:", err);
-    // Refund — couldn't program lock
+    // Roll back: deactivate the just-inserted day_code so its slot frees up,
+    // then refund the balance.
+    await supabase
+      .from("day_codes")
+      .update({ is_active: false, revoked_at: new Date().toISOString() })
+      .eq("id", allocation.data.id);
     await supabase.rpc("increment_day_pass_balance", { p_member_id: member.id, p_amount: 1 });
-    return NextResponse.json(
-      { error: LOCK_FAILURE_MSG },
-      { status: 502 }
-    );
-  }
-
-  const { error: insertError } = await supabase
-    .from("day_codes")
-    .insert({
-      member_id: member.id,
-      label: label ?? null,
-      code,
-      pin_slot: slot,
-      issued_at: new Date().toISOString(),
-      expires_at: expiresAt,
-      is_active: true,
-    });
-
-  if (insertError) {
-    console.error("[DB] Failed to insert day code:", insertError);
-    return NextResponse.json({ error: "Code set but DB save failed" }, { status: 500 });
+    return NextResponse.json({ error: LOCK_FAILURE_MSG }, { status: 502 });
   }
 
   return NextResponse.json({
