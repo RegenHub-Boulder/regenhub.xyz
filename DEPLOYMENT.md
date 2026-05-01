@@ -94,6 +94,173 @@ Recommended provider: [Resend](https://resend.com) — 3,000 free emails/month. 
 
 ---
 
+## Backups & Recovery
+
+> **Status (2026-05-01):** No automated backups exist. The Apr 27 incident (#38) recovered cleanly only because the Docker volumes survived a host reboot. If a volume is lost — disk failure, accidental `docker volume rm`, a botched `docker compose down -v` — there is currently no way to recover the data. Setting up a weekly `pg_dump` to an off-host location is the single highest-leverage operational win for this stack and is recommended below.
+
+### What holds state
+
+The Supabase instance ID is `w8gw0wc80o80c0c8g88kk8og` (used as a suffix on every container and volume name). The stack runs ~14 containers but only a handful hold persistent data:
+
+| Volume | What's in it | Recovery cost if lost |
+|---|---|---|
+| `w8gw0wc80o80c0c8g88kk8og_supabase-db-data` | Postgres data directory (members, day codes, applications, free-day claims, access logs, auth users) | **Total** — every member record, every code ever issued, every login. No way to rebuild without a backup. |
+| `w8gw0wc80o80c0c8g88kk8og_supabase-db-config` | Postgres config (`postgresql.conf`, `pg_hba.conf`) | Low — recreatable from the Supabase image defaults. |
+| `w8gw0wc80o80c0c8g88kk8og_supabase-storage` | Supabase Storage bucket files | Currently unused — `members.profile_photo_url` is a free-text URL column, no uploads land in Storage. Safe to ignore for now; revisit when uploads are added. |
+| `/data/coolify/services/w8gw0wc80o80c0c8g88kk8og/.env` | Service env (anon key, service-role key, JWT secret, Postgres password, etc.) | High — without these, the surviving DB is unreachable. Coolify's DB is the source of truth, but env drift between Coolify and this on-disk file caused the Kong-key half of #38. |
+| `/data/coolify/services/w8gw0wc80o80c0c8g88kk8og/docker-compose.yaml` | Generated compose file | Low — Coolify regenerates it. |
+
+List the live volumes:
+```bash
+ssh steward@regenhub-compute-1.lan \
+  "sudo docker volume ls --filter name=w8gw0wc80o80c0c8g88kk8og"
+```
+
+### Recommended backup strategy
+
+Until something better is in place, do **at least** one of these. (A) is highest-leverage and cheapest:
+
+**(A) Weekly `pg_dump` to off-host storage.** A logical dump is portable across Postgres versions, small (~tens of MB compressed for this dataset), and restores cleanly into a fresh container. Suggested cadence: weekly via cron on compute-1, retain the last 8 dumps.
+
+```bash
+# Example cron entry on compute-1 (steward crontab):
+# Sunday 03:00 — dump, gzip, push off-host, prune local copies
+0 3 * * 0 /home/steward/backup-supabase.sh
+```
+
+The script (sketch — needs to be written and tested):
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+INSTANCE=w8gw0wc80o80c0c8g88kk8og
+TS=$(date +%Y%m%d-%H%M%S)
+OUT=/var/backups/supabase/${INSTANCE}-${TS}.sql.gz
+mkdir -p /var/backups/supabase
+sudo docker exec supabase-db-${INSTANCE} \
+  pg_dump -U supabase_admin -d postgres --no-owner --clean --if-exists \
+  | gzip > "$OUT"
+# Off-host: rsync to a separate box, S3-compatible bucket, or compute-2
+rsync -a "$OUT" steward@regenhub-compute-2.lan:/srv/backups/supabase/
+# Prune: keep last 8 weekly dumps locally
+ls -1t /var/backups/supabase/*.sql.gz | tail -n +9 | xargs -r rm
+```
+
+**(B) Volume snapshots.** Lower priority than (A) — `docker run --rm -v <vol>:/v -v $(pwd):/out alpine tar czf /out/<vol>-<ts>.tar.gz -C /v .` produces a tarball of the raw data directory. Restore is `tar xzf` into a fresh empty volume. Snapshot from a stopped or pause-and-checkpoint Postgres for consistency, or accept a slightly inconsistent snapshot and hope the WAL replays cleanly. `pg_dump` is more robust.
+
+**(C) Off-site copy.** Whatever path you pick for (A) or (B), a copy should leave the building. Compute-2 on the same LAN survives compute-1 failure but not site-wide events (fire, theft, internet loss). A weekly push to S3 / B2 / a remote VPS via `rclone` or `restic` is the gold standard.
+
+### Verifying a backup actually restores
+
+A backup that hasn't been restored is a hope, not a backup. Once a dump cadence is in place, restore the latest dump into a throwaway Postgres container and confirm the row counts match prod, at least quarterly:
+
+```bash
+# On any Linux box with Docker
+gunzip -c <dump>.sql.gz | docker exec -i <test-pg-container> psql -U postgres -d test_restore
+docker exec <test-pg-container> psql -U postgres -d test_restore -c "SELECT count(*) FROM members;"
+```
+
+### Recovery: DB container missing, volumes survive
+
+This is the failure mode hit on 2026-04-27 (#38). The host rebooted, every Supabase service came back **except** `supabase-db-w8gw0wc80o80c0c8g88kk8og`, which was missing entirely from `docker ps -a`. Auth/storage/supavisor crash-looped trying to reach a database that wasn't there.
+
+The trap: don't use Coolify's UI "Start" or "Redeploy" — those regenerate `SERVICE_PASSWORD_*` values, and the existing data volume's password won't match. Instead, recreate **only the db service** using the existing compose file and on-disk env:
+
+```bash
+ssh steward@regenhub-compute-1.lan
+cd /data/coolify/services/w8gw0wc80o80c0c8g88kk8og
+sudo docker compose up -d --no-deps supabase-db
+```
+
+`--no-deps` is the important flag — it stops compose from also touching `supabase-auth`, `supabase-kong`, etc. The auth/storage/supavisor/analytics containers that were crash-looping will reconnect within ~30 seconds once Postgres is reachable.
+
+Verify:
+```bash
+sudo docker ps --filter name=supabase-db-w8gw0wc80o80c0c8g88kk8og
+sudo docker exec supabase-db-w8gw0wc80o80c0c8g88kk8og pg_isready -U supabase_admin
+```
+
+If a migration was pending when the outage hit, apply it directly with `psql` (Studio UI may also be unreachable until Kong recovers — see next section):
+```bash
+sudo docker exec supabase-db-w8gw0wc80o80c0c8g88kk8og \
+  psql -U supabase_admin -d postgres -f - < supabase/migrations/0XX_whatever.sql
+```
+
+### Recovery: Kong consumer keys stale (`Invalid authentication credentials`)
+
+Symptom: every API call from the web app gets `401 Invalid authentication credentials` even though the anon key in `apps/web/.env.production` is the same one that worked yesterday.
+
+Cause: Kong's `kong.yml` substitutes `$SUPABASE_ANON_KEY` and `$SUPABASE_SERVICE_KEY` from `/data/coolify/services/<id>/.env` at container startup. These env values can drift from the live `JWT_SECRET` used by auth/postgrest/db — usually because Coolify regenerated them but the JWT secret wasn't rotated in lockstep. Web's anon key (signed with the live secret) is correct; Kong's stored copy (signed with an older secret) is stale → Kong rejects everything.
+
+**Verify which key is stale.** For each candidate JWT, recompute the signature against the live `JWT_SECRET` (read from the running auth container env) and compare to the JWT's signature segment:
+
+```bash
+# Get live JWT_SECRET
+ssh steward@regenhub-compute-1.lan \
+  "sudo docker inspect supabase-auth-w8gw0wc80o80c0c8g88kk8og \
+   --format '{{range .Config.Env}}{{println .}}{{end}}'" \
+  | grep '^GOTRUE_JWT_SECRET=' | cut -d= -f2-
+
+# Recompute signature for a candidate JWT (header.payload portion)
+HP='eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6...'
+SECRET='<the JWT_SECRET above>'
+printf '%s' "$HP" | openssl dgst -sha256 -hmac "$SECRET" -binary \
+  | openssl base64 -A | tr -d '=' | tr '/+' '_-'
+```
+
+Compare to the JWT's third segment (everything after the final dot). Match = good; mismatch = stale.
+
+**Fix.** Patch the stale key(s) in `.env` and restart only Kong:
+
+```bash
+ssh steward@regenhub-compute-1.lan
+cd /data/coolify/services/w8gw0wc80o80c0c8g88kk8og
+sudo cp .env .env.bak.$(date +%s)
+# Edit: set SERVICE_SUPABASEANON_KEY and/or SERVICE_SUPABASESERVICE_KEY
+# to JWTs that verify against the live JWT_SECRET. The web app's
+# NEXT_PUBLIC_SUPABASE_ANON_KEY (in apps/web/.env.production) is the
+# canonical anon key.
+sudo nano .env
+sudo docker compose up -d --no-deps supabase-kong
+```
+
+Smoke-test:
+```bash
+ANON='<the now-correct anon key>'
+curl -s -o /dev/null -w "%{http_code}\n" \
+  -H "apikey: $ANON" -H "Authorization: Bearer $ANON" \
+  https://supabasekong-w8gw0wc80o80c0c8g88kk8og.regenhub.build/auth/v1/settings
+# Expect: 200
+```
+
+**Make it durable.** The `.env` patch lives only on disk — Coolify's UI/DB is the source of truth and a future Coolify-driven service redeploy will overwrite the file. Update the same env vars in the Coolify UI for the `regenhub-supabase` service so the next redeploy doesn't reintroduce stale keys.
+
+### Recovery: total volume loss (the one we don't have a story for)
+
+If the Postgres data volume is destroyed and there's no backup, the data is gone. Members would need to re-register, applications re-submit, day-pass balances re-credit by hand against payment-receipt records. Avoid by implementing the backup strategy above; this entry exists to make the consequence visible, not because there's a procedure.
+
+If a backup exists, restore looks like:
+
+```bash
+# 1. Stop dependents so nothing writes during restore
+sudo docker compose stop supabase-auth supabase-rest supabase-storage supabase-supavisor supabase-realtime
+
+# 2. Drop the broken volume and let compose recreate it empty
+sudo docker compose rm -f supabase-db
+sudo docker volume rm w8gw0wc80o80c0c8g88kk8og_supabase-db-data
+sudo docker compose up -d --no-deps supabase-db
+
+# 3. Wait until Postgres is ready, then load the dump
+sudo docker exec -i supabase-db-w8gw0wc80o80c0c8g88kk8og \
+  psql -U supabase_admin -d postgres < <(gunzip -c /path/to/dump.sql.gz)
+
+# 4. Bring everything else back
+sudo docker compose up -d
+```
+
+Test this path against a non-prod instance before you need it for real.
+
+---
+
 ## Web App (Next.js)
 
 Deployed via Coolify as a Dockerfile build (not Nixpacks).
