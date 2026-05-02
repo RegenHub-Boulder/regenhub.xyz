@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/admin";
-import { allocateSlotWithRetry } from "@/lib/slotAllocation";
 import type { Member } from "@/lib/supabase/types";
-import { setUserCode, generateRandomCode, MEMBER_SLOT_MIN, MEMBER_SLOT_MAX } from "@regenhub/shared";
+import {
+  allocateSlotWithRetry,
+  setUserCode,
+  generateRandomCode,
+  MEMBER_SLOT_MIN,
+  MEMBER_SLOT_MAX,
+} from "@regenhub/shared";
 
 export async function POST(request: Request) {
   if (!await requireAdmin()) {

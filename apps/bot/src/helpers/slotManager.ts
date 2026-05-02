@@ -1,45 +1,11 @@
-import { db } from "../db/supabase.js";
-import {
-  MEMBER_SLOT_MIN,
-  MEMBER_SLOT_MAX,
-  DAY_CODE_SLOT_MIN,
-  DAY_CODE_SLOT_MAX,
-} from "@regenhub/shared";
+// Slot-allocation helpers (find-then-insert) used to live here. They were
+// replaced with `allocateSlotWithRetry` from @regenhub/shared in #49 — the
+// retry-on-unique-violation pattern is required once migration 018 lands,
+// otherwise concurrent claims surface as 5xx errors at user-visible time.
+//
+// This file now only owns the bot's date/expiration helpers.
 
 const TIMEZONE = process.env.TIMEZONE ?? "America/Denver";
-
-export async function findNextAvailableDayPassSlot(): Promise<number | null> {
-  const { data: activeCodes } = await db
-    .from("day_codes")
-    .select("pin_slot")
-    .eq("is_active", true);
-
-  const usedSlots = new Set((activeCodes ?? []).map((c) => c.pin_slot));
-
-  for (let slot = DAY_CODE_SLOT_MIN; slot <= DAY_CODE_SLOT_MAX; slot++) {
-    if (!usedSlots.has(slot)) return slot;
-  }
-  return null;
-}
-
-/**
- * Find the next available member slot (1–100).
- * Scans for gaps so freed slots are reused.
- * Returns null if all 100 slots are occupied.
- */
-export async function findNextMemberSlot(): Promise<number | null> {
-  const { data } = await db
-    .from("members")
-    .select("pin_code_slot")
-    .not("pin_code_slot", "is", null);
-
-  const used = new Set((data ?? []).map((m) => m.pin_code_slot));
-
-  for (let slot = MEMBER_SLOT_MIN; slot <= MEMBER_SLOT_MAX; slot++) {
-    if (!used.has(slot)) return slot;
-  }
-  return null;
-}
 
 /**
  * Create a Date object for a specific hour:minute in the configured timezone.

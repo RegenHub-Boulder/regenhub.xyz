@@ -1,20 +1,15 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/admin";
-import { setUserCode, formatLockStatus, generateRandomCode, DAY_CODE_SLOT_MIN, DAY_CODE_SLOT_MAX, LOCK_FAILURE_MSG } from "@regenhub/shared";
-
-async function findAvailableSlot(supabase: Awaited<ReturnType<typeof createClient>>): Promise<number | null> {
-  const { data: usedSlots } = await supabase
-    .from("day_codes")
-    .select("pin_slot")
-    .eq("is_active", true);
-
-  const used = new Set(usedSlots?.map((r) => r.pin_slot) ?? []);
-  for (let slot = DAY_CODE_SLOT_MIN; slot <= DAY_CODE_SLOT_MAX; slot++) {
-    if (!used.has(slot)) return slot;
-  }
-  return null;
-}
+import {
+  allocateSlotWithRetry,
+  setUserCode,
+  formatLockStatus,
+  generateRandomCode,
+  DAY_CODE_SLOT_MIN,
+  DAY_CODE_SLOT_MAX,
+  LOCK_FAILURE_MSG,
+} from "@regenhub/shared";
 
 export async function POST(request: Request) {
   if (!await requireAdmin()) {
@@ -41,42 +36,64 @@ export async function POST(request: Request) {
     if (member.disabled) return NextResponse.json({ error: "Member is disabled" }, { status: 400 });
   }
 
-  const slot = await findAvailableSlot(supabase);
-  if (!slot) {
-    return NextResponse.json({ error: "No available door code slots" }, { status: 503 });
-  }
-
   const code = generateRandomCode();
 
-  let lockStatus: string;
-  try {
-    const lockResults = await setUserCode(slot, code);
-    lockStatus = formatLockStatus(lockResults);
-  } catch (err) {
-    console.error("[Lock] Failed to set quick code:", err);
+  // Atomic slot claim: INSERT-with-retry on unique-violation. Combined with
+  // migration 018's partial unique index, prevents two concurrent quickcodes
+  // from sharing a slot.
+  const allocation = await allocateSlotWithRetry<{ id: number; pin_slot: number }>({
+    min: DAY_CODE_SLOT_MIN,
+    max: DAY_CODE_SLOT_MAX,
+    getUsedSlots: async () => {
+      const { data } = await supabase
+        .from("day_codes")
+        .select("pin_slot")
+        .eq("is_active", true);
+      return new Set(data?.map((r) => r.pin_slot) ?? []);
+    },
+    tryInsert: (slot) =>
+      supabase
+        .from("day_codes")
+        .insert({
+          day_pass_id: null,
+          member_id: member_id ?? null,
+          label: label ?? null,
+          code,
+          pin_slot: slot,
+          issued_at: new Date().toISOString(),
+          expires_at: expiresAt,
+          is_active: true,
+        })
+        .select("id, pin_slot")
+        .single(),
+  });
+
+  if (!allocation.ok) {
+    if (!allocation.exhausted) console.error("[Admin QuickCode] DB insert failed:", allocation.error);
     return NextResponse.json(
-      { error: LOCK_FAILURE_MSG },
-      { status: 502 }
+      { error: allocation.exhausted ? "No available door code slots" : "Code could not be saved" },
+      { status: allocation.exhausted ? 503 : 500 }
     );
   }
 
-  const { error: insertError } = await supabase
-    .from("day_codes")
-    .insert({
-      day_pass_id: null,
-      member_id: member_id ?? null,
-      label: label ?? null,
-      code,
-      pin_slot: slot,
-      issued_at: new Date().toISOString(),
-      expires_at: expiresAt,
-      is_active: true,
-    });
-
-  if (insertError) {
-    console.error("[DB] Failed to insert quick code:", insertError);
-    return NextResponse.json({ error: "Code set but DB save failed" }, { status: 500 });
+  let lockStatus: string;
+  try {
+    const lockResults = await setUserCode(allocation.slot, code);
+    lockStatus = formatLockStatus(lockResults);
+  } catch (err) {
+    console.error("[Admin QuickCode] Failed to set lock code:", err);
+    // Roll back so the slot frees up for retry.
+    await supabase
+      .from("day_codes")
+      .update({ is_active: false, revoked_at: new Date().toISOString() })
+      .eq("id", allocation.data.id);
+    return NextResponse.json({ error: LOCK_FAILURE_MSG }, { status: 502 });
   }
 
-  return NextResponse.json({ code, expires_at: expiresAt, pin_slot: slot, lock_status: lockStatus });
+  return NextResponse.json({
+    code,
+    expires_at: expiresAt,
+    pin_slot: allocation.slot,
+    lock_status: lockStatus,
+  });
 }

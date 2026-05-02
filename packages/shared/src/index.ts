@@ -15,3 +15,5 @@ export {
   SUPPORT_CONTACT,
   type LockResult,
 } from "./homeAssistant.js";
+
+export { allocateSlotWithRetry } from "./slotAllocation.js";

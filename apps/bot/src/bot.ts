@@ -1,12 +1,32 @@
 import TelegramBot from "node-telegram-bot-api";
 import { db, findMemberByTelegram, findAdminByTelegram, type MemberRow } from "./db/supabase.js";
-import { setUserCode, clearUserCode, formatLockWarning, formatLockStatus, generateRandomCode, LOCK_FAILURE_MSG } from "@regenhub/shared";
 import {
-  findNextAvailableDayPassSlot,
-  findNextMemberSlot,
+  allocateSlotWithRetry,
+  setUserCode,
+  clearUserCode,
+  formatLockWarning,
+  formatLockStatus,
+  generateRandomCode,
+  LOCK_FAILURE_MSG,
+  DAY_CODE_SLOT_MIN,
+  DAY_CODE_SLOT_MAX,
+  MEMBER_SLOT_MIN,
+  MEMBER_SLOT_MAX,
+} from "@regenhub/shared";
+import {
   calculateDayPassExpiration,
   calculateExpiration,
 } from "./helpers/slotManager.js";
+
+async function getUsedDayCodeSlots(): Promise<Set<number>> {
+  const { data } = await db.from("day_codes").select("pin_slot").eq("is_active", true);
+  return new Set((data ?? []).map((r) => r.pin_slot));
+}
+
+async function getUsedMemberSlots(): Promise<Set<number>> {
+  const { data } = await db.from("members").select("pin_code_slot").not("pin_code_slot", "is", null);
+  return new Set((data ?? []).map((m) => m.pin_code_slot as number));
+}
 
 let bot: TelegramBot;
 
@@ -171,32 +191,47 @@ async function handleDayPass(msg: TelegramBot.Message) {
     return bot.sendMessage(msg.chat.id, "No day passes remaining. Contact an admin to top up.");
   }
 
-  const slot = await findNextAvailableDayPassSlot();
-  if (!slot) {
-    // Refund the pass since we can't issue a code
-    await db.rpc("increment_day_pass_balance", { p_member_id: user.id, p_amount: 1 });
-    return bot.sendMessage(msg.chat.id, "All slots in use. Try again later or contact an admin.");
-  }
-
   const code = generateRandomCode();
   const expiresAt = calculateDayPassExpiration();
+
+  // Atomic slot claim. INSERT-with-retry; rollback (deactivate row + refund
+  // balance) on lock failure so the slot frees up for the next attempt.
+  const allocation = await allocateSlotWithRetry<{ id: number }>({
+    min: DAY_CODE_SLOT_MIN,
+    max: DAY_CODE_SLOT_MAX,
+    getUsedSlots: getUsedDayCodeSlots,
+    tryInsert: (slot) =>
+      db.from("day_codes").insert({
+        member_id: user.id,
+        label: user.member_type === "day_pass" ? null : `Guest by ${user.name}`,
+        code,
+        pin_slot: slot,
+        expires_at: expiresAt.toISOString(),
+        is_active: true,
+      }).select("id").single(),
+  });
+
+  if (!allocation.ok) {
+    await db.rpc("increment_day_pass_balance", { p_member_id: user.id, p_amount: 1 });
+    if (!allocation.exhausted) console.error("[DayPass] DB insert failed:", allocation.error);
+    const text = allocation.exhausted
+      ? "All slots in use. Try again later or contact an admin."
+      : "Couldn't save day code. Try again, or contact an admin if it keeps failing.";
+    return bot.sendMessage(msg.chat.id, text);
+  }
 
   await bot.sendMessage(msg.chat.id, "⏳ Programming door locks...");
   let lockResults;
   try {
-    lockResults = await setUserCode(slot, code);
+    lockResults = await setUserCode(allocation.slot, code);
   } catch (err) {
     console.error("[DayPass] Failed to program lock:", err);
-    // Refund the pass since we couldn't program the lock
+    await db.from("day_codes")
+      .update({ is_active: false, revoked_at: new Date().toISOString() })
+      .eq("id", allocation.data.id);
     await db.rpc("increment_day_pass_balance", { p_member_id: user.id, p_amount: 1 });
     return bot.sendMessage(msg.chat.id, `⚠️ ${LOCK_FAILURE_MSG}`);
   }
-
-  await db.from("day_codes").insert({
-    member_id: user.id,
-    label: user.member_type === "day_pass" ? null : `Guest by ${user.name}`,
-    code, pin_slot: slot, expires_at: expiresAt.toISOString(), is_active: true,
-  });
 
   const remaining = newBalance as number;
   const status = formatLockStatus(lockResults);
@@ -408,21 +443,41 @@ async function handleExpirationCallback(chatId: number, data: string) {
 }
 
 async function createQuickCode(chatId: number, expiresAt: Date, label: string | null) {
-  const slot = await findNextAvailableDayPassSlot();
-  if (!slot) return bot.sendMessage(chatId, "All slots full. Use /codes to revoke unused ones.");
-
   const code = generateRandomCode();
+
+  const allocation = await allocateSlotWithRetry<{ id: number }>({
+    min: DAY_CODE_SLOT_MIN,
+    max: DAY_CODE_SLOT_MAX,
+    getUsedSlots: getUsedDayCodeSlots,
+    tryInsert: (slot) =>
+      db.from("day_codes").insert({
+        label,
+        code,
+        pin_slot: slot,
+        expires_at: expiresAt.toISOString(),
+        is_active: true,
+      }).select("id").single(),
+  });
+
+  if (!allocation.ok) {
+    if (!allocation.exhausted) console.error("[QuickCode] DB insert failed:", allocation.error);
+    const text = allocation.exhausted
+      ? "All slots full. Use /codes to revoke unused ones."
+      : "Couldn't save quick code. Try again or contact an admin.";
+    return bot.sendMessage(chatId, text);
+  }
 
   await bot.sendMessage(chatId, "⏳ Programming door locks...");
   let lockResults;
   try {
-    lockResults = await setUserCode(slot, code);
+    lockResults = await setUserCode(allocation.slot, code);
   } catch (err) {
     console.error("[QuickCode] Failed to program lock:", err);
+    await db.from("day_codes")
+      .update({ is_active: false, revoked_at: new Date().toISOString() })
+      .eq("id", allocation.data.id);
     return bot.sendMessage(chatId, `⚠️ ${LOCK_FAILURE_MSG}`);
   }
-
-  await db.from("day_codes").insert({ label, code, pin_slot: slot, expires_at: expiresAt.toISOString(), is_active: true });
 
   const status = formatLockStatus(lockResults);
   let text = `Quick code created!\n\n🔑 *${code}*\n\n${status}\n\nExpires: ${fmt(expiresAt)}`;
@@ -605,12 +660,6 @@ async function handleAddMemberFlow(chatId: number, text: string, p: PendingActio
       const pin = text.toLowerCase() === "random" ? String(Math.floor(100000 + Math.random() * 900000)) : /^\d{4,6}$/.test(text) ? text : null;
       if (!pin) return bot.sendMessage(chatId, "Invalid. Enter 4-6 digits or 'random':");
       p.data.pinCode = pin;
-      const slot = await findNextMemberSlot();
-      if (!slot) {
-        pending.delete(chatId);
-        return bot.sendMessage(chatId, "All member slots (1–100) are full. Free up a slot or contact an admin.");
-      }
-      p.data.pinSlot = slot;
       pending.delete(chatId);
       return createMember(chatId, p.data);
     }
@@ -624,37 +673,67 @@ async function handleAddMemberFlow(chatId: number, text: string, p: PendingActio
 
 async function createMember(chatId: number, d: Record<string, unknown>) {
   const isFull = d.memberType !== "day_pass";
-  let memberLockStatus: string | null = null;
-  if (isFull && d.pinCode && d.pinSlot) {
-    await bot.sendMessage(chatId, "⏳ Programming door locks...");
-    try {
-      const lockResults = await setUserCode(d.pinSlot as number, d.pinCode as string);
-      memberLockStatus = formatLockStatus(lockResults);
-    } catch (err) {
-      console.error("[CreateMember] Failed to program lock:", err);
-      return bot.sendMessage(chatId, `⚠️ Member not created. ${LOCK_FAILURE_MSG}`);
-    }
-  }
-
   const passCount = !isFull ? ((d.passes as number | undefined) ?? 10) : 0;
-
-  const { data: member, error } = await db.from("members").insert({
+  const baseInsert = {
     name: d.name as string,
     member_type: d.memberType as "cold_desk" | "hot_desk" | "hub_friend" | "day_pass",
     telegram_username: (d.telegram as string | undefined) ?? null,
-    pin_code: isFull ? (d.pinCode as string) : null,
-    pin_code_slot: isFull ? (d.pinSlot as number) : null,
     day_passes_balance: passCount,
-  }).select().single();
-
-  if (error) return bot.sendMessage(chatId, `Error: ${error.message}`);
-
+  };
   const typeLabel = d.memberType === "cold_desk" ? "Cold Desk" : d.memberType === "hot_desk" ? "Hot Desk" : d.memberType === "hub_friend" ? "Hub Friend" : "Day Pass";
-  let text = `Member created!\n\nName: ${member.name}\nType: ${typeLabel}`;
+
+  // Day-pass members: no slot, simple INSERT.
+  if (!isFull) {
+    const { data: member, error } = await db.from("members").insert({
+      ...baseInsert,
+      pin_code: null,
+      pin_code_slot: null,
+    }).select().single();
+    if (error) return bot.sendMessage(chatId, `Error: ${error.message}`);
+    let text = `Member created!\n\nName: ${member.name}\nType: ${typeLabel}`;
+    if (d.telegram) text += `\nTelegram: ${d.telegram}`;
+    text += `\nDay Passes: ${passCount}`;
+    return bot.sendMessage(chatId, text);
+  }
+
+  // Permanent members: atomic slot claim, then lock program with rollback.
+  const pinCode = d.pinCode as string;
+  const allocation = await allocateSlotWithRetry<{ id: number; pin_code_slot: number }>({
+    min: MEMBER_SLOT_MIN,
+    max: MEMBER_SLOT_MAX,
+    getUsedSlots: getUsedMemberSlots,
+    tryInsert: (slot) =>
+      db.from("members").insert({
+        ...baseInsert,
+        pin_code: pinCode,
+        pin_code_slot: slot,
+      }).select("id, pin_code_slot").single(),
+  });
+
+  if (!allocation.ok) {
+    if (!allocation.exhausted) console.error("[CreateMember] DB insert failed:", allocation.error);
+    const text = allocation.exhausted
+      ? "All member slots (1–100) are full. Free up a slot or contact an admin."
+      : `Couldn't create member: ${allocation.error}`;
+    return bot.sendMessage(chatId, text);
+  }
+
+  await bot.sendMessage(chatId, "⏳ Programming door locks...");
+  let memberLockStatus: string;
+  try {
+    const lockResults = await setUserCode(allocation.slot, pinCode);
+    memberLockStatus = formatLockStatus(lockResults);
+  } catch (err) {
+    console.error("[CreateMember] Failed to program lock:", err);
+    // Roll back: delete the member row so the slot frees up.
+    await db.from("members").delete().eq("id", allocation.data.id);
+    return bot.sendMessage(chatId, `⚠️ Member not created. ${LOCK_FAILURE_MSG}`);
+  }
+
+  let text = `Member created!\n\nName: ${baseInsert.name}\nType: ${typeLabel}`;
   if (d.telegram) text += `\nTelegram: ${d.telegram}`;
-  if (isFull) text += `\nSlot: ${d.pinSlot}\nCode: ${d.pinCode}`;
-  else text += `\nDay Passes: ${d.passes ?? 10}`;
-  if (memberLockStatus) text += `\n\n${memberLockStatus}`;
+  text += `\nSlot: ${allocation.slot}\nCode: ${pinCode}`;
+  text += `\n\n${memberLockStatus}`;
 
   return bot.sendMessage(chatId, text);
 }
@@ -764,19 +843,41 @@ async function handleChangeToCallback(chatId: number, data: string) {
   let lockStatus: string | null = null;
 
   if (isPermanent && !wasPermanent && !currentSlot) {
-    // Upgrading from day_pass to permanent — assign slot + code
-    const slot = await findNextMemberSlot();
-    if (!slot) return bot.sendMessage(chatId, "No member slots available (1–100 all in use).");
+    // Upgrading from day_pass to permanent — atomic slot claim via UPDATE.
+    // The partial unique index on members.pin_code_slot makes this race-safe.
     const code = generateRandomCode();
-    update.pin_code_slot = slot;
+    const allocation = await allocateSlotWithRetry<{ id: number; pin_code_slot: number }>({
+      min: MEMBER_SLOT_MIN,
+      max: MEMBER_SLOT_MAX,
+      getUsedSlots: getUsedMemberSlots,
+      tryInsert: (slot) =>
+        db.from("members")
+          .update({ member_type: newType, pin_code_slot: slot, pin_code: code })
+          .eq("id", memberId)
+          .select("id, pin_code_slot")
+          .single(),
+    });
+
+    if (!allocation.ok) {
+      if (!allocation.exhausted) console.error("[ChangeType] Slot claim failed:", allocation.error);
+      return bot.sendMessage(chatId, allocation.exhausted
+        ? "No member slots available (1–100 all in use)."
+        : `Couldn't change type: ${allocation.error}`);
+    }
+
+    update.pin_code_slot = allocation.slot;
     update.pin_code = code;
 
     await bot.sendMessage(chatId, "⏳ Programming door locks...");
     try {
-      const lockResults = await setUserCode(slot, code);
+      const lockResults = await setUserCode(allocation.slot, code);
       lockStatus = formatLockStatus(lockResults);
     } catch (err) {
       console.error("[ChangeType] Failed to program lock:", err);
+      // Roll back the slot claim so the member returns to their previous type.
+      await db.from("members")
+        .update({ member_type: currentType, pin_code_slot: null, pin_code: null })
+        .eq("id", memberId);
       return bot.sendMessage(chatId, `⚠️ Type not changed. ${LOCK_FAILURE_MSG}`);
     }
   } else if (!isPermanent && wasPermanent && currentSlot) {

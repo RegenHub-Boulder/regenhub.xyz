@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { allocateSlotWithRetry } from "@/lib/slotAllocation";
-import { setUserCode, formatLockStatus, generateRandomCode, DAY_CODE_SLOT_MIN, DAY_CODE_SLOT_MAX, LOCK_FAILURE_MSG } from "@regenhub/shared";
+import {
+  allocateSlotWithRetry,
+  setUserCode,
+  formatLockStatus,
+  generateRandomCode,
+  DAY_CODE_SLOT_MIN,
+  DAY_CODE_SLOT_MAX,
+  LOCK_FAILURE_MSG,
+} from "@regenhub/shared";
 
 const TIMEZONE = "America/Denver";
 
