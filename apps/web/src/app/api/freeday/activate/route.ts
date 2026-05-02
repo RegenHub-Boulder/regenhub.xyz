@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { allocateSlotWithRetry } from "@/lib/slotAllocation";
 import {
+  allocateSlotWithRetry,
   setUserCode,
   formatLockStatus,
   generateRandomCode,
