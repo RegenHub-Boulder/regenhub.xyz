@@ -64,6 +64,12 @@ export default function RegenHubLanding() {
                 </Button>
               </a>
             </div>
+            <p className="mt-6 text-sm text-muted">
+              Not ready yet?{" "}
+              <Link href="/interest" className="text-sage hover:underline">
+                Stay in touch →
+              </Link>
+            </p>
           </div>
         </div>
       </section>
@@ -252,6 +258,7 @@ export default function RegenHubLanding() {
                 { label: "Telegram", href: "https://t.me/+Mg1PLuT9pX9mMGVh", external: true },
                 { label: "Email", href: "mailto:boulder.regenhub@gmail.com", external: false },
                 { label: "Free Day", href: "/freeday", external: false },
+                { label: "Stay in Touch", href: "/interest", external: false },
                 { label: "Events", href: "https://lu.ma/regenhub", external: true },
                 { label: "Portal", href: "/portal", external: false },
               ].map(({ label, href, external }) => (

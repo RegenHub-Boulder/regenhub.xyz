@@ -9,6 +9,7 @@ const links: NavLink[] = [
   { href: "/admin", label: "Overview" },
   { href: "/admin/claims", label: "Free Days" },
   { href: "/admin/applications", label: "Applications" },
+  { href: "/admin/interests", label: "Interests" },
   { href: "/admin/members", label: "Members" },
   { href: "/admin/codes", label: "Live Codes" },
   { href: "/admin/lock", label: "Lock Sync" },
@@ -41,6 +42,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <Link href="/admin" className="text-muted hover:text-foreground transition-colors">Overview</Link>
               <Link href="/admin/claims" className="text-muted hover:text-foreground transition-colors">Free Days</Link>
               <Link href="/admin/applications" className="text-muted hover:text-foreground transition-colors">Applications</Link>
+              <Link href="/admin/interests" className="text-muted hover:text-foreground transition-colors">Interests</Link>
               <Link href="/admin/members" className="text-muted hover:text-foreground transition-colors">Members</Link>
               <Link href="/admin/codes" className="text-muted hover:text-foreground transition-colors">Live Codes</Link>
               <Link href="/admin/lock" className="text-muted hover:text-foreground transition-colors">Lock Sync</Link>
