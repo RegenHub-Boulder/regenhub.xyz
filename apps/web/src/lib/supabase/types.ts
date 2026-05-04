@@ -135,6 +135,26 @@ export interface Database {
         Update: never;
         Relationships: [];
       };
+      interests: {
+        Row: {
+          id: number;
+          email: string;
+          name: string | null;
+          source_path: string | null;
+          interests: string[];
+          resend_contact_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          email: string;
+          name?: string | null;
+          source_path?: string | null;
+          interests?: string[];
+          resend_contact_id?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["interests"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: { [_ in never]: never };
     Functions: {
@@ -161,3 +181,13 @@ export type Member = Database["public"]["Tables"]["members"]["Row"];
 export type DayPass = Database["public"]["Tables"]["day_passes"]["Row"];
 export type DayCode = Database["public"]["Tables"]["day_codes"]["Row"];
 export type AccessLog = Database["public"]["Tables"]["access_logs"]["Row"];
+export type Interest = Database["public"]["Tables"]["interests"]["Row"];
+
+export const INTEREST_OPTIONS = [
+  { value: "membership", label: "Desk membership" },
+  { value: "day_pass", label: "Day passes" },
+  { value: "events", label: "Events & gatherings" },
+  { value: "telegram", label: "Community Telegram" },
+] as const;
+
+export type InterestKey = (typeof INTEREST_OPTIONS)[number]["value"];
