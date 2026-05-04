@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { MemberDirectory } from "@/components/landing/MemberDirectory";
 import { ForestMascot } from "@/components/landing/ForestMascot";
+import HeroInterestForm from "@/components/landing/HeroInterestForm";
 import forestBackground from "@/assets/forest-background.jpg";
 import regenHubLogo from "@/assets/regenhub-logo.svg";
 import regenHubText from "@/assets/regenhub-text.svg";
@@ -64,12 +65,7 @@ export default function RegenHubLanding() {
                 </Button>
               </a>
             </div>
-            <p className="mt-6 text-sm text-muted">
-              Not ready yet?{" "}
-              <Link href="/interest" className="text-sage hover:underline">
-                Stay in touch →
-              </Link>
-            </p>
+            <HeroInterestForm />
           </div>
         </div>
       </section>
