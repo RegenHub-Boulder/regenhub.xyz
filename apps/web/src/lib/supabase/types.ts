@@ -143,6 +143,7 @@ export interface Database {
           source_path: string | null;
           interests: string[];
           resend_contact_id: string | null;
+          member_id: number | null;
           created_at: string;
         };
         Insert: {
@@ -151,6 +152,7 @@ export interface Database {
           source_path?: string | null;
           interests?: string[];
           resend_contact_id?: string | null;
+          member_id?: number | null;
         };
         Update: Partial<Database["public"]["Tables"]["interests"]["Insert"]>;
         Relationships: [];

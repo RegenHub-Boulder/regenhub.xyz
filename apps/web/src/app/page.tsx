@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import RegenHubLanding from "@/components/landing/RegenHubLanding";
+import { createClient } from "@/lib/supabase/server";
+import RegenHubLanding, { type SignedInMember } from "@/components/landing/RegenHubLanding";
 
 export const metadata: Metadata = {
   title: "RegenHub Boulder — Regenerative Coworking & Innovation Hub",
@@ -21,6 +22,19 @@ export const metadata: Metadata = {
   },
 };
 
-export default function Home() {
-  return <RegenHubLanding />;
+export default async function Home() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  let signedInMember: SignedInMember = null;
+  if (user) {
+    const { data: member } = await supabase
+      .from("members")
+      .select("name")
+      .eq("supabase_user_id", user.id)
+      .maybeSingle();
+    if (member) signedInMember = { name: member.name };
+  }
+
+  return <RegenHubLanding signedInMember={signedInMember} />;
 }

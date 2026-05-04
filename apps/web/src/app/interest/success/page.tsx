@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { CheckCircle, ArrowLeft } from "lucide-react";
+import { CheckCircle, ArrowLeft, Zap, Key, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import regenHubFull from "@/assets/regenhub-full.svg";
@@ -32,20 +32,48 @@ export default function InterestSuccessPage() {
               Thanks for reaching out. We&apos;ll be in touch when there&apos;s
               something worth sharing.
             </p>
-            <p className="text-sm text-muted mb-8">
-              In the meantime, your first day at RegenHub is on us — come hang out.
+            <p className="text-sm text-muted mb-6">
+              In the meantime — there&apos;s no need to wait.
             </p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+
+            <div className="grid sm:grid-cols-2 gap-3 mb-6 text-left">
               <Link href="/freeday">
-                <Button className="btn-primary-glass">Try a Free Day</Button>
+                <Card className="glass-panel hover-lift cursor-pointer h-full">
+                  <CardContent className="p-4">
+                    <Zap className="w-6 h-6 text-gold mb-2" />
+                    <p className="font-medium text-sm mb-1">Try a Free Day</p>
+                    <p className="text-xs text-muted">
+                      Your first day&apos;s on us — see if RegenHub fits.
+                    </p>
+                    <p className="text-xs text-sage mt-2 inline-flex items-center gap-1">
+                      Get a code <ArrowRight className="w-3 h-3" />
+                    </p>
+                  </CardContent>
+                </Card>
               </Link>
-              <Link href="/">
-                <Button variant="ghost" className="btn-glass gap-2">
-                  <ArrowLeft className="w-4 h-4" />
-                  Back home
-                </Button>
-              </Link>
+
+              <a href="mailto:boulder.regenhub@gmail.com?subject=Interested in desk membership">
+                <Card className="glass-panel hover-lift cursor-pointer h-full">
+                  <CardContent className="p-4">
+                    <Key className="w-6 h-6 text-sage mb-2" />
+                    <p className="font-medium text-sm mb-1">See Membership</p>
+                    <p className="text-xs text-muted">
+                      Desks from $250/mo. Permanent code, 24/7 access.
+                    </p>
+                    <p className="text-xs text-sage mt-2 inline-flex items-center gap-1">
+                      Inquire <ArrowRight className="w-3 h-3" />
+                    </p>
+                  </CardContent>
+                </Card>
+              </a>
             </div>
+
+            <Link href="/">
+              <Button variant="ghost" className="btn-glass gap-2 text-xs">
+                <ArrowLeft className="w-3 h-3" />
+                Back home
+              </Button>
+            </Link>
           </CardContent>
         </Card>
       </div>
