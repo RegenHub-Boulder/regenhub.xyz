@@ -35,5 +35,8 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
 
+      - name: Test web
+        run: pnpm --filter web test
+
       - name: Build bot
         run: pnpm --filter bot build
