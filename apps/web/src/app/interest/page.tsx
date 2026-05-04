@@ -22,8 +22,8 @@ export default function InterestPage() {
             Stay in Touch
           </h1>
           <p className="text-muted max-w-md mx-auto">
-            Not ready to commit but want to stay in the loop? Drop your email and
-            we&apos;ll reach out about whatever interests you most.
+            Drop your email and we&apos;ll keep you in the loop on what&apos;s
+            happening at RegenHub.
           </p>
         </div>
 
