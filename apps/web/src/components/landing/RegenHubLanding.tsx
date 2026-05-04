@@ -6,12 +6,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { MemberDirectory } from "@/components/landing/MemberDirectory";
 import { ForestMascot } from "@/components/landing/ForestMascot";
 import HeroInterestForm from "@/components/landing/HeroInterestForm";
+
+export type SignedInMember = { name: string } | null;
 import forestBackground from "@/assets/forest-background.jpg";
 import regenHubLogo from "@/assets/regenhub-logo.svg";
 import regenHubText from "@/assets/regenhub-text.svg";
 import regenHubFull from "@/assets/regenhub-full.svg";
 
-export default function RegenHubLanding() {
+export default function RegenHubLanding({ signedInMember }: { signedInMember?: SignedInMember }) {
   return (
     <div className="min-h-screen relative overflow-x-hidden">
       {/* Forest background */}
@@ -65,7 +67,16 @@ export default function RegenHubLanding() {
                 </Button>
               </a>
             </div>
-            <HeroInterestForm />
+            {signedInMember ? (
+              <p className="mt-6 text-sm text-muted">
+                You&apos;re in, {signedInMember.name.split(" ")[0]}.{" "}
+                <Link href="/portal" className="text-sage hover:underline">
+                  Open your portal →
+                </Link>
+              </p>
+            ) : (
+              <HeroInterestForm />
+            )}
           </div>
         </div>
       </section>

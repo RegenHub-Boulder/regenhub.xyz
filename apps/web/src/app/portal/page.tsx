@@ -58,6 +58,19 @@ export default async function PortalPage() {
     freeDayClaim = data;
   }
 
+  // Look up the original interest signup (if any) for the funnel-continuity ack
+  let interestSignup: { created_at: string } | null = null;
+  if (member) {
+    const { data } = await supabase
+      .from("interests")
+      .select("created_at")
+      .eq("member_id", member.id)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    interestSignup = data;
+  }
+
   if (!member) {
     if (application) {
       const statusColor = application.status === "approved"
@@ -120,11 +133,25 @@ export default async function PortalPage() {
   const accountAgeMs = Date.now() - new Date(member.created_at).getTime();
   const isNewMember = !member.pin_code || accountAgeMs < 7 * 24 * 60 * 60 * 1000;
 
+  const interestSignupLabel = interestSignup
+    ? new Date(interestSignup.created_at).toLocaleDateString("en-US", {
+        timeZone: "America/Denver",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      })
+    : null;
+
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold text-forest">Welcome back, {member.name.split(" ")[0]}</h1>
         <p className="text-muted mt-1">{typeLabel} Member</p>
+        {interestSignupLabel && (
+          <p className="text-xs text-muted mt-2">
+            Thanks for joining our list on {interestSignupLabel}. Glad you stuck with us.
+          </p>
+        )}
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">

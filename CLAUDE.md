@@ -75,6 +75,16 @@ DEPLOYMENT.md               # Full infra guide for agents + humans
 - `day_passes` — pool of N-use guest passes per member
 - `day_codes` — temporary door codes (PIN slots 125-249) issued against a pass
 - `access_logs` — every door access event
+- `interests` — public "stay in touch" signups from `/interest`. Linked to `members` via `member_id` (nullable FK). The funnel runs `interests → application → member → auth.users`; whichever events fire first, triggers backfill the linkage so admins can see who came from where.
+
+### Identity linkage
+Three identities can exist for one person: an `interests` row (email-only signup), a `members` row (full profile, may pre-exist via Telegram bot or admin add), and an `auth.users` row (created on first magic-link sign-in). They're stitched together by email via two trigger functions plus per-route fallbacks:
+- `link_member_on_auth` (migration 004 + extended in 020) fires on `auth.users` insert/update; links `members.supabase_user_id` and `interests.member_id` to whichever rows match the email.
+- `link_member_to_auth` (migration 013) fires on `members.email` change; pulls in the auth user if one already exists.
+- `/api/interest` (POST) looks up `members` by email at insert time, so the common case (member exists, then signs up to the interest list) is linked synchronously.
+- `/portal` (server component) auto-links `members.supabase_user_id` if the auth user signs in with an email matching an unlinked member.
+
+The result: regardless of event order, the linkage materializes the moment all three records can be reconciled.
 
 ## Common Tasks
 

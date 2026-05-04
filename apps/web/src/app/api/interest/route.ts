@@ -26,12 +26,25 @@ export async function POST(req: Request) {
     ? interests.filter((i): i is string => typeof i === "string" && VALID_INTERESTS.has(i))
     : [];
 
+  const normalizedEmail = email.trim().toLowerCase();
   const supabase = createServiceClient();
+
+  // If a member already exists for this email, link the interest at signup time.
+  // The signup-second-member-first case is also covered by the auth-side trigger
+  // in migration 020, but going direct here saves a round trip when the member
+  // exists today.
+  const { data: existingMember } = await supabase
+    .from("members")
+    .select("id")
+    .ilike("email", normalizedEmail)
+    .maybeSingle();
+
   const { error } = await supabase.from("interests").insert({
-    email: email.trim().toLowerCase(),
+    email: normalizedEmail,
     name: name?.trim() || null,
     interests: validInterests,
     source_path: source_path?.slice(0, 500) ?? null,
+    member_id: existingMember?.id ?? null,
   });
 
   if (error) {
