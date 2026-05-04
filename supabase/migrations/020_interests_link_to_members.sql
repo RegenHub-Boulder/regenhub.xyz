@@ -58,3 +58,14 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+-- (d) Let members read their own linked interest row.
+-- The migration-019 policy was admin-only; without this, the /portal
+-- "Thanks for joining our list on …" acknowledgment can't see the row
+-- (it queries via the user's RLS-bound client). The existing admins_all
+-- policy stays in place — RLS combines policies with OR, so admins still
+-- see everything and members see only their own row.
+CREATE POLICY "members_read_own" ON interests
+  FOR SELECT USING (
+    member_id = (SELECT id FROM members WHERE supabase_user_id = auth.uid())
+  );
