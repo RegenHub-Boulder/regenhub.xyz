@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { MemberDirectory } from "@/components/landing/MemberDirectory";
 import { ForestMascot } from "@/components/landing/ForestMascot";
 import HeroInterestForm from "@/components/landing/HeroInterestForm";
+import CommunityGallery from "@/components/landing/CommunityGallery";
 
 export type SignedInMember = { name: string } | null;
 import forestBackground from "@/assets/forest-background.jpg";
@@ -80,6 +81,9 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
           </div>
         </div>
       </section>
+
+      {/* Community Gallery */}
+      <CommunityGallery />
 
       {/* What We Offer */}
       <section className="relative px-6 py-16">
