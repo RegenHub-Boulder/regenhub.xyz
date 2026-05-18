@@ -1,7 +1,30 @@
 export type MemberType = "cold_desk" | "hot_desk" | "hub_friend" | "day_pass";
 export type ApplicationStatus = "pending" | "approved" | "rejected";
-export type MembershipInterest = "daypass_single" | "daypass_5pack" | "hot_desk" | "reserved_desk";
+export type MembershipInterest =
+  | "daypass_single"
+  | "daypass_5pack"
+  | "hot_desk"
+  | "reserved_desk"
+  | "social_events_1"
+  | "social_events_5";
 export type AccessMethod = "nfc" | "pin" | "daycode";
+// Free text — concrete plan keys live in apps/web/src/lib/stripe.ts PLANS.
+// Typed as string here so adding new plans (social, events, etc.) doesn't
+// require touching the DB schema or this file.
+export type PlanKey = string;
+export type DiscountDuration = "forever" | "repeating";
+export type PurchaseKind = "day_pass" | "five_pack";
+
+// Mirrors Stripe.Subscription.Status verbatim
+export type StripeSubscriptionStatus =
+  | "active"
+  | "past_due"
+  | "canceled"
+  | "incomplete"
+  | "incomplete_expired"
+  | "trialing"
+  | "unpaid"
+  | "paused";
 
 export interface Database {
   public: {
@@ -17,6 +40,16 @@ export interface Database {
           membership_interest: MembershipInterest;
           status: ApplicationStatus;
           admin_notes: string | null;
+          approved_plan_key: PlanKey | null;
+          approved_monthly_cents: number | null;
+          discount_cents: number | null;
+          discount_duration: DiscountDuration | null;
+          discount_months: number | null;
+          discount_note: string | null;
+          stripe_checkout_session_id: string | null;
+          stripe_checkout_url: string | null;
+          checkout_sent_at: string | null;
+          checkout_completed_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -29,6 +62,16 @@ export interface Database {
           membership_interest?: MembershipInterest;
           status?: ApplicationStatus;
           admin_notes?: string | null;
+          approved_plan_key?: PlanKey | null;
+          approved_monthly_cents?: number | null;
+          discount_cents?: number | null;
+          discount_duration?: DiscountDuration | null;
+          discount_months?: number | null;
+          discount_note?: string | null;
+          stripe_checkout_session_id?: string | null;
+          stripe_checkout_url?: string | null;
+          checkout_sent_at?: string | null;
+          checkout_completed_at?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["applications"]["Insert"]>;
         Relationships: [];
@@ -53,6 +96,7 @@ export interface Database {
           skills: string[] | null;
           profile_photo_url: string | null;
           show_in_directory: boolean;
+          stripe_customer_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -74,6 +118,7 @@ export interface Database {
           bio?: string | null;
           skills?: string[] | null;
           profile_photo_url?: string | null;
+          stripe_customer_id?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["members"]["Insert"]>;
         Relationships: [];
@@ -157,6 +202,93 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["interests"]["Insert"]>;
         Relationships: [];
       };
+      subscriptions: {
+        Row: {
+          id: number;
+          member_id: number;
+          stripe_subscription_id: string;
+          stripe_customer_id: string;
+          stripe_price_id: string;
+          plan_key: PlanKey;
+          monthly_cents: number;
+          status: StripeSubscriptionStatus;
+          current_period_end: string | null;
+          cancel_at_period_end: boolean;
+          canceled_at: string | null;
+          past_due_since: string | null;
+          access_disabled_at: string | null;
+          discount_cents: number | null;
+          discount_duration: DiscountDuration | null;
+          discount_months: number | null;
+          discount_note: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          member_id: number;
+          stripe_subscription_id: string;
+          stripe_customer_id: string;
+          stripe_price_id: string;
+          plan_key: PlanKey;
+          monthly_cents: number;
+          status: StripeSubscriptionStatus;
+          current_period_end?: string | null;
+          cancel_at_period_end?: boolean;
+          canceled_at?: string | null;
+          past_due_since?: string | null;
+          access_disabled_at?: string | null;
+          discount_cents?: number | null;
+          discount_duration?: DiscountDuration | null;
+          discount_months?: number | null;
+          discount_note?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["subscriptions"]["Insert"]>;
+        Relationships: [];
+      };
+      purchases: {
+        Row: {
+          id: number;
+          member_id: number | null;
+          stripe_checkout_session: string | null;
+          stripe_payment_intent: string | null;
+          kind: PurchaseKind;
+          amount_cents: number;
+          passes_granted: number;
+          email: string | null;
+          created_at: string;
+        };
+        Insert: {
+          member_id?: number | null;
+          stripe_checkout_session?: string | null;
+          stripe_payment_intent?: string | null;
+          kind: PurchaseKind;
+          amount_cents: number;
+          passes_granted: number;
+          email?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["purchases"]["Insert"]>;
+        Relationships: [];
+      };
+      pass_grants: {
+        Row: {
+          id: number;
+          member_id: number;
+          subscription_id: number | null;
+          stripe_invoice_id: string;
+          plan_key: PlanKey;
+          passes_granted: number;
+          created_at: string;
+        };
+        Insert: {
+          member_id: number;
+          subscription_id?: number | null;
+          stripe_invoice_id: string;
+          plan_key: PlanKey;
+          passes_granted: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["pass_grants"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: { [_ in never]: never };
     Functions: {
@@ -184,6 +316,9 @@ export type DayPass = Database["public"]["Tables"]["day_passes"]["Row"];
 export type DayCode = Database["public"]["Tables"]["day_codes"]["Row"];
 export type AccessLog = Database["public"]["Tables"]["access_logs"]["Row"];
 export type Interest = Database["public"]["Tables"]["interests"]["Row"];
+export type Subscription = Database["public"]["Tables"]["subscriptions"]["Row"];
+export type Purchase = Database["public"]["Tables"]["purchases"]["Row"];
+export type PassGrant = Database["public"]["Tables"]["pass_grants"]["Row"];
 
 export const INTEREST_OPTIONS = [
   { value: "membership", label: "Desk membership" },

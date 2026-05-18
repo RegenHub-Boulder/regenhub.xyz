@@ -3,10 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import Link from "next/link";
-import { Key, Ticket, User, ClipboardList, CheckCircle, Clock, MessageCircle, Zap, Calendar, Mail } from "lucide-react";
+import { Key, Ticket, User, ClipboardList, CheckCircle, Clock, MessageCircle, Zap, Calendar, ArrowRight, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import HubEssentials from "@/components/portal/HubEssentials";
 import InviteCard from "@/components/portal/InviteCard";
+import { ManageSubscriptionButton } from "@/components/portal/ManageSubscriptionButton";
 
 export default async function PortalPage() {
   const supabase = await createClient();
@@ -69,6 +70,29 @@ export default async function PortalPage() {
       .limit(1)
       .maybeSingle();
     interestSignup = data;
+  }
+
+  // Look up active subscription (if any) for the manage-subscription CTA
+  let activeSubscription:
+    | {
+        plan_key: string;
+        monthly_cents: number;
+        status: string;
+        cancel_at_period_end: boolean;
+        current_period_end: string | null;
+        past_due_since: string | null;
+      }
+    | null = null;
+  if (member) {
+    const { data } = await supabase
+      .from("subscriptions")
+      .select("plan_key, monthly_cents, status, cancel_at_period_end, current_period_end, past_due_since")
+      .eq("member_id", member.id)
+      .in("status", ["active", "trialing", "past_due"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    activeSubscription = data;
   }
 
   if (!member) {
@@ -229,24 +253,80 @@ export default async function PortalPage() {
         {member.is_coop_member && <InviteCard />}
       </div>
 
-      {/* Membership upgrade prompt for day_pass members */}
-      {!isFullMember && (
+      {/* Subscription management — shown for ANY active sub (desk or social tiers) */}
+      {activeSubscription && (
+        <Card className="glass-panel border border-sage/20">
+          <CardContent className="p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h3 className="font-semibold mb-1">
+                  Membership
+                  {activeSubscription.plan_key && (
+                    <span className="text-muted font-normal ml-2 text-sm">
+                      ·{" "}
+                      {activeSubscription.plan_key === "cold_desk" ? "Cold Desk"
+                        : activeSubscription.plan_key === "hot_desk" ? "Hot Desk"
+                        : activeSubscription.plan_key === "social_events_1" ? "Social — Events + 1 day/mo"
+                        : activeSubscription.plan_key === "social_events_5" ? "Social — Events + 5 days/mo"
+                        : activeSubscription.plan_key}
+                      {" · "}${activeSubscription.monthly_cents / 100}/mo
+                    </span>
+                  )}
+                </h3>
+                {activeSubscription.cancel_at_period_end && activeSubscription.current_period_end && (
+                  <p className="text-sm text-amber-400 flex items-center gap-1.5">
+                    <AlertCircle className="w-4 h-4" />
+                    Cancelling on{" "}
+                    {new Date(activeSubscription.current_period_end).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </p>
+                )}
+                {activeSubscription.status === "past_due" && (
+                  <p className="text-sm text-red-400 flex items-center gap-1.5">
+                    <AlertCircle className="w-4 h-4" />
+                    Payment failed — update your card to keep access
+                  </p>
+                )}
+                {!activeSubscription.cancel_at_period_end && activeSubscription.status !== "past_due" && (
+                  <p className="text-sm text-muted">
+                    Renews{" "}
+                    {activeSubscription.current_period_end
+                      ? new Date(activeSubscription.current_period_end).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                        })
+                      : "monthly"}
+                  </p>
+                )}
+              </div>
+              <ManageSubscriptionButton />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Upgrade prompt only for day_pass members WITHOUT an active sub
+          (free/intro users — paying social members shouldn't see "apply") */}
+      {!isFullMember && !activeSubscription && (
         <Card className="glass-panel border border-forest/20">
           <CardContent className="p-6">
             <div className="flex items-start gap-4">
               <Key className="w-7 h-7 text-sage shrink-0 mt-0.5" />
               <div>
-                <h3 className="font-semibold mb-1">Want your own desk?</h3>
+                <h3 className="font-semibold mb-1">Ready for a permanent desk?</h3>
                 <p className="text-sm text-muted mb-3">
-                  Desk members get a permanent door code, 24/7 access, and a path to co-op ownership.
-                  Desks are $250/month.
+                  Members get a permanent door code, 24/7 access, and a path to co-op ownership.
+                  Hot Desk is $250/month, Cold Desk (reserved) is $500/month.
                 </p>
-                <a href="mailto:boulder.regenhub@gmail.com?subject=Interested in desk membership">
+                <Link href="/freeday">
                   <Button className="btn-glass gap-2 text-sm">
-                    <Mail className="w-4 h-4" />
-                    Inquire about membership
+                    Apply for membership
+                    <ArrowRight className="w-4 h-4" />
                   </Button>
-                </a>
+                </Link>
               </div>
             </div>
           </CardContent>

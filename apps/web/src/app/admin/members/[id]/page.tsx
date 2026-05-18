@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { MemberForm } from "@/components/admin/MemberForm";
 import { AddPassesCard } from "@/components/admin/AddPassesCard";
 import { PaymentLinkCard } from "@/components/admin/PaymentLinkCard";
+import { SubscriptionCard } from "@/components/admin/SubscriptionCard";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Key } from "lucide-react";
@@ -13,7 +14,7 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: member }, { data: codeHistory }] = await Promise.all([
+  const [{ data: member }, { data: codeHistory }, { data: subscriptions }, { data: purchases }] = await Promise.all([
     supabase
       .from("members")
       .select("*")
@@ -25,9 +26,24 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
       .eq("member_id", Number(id))
       .order("created_at", { ascending: false })
       .limit(20),
+    supabase
+      .from("subscriptions")
+      .select("*")
+      .eq("member_id", Number(id))
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("purchases")
+      .select("*")
+      .eq("member_id", Number(id))
+      .order("created_at", { ascending: false })
+      .limit(10),
   ]);
 
   if (!member) notFound();
+
+  const activeSubscription = subscriptions?.find((s) =>
+    ["active", "trialing", "past_due"].includes(s.status),
+  );
 
   return (
     <div className="space-y-8 max-w-2xl">
@@ -36,6 +52,12 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
         <p className="text-muted mt-1">{member.name}</p>
       </div>
       <MemberForm member={member} />
+      <SubscriptionCard
+        memberId={member.id}
+        memberName={member.name}
+        activeSubscription={activeSubscription ?? null}
+        recentPurchases={purchases ?? []}
+      />
       <AddPassesCard memberId={member.id} initialBalance={member.day_passes_balance} />
       <PaymentLinkCard
         memberName={member.name}

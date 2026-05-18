@@ -4,8 +4,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RequestDayPassButton } from "@/components/portal/RequestDayPassButton";
 import { RevokeCodeButton } from "@/components/portal/RevokeCodeButton";
-import { Ticket, Clock, ShoppingCart, Key, Mail } from "lucide-react";
+import { Ticket, Clock, ShoppingCart, Key, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export const metadata = { title: "Live Codes — RegenHub" };
 
@@ -200,14 +201,14 @@ export default async function PassesPage() {
                 <h3 className="font-semibold mb-1">Ready for your own desk?</h3>
                 <p className="text-sm text-muted mb-4">
                   Desk members get a permanent door code, 24/7 access, and a path to co-op ownership.
-                  Desks are $250/month.
+                  Hot Desk is $250/month, Cold Desk (reserved) is $500/month.
                 </p>
-                <a href="mailto:boulder.regenhub@gmail.com?subject=Interested in desk membership">
+                <Link href="/freeday">
                   <Button className="btn-glass gap-2 text-sm">
-                    <Mail className="w-4 h-4" />
-                    Inquire about membership
+                    Apply for membership
+                    <ArrowRight className="w-4 h-4" />
                   </Button>
-                </a>
+                </Link>
               </div>
             </div>
           </CardContent>

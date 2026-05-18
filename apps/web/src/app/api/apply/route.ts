@@ -5,6 +5,8 @@ import type { MembershipInterest } from "@/lib/supabase/types";
 const interestLabels: Record<string, string> = {
   daypass_single: "Day Pass",
   daypass_5pack: "5-Pack Day Passes",
+  social_events_1: "Social — Events + 1 day/mo",
+  social_events_5: "Social — Events + 5 days/mo",
   hot_desk: "Hot Desk",
   reserved_desk: "Reserved Desk",
   community: "Community",

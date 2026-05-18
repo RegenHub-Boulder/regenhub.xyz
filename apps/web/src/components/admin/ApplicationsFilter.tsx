@@ -10,6 +10,8 @@ import type { Application, ApplicationStatus } from "@/lib/supabase/types";
 const interestLabels: Record<string, string> = {
   daypass_single: "Day Pass",
   daypass_5pack: "5-Pack",
+  social_events_1: "Social · 1 day/mo",
+  social_events_5: "Social · 5 days/mo",
   hot_desk: "Hot Desk",
   reserved_desk: "Reserved Desk",
   community: "Community",
@@ -145,11 +147,7 @@ export function ApplicationsFilter({ applications }: { applications: Application
                 </p>
               )}
 
-              <ApplicationActions
-                applicationId={app.id}
-                currentStatus={app.status}
-                adminNotes={app.admin_notes}
-              />
+              <ApplicationActions application={app} />
             </div>
           ))}
         </div>
