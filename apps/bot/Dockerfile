@@ -1,5 +1,6 @@
 FROM node:22-alpine AS base
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Pinned to match local pnpm + lockfile version (lockfileVersion 9.0).
+RUN corepack enable && corepack prepare pnpm@10.28.2 --activate
 
 # --- deps ---
 FROM base AS deps
