@@ -14,8 +14,10 @@ import regenHubFull from "@/assets/regenhub-full.svg";
 const ACCESS_OPTIONS = [
   { value: "daypass_5pack", label: "5-Pack Day Passes", desc: "Flexible drop-in access — buy a 5-pack and use them whenever you need a desk" },
   { value: "daypass_single", label: "Single Day Passes", desc: "Occasional drop-in access, purchased one at a time" },
-  { value: "hot_desk", label: "Hot Desk Membership", desc: "Regular monthly access — a dedicated place in the community with full membership benefits" },
-  { value: "reserved_desk", label: "Reserved Desk", desc: "Your own dedicated desk, always available, full cooperative membership" },
+  { value: "social_events_1", label: "Social — Events + 1 day/mo ($50/mo)", desc: "Member-only events + 1 day of coworking per month" },
+  { value: "social_events_5", label: "Social — Events + 5 days/mo ($100/mo)", desc: "Member-only events + 5 days of coworking per month" },
+  { value: "hot_desk", label: "Hot Desk Membership ($250/mo)", desc: "Regular monthly access — a dedicated place in the community with full membership benefits" },
+  { value: "reserved_desk", label: "Reserved Desk ($500/mo)", desc: "Your own dedicated desk, always available, full cooperative membership" },
 ] as const;
 
 type Props = {
@@ -31,7 +33,7 @@ export default function ApplyForm({ authenticatedEmail }: Props) {
     telegram: "",
     about: "",
     why_join: "",
-    membership_interest: "daypass_5pack" as "daypass_5pack" | "daypass_single" | "hot_desk" | "reserved_desk",
+    membership_interest: "daypass_5pack" as "daypass_5pack" | "daypass_single" | "hot_desk" | "reserved_desk" | "social_events_1" | "social_events_5",
   });
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
