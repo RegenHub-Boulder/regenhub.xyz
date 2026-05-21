@@ -8,6 +8,7 @@ async function notifyTelegramInvited(claim: {
   email: string;
   claimed_date: string;
   inviter_name: string;
+  know_at_hub?: string;
 }) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_GROUP_CHAT_ID;
@@ -25,6 +26,7 @@ async function notifyTelegramInvited(claim: {
     `Date: ${dateStr}`,
     `Invited by: *${claim.inviter_name}*`,
   ];
+  if (claim.know_at_hub) lines.push(`Knows: ${claim.know_at_hub}`);
 
   try {
     await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -50,6 +52,7 @@ async function notifyTelegramApplication(claim: {
   claimed_date: string;
   about: string;
   why_join: string;
+  know_at_hub?: string;
 }) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_GROUP_CHAT_ID;
@@ -65,13 +68,18 @@ async function notifyTelegramApplication(claim: {
     ``,
     `*${claim.name}*  ·  ${claim.email}`,
     `Date: ${dateStr}`,
+  ];
+  if (claim.know_at_hub) {
+    lines.push(`Knows at hub: ${claim.know_at_hub}`);
+  }
+  lines.push(
     ``,
     `*What are you working on?*`,
     claim.about,
     ``,
     `*Why RegenHub?*`,
     claim.why_join,
-  ];
+  );
 
   try {
     await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -103,13 +111,14 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
 
-  const { name, email, claimed_date, invite_code, about, why_join } = body as {
+  const { name, email, claimed_date, invite_code, about, why_join, know_at_hub } = body as {
     name?: string;
     email?: string;
     claimed_date?: string;
     invite_code?: string;
     about?: string;
     why_join?: string;
+    know_at_hub?: string;
   };
 
   if (!name?.trim() || !email?.trim() || !claimed_date) {
@@ -212,6 +221,7 @@ export async function POST(req: Request) {
       invited_by_member_id: inviter?.id ?? null,
       about: about?.trim() || null,
       why_join: why_join?.trim() || null,
+      know_at_hub: know_at_hub?.trim() || null,
     })
     .select("id")
     .single();
@@ -235,6 +245,7 @@ export async function POST(req: Request) {
       email: normalizedEmail,
       claimed_date,
       inviter_name: inviter.name,
+      know_at_hub: know_at_hub?.trim() || undefined,
     });
   } else {
     notifyTelegramApplication({
@@ -244,6 +255,7 @@ export async function POST(req: Request) {
       claimed_date,
       about: about!.trim(),
       why_join: why_join!.trim(),
+      know_at_hub: know_at_hub?.trim() || undefined,
     });
   }
 

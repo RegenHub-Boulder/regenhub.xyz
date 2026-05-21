@@ -119,6 +119,7 @@ export default function FreeDayForm({
   const [claimedDate, setClaimedDate] = useState(getNextWeekday());
   const [about, setAbout] = useState("");
   const [whyJoin, setWhyJoin] = useState("");
+  const [knowAtHub, setKnowAtHub] = useState("");
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -156,6 +157,7 @@ export default function FreeDayForm({
           invite_code: inviter?.invite_code || undefined,
           about: about.trim() || undefined,
           why_join: whyJoin.trim() || undefined,
+          know_at_hub: knowAtHub.trim() || undefined,
         }),
       });
       const json = await res.json();
@@ -648,6 +650,18 @@ export default function FreeDayForm({
                       required
                       placeholder="What draws you to regenerative community? What are you hoping to find here?"
                       className="w-full rounded-md px-3 py-2 text-sm glass-input resize-none"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="know_at_hub">Anyone you know at RegenHub?</Label>
+                    <input
+                      id="know_at_hub"
+                      type="text"
+                      value={knowAtHub}
+                      onChange={(e) => setKnowAtHub(e.target.value)}
+                      placeholder="Member name(s), or how you heard about us — optional but helpful"
+                      className="w-full rounded-md px-3 py-2 text-sm glass-input"
                     />
                   </div>
                 </>

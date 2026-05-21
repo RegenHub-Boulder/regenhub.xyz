@@ -12,12 +12,13 @@ import { Loader2, CheckCircle, ArrowLeft } from "lucide-react";
 import regenHubFull from "@/assets/regenhub-full.svg";
 
 const ACCESS_OPTIONS = [
-  { value: "daypass_5pack", label: "5-Pack Day Passes", desc: "Flexible drop-in access — buy a 5-pack and use them whenever you need a desk" },
-  { value: "daypass_single", label: "Single Day Passes", desc: "Occasional drop-in access, purchased one at a time" },
-  { value: "social_events_1", label: "Social — Events + 1 day/mo ($50/mo)", desc: "Member-only events + 1 day of coworking per month" },
-  { value: "social_events_5", label: "Social — Events + 5 days/mo ($100/mo)", desc: "Member-only events + 5 days of coworking per month" },
-  { value: "hot_desk", label: "Hot Desk Membership ($250/mo)", desc: "Regular monthly access — a dedicated place in the community with full membership benefits" },
-  { value: "reserved_desk", label: "Reserved Desk ($500/mo)", desc: "Your own dedicated desk, always available, full cooperative membership" },
+  { value: "daypass_5pack", label: "5-Pack Day Passes ($100)", desc: "Flexible drop-in access — buy a 5-pack and use them whenever you need a desk" },
+  { value: "daypass_single", label: "Single Day Pass ($25)", desc: "Occasional drop-in access, one at a time" },
+  { value: "member_basic", label: "Member ($20/mo)", desc: "Member access — community, events, and the ability to buy day passes" },
+  { value: "member_2day", label: "Member + 2 days/mo ($50/mo)", desc: "Member access plus 2 days of coworking per month, auto-credited" },
+  { value: "member_5day", label: "Member + 5 days/mo ($100/mo)", desc: "Member access plus 5 days of coworking per month, auto-credited" },
+  { value: "hot_desk", label: "Hot Desk ($250/mo)", desc: "Permanent door code, 24/7 access, full membership benefits" },
+  { value: "reserved_desk", label: "Cold Desk — Reserved ($500/mo)", desc: "Your own dedicated desk, always available, full cooperative membership" },
 ] as const;
 
 type Props = {
@@ -33,7 +34,7 @@ export default function ApplyForm({ authenticatedEmail }: Props) {
     telegram: "",
     about: "",
     why_join: "",
-    membership_interest: "daypass_5pack" as "daypass_5pack" | "daypass_single" | "hot_desk" | "reserved_desk" | "social_events_1" | "social_events_5",
+    membership_interest: "daypass_5pack" as "daypass_5pack" | "daypass_single" | "hot_desk" | "reserved_desk" | "member_basic" | "member_2day" | "member_5day",
   });
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);

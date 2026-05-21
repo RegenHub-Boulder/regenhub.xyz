@@ -4,7 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { RegenerateCodeButton } from "@/components/portal/RegenerateCodeButton";
 import { RevealPin } from "@/components/portal/RevealPin";
-import { Key, Nfc, AlertCircle, Zap } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Key, Nfc, AlertCircle, Zap, Ticket } from "lucide-react";
 
 export const metadata = { title: "My Door Code — RegenHub" };
 
@@ -23,8 +24,16 @@ export default async function MyCodePage() {
     return (
       <div className="glass-panel p-8 text-center max-w-md mx-auto mt-8">
         <AlertCircle className="w-8 h-8 text-muted mx-auto mb-3" />
-        <h2 className="font-semibold mb-2">Cold/hot desk membership required</h2>
-        <p className="text-sm text-muted">Permanent door codes are for cold and hot desk members. Day pass members use the Passes page.</p>
+        <h2 className="font-semibold mb-2">Permanent codes are for desk members</h2>
+        <p className="text-sm text-muted mb-5">
+          You&apos;re on a day-pass plan, so you generate a fresh code for each visit on the Passes page.
+        </p>
+        <Link href="/portal/passes">
+          <Button className="btn-primary-glass gap-2">
+            <Ticket className="w-4 h-4" />
+            Go to Day Passes
+          </Button>
+        </Link>
       </div>
     );
   }

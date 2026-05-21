@@ -9,10 +9,11 @@ import type { Application, ApplicationStatus } from "@/lib/supabase/types";
 // Plan catalog — keep in sync with apps/web/src/lib/stripe.ts PLANS.
 // Mirrored here so the admin UI doesn't have to import server-only code.
 const APPROVABLE_PLANS = [
-  { key: "cold_desk",       label: "Cold Desk",                       defaultDollars: 500 },
-  { key: "hot_desk",        label: "Hot Desk",                        defaultDollars: 250 },
-  { key: "social_events_5", label: "Social — Events + 5 days/mo",     defaultDollars: 100 },
-  { key: "social_events_1", label: "Social — Events + 1 day/mo",      defaultDollars: 50 },
+  { key: "cold_desk",    label: "Cold Desk",          defaultDollars: 500 },
+  { key: "hot_desk",     label: "Hot Desk",           defaultDollars: 250 },
+  { key: "member_5day",  label: "Member + 5 days/mo", defaultDollars: 100 },
+  { key: "member_2day",  label: "Member + 2 days/mo", defaultDollars: 50 },
+  { key: "member_basic", label: "Member",             defaultDollars: 20 },
 ] as const;
 
 type DurationChoice = "forever" | "repeating";
@@ -161,7 +162,7 @@ export function ApplicationActions({ application }: { application: Application }
       {showApprove && status === "pending" && (
         <div className="glass-panel p-4 space-y-3 border border-emerald-500/20">
           <div>
-            <p className="text-xs text-muted mb-1.5 font-medium">Plan</p>
+            <p className="text-xs text-muted mb-1.5 font-medium">Plan (rate can be customized below)</p>
             <div className="flex gap-2 flex-wrap">
               {APPROVABLE_PLANS.map((p) => (
                 <button

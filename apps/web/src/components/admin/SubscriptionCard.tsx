@@ -87,6 +87,9 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
               <span>
                 {activeSubscription.plan_key === "cold_desk" ? "Cold Desk"
                   : activeSubscription.plan_key === "hot_desk" ? "Hot Desk"
+                  : activeSubscription.plan_key === "member_5day" ? "Member + 5 days/mo"
+                  : activeSubscription.plan_key === "member_2day" ? "Member + 2 days/mo"
+                  : activeSubscription.plan_key === "member_basic" ? "Member"
                   : activeSubscription.plan_key}
               </span>
               <span className="text-muted">·</span>

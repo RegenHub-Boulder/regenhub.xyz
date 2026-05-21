@@ -170,6 +170,24 @@ export async function fulfillPassPurchase(
   );
 
   if (isFirstTime) {
+    // Send a magic-link so the brand-new member can claim their portal.
+    // Without this, they paid + got a member record but have no auth
+    // account, so they can't sign in to see their balance / get a code.
+    if (customerEmail) {
+      const baseUrl =
+        process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://regenhub.xyz";
+      const { error: otpErr } = await admin.auth.signInWithOtp({
+        email: customerEmail,
+        options: {
+          emailRedirectTo: `${baseUrl}/auth/callback?next=/portal/passes`,
+          shouldCreateUser: true,
+        },
+      });
+      if (otpErr) {
+        console.error("[PassFulfillment] OTP send failed:", otpErr);
+      }
+    }
+
     const reviewUrl = `https://regenhub.xyz/admin/members/${memberId}`;
     await notifyTelegram(
       [
@@ -177,6 +195,7 @@ export async function fulfillPassPurchase(
         ``,
         `*${memberName}* · ${customerEmail}`,
         `Bought: ${def.label} ($${(session.amount_total ?? def.cents) / 100})`,
+        `Sign-in email sent to claim their portal.`,
         ``,
         `[Review →](${reviewUrl})`,
       ].join("\n"),

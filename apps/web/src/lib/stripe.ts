@@ -58,21 +58,27 @@ export const PLANS = {
     grantsMemberType: "hot_desk" as MemberType,
     productIdEnvKey: "STRIPE_PRODUCT_HOT_DESK",
   },
-  social_events_1: {
-    label: "Social — Events + 1 day/mo",
-    defaultMonthlyCents: 5000,
-    grantsMemberType: "day_pass" as MemberType,
-    productIdEnvKey: "STRIPE_PRODUCT_SOCIAL_EVENTS_1",
-    monthlyDayPasses: 1,
-  },
-  social_events_5: {
-    label: "Social — Events + 5 days/mo",
+  member_5day: {
+    label: "Member + 5 days/mo",
     defaultMonthlyCents: 10000,
     grantsMemberType: "day_pass" as MemberType,
-    productIdEnvKey: "STRIPE_PRODUCT_SOCIAL_EVENTS_5",
+    productIdEnvKey: "STRIPE_PRODUCT_MEMBER_5DAY",
     monthlyDayPasses: 5,
   },
-  // Future: social_forums (~$20/mo, online-only, grantsMemberType: null)
+  member_2day: {
+    label: "Member + 2 days/mo",
+    defaultMonthlyCents: 5000,
+    grantsMemberType: "day_pass" as MemberType,
+    productIdEnvKey: "STRIPE_PRODUCT_MEMBER_2DAY",
+    monthlyDayPasses: 2,
+  },
+  member_basic: {
+    label: "Member",
+    defaultMonthlyCents: 2000,
+    grantsMemberType: "day_pass" as MemberType,
+    productIdEnvKey: "STRIPE_PRODUCT_MEMBER_BASIC",
+    monthlyDayPasses: 0,
+  },
 } as const satisfies Record<
   string,
   {

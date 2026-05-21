@@ -10,6 +10,10 @@ import type { Application, ApplicationStatus } from "@/lib/supabase/types";
 const interestLabels: Record<string, string> = {
   daypass_single: "Day Pass",
   daypass_5pack: "5-Pack",
+  member_basic: "Member",
+  member_2day: "Member · 2 days/mo",
+  member_5day: "Member · 5 days/mo",
+  // Legacy keys kept so historical applications still display nicely
   social_events_1: "Social · 1 day/mo",
   social_events_5: "Social · 5 days/mo",
   hot_desk: "Hot Desk",

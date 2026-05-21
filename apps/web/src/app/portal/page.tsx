@@ -168,6 +168,20 @@ export default async function PortalPage() {
 
   return (
     <div className="space-y-8">
+      {/* Top-priority banner: payment failed needs attention */}
+      {activeSubscription?.status === "past_due" && (
+        <div className="glass-panel p-4 border border-red-500/40 bg-red-500/5 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-red-400">Your payment failed</p>
+            <p className="text-xs text-muted mt-0.5">
+              Update your card to keep your access. We&apos;ll automatically retry — and door access continues for 7 days while you sort it out.
+            </p>
+          </div>
+          <ManageSubscriptionButton />
+        </div>
+      )}
+
       <div>
         <h1 className="text-3xl font-bold text-forest">Welcome back, {member.name.split(" ")[0]}</h1>
         <p className="text-muted mt-1">{typeLabel} Member</p>
@@ -266,8 +280,9 @@ export default async function PortalPage() {
                       ·{" "}
                       {activeSubscription.plan_key === "cold_desk" ? "Cold Desk"
                         : activeSubscription.plan_key === "hot_desk" ? "Hot Desk"
-                        : activeSubscription.plan_key === "social_events_1" ? "Social — Events + 1 day/mo"
-                        : activeSubscription.plan_key === "social_events_5" ? "Social — Events + 5 days/mo"
+                        : activeSubscription.plan_key === "member_5day" ? "Member + 5 days/mo"
+                        : activeSubscription.plan_key === "member_2day" ? "Member + 2 days/mo"
+                        : activeSubscription.plan_key === "member_basic" ? "Member"
                         : activeSubscription.plan_key}
                       {" · "}${activeSubscription.monthly_cents / 100}/mo
                     </span>

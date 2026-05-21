@@ -5,8 +5,9 @@ export type MembershipInterest =
   | "daypass_5pack"
   | "hot_desk"
   | "reserved_desk"
-  | "social_events_1"
-  | "social_events_5";
+  | "member_basic"
+  | "member_2day"
+  | "member_5day";
 export type AccessMethod = "nfc" | "pin" | "daycode";
 // Free text — concrete plan keys live in apps/web/src/lib/stripe.ts PLANS.
 // Typed as string here so adding new plans (social, events, etc.) doesn't
