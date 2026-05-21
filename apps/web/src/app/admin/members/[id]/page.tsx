@@ -5,7 +5,7 @@ import { AddPassesCard } from "@/components/admin/AddPassesCard";
 import { SubscriptionCard } from "@/components/admin/SubscriptionCard";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Key } from "lucide-react";
+import { Key, AlertCircle } from "lucide-react";
 
 export const metadata = { title: "Edit Member — Admin" };
 
@@ -44,8 +44,26 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
     ["active", "trialing", "past_due"].includes(s.status),
   );
 
+  const pastDue = activeSubscription?.status === "past_due";
+
   return (
     <div className="space-y-8 max-w-2xl">
+      {pastDue && (
+        <div className="glass-panel p-4 border border-red-500/40 bg-red-500/5 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-red-400">Payment past due</p>
+            <p className="text-xs text-muted mt-0.5">
+              {member.name}&apos;s {activeSubscription!.plan_key} subscription has a failed payment
+              {activeSubscription!.past_due_since && (
+                <> since {new Date(activeSubscription!.past_due_since).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</>
+              )}
+              . The 7-day grace cron will flip them to day-pass if not resolved.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div>
         <h1 className="text-3xl font-bold text-forest">Edit Member</h1>
         <p className="text-muted mt-1">{member.name}</p>

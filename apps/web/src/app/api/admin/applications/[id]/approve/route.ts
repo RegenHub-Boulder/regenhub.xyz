@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import {
   createApprovalCheckoutSession,
   getPlan,
+  getStripe,
   isStripeConfigured,
 } from "@/lib/stripe";
 import type { PlanKey, DiscountDuration } from "@/lib/supabase/types";
@@ -29,7 +30,7 @@ export async function POST(
 
   const { data: adminMember } = await supabase
     .from("members")
-    .select("is_admin")
+    .select("id, is_admin")
     .eq("supabase_user_id", user.id)
     .single();
   if (!adminMember?.is_admin) {
@@ -81,6 +82,28 @@ export async function POST(
     .single();
   if (!application) {
     return NextResponse.json({ error: "Application not found" }, { status: 404 });
+  }
+
+  // Idempotency: if this application already has an open Stripe Checkout
+  // Session, return its URL instead of creating a new customer + coupon +
+  // session. Protects against double-click submissions and admin re-clicks.
+  if (application.stripe_checkout_session_id && !application.checkout_completed_at) {
+    try {
+      const existing = await getStripe().checkout.sessions.retrieve(
+        application.stripe_checkout_session_id,
+      );
+      if (existing.status === "open" && existing.url) {
+        return NextResponse.json({
+          checkout_url: existing.url,
+          session_id: existing.id,
+          reused: true,
+        });
+      }
+      // Status is "complete" or "expired" — fall through to create a new one
+    } catch (err) {
+      console.warn("[ApproveApp] Couldn't retrieve existing session, creating new:", err);
+      // Fall through to create new
+    }
   }
 
   // Find or create the member row for this applicant.
@@ -151,6 +174,10 @@ export async function POST(
       status: "approved",
       approved_plan_key: body.plan_key,
       approved_monthly_cents: body.monthly_cents,
+      approved_by: adminMember.id,
+      // Clear any prior rejection signal — this is a fresh approval
+      rejected_by: null,
+      rejected_at: null,
       discount_cents: discountCents > 0 ? discountCents : null,
       discount_duration: discountDuration,
       discount_months: discountMonths,

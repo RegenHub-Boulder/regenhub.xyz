@@ -29,7 +29,13 @@ const statusStyle: Record<ApplicationStatus, string> = {
 
 const statusTabs = ["all", "pending", "approved", "rejected"] as const;
 
-export function ApplicationsFilter({ applications }: { applications: Application[] }) {
+export function ApplicationsFilter({
+  applications,
+  adminNames = {},
+}: {
+  applications: Application[];
+  adminNames?: Record<number, string>;
+}) {
   const [activeTab, setActiveTab] = useState<string>("all");
   const [search, setSearch] = useState("");
 
@@ -151,7 +157,7 @@ export function ApplicationsFilter({ applications }: { applications: Application
                 </p>
               )}
 
-              <ApplicationActions application={app} />
+              <ApplicationActions application={app} adminNames={adminNames} />
             </div>
           ))}
         </div>

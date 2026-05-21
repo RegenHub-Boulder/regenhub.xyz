@@ -13,7 +13,7 @@ export async function PATCH(req: Request) {
   // Admin check
   const { data: member } = await supabase
     .from("members")
-    .select("is_admin")
+    .select("id, is_admin")
     .eq("supabase_user_id", user.id)
     .single();
   if (!member?.is_admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -28,7 +28,14 @@ export async function PATCH(req: Request) {
   };
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  if (status) updates.status = status;
+  if (status) {
+    updates.status = status;
+    if (status === "rejected") {
+      updates.rejected_by = member.id;
+      updates.rejected_at = new Date().toISOString();
+    }
+    // Don't clear rejected_by on revert — keep audit history of past decisions
+  }
   if (admin_notes !== undefined) updates.admin_notes = admin_notes;
 
   const { error } = await supabase

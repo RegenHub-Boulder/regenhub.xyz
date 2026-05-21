@@ -46,6 +46,37 @@ export async function POST(
 
   await admin.from("members").update({ disabled: true }).eq("id", memberId);
 
+  // Cancel any active Stripe subscriptions immediately. They keep paying
+  // otherwise, which is bad. Failures here don't roll back the revoke —
+  // member is still disabled; admin gets a warning to clean up in Stripe.
+  const canceledSubs: string[] = [];
+  const cancelErrors: { stripe_subscription_id: string; error: string }[] = [];
+  if (isStripeConfigured()) {
+    const { data: liveSubs } = await admin
+      .from("subscriptions")
+      .select("id, stripe_subscription_id")
+      .eq("member_id", memberId)
+      .in("status", ["active", "trialing", "past_due", "incomplete"]);
+    for (const sub of liveSubs ?? []) {
+      try {
+        await getStripe().subscriptions.cancel(sub.stripe_subscription_id);
+        // Local mirror updates via the customer.subscription.deleted webhook,
+        // but stamp it here too in case the webhook is delayed.
+        await admin
+          .from("subscriptions")
+          .update({ status: "canceled", canceled_at: new Date().toISOString() })
+          .eq("id", sub.id);
+        canceledSubs.push(sub.stripe_subscription_id);
+      } catch (err) {
+        console.error("[RevokeMember] Stripe cancel failed:", err);
+        cancelErrors.push({
+          stripe_subscription_id: sub.stripe_subscription_id,
+          error: err instanceof Error ? err.message : "Unknown error",
+        });
+      }
+    }
+  }
+
   let refunded: { amount: number; refund_id: string } | null = null;
   if (body?.refund_last_purchase && isStripeConfigured()) {
     const { data: lastPurchase } = await admin
@@ -67,11 +98,18 @@ export async function POST(
         // Don't fail the whole revoke if refund fails — member is still disabled.
         return NextResponse.json({
           revoked: true,
+          canceled_subscriptions: canceledSubs,
+          cancel_errors: cancelErrors,
           refund_error: err instanceof Error ? err.message : "Refund failed",
         });
       }
     }
   }
 
-  return NextResponse.json({ revoked: true, refunded });
+  return NextResponse.json({
+    revoked: true,
+    canceled_subscriptions: canceledSubs,
+    cancel_errors: cancelErrors,
+    refunded,
+  });
 }

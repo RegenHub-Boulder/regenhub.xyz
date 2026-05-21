@@ -142,10 +142,11 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
           <div className="glass-panel p-3 border border-red-500/20 space-y-2">
             <p className="text-sm">
               Revoke <span className="font-semibold">{memberName}</span>&apos;s access?
-              This sets <code>disabled = true</code> on the member record.
+              This sets <code>disabled = true</code> on the member record
               {activeSubscription && (
-                <span className="text-muted"> The active subscription will need to be cancelled separately in Stripe.</span>
+                <span> and immediately cancels their <span className="font-semibold">{activeSubscription.plan_key === "cold_desk" ? "Cold Desk" : activeSubscription.plan_key === "hot_desk" ? "Hot Desk" : activeSubscription.plan_key === "member_5day" ? "Member + 5 days/mo" : activeSubscription.plan_key === "member_2day" ? "Member + 2 days/mo" : activeSubscription.plan_key === "member_basic" ? "Member" : activeSubscription.plan_key}</span> subscription in Stripe</span>
               )}
+              .
             </p>
             {recentPurchases.length > 0 && (
               <label className="flex items-center gap-2 text-xs">

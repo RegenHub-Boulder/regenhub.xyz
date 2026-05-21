@@ -43,6 +43,9 @@ export interface Database {
           admin_notes: string | null;
           approved_plan_key: PlanKey | null;
           approved_monthly_cents: number | null;
+          approved_by: number | null;
+          rejected_by: number | null;
+          rejected_at: string | null;
           discount_cents: number | null;
           discount_duration: DiscountDuration | null;
           discount_months: number | null;
@@ -65,6 +68,9 @@ export interface Database {
           admin_notes?: string | null;
           approved_plan_key?: PlanKey | null;
           approved_monthly_cents?: number | null;
+          approved_by?: number | null;
+          rejected_by?: number | null;
+          rejected_at?: string | null;
           discount_cents?: number | null;
           discount_duration?: DiscountDuration | null;
           discount_months?: number | null;

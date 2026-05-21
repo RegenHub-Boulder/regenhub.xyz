@@ -10,8 +10,9 @@ import {
   ArrowDownCircle,
   CheckCircle2,
   ShoppingBag,
+  Gift,
 } from "lucide-react";
-import type { Subscription, Purchase } from "@/lib/supabase/types";
+import type { Subscription, Purchase, PassGrant } from "@/lib/supabase/types";
 
 export const metadata = { title: "Billing — Admin" };
 
@@ -58,6 +59,9 @@ type SubWithMember = Subscription & {
 type PurchaseWithMember = Purchase & {
   members: { id: number; name: string } | null;
 };
+type GrantWithMember = PassGrant & {
+  members: { id: number; name: string } | null;
+};
 
 export default async function BillingPage() {
   const supabase = await createClient();
@@ -67,7 +71,7 @@ export default async function BillingPage() {
   startOfMonth.setUTCDate(1);
   startOfMonth.setUTCHours(0, 0, 0, 0);
 
-  const [{ data: subs }, { data: purchases }, { data: thisMonthPurchases }] = await Promise.all([
+  const [{ data: subs }, { data: purchases }, { data: thisMonthPurchases }, { data: grants }] = await Promise.all([
     supabase
       .from("subscriptions")
       .select("*, members(id, name, email)")
@@ -83,6 +87,12 @@ export default async function BillingPage() {
       .from("purchases")
       .select("amount_cents")
       .gte("created_at", startOfMonth.toISOString()),
+    supabase
+      .from("pass_grants")
+      .select("*, members(id, name)")
+      .order("created_at", { ascending: false })
+      .limit(20)
+      .returns<GrantWithMember[]>(),
   ]);
 
   const allSubs = subs ?? [];
@@ -113,6 +123,7 @@ export default async function BillingPage() {
   const dayPassCountThisMonth = thisMonthPurchases?.length ?? 0;
 
   const recentPurchases = purchases ?? [];
+  const recentGrants = grants ?? [];
 
   return (
     <div className="space-y-8">
@@ -345,6 +356,40 @@ export default async function BillingPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Monthly day-pass grants (auto-credited from social-tier renewals) */}
+      {recentGrants.length > 0 && (
+        <Card className="glass-panel">
+          <CardContent className="p-5">
+            <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+              <Gift className="w-4 h-4 text-sage" />
+              Monthly auto-grants
+              <span className="text-xs text-muted font-normal">(latest {recentGrants.length})</span>
+            </h3>
+            <p className="text-xs text-muted mb-3">
+              Day passes auto-credited to social-tier members when their subscription invoice succeeds.
+            </p>
+            <div className="space-y-2">
+              {recentGrants.map((g) => (
+                <Link
+                  key={g.id}
+                  href={g.members ? `/admin/members/${g.members.id}` : "#"}
+                  className="flex items-center justify-between gap-3 py-2 px-3 rounded hover:bg-white/5 transition-colors"
+                >
+                  <div>
+                    <p className="text-sm font-medium">{g.members?.name ?? "(unknown)"}</p>
+                    <p className="text-xs text-muted">{planLabels[g.plan_key] ?? g.plan_key}</p>
+                  </div>
+                  <div className="text-right text-xs">
+                    <p className="font-medium text-sage">+{g.passes_granted} pass{g.passes_granted === 1 ? "" : "es"}</p>
+                    <p className="text-muted">{fmtDate(g.created_at)}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Recent day-pass purchases */}
       <Card className="glass-panel">

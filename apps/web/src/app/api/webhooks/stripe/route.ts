@@ -7,6 +7,19 @@ import type { StripeSubscriptionStatus } from "@/lib/supabase/types";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
+/**
+ * Throw this from a handler when the event is permanently un-processable
+ * (e.g. missing or unknown metadata). Top-level returns 422 so Stripe marks
+ * the delivery as failed (and stops retrying) and the issue is visible in
+ * the Stripe Dashboard. Any other error → 500 → Stripe retries.
+ */
+class WebhookDataError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WebhookDataError";
+  }
+}
+
 function isActiveStatus(s: string | null | undefined): boolean {
   return s === "active" || s === "trialing";
 }
@@ -76,7 +89,18 @@ export async function POST(request: Request) {
         break;
     }
   } catch (err) {
-    console.error(`[Stripe] Error handling ${event.type}:`, err);
+    if (err instanceof WebhookDataError) {
+      // Permanent — Stripe shouldn't retry. 422 makes it visible in Stripe
+      // Dashboard as failed delivery so we can investigate.
+      console.warn(`[Stripe] Unprocessable ${event.type} (${event.id}): ${err.message}`);
+      await notifyTelegram(
+        `⚠️ *Stripe webhook unprocessable*\n\n${event.type}\n\`${err.message}\``,
+        { silent: true },
+      );
+      return NextResponse.json({ skipped: err.message }, { status: 422 });
+    }
+    // Transient (DB, Stripe API, anything else) — return 500 so Stripe retries
+    console.error(`[Stripe] Error handling ${event.type} (${event.id}):`, err);
     return NextResponse.json({ error: "Processing failed" }, { status: 500 });
   }
 
@@ -336,16 +360,15 @@ async function upsertSubscription(
   { isNew }: { isNew: boolean },
 ) {
   // Plan key comes from metadata set at checkout creation. No fallback — if
-  // metadata is missing, something's wrong with how the sub was created.
+  // metadata is missing, something's wrong with how the sub was created
+  // (likely created manually in Stripe Dashboard, not via our admin flow).
   const planKey = sub.metadata?.plan_key;
   if (!planKey) {
-    console.error(`[Stripe] No plan_key in metadata for subscription ${sub.id}`);
-    return;
+    throw new WebhookDataError(`subscription ${sub.id} has no plan_key in metadata`);
   }
   const plan = getPlan(planKey);
   if (!plan) {
-    console.error(`[Stripe] Unknown plan_key "${planKey}" for subscription ${sub.id}`);
-    return;
+    throw new WebhookDataError(`subscription ${sub.id} has unknown plan_key "${planKey}"`);
   }
 
   const item = sub.items.data[0];
@@ -382,8 +405,9 @@ async function upsertSubscription(
   }
 
   if (!member) {
-    console.error(`[Stripe] No member found for subscription ${sub.id} (customer ${customerId})`);
-    return;
+    throw new WebhookDataError(
+      `subscription ${sub.id} has no resolvable member (customer ${customerId})`,
+    );
   }
 
   // Pull discount snapshot from the originating application (source of truth

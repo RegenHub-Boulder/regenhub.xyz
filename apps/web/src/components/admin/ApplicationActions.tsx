@@ -18,7 +18,27 @@ const APPROVABLE_PLANS = [
 
 type DurationChoice = "forever" | "repeating";
 
-export function ApplicationActions({ application }: { application: Application }) {
+function relTime(iso: string | null): string {
+  if (!iso) return "";
+  const ms = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const d = Math.floor(hr / 24);
+  if (d < 30) return `${d}d ago`;
+  const mo = Math.floor(d / 30);
+  return `${mo}mo ago`;
+}
+
+export function ApplicationActions({
+  application,
+  adminNames = {},
+}: {
+  application: Application;
+  adminNames?: Record<number, string>;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -113,8 +133,24 @@ export function ApplicationActions({ application }: { application: Application }
   const checkoutUrl = application.stripe_checkout_url;
   const checkoutCompleted = !!application.checkout_completed_at;
 
+  const approvedByName = application.approved_by ? adminNames[application.approved_by] : null;
+  const rejectedByName = application.rejected_by ? adminNames[application.rejected_by] : null;
+
   return (
     <div className="space-y-2">
+      {(approvedByName || rejectedByName) && (
+        <p className="text-xs text-muted">
+          {status === "approved" && approvedByName && (
+            <>Approved by <span className="text-sage">{approvedByName}</span> · {relTime(application.checkout_sent_at)}</>
+          )}
+          {status === "rejected" && rejectedByName && (
+            <>Rejected by <span className="text-red-400">{rejectedByName}</span> · {relTime(application.rejected_at)}</>
+          )}
+          {status === "pending" && rejectedByName && (
+            <span className="italic">Previously rejected by {rejectedByName} · {relTime(application.rejected_at)}</span>
+          )}
+        </p>
+      )}
       <div className="flex items-center gap-1.5 flex-wrap">
         {status === "pending" && (
           <>
