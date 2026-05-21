@@ -40,6 +40,15 @@ export async function allocateSlotWithRetry<T extends object>(opts: AllocateOpts
   const maxRetries = opts.maxRetries ?? 5;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
+    // Back off between attempts: 10ms, 20ms, 40ms, 80ms (cap 200ms).
+    // Without this, contention causes a tight loop that thrashes the DB.
+    if (attempt > 0) {
+      const baseDelay = Math.min(200, 10 * 2 ** (attempt - 1));
+      // ±25% jitter so concurrent callers don't synchronize on the same instants
+      const jitter = baseDelay * (Math.random() * 0.5 - 0.25);
+      await new Promise((r) => setTimeout(r, Math.round(baseDelay + jitter)));
+    }
+
     const used = await opts.getUsedSlots();
 
     let chosen: number | null = null;

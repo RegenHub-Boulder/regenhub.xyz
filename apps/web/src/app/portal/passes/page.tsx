@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { RequestDayPassButton } from "@/components/portal/RequestDayPassButton";
 import { RevokeCodeButton } from "@/components/portal/RevokeCodeButton";
 import { BuyPassButton } from "@/components/portal/BuyPassButton";
-import { Ticket, Clock, ShoppingCart, Key, ArrowRight, CheckCircle, XCircle } from "lucide-react";
+import { Ticket, Clock, ShoppingCart, Key, ArrowRight, CheckCircle, XCircle, Receipt, Gift } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
@@ -82,12 +82,26 @@ export default async function PassesPage({ searchParams }: PageProps) {
 
   const isFullMember = member.member_type !== "day_pass";
 
-  const { data: activeCodes } = await supabase
-    .from("day_codes")
-    .select("*")
-    .eq("member_id", member.id)
-    .eq("is_active", true)
-    .order("expires_at", { ascending: true, nullsFirst: false });
+  const [{ data: activeCodes }, { data: recentPurchases }, { data: recentGrants }] = await Promise.all([
+    supabase
+      .from("day_codes")
+      .select("*")
+      .eq("member_id", member.id)
+      .eq("is_active", true)
+      .order("expires_at", { ascending: true, nullsFirst: false }),
+    supabase
+      .from("purchases")
+      .select("id, kind, amount_cents, passes_granted, created_at")
+      .eq("member_id", member.id)
+      .order("created_at", { ascending: false })
+      .limit(10),
+    supabase
+      .from("pass_grants")
+      .select("id, plan_key, passes_granted, created_at")
+      .eq("member_id", member.id)
+      .order("created_at", { ascending: false })
+      .limit(10),
+  ]);
 
   return (
     <div className="space-y-8 max-w-3xl">
@@ -133,7 +147,7 @@ export default async function PassesPage({ searchParams }: PageProps) {
             <div>
               <div className="flex items-center gap-2 text-sm text-muted mb-1">
                 <Ticket className="w-4 h-4" />
-                Passes remaining
+                {isFullMember ? "Guest passes available" : "Passes remaining"}
               </div>
               <p className={`text-4xl font-bold ${liveBalance > 0 ? "text-gold" : "text-muted"}`}>
                 {liveBalance}
@@ -145,9 +159,14 @@ export default async function PassesPage({ searchParams }: PageProps) {
               remainingUses={liveBalance}
             />
           </div>
-          {liveBalance === 0 && (
+          {liveBalance === 0 && !isFullMember && (
             <p className="text-sm text-muted mt-4">
               No passes remaining — grab one below to get a door code.
+            </p>
+          )}
+          {liveBalance === 0 && isFullMember && (
+            <p className="text-sm text-muted mt-4">
+              No guest passes — buy below to share day codes with visitors.
             </p>
           )}
         </CardContent>
@@ -237,6 +256,61 @@ export default async function PassesPage({ searchParams }: PageProps) {
           </BuyPassButton>
         </div>
       </div>
+
+      {/* Recent activity — purchases + monthly auto-grants */}
+      {((recentPurchases && recentPurchases.length > 0) || (recentGrants && recentGrants.length > 0)) && (
+        <div>
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <Receipt className="w-5 h-5 text-sage" />
+            Recent activity
+          </h2>
+          <div className="glass-panel divide-y divide-white/5">
+            {/* Merge + sort by date desc */}
+            {[
+              ...(recentPurchases ?? []).map((p) => ({
+                key: `p-${p.id}`,
+                date: p.created_at,
+                icon: <ShoppingCart className="w-4 h-4 text-sage" />,
+                title: p.kind === "five_pack" ? "5-Pack purchased" : "Day Pass purchased",
+                amount: `$${p.amount_cents / 100}`,
+                detail: `+${p.passes_granted} pass${p.passes_granted === 1 ? "" : "es"}`,
+              })),
+              ...(recentGrants ?? []).map((g) => ({
+                key: `g-${g.id}`,
+                date: g.created_at,
+                icon: <Gift className="w-4 h-4 text-sage" />,
+                title: "Monthly passes credited",
+                amount: "",
+                detail: `+${g.passes_granted} pass${g.passes_granted === 1 ? "" : "es"}`,
+              })),
+            ]
+              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+              .slice(0, 15)
+              .map((row) => (
+                <div key={row.key} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    {row.icon}
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{row.title}</p>
+                      <p className="text-xs text-muted">{row.detail}</p>
+                    </div>
+                  </div>
+                  <div className="text-right text-xs shrink-0">
+                    {row.amount && <p className="font-medium">{row.amount}</p>}
+                    <p className="text-muted">
+                      {new Date(row.date).toLocaleDateString("en-US", {
+                        timeZone: "America/Denver",
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </p>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
 
       {/* Membership upgrade prompt for day_pass members */}
       {!isFullMember && (

@@ -47,6 +47,14 @@ export async function POST(req: Request) {
   const admin = createServiceClient();
   const cutoff = new Date(Date.now() - GRACE_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
+  type StaleRow = {
+    id: number;
+    member_id: number;
+    stripe_subscription_id: string;
+    past_due_since: string | null;
+    members: { name: string } | null;
+  };
+
   // Find subscriptions in their grace window that are past the cutoff and
   // haven't already been disabled.
   const { data: stale, error } = await admin
@@ -54,7 +62,8 @@ export async function POST(req: Request) {
     .select("id, member_id, stripe_subscription_id, past_due_since, members(name)")
     .lt("past_due_since", cutoff)
     .is("access_disabled_at", null)
-    .not("past_due_since", "is", null);
+    .not("past_due_since", "is", null)
+    .returns<StaleRow[]>();
 
   if (error) {
     console.error("[PastDueCron] Query error:", error);
@@ -62,23 +71,47 @@ export async function POST(req: Request) {
   }
 
   const now = new Date().toISOString();
-  let flipped = 0;
+  const results: { subscription_id: number; member_id: number; ok: boolean; error?: string }[] = [];
+
   for (const row of stale ?? []) {
-    await admin
-      .from("subscriptions")
-      .update({ access_disabled_at: now })
-      .eq("id", row.id);
-    await admin
-      .from("members")
-      .update({ member_type: "day_pass" })
-      .eq("id", row.member_id);
-    // @ts-expect-error nested join shape
-    const name = row.members?.name ?? "A member";
-    await notifyTelegram(
-      `🔒 *Access downgraded*\n\n${name}'s payment failed >7 days ago. Moved to day-pass status.`,
-    );
-    flipped++;
+    try {
+      const { error: subErr } = await admin
+        .from("subscriptions")
+        .update({ access_disabled_at: now })
+        .eq("id", row.id);
+      if (subErr) throw subErr;
+
+      const { error: memErr } = await admin
+        .from("members")
+        .update({ member_type: "day_pass" })
+        .eq("id", row.member_id);
+      if (memErr) throw memErr;
+
+      const name = row.members?.name ?? "A member";
+      await notifyTelegram(
+        `🔒 *Access downgraded*\n\n${name}'s payment failed >7 days ago. Moved to day-pass status.`,
+      );
+      results.push({ subscription_id: row.id, member_id: row.member_id, ok: true });
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error(`[PastDueCron] Failed for subscription ${row.id}:`, errorMsg);
+      results.push({ subscription_id: row.id, member_id: row.member_id, ok: false, error: errorMsg });
+    }
   }
 
-  return NextResponse.json({ swept: (stale ?? []).length, flipped });
+  const flipped = results.filter((r) => r.ok).length;
+  const failed = results.filter((r) => !r.ok);
+
+  if (failed.length > 0) {
+    await notifyTelegram(
+      `⚠️ *Past-due sweep partial failure*\n\n${failed.length} of ${results.length} flips failed. Inspect: ${failed.map((f) => `sub#${f.subscription_id}`).join(", ")}`,
+    );
+  }
+
+  return NextResponse.json({
+    swept: results.length,
+    flipped,
+    failed: failed.length,
+    failures: failed,
+  });
 }

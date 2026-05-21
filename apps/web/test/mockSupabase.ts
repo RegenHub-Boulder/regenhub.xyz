@@ -78,8 +78,12 @@ export function makeSupabaseMock(opts: SupabaseMockOpts = {}) {
       in: vi.fn(() => builder),
       not: vi.fn(() => builder),
       lt: vi.fn(() => builder),
+      gt: vi.fn(() => builder),
+      gte: vi.fn(() => builder),
       order: vi.fn(() => builder),
       limit: vi.fn(() => builder),
+      // .returns<T>() is a Supabase type-assertion helper — runtime no-op
+      returns: vi.fn(() => builder),
       single: vi.fn().mockResolvedValue(selectResp),
       maybeSingle: vi.fn().mockResolvedValue(selectResp),
       then: makeThen(selectResp),

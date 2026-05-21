@@ -20,6 +20,13 @@ class WebhookDataError extends Error {
   }
 }
 
+// Typed shapes for subscription→member joins (avoids @ts-expect-error)
+type SubMemberNameRow = { member_id: number; members: { name: string } | null };
+type SubMemberNameEmailRow = {
+  member_id: number;
+  members: { name: string; email: string | null } | null;
+};
+
 function isActiveStatus(s: string | null | undefined): boolean {
   return s === "active" || s === "trialing";
 }
@@ -64,34 +71,66 @@ export async function POST(request: Request) {
 
   const admin = createServiceClient();
 
+  // Insert a tracking row up front. ON CONFLICT lets Stripe redeliveries
+  // (same event.id) refresh in place rather than insert twice.
+  const startedAt = Date.now();
+  await admin.from("webhook_events").upsert(
+    {
+      stripe_event_id: event.id,
+      event_type: event.type,
+      status: "processing",
+    },
+    { onConflict: "stripe_event_id" },
+  );
+
+  // Capture the resolved member_id (if any) and the final status, then write back
+  let resolvedMemberId: number | null = null;
+  let finalStatus: "ok" | "data_error" | "error" = "ok";
+  let errorMessage: string | null = null;
+
+  async function recordCompletion() {
+    await admin
+      .from("webhook_events")
+      .update({
+        status: finalStatus,
+        error_message: errorMessage,
+        member_id: resolvedMemberId,
+        duration_ms: Date.now() - startedAt,
+        completed_at: new Date().toISOString(),
+      })
+      .eq("stripe_event_id", event.id);
+  }
+
   try {
     switch (event.type) {
       case "checkout.session.completed":
-        await handleCheckoutCompleted(admin, event.data.object as Stripe.Checkout.Session);
+        resolvedMemberId = await handleCheckoutCompleted(admin, event.data.object as Stripe.Checkout.Session);
         break;
       case "customer.subscription.created":
-        await handleSubscriptionCreated(admin, event.data.object as Stripe.Subscription);
+        resolvedMemberId = await handleSubscriptionCreated(admin, event.data.object as Stripe.Subscription);
         break;
       case "customer.subscription.updated":
-        await handleSubscriptionUpdated(admin, event.data.object as Stripe.Subscription);
+        resolvedMemberId = await handleSubscriptionUpdated(admin, event.data.object as Stripe.Subscription);
         break;
       case "customer.subscription.deleted":
-        await handleSubscriptionDeleted(admin, event.data.object as Stripe.Subscription);
+        resolvedMemberId = await handleSubscriptionDeleted(admin, event.data.object as Stripe.Subscription);
         break;
       case "invoice.payment_succeeded":
-        await handleInvoicePaymentSucceeded(admin, event.data.object as Stripe.Invoice);
+        resolvedMemberId = await handleInvoicePaymentSucceeded(admin, event.data.object as Stripe.Invoice);
         break;
       case "invoice.payment_failed":
-        await handleInvoicePaymentFailed(admin, event.data.object as Stripe.Invoice);
+        resolvedMemberId = await handleInvoicePaymentFailed(admin, event.data.object as Stripe.Invoice);
         break;
       default:
         // Unhandled event types — Stripe sends a lot we don't care about
         break;
     }
+    await recordCompletion();
   } catch (err) {
     if (err instanceof WebhookDataError) {
-      // Permanent — Stripe shouldn't retry. 422 makes it visible in Stripe
-      // Dashboard as failed delivery so we can investigate.
+      finalStatus = "data_error";
+      errorMessage = err.message;
+      await recordCompletion();
       console.warn(`[Stripe] Unprocessable ${event.type} (${event.id}): ${err.message}`);
       await notifyTelegram(
         `⚠️ *Stripe webhook unprocessable*\n\n${event.type}\n\`${err.message}\``,
@@ -99,7 +138,9 @@ export async function POST(request: Request) {
       );
       return NextResponse.json({ skipped: err.message }, { status: 422 });
     }
-    // Transient (DB, Stripe API, anything else) — return 500 so Stripe retries
+    finalStatus = "error";
+    errorMessage = err instanceof Error ? err.message : String(err);
+    await recordCompletion();
     console.error(`[Stripe] Error handling ${event.type} (${event.id}):`, err);
     return NextResponse.json({ error: "Processing failed" }, { status: 500 });
   }
@@ -111,22 +152,29 @@ export async function POST(request: Request) {
 // Handlers
 // =====================================================
 
-async function handleCheckoutCompleted(admin: ServiceClient, session: Stripe.Checkout.Session) {
+async function handleCheckoutCompleted(
+  admin: ServiceClient,
+  session: Stripe.Checkout.Session,
+): Promise<number | null> {
   if (session.mode === "subscription") {
     // Subscriptions get granted on customer.subscription.created — more
     // authoritative since we read the live subscription state there.
-    return;
+    return null;
   }
   // mode === 'payment' → day pass / 5-pack — delegate to shared helper.
   // Idempotent: the success page may have already fulfilled this session.
-  await fulfillPassPurchase(session, admin);
+  const result = await fulfillPassPurchase(session, admin);
+  return result.member_id ?? null;
 }
 
-async function handleSubscriptionCreated(admin: ServiceClient, sub: Stripe.Subscription) {
-  await upsertSubscription(admin, sub, { isNew: true });
+async function handleSubscriptionCreated(
+  admin: ServiceClient,
+  sub: Stripe.Subscription,
+): Promise<number | null> {
+  return upsertSubscription(admin, sub, { isNew: true });
 }
 
-async function handleSubscriptionUpdated(admin: ServiceClient, sub: Stripe.Subscription) {
+async function handleSubscriptionUpdated(admin: ServiceClient, sub: Stripe.Subscription): Promise<number | null> {
   // Capture previous state to detect transitions
   const { data: prev } = await admin
     .from("subscriptions")
@@ -134,7 +182,7 @@ async function handleSubscriptionUpdated(admin: ServiceClient, sub: Stripe.Subsc
     .eq("stripe_subscription_id", sub.id)
     .maybeSingle();
 
-  await upsertSubscription(admin, sub, { isNew: false });
+  const memberId = await upsertSubscription(admin, sub, { isNew: false });
 
   const newStatus = sub.status;
 
@@ -142,11 +190,12 @@ async function handleSubscriptionUpdated(admin: ServiceClient, sub: Stripe.Subsc
   if (prev) {
     // Cancellation queued
     if (!prev.cancel_at_period_end && sub.cancel_at_period_end) {
-      const { data: member } = await admin
+      const { data: row } = await admin
         .from("subscriptions")
         .select("member_id, members(name)")
         .eq("stripe_subscription_id", sub.id)
-        .single();
+        .returns<SubMemberNameRow[]>()
+        .maybeSingle();
       const periodEndUnix = sub.items.data[0]?.current_period_end;
       const endDate = periodEndUnix
         ? new Date(periodEndUnix * 1000).toLocaleDateString("en-US", {
@@ -155,8 +204,7 @@ async function handleSubscriptionUpdated(admin: ServiceClient, sub: Stripe.Subsc
             year: "numeric",
           })
         : "the end of the period";
-      // @ts-expect-error nested join shape
-      const name = member?.members?.name ?? "A member";
+      const name = row?.members?.name ?? "A member";
       await notifyTelegram(
         `📤 *Subscription cancellation queued*\n\n${name} cancelled, effective ${endDate}. Maybe reach out?`,
       );
@@ -168,10 +216,9 @@ async function handleSubscriptionUpdated(admin: ServiceClient, sub: Stripe.Subsc
         .from("subscriptions")
         .select("member_id, members(name, email)")
         .eq("stripe_subscription_id", sub.id)
-        .single();
-      // @ts-expect-error nested join shape
+        .returns<SubMemberNameEmailRow[]>()
+        .maybeSingle();
       const name = row?.members?.name ?? "A member";
-      // @ts-expect-error nested join shape
       const email = row?.members?.email ?? "";
       await notifyTelegram(
         `⚠️ *Payment failed*\n\n${name} (${email}) — card needs attention. 7-day grace period started.`,
@@ -182,19 +229,21 @@ async function handleSubscriptionUpdated(admin: ServiceClient, sub: Stripe.Subsc
     if (prev.status === "past_due" && isActiveStatus(newStatus)) {
       const { data: row } = await admin
         .from("subscriptions")
-        .select("members(name)")
+        .select("member_id, members(name)")
         .eq("stripe_subscription_id", sub.id)
-        .single();
-      // @ts-expect-error nested join shape
+        .returns<SubMemberNameRow[]>()
+        .maybeSingle();
       const name = row?.members?.name ?? "A member";
       await notifyTelegram(`✅ ${name}'s payment recovered — back in good standing.`, {
         silent: true,
       });
     }
   }
+
+  return memberId;
 }
 
-async function handleSubscriptionDeleted(admin: ServiceClient, sub: Stripe.Subscription) {
+async function handleSubscriptionDeleted(admin: ServiceClient, sub: Stripe.Subscription): Promise<number | null> {
   // Mark canceled in local mirror
   await admin
     .from("subscriptions")
@@ -210,13 +259,14 @@ async function handleSubscriptionDeleted(admin: ServiceClient, sub: Stripe.Subsc
     .from("subscriptions")
     .select("member_id, members(name)")
     .eq("stripe_subscription_id", sub.id)
-    .single();
+    .returns<SubMemberNameRow[]>()
+    .maybeSingle();
   if (row?.member_id) {
     await admin.from("members").update({ member_type: "day_pass" }).eq("id", row.member_id);
-    // @ts-expect-error nested join shape
     const name = row.members?.name ?? "A member";
     await notifyTelegram(`👋 ${name}'s subscription ended. Now on day-pass status.`);
   }
+  return row?.member_id ?? null;
 }
 
 function invoiceSubscriptionId(invoice: Stripe.Invoice): string | null {
@@ -226,9 +276,12 @@ function invoiceSubscriptionId(invoice: Stripe.Invoice): string | null {
   return null;
 }
 
-async function handleInvoicePaymentSucceeded(admin: ServiceClient, invoice: Stripe.Invoice) {
+async function handleInvoicePaymentSucceeded(
+  admin: ServiceClient,
+  invoice: Stripe.Invoice,
+): Promise<number | null> {
   const subId = invoiceSubscriptionId(invoice);
-  if (!subId) return;
+  if (!subId) return null;
 
   // Clear past_due state on the renewal
   await admin
@@ -238,7 +291,7 @@ async function handleInvoicePaymentSucceeded(admin: ServiceClient, invoice: Stri
 
   // For plans with monthlyDayPasses, credit the member's balance.
   // Idempotent via UNIQUE(stripe_invoice_id) on pass_grants.
-  await maybeGrantMonthlyPasses(admin, invoice, subId);
+  return maybeGrantMonthlyPasses(admin, invoice, subId);
 }
 
 /**
@@ -250,7 +303,7 @@ async function maybeGrantMonthlyPasses(
   admin: ServiceClient,
   invoice: Stripe.Invoice,
   subId: string,
-) {
+): Promise<number | null> {
   // Local subscription row (created by handleSubscriptionCreated) gives us
   // plan_key + member_id + local sub.id for the grant audit trail.
   const { data: localSub } = await admin
@@ -265,11 +318,13 @@ async function maybeGrantMonthlyPasses(
     (invoice.parent?.subscription_details?.metadata?.plan_key as string | undefined);
   if (!planKey) {
     console.warn(`[Stripe] No plan_key found for invoice ${invoice.id} (sub ${subId})`);
-    return;
+    return localSub?.member_id ?? null;
   }
 
   const plan = getPlan(planKey);
-  if (!plan || !plan.monthlyDayPasses || plan.monthlyDayPasses <= 0) return;
+  if (!plan || !plan.monthlyDayPasses || plan.monthlyDayPasses <= 0) {
+    return localSub?.member_id ?? null;
+  }
 
   // Resolve member: prefer local subscription row, fall back to customer lookup
   let memberId = localSub?.member_id ?? null;
@@ -286,12 +341,12 @@ async function maybeGrantMonthlyPasses(
   }
   if (!memberId) {
     console.warn(`[Stripe] No member resolved for invoice ${invoice.id}`);
-    return;
+    return null;
   }
 
   if (!invoice.id) {
     console.warn("[Stripe] Invoice missing id, skipping grant");
-    return;
+    return memberId;
   }
 
   // Idempotent insert — UNIQUE on stripe_invoice_id prevents double-grant on redelivery
@@ -309,11 +364,11 @@ async function maybeGrantMonthlyPasses(
 
   // PG unique violation code is 23505 — that's the "already granted" case
   if (insertErr) {
-    if (insertErr.code === "23505") return;
+    if (insertErr.code === "23505") return memberId; // already granted
     console.error("[Stripe] pass_grants insert failed:", insertErr);
-    return;
+    return memberId;
   }
-  if (!inserted) return;
+  if (!inserted) return memberId;
 
   const { data: newBalance, error: rpcError } = await admin.rpc(
     "increment_day_pass_balance",
@@ -323,22 +378,26 @@ async function maybeGrantMonthlyPasses(
     console.error("[Stripe] Failed to grant monthly passes:", rpcError);
     // Rollback the grant row so a retry can succeed
     await admin.from("pass_grants").delete().eq("id", inserted.id);
-    return;
+    return memberId;
   }
 
   console.log(
     `[Stripe] +${plan.monthlyDayPasses} monthly passes for member ${memberId} (plan=${planKey}, invoice=${invoice.id}) → balance=${newBalance}`,
   );
+  return memberId;
 }
 
-async function handleInvoicePaymentFailed(admin: ServiceClient, invoice: Stripe.Invoice) {
+async function handleInvoicePaymentFailed(
+  admin: ServiceClient,
+  invoice: Stripe.Invoice,
+): Promise<number | null> {
   const subId = invoiceSubscriptionId(invoice);
-  if (!subId) return;
+  if (!subId) return null;
 
   // Only set past_due_since if not already set (preserve original failure time)
   const { data: existing } = await admin
     .from("subscriptions")
-    .select("past_due_since")
+    .select("past_due_since, member_id")
     .eq("stripe_subscription_id", subId)
     .maybeSingle();
 
@@ -348,6 +407,7 @@ async function handleInvoicePaymentFailed(admin: ServiceClient, invoice: Stripe.
       .update({ past_due_since: new Date().toISOString() })
       .eq("stripe_subscription_id", subId);
   }
+  return existing?.member_id ?? null;
 }
 
 // =====================================================
@@ -358,7 +418,7 @@ async function upsertSubscription(
   admin: ServiceClient,
   sub: Stripe.Subscription,
   { isNew }: { isNew: boolean },
-) {
+): Promise<number | null> {
   // Plan key comes from metadata set at checkout creation. No fallback — if
   // metadata is missing, something's wrong with how the sub was created
   // (likely created manually in Stripe Dashboard, not via our admin flow).
@@ -500,4 +560,6 @@ async function upsertSubscription(
       );
     }
   }
+
+  return member.id;
 }

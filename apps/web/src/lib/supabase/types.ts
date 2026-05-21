@@ -296,6 +296,34 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["pass_grants"]["Insert"]>;
         Relationships: [];
       };
+      webhook_events: {
+        Row: {
+          id: number;
+          stripe_event_id: string;
+          event_type: string;
+          status: "processing" | "ok" | "data_error" | "error";
+          error_message: string | null;
+          member_id: number | null;
+          duration_ms: number | null;
+          received_at: string;
+          completed_at: string | null;
+        };
+        Insert: {
+          stripe_event_id: string;
+          event_type: string;
+          status?: "processing" | "ok" | "data_error" | "error";
+          error_message?: string | null;
+          member_id?: number | null;
+          duration_ms?: number | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["webhook_events"]["Insert"]> & {
+          completed_at?: string | null;
+          status?: "processing" | "ok" | "data_error" | "error";
+          error_message?: string | null;
+          duration_ms?: number | null;
+        };
+        Relationships: [];
+      };
     };
     Views: { [_ in never]: never };
     Functions: {
@@ -326,6 +354,7 @@ export type Interest = Database["public"]["Tables"]["interests"]["Row"];
 export type Subscription = Database["public"]["Tables"]["subscriptions"]["Row"];
 export type Purchase = Database["public"]["Tables"]["purchases"]["Row"];
 export type PassGrant = Database["public"]["Tables"]["pass_grants"]["Row"];
+export type WebhookEvent = Database["public"]["Tables"]["webhook_events"]["Row"];
 
 export const INTEREST_OPTIONS = [
   { value: "membership", label: "Desk membership" },

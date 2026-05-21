@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+// Validates required env vars at app boot — see lib/env.ts
+import "@/lib/env";
 
 const inter = Inter({ subsets: ["latin"] });
 

@@ -11,8 +11,9 @@ import {
   CheckCircle2,
   ShoppingBag,
   Gift,
+  Activity,
 } from "lucide-react";
-import type { Subscription, Purchase, PassGrant } from "@/lib/supabase/types";
+import type { Subscription, Purchase, PassGrant, WebhookEvent } from "@/lib/supabase/types";
 
 export const metadata = { title: "Billing — Admin" };
 
@@ -71,7 +72,7 @@ export default async function BillingPage() {
   startOfMonth.setUTCDate(1);
   startOfMonth.setUTCHours(0, 0, 0, 0);
 
-  const [{ data: subs }, { data: purchases }, { data: thisMonthPurchases }, { data: grants }] = await Promise.all([
+  const [{ data: subs }, { data: purchases }, { data: thisMonthPurchases }, { data: grants }, { data: webhookEvents }] = await Promise.all([
     supabase
       .from("subscriptions")
       .select("*, members(id, name, email)")
@@ -93,6 +94,12 @@ export default async function BillingPage() {
       .order("created_at", { ascending: false })
       .limit(20)
       .returns<GrantWithMember[]>(),
+    supabase
+      .from("webhook_events")
+      .select("*")
+      .order("received_at", { ascending: false })
+      .limit(30)
+      .returns<WebhookEvent[]>(),
   ]);
 
   const allSubs = subs ?? [];
@@ -124,6 +131,8 @@ export default async function BillingPage() {
 
   const recentPurchases = purchases ?? [];
   const recentGrants = grants ?? [];
+  const events = webhookEvents ?? [];
+  const failedEvents = events.filter((e) => e.status === "data_error" || e.status === "error");
 
   return (
     <div className="space-y-8">
@@ -426,6 +435,75 @@ export default async function BillingPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Stripe webhook delivery log — ops visibility into what Stripe sent */}
+      {events.length > 0 && (
+        <Card className={`glass-panel ${failedEvents.length > 0 ? "border border-amber-500/30" : ""}`}>
+          <CardContent className="p-5">
+            <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+              <Activity className="w-4 h-4 text-sage" />
+              Stripe webhook activity
+              <span className="text-xs text-muted font-normal">(last {events.length})</span>
+              {failedEvents.length > 0 && (
+                <Badge className="text-xs bg-amber-500/20 text-amber-400 border-amber-500/30">
+                  {failedEvents.length} need attention
+                </Badge>
+              )}
+            </h3>
+            <p className="text-xs text-muted mb-3">
+              Every Stripe event we receive is logged here. Failed events show up so we can investigate why a customer&apos;s subscription isn&apos;t reflecting correctly.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-white/10 text-left text-muted">
+                    <th className="py-2 pr-3 font-medium">Event</th>
+                    <th className="py-2 pr-3 font-medium">Status</th>
+                    <th className="py-2 pr-3 font-medium">Member</th>
+                    <th className="py-2 pr-3 font-medium">Took</th>
+                    <th className="py-2 font-medium">Received</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {events.map((e) => {
+                    const statusColor =
+                      e.status === "ok" ? "text-emerald-400"
+                      : e.status === "processing" ? "text-sky-400"
+                      : e.status === "data_error" ? "text-amber-400"
+                      : "text-red-400";
+                    return (
+                      <tr key={e.id} className="border-b border-white/5">
+                        <td className="py-2 pr-3 font-mono text-xs text-muted">{e.event_type}</td>
+                        <td className="py-2 pr-3">
+                          <span className={statusColor}>{e.status}</span>
+                          {e.error_message && (
+                            <span className="text-muted ml-1" title={e.error_message}>· {e.error_message.slice(0, 40)}{e.error_message.length > 40 ? "…" : ""}</span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-3">
+                          {e.member_id ? (
+                            <Link href={`/admin/members/${e.member_id}`} className="text-sage hover:underline">#{e.member_id}</Link>
+                          ) : <span className="text-muted">—</span>}
+                        </td>
+                        <td className="py-2 pr-3 text-muted">{e.duration_ms != null ? `${e.duration_ms}ms` : "—"}</td>
+                        <td className="py-2 text-muted">
+                          {new Date(e.received_at).toLocaleString("en-US", {
+                            timeZone: "America/Denver",
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
