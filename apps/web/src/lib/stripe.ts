@@ -1,7 +1,19 @@
 import Stripe from "stripe";
-import type { Member, PlanKey, MemberType, DiscountDuration } from "./supabase/types";
+import type { Member, PlanKey, MemberType, DiscountDuration, PurchaseKind } from "./supabase/types";
 
 let stripeClient: Stripe | null = null;
+
+// ---------- Day pass catalog ----------
+// One-time purchases. Pricing is set at Checkout-Session creation via
+// price_data — no Products or Prices need to exist in Stripe.
+export const PASS_KINDS: Record<
+  PurchaseKind,
+  { label: string; cents: number; quantity: number }
+> = {
+  day_pass:  { label: "Day Pass", cents: 2500,  quantity: 1 },
+  five_pack: { label: "5-Pack",   cents: 10000, quantity: 5 },
+};
+// ---------------------------------------
 
 export function getStripe(): Stripe {
   if (!stripeClient) {
@@ -219,5 +231,50 @@ export async function createCustomerPortalSession(
   return stripe.billingPortal.sessions.create({
     customer: customer.id,
     return_url: returnUrl,
+  });
+}
+
+// ============================================================
+// Day pass purchase: dynamic Checkout Session (no Stripe setup)
+// ============================================================
+
+export interface PassCheckoutInput {
+  member: Pick<Member, "id" | "name" | "email" | "stripe_customer_id">;
+  kind: PurchaseKind;
+  successUrl: string;
+  cancelUrl: string;
+}
+
+export async function createPassCheckoutSession(
+  input: PassCheckoutInput,
+): Promise<Stripe.Checkout.Session> {
+  const stripe = getStripe();
+  const def = PASS_KINDS[input.kind];
+
+  return stripe.checkout.sessions.create({
+    mode: "payment",
+    client_reference_id: String(input.member.id),
+    customer_email: input.member.email ?? undefined,
+    line_items: [{
+      price_data: {
+        currency: "usd",
+        unit_amount: def.cents,
+        product_data: { name: def.label },
+      },
+      quantity: 1,
+    }],
+    metadata: {
+      member_id: String(input.member.id),
+      kind: input.kind,
+      passes_granted: String(def.quantity),
+    },
+    payment_intent_data: {
+      metadata: {
+        member_id: String(input.member.id),
+        kind: input.kind,
+      },
+    },
+    success_url: input.successUrl,
+    cancel_url: input.cancelUrl,
   });
 }

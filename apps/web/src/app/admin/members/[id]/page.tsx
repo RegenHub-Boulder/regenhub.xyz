@@ -2,7 +2,6 @@ import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { MemberForm } from "@/components/admin/MemberForm";
 import { AddPassesCard } from "@/components/admin/AddPassesCard";
-import { PaymentLinkCard } from "@/components/admin/PaymentLinkCard";
 import { SubscriptionCard } from "@/components/admin/SubscriptionCard";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -59,15 +58,6 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
         recentPurchases={purchases ?? []}
       />
       <AddPassesCard memberId={member.id} initialBalance={member.day_passes_balance} />
-      <PaymentLinkCard
-        memberName={member.name}
-        daypassUrl={process.env.NEXT_PUBLIC_STRIPE_DAYPASS_LINK
-          ? `${process.env.NEXT_PUBLIC_STRIPE_DAYPASS_LINK}?client_reference_id=${member.id}&prefilled_email=${encodeURIComponent(member.email ?? "")}`
-          : null}
-        fivepackUrl={process.env.NEXT_PUBLIC_STRIPE_FIVEPACK_LINK
-          ? `${process.env.NEXT_PUBLIC_STRIPE_FIVEPACK_LINK}?client_reference_id=${member.id}&prefilled_email=${encodeURIComponent(member.email ?? "")}`
-          : null}
-      />
 
       {/* Code history */}
       {codeHistory && codeHistory.length > 0 && (

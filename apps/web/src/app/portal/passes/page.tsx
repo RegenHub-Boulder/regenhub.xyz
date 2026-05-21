@@ -1,16 +1,24 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/admin";
+import { getStripe, isStripeConfigured, PASS_KINDS } from "@/lib/stripe";
+import { fulfillPassPurchase } from "@/lib/passFulfillment";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RequestDayPassButton } from "@/components/portal/RequestDayPassButton";
 import { RevokeCodeButton } from "@/components/portal/RevokeCodeButton";
-import { Ticket, Clock, ShoppingCart, Key, ArrowRight } from "lucide-react";
+import { BuyPassButton } from "@/components/portal/BuyPassButton";
+import { Ticket, Clock, ShoppingCart, Key, ArrowRight, CheckCircle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
 export const metadata = { title: "Live Codes — RegenHub" };
 
-export default async function PassesPage() {
+interface PageProps {
+  searchParams: Promise<{ session_id?: string; checkout?: string }>;
+}
+
+export default async function PassesPage({ searchParams }: PageProps) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
@@ -33,14 +41,44 @@ export default async function PassesPage() {
     );
   }
 
-  // Build Stripe payment link URLs with member context pre-filled
-  const stripeParams = `?client_reference_id=${member.id}&prefilled_email=${encodeURIComponent(member.email ?? "")}`;
-  const daypassUrl = process.env.NEXT_PUBLIC_STRIPE_DAYPASS_LINK
-    ? `${process.env.NEXT_PUBLIC_STRIPE_DAYPASS_LINK}${stripeParams}`
-    : null;
-  const fivepackUrl = process.env.NEXT_PUBLIC_STRIPE_FIVEPACK_LINK
-    ? `${process.env.NEXT_PUBLIC_STRIPE_FIVEPACK_LINK}${stripeParams}`
-    : null;
+  // Post-checkout fulfillment: if Stripe redirected with a session_id, look
+  // up the session and idempotently fulfill it. This makes the balance feel
+  // instant even before the webhook arrives. UNIQUE on stripe_checkout_session
+  // means a double-call (page + webhook) is safe.
+  const params = await searchParams;
+  let justPurchased: { label: string; passes: number } | null = null;
+  let purchaseError: string | null = null;
+  let liveBalance = member.day_passes_balance;
+
+  if (params.session_id && isStripeConfigured()) {
+    try {
+      const session = await getStripe().checkout.sessions.retrieve(params.session_id);
+      const result = await fulfillPassPurchase(session, createServiceClient());
+      if (result.status === "granted" || result.status === "already_processed") {
+        const kind = session.metadata?.kind as keyof typeof PASS_KINDS | undefined;
+        const def = kind ? PASS_KINDS[kind] : null;
+        if (def) {
+          justPurchased = { label: def.label, passes: result.passes_granted ?? def.quantity };
+        }
+        if (typeof result.new_balance === "number") {
+          liveBalance = result.new_balance;
+        } else if (result.status === "granted") {
+          // Re-read the balance to reflect the freshly-granted passes
+          const { data: fresh } = await supabase
+            .from("members")
+            .select("day_passes_balance")
+            .eq("id", member.id)
+            .single();
+          if (fresh) liveBalance = fresh.day_passes_balance;
+        }
+      } else if (result.reason) {
+        purchaseError = `Checkout completed but fulfillment skipped: ${result.reason}`;
+      }
+    } catch (err) {
+      console.error("[PassesPage] Fulfillment lookup failed:", err);
+      purchaseError = "We couldn't verify your purchase. If your balance doesn't update in a minute, contact an admin.";
+    }
+  }
 
   const isFullMember = member.member_type !== "day_pass";
 
@@ -51,8 +89,6 @@ export default async function PassesPage() {
     .eq("is_active", true)
     .order("expires_at", { ascending: true, nullsFirst: false });
 
-  const hasStripe = !!(daypassUrl || fivepackUrl);
-
   return (
     <div className="space-y-8 max-w-3xl">
       <div>
@@ -62,9 +98,33 @@ export default async function PassesPage() {
         <p className="text-muted mt-1">
           {isFullMember
             ? "Generate temporary door codes for guests"
-            : "Get a door code for the day (8 AM \u2013 6 PM, Mon\u2013Fri)"}
+            : "Get a door code for the day (8 AM – 6 PM, Mon–Fri)"}
         </p>
       </div>
+
+      {/* Post-checkout banner */}
+      {justPurchased && (
+        <div className="glass-panel p-4 border border-emerald-500/30 bg-emerald-500/5 flex items-start gap-3">
+          <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium text-emerald-400">
+              Purchase complete — {justPurchased.passes} pass{justPurchased.passes === 1 ? "" : "es"} added to your balance.
+            </p>
+            <p className="text-xs text-muted mt-0.5">Thanks for supporting RegenHub.</p>
+          </div>
+        </div>
+      )}
+      {params.checkout === "cancelled" && !justPurchased && (
+        <div className="glass-panel p-4 border border-white/10 flex items-start gap-3">
+          <XCircle className="w-5 h-5 text-muted shrink-0 mt-0.5" />
+          <p className="text-sm text-muted">Checkout cancelled — no charge made.</p>
+        </div>
+      )}
+      {purchaseError && (
+        <div className="glass-panel p-4 border border-amber-500/30 bg-amber-500/5">
+          <p className="text-sm text-amber-400">{purchaseError}</p>
+        </div>
+      )}
 
       {/* Balance + action */}
       <Card className="glass-panel">
@@ -75,21 +135,19 @@ export default async function PassesPage() {
                 <Ticket className="w-4 h-4" />
                 Passes remaining
               </div>
-              <p className={`text-4xl font-bold ${member.day_passes_balance > 0 ? "text-gold" : "text-muted"}`}>
-                {member.day_passes_balance}
+              <p className={`text-4xl font-bold ${liveBalance > 0 ? "text-gold" : "text-muted"}`}>
+                {liveBalance}
               </p>
             </div>
             <RequestDayPassButton
               memberId={member.id}
               isFullMember={isFullMember}
-              remainingUses={member.day_passes_balance}
+              remainingUses={liveBalance}
             />
           </div>
-          {member.day_passes_balance === 0 && (
+          {liveBalance === 0 && (
             <p className="text-sm text-muted mt-4">
-              {hasStripe
-                ? "No passes remaining \u2014 grab one below to get a door code."
-                : "No passes remaining \u2014 day pass purchasing will be available soon."}
+              No passes remaining — grab one below to get a door code.
             </p>
           )}
         </CardContent>
@@ -102,7 +160,6 @@ export default async function PassesPage() {
           <div className="space-y-3">
             {activeCodes.map((code) => {
               const expiresAt = code.expires_at ? new Date(code.expires_at) : null;
-              // eslint-disable-next-line react-hooks/purity -- server component, renders once
               const msLeft = expiresAt ? expiresAt.getTime() - Date.now() : null;
               const hoursLeft = msLeft != null ? Math.max(0, Math.ceil(msLeft / 3600000)) : null;
               const timeLabel = hoursLeft == null
@@ -148,48 +205,38 @@ export default async function PassesPage() {
         </div>
       )}
 
-      {/* Buy more passes */}
-      {(daypassUrl || fivepackUrl) && (
-        <div>
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <ShoppingCart className="w-5 h-5 text-sage" />
-            {isFullMember ? "Buy guest passes" : "Get day passes"}
-          </h2>
-          <div className="grid sm:grid-cols-2 gap-4">
-            {daypassUrl && (
-              <a
-                href={daypassUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="glass-panel p-5 hover:bg-white/5 transition-colors group block"
-              >
-                <p className="font-semibold mb-1">Single Day Pass</p>
-                <p className="text-3xl font-bold text-gold mb-3">$25</p>
-                <p className="text-xs text-muted group-hover:text-foreground transition-colors">
-                  1 door code &rarr; full day access &rarr;
-                </p>
-              </a>
-            )}
-            {fivepackUrl && (
-              <a
-                href={fivepackUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="glass-panel p-5 hover:bg-white/5 transition-colors group block"
-              >
-                <div className="flex items-start justify-between">
-                  <p className="font-semibold mb-1">5-Pack</p>
-                  <span className="text-xs bg-sage/20 text-sage px-2 py-0.5 rounded-full">Save $25</span>
-                </div>
-                <p className="text-3xl font-bold text-gold mb-3">$100</p>
-                <p className="text-xs text-muted group-hover:text-foreground transition-colors">
-                  5 door codes &rarr; best value &rarr;
-                </p>
-              </a>
-            )}
-          </div>
+      {/* Buy more passes — always shown; Stripe configuration is checked server-side */}
+      <div>
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <ShoppingCart className="w-5 h-5 text-sage" />
+          {isFullMember ? "Buy guest passes" : "Get day passes"}
+        </h2>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <BuyPassButton
+            kind="day_pass"
+            className="glass-panel p-5 hover:bg-white/5 transition-colors group block text-left w-full"
+          >
+            <p className="font-semibold mb-1">Single Day Pass</p>
+            <p className="text-3xl font-bold text-gold mb-3">$25</p>
+            <p className="text-xs text-muted group-hover:text-foreground transition-colors">
+              1 door code &rarr; full day access &rarr;
+            </p>
+          </BuyPassButton>
+          <BuyPassButton
+            kind="five_pack"
+            className="glass-panel p-5 hover:bg-white/5 transition-colors group block text-left w-full"
+          >
+            <div className="flex items-start justify-between">
+              <p className="font-semibold mb-1">5-Pack</p>
+              <span className="text-xs bg-sage/20 text-sage px-2 py-0.5 rounded-full">Save $25</span>
+            </div>
+            <p className="text-3xl font-bold text-gold mb-3">$100</p>
+            <p className="text-xs text-muted group-hover:text-foreground transition-colors">
+              5 door codes &rarr; best value &rarr;
+            </p>
+          </BuyPassButton>
         </div>
-      )}
+      </div>
 
       {/* Membership upgrade prompt for day_pass members */}
       {!isFullMember && (

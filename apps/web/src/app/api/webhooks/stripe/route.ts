@@ -1,17 +1,11 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getStripe, getPlan, planLabel } from "@/lib/stripe";
+import { fulfillPassPurchase } from "@/lib/passFulfillment";
 import { createServiceClient } from "@/lib/supabase/admin";
 import type { StripeSubscriptionStatus } from "@/lib/supabase/types";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
-
-// Map Stripe price IDs → number of day passes granted (one-time purchases)
-function passCountForPrice(priceId: string): number {
-  if (priceId === process.env.STRIPE_PRICE_DAYPASS) return 1;
-  if (priceId === process.env.STRIPE_PRICE_FIVEPACK) return 5;
-  return 0;
-}
 
 function isActiveStatus(s: string | null | undefined): boolean {
   return s === "active" || s === "trialing";
@@ -95,135 +89,13 @@ export async function POST(request: Request) {
 
 async function handleCheckoutCompleted(admin: ServiceClient, session: Stripe.Checkout.Session) {
   if (session.mode === "subscription") {
-    // The actual grant happens on customer.subscription.created — more
-    // authoritative since we read the live subscription state.
+    // Subscriptions get granted on customer.subscription.created — more
+    // authoritative since we read the live subscription state there.
     return;
   }
-
-  // mode === 'payment' → existing day pass / 5-pack flow
-  const stripe = getStripe();
-  const lineItems = await stripe.checkout.sessions.listLineItems(session.id, { limit: 5 });
-
-  let passCount = 0;
-  let kind: "day_pass" | "five_pack" | null = null;
-  for (const item of lineItems.data) {
-    const priceId = item.price?.id;
-    if (!priceId) continue;
-    const count = passCountForPrice(priceId) * (item.quantity ?? 1);
-    passCount += count;
-    if (count === 1 && !kind) kind = "day_pass";
-    if (count === 5) kind = "five_pack";
-  }
-
-  if (passCount === 0 || !kind) {
-    console.warn("[Stripe] No matching price IDs in session", session.id);
-    return;
-  }
-
-  // Resolve the member: prefer client_reference_id, fall back to email
-  const customerEmail =
-    session.customer_details?.email ??
-    session.customer_email ??
-    null;
-
-  let memberId: number | null = null;
-  let memberName: string | null = null;
-  let isFirstTime = false;
-
-  if (session.client_reference_id) {
-    const id = parseInt(session.client_reference_id, 10);
-    if (Number.isFinite(id)) {
-      const { data: m } = await admin
-        .from("members")
-        .select("id, name")
-        .eq("id", id)
-        .maybeSingle();
-      if (m) {
-        memberId = m.id;
-        memberName = m.name;
-      }
-    }
-  }
-
-  if (!memberId && customerEmail) {
-    const { data: m } = await admin
-      .from("members")
-      .select("id, name")
-      .eq("email", customerEmail)
-      .maybeSingle();
-    if (m) {
-      memberId = m.id;
-      memberName = m.name;
-    } else {
-      // First-time buyer: auto-create a day_pass member
-      const name = session.customer_details?.name?.trim() || customerEmail.split("@")[0];
-      const { data: created } = await admin
-        .from("members")
-        .insert({
-          name,
-          email: customerEmail,
-          member_type: "day_pass",
-        })
-        .select("id, name")
-        .single();
-      if (created) {
-        memberId = created.id;
-        memberName = created.name;
-        isFirstTime = true;
-      }
-    }
-  }
-
-  if (!memberId) {
-    console.error("[Stripe] Could not resolve member for session", session.id);
-    return;
-  }
-
-  // Increment balance atomically
-  const { data: newBalance, error: rpcError } = await admin.rpc(
-    "increment_day_pass_balance",
-    { p_member_id: memberId, p_amount: passCount },
-  );
-  if (rpcError) {
-    console.error("[Stripe] Failed to increment balance:", rpcError);
-    throw rpcError;
-  }
-
-  // Audit log — idempotent on stripe_checkout_session
-  const paymentIntent =
-    typeof session.payment_intent === "string"
-      ? session.payment_intent
-      : (session.payment_intent?.id ?? null);
-  await admin.from("purchases").upsert(
-    {
-      member_id: memberId,
-      stripe_checkout_session: session.id,
-      stripe_payment_intent: paymentIntent,
-      kind,
-      amount_cents: session.amount_total ?? 0,
-      passes_granted: passCount,
-      email: customerEmail,
-    },
-    { onConflict: "stripe_checkout_session" },
-  );
-
-  console.log(
-    `[Stripe] +${passCount} passes for ${memberName} (id=${memberId}) → balance=${newBalance}`,
-  );
-
-  if (isFirstTime) {
-    const reviewUrl = `https://regenhub.xyz/admin/members/${memberId}`;
-    await notifyTelegram(
-      [
-        `🆕 *First-time day-pass buyer*`,
-        ``,
-        `*${memberName}* · ${customerEmail}`,
-        `Bought: ${kind === "five_pack" ? "5-Pack" : "Day Pass"} ($${(session.amount_total ?? 0) / 100})`,
-        ``,
-        `[Review →](${reviewUrl})`,
-      ].join("\n"),
-    );
-  }
+  // mode === 'payment' → day pass / 5-pack — delegate to shared helper.
+  // Idempotent: the success page may have already fulfilled this session.
+  await fulfillPassPurchase(session, admin);
 }
 
 async function handleSubscriptionCreated(admin: ServiceClient, sub: Stripe.Subscription) {
