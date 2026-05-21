@@ -3,7 +3,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Users, Key, Zap, UserPlus, AlertTriangle, ClipboardList, Calendar } from "lucide-react";
+import { Users, Key, Zap, UserPlus, AlertTriangle, ClipboardList, Calendar, DollarSign } from "lucide-react";
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -26,6 +26,8 @@ export default async function AdminPage() {
     // Free day stats
     { count: pendingClaimCount },
     { count: reservedClaimCount },
+    // Subscriptions snapshot for the MRR card
+    { data: billingSubs },
     // Recent activity
     { data: recentMembers },
     { data: recentApps },
@@ -47,11 +49,20 @@ export default async function AdminPage() {
     // Free day claims
     admin.from("free_day_claims").select("*", { count: "exact", head: true }).eq("status", "pending"),
     admin.from("free_day_claims").select("*", { count: "exact", head: true }).eq("status", "reserved"),
+    // Subscriptions — only the billable rows (active/trialing/past_due)
+    supabase.from("subscriptions").select("monthly_cents, status").in("status", ["active", "trialing", "past_due"]),
     // Recent activity
     supabase.from("members").select("id, name, member_type, created_at").eq("disabled", false).order("created_at", { ascending: false }).limit(5),
     supabase.from("applications").select("id, name, email, status, created_at").order("created_at", { ascending: false }).limit(5),
     supabase.from("day_codes").select("id, code, label, pin_slot, is_active, created_at, members(name)").order("created_at", { ascending: false }).limit(5),
   ]);
+
+  const subs = billingSubs ?? [];
+  const payingCount = subs.length;
+  const mrrCents = subs
+    .filter((s) => s.status !== "past_due")
+    .reduce((sum, s) => sum + s.monthly_cents, 0);
+  const pastDueCount = subs.filter((s) => s.status === "past_due").length;
 
   const typeBreakdown = [
     { label: "Cold Desk", count: coldDeskCount ?? 0, color: "text-green-400" },
@@ -68,7 +79,20 @@ export default async function AdminPage() {
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        <Link href="/admin/billing">
+          <Card className="glass-panel hover-lift cursor-pointer">
+            <CardContent className="p-5">
+              <DollarSign className="w-6 h-6 text-sage mb-2" />
+              <p className="text-xs text-muted mb-1">MRR</p>
+              <p className="text-3xl font-bold text-foreground">${(mrrCents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}</p>
+              <p className="text-xs text-muted mt-1">
+                {payingCount} paying{pastDueCount > 0 ? <span className="text-red-400"> · {pastDueCount} past due</span> : ""}
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+
         <Link href="/admin/members">
           <Card className="glass-panel hover-lift cursor-pointer">
             <CardContent className="p-5">

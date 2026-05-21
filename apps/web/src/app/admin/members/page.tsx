@@ -6,8 +6,34 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import { Search, X } from "lucide-react";
-import type { AdminUsersResponse, AdminUser } from "@/app/api/admin/users/route";
+import type { AdminUsersResponse, AdminUser, AdminUserSubscription } from "@/app/api/admin/users/route";
 import type { Member } from "@/lib/supabase/types";
+
+function subBadge(sub: AdminUserSubscription | null) {
+  if (!sub) return null;
+  const dollars = `$${(sub.monthly_cents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}/mo`;
+  if (sub.status === "past_due") {
+    return (
+      <Badge className="text-xs bg-red-500/20 text-red-400 border-red-500/30" title="Payment failed">
+        {dollars} · past due
+      </Badge>
+    );
+  }
+  if (sub.cancel_at_period_end) {
+    return (
+      <Badge className="text-xs bg-amber-500/20 text-amber-400 border-amber-500/30" title="Cancelling at period end">
+        {dollars} · canceling
+      </Badge>
+    );
+  }
+  return (
+    <Badge className="text-xs bg-sage/20 text-sage border-sage/30" title="Active subscription">
+      {dollars}
+    </Badge>
+  );
+}
+
+type LegacyMemberWithSub = Member & { subscription: AdminUserSubscription | null };
 
 function memberStatusBadge(member: Member | null) {
   if (!member) {
@@ -87,7 +113,12 @@ function AuthUserRow({ u }: { u: AdminUser }) {
       <tr className="border-b border-white/5 hover:bg-white/5 transition-colors hidden sm:table-row">
         <td className="px-4 py-3 font-medium">{nameNode}</td>
         <td className="px-4 py-3 text-muted text-sm">{u.email}</td>
-        <td className="px-4 py-3">{memberStatusBadge(u.member)}</td>
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {memberStatusBadge(u.member)}
+            {subBadge(u.subscription)}
+          </div>
+        </td>
         <td className="px-4 py-3 text-muted text-sm">{u.member?.telegram_username ?? "—"}</td>
         <td className="px-4 py-3 text-muted font-mono text-sm">{u.member?.pin_code_slot ?? "—"}</td>
         <td className="px-4 py-3 text-muted text-sm">{u.member ? u.member.day_passes_balance : "—"}</td>
@@ -100,7 +131,7 @@ function AuthUserRow({ u }: { u: AdminUser }) {
       <MemberCard
         name={nameNode}
         email={u.email}
-        badge={memberStatusBadge(u.member)}
+        badge={<div className="flex items-center gap-1.5 flex-wrap">{memberStatusBadge(u.member)}{subBadge(u.subscription)}</div>}
         telegram={u.member?.telegram_username ?? "—"}
         slot={u.member?.pin_code_slot?.toString() ?? "—"}
         passes={u.member ? String(u.member.day_passes_balance) : "—"}
@@ -111,7 +142,7 @@ function AuthUserRow({ u }: { u: AdminUser }) {
   );
 }
 
-function LegacyMemberRow({ m }: { m: Member }) {
+function LegacyMemberRow({ m }: { m: LegacyMemberWithSub }) {
   const nameNode = (
     <>
       {m.name}
@@ -130,7 +161,12 @@ function LegacyMemberRow({ m }: { m: Member }) {
       <tr className="border-b border-white/5 hover:bg-white/5 transition-colors hidden sm:table-row">
         <td className="px-4 py-3 font-medium">{nameNode}</td>
         <td className="px-4 py-3 text-muted text-sm">{m.email ?? "—"}</td>
-        <td className="px-4 py-3">{memberStatusBadge(m)}</td>
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {memberStatusBadge(m)}
+            {subBadge(m.subscription)}
+          </div>
+        </td>
         <td className="px-4 py-3 text-muted text-sm">{m.telegram_username ?? "—"}</td>
         <td className="px-4 py-3 text-muted font-mono text-sm">{m.pin_code_slot ?? "—"}</td>
         <td className="px-4 py-3 text-muted text-sm">{m.day_passes_balance}</td>
@@ -140,7 +176,7 @@ function LegacyMemberRow({ m }: { m: Member }) {
       <MemberCard
         name={nameNode}
         email={m.email ?? "—"}
-        badge={memberStatusBadge(m)}
+        badge={<div className="flex items-center gap-1.5 flex-wrap">{memberStatusBadge(m)}{subBadge(m.subscription)}</div>}
         telegram={m.telegram_username ?? "—"}
         slot={m.pin_code_slot?.toString() ?? "—"}
         passes={String(m.day_passes_balance)}
