@@ -296,6 +296,28 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["pass_grants"]["Insert"]>;
         Relationships: [];
       };
+      lock_sync_runs: {
+        Row: {
+          id: number;
+          triggered_by: number | null;
+          synced: number;
+          failed: number;
+          partial: number;
+          // Per-member results returned by the lock-sync API. Schema:
+          // { name, slot, action: "set"|"clear", ok: boolean, partial?: string[] }
+          results: unknown;
+          created_at: string;
+        };
+        Insert: {
+          triggered_by?: number | null;
+          synced: number;
+          failed: number;
+          partial: number;
+          results?: unknown;
+        };
+        Update: Partial<Database["public"]["Tables"]["lock_sync_runs"]["Insert"]>;
+        Relationships: [];
+      };
       webhook_events: {
         Row: {
           id: number;
@@ -355,6 +377,15 @@ export type Subscription = Database["public"]["Tables"]["subscriptions"]["Row"];
 export type Purchase = Database["public"]["Tables"]["purchases"]["Row"];
 export type PassGrant = Database["public"]["Tables"]["pass_grants"]["Row"];
 export type WebhookEvent = Database["public"]["Tables"]["webhook_events"]["Row"];
+export type LockSyncRun = Database["public"]["Tables"]["lock_sync_runs"]["Row"];
+
+export interface LockSyncResultRow {
+  name: string;
+  slot: number;
+  action: "set" | "clear";
+  ok: boolean;
+  partial?: string[];
+}
 
 export const INTEREST_OPTIONS = [
   { value: "membership", label: "Desk membership" },

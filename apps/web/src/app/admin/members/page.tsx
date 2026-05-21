@@ -192,7 +192,9 @@ export default function UsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  // Default to "active" so the directory isn't cluttered with disabled accounts;
+  // toggle to "disabled" or "all" via the filter dropdown when needed.
+  const [statusFilter, setStatusFilter] = useState<string>("active");
 
   useEffect(() => {
     fetch("/api/admin/users")

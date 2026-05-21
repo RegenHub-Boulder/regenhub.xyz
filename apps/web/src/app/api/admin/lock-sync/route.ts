@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/admin";
 import { setUserCode, clearUserCode, type LockResult } from "@regenhub/shared";
 
 export async function POST() {
-  if (!await requireAdmin()) {
+  const adminUser = await requireAdmin();
+  if (!adminUser) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -18,7 +20,7 @@ export async function POST() {
     return NextResponse.json({ error: "Failed to fetch members" }, { status: 500 });
   }
 
-  const results: Array<{ name: string; slot: number; action: string; ok: boolean; partial?: string[] }> = [];
+  const results: Array<{ name: string; slot: number; action: "set" | "clear"; ok: boolean; partial?: string[] }> = [];
 
   for (const m of members) {
     const slot = m.pin_code_slot!;
@@ -41,5 +43,27 @@ export async function POST() {
 
   const failed = results.filter((r) => !r.ok).length;
   const partial = results.filter((r) => r.ok && r.partial).length;
-  return NextResponse.json({ synced: results.length - failed, failed, partial, results });
+  const synced = results.length - failed;
+
+  // Resolve the admin's member.id for triggered_by
+  const { data: adminMember } = await supabase
+    .from("members")
+    .select("id")
+    .eq("supabase_user_id", adminUser.id)
+    .maybeSingle();
+
+  // Persist the run so /admin/lock can show "last sync" without re-running
+  const serviceClient = createServiceClient();
+  const { error: logErr } = await serviceClient.from("lock_sync_runs").insert({
+    triggered_by: adminMember?.id ?? null,
+    synced,
+    failed,
+    partial,
+    results,
+  });
+  if (logErr) {
+    console.error("[LockSync] Failed to persist run:", logErr);
+  }
+
+  return NextResponse.json({ synced, failed, partial, results });
 }
