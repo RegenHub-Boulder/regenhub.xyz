@@ -228,6 +228,82 @@ export async function createApprovalCheckoutSession(
   return { session, customer, couponId };
 }
 
+// ============================================================
+// Existing-member subscription checkout (migration tool)
+// ============================================================
+
+export interface MemberSubscriptionCheckoutInput {
+  member: Pick<Member, "id" | "name" | "email" | "stripe_customer_id">;
+  planKey: PlanKey;
+  monthlyCents: number;
+  // For Xero migration: align first charge with end of their current cycle
+  trialPeriodDays?: number | null;
+  // Free-text admin note ("Migrating from Xero $300/mo", "Founder rate")
+  note?: string | null;
+  successUrl: string;
+  cancelUrl: string;
+}
+
+/**
+ * Create a subscription Checkout Session for an existing member (no application).
+ *
+ * Used to migrate Xero payers onto Stripe — admin generates the link with their
+ * current rate baked in, optionally with trial_period_days so the first Stripe
+ * charge lines up with the end of their Xero cycle.
+ */
+export async function createMemberSubscriptionCheckout(
+  input: MemberSubscriptionCheckoutInput,
+): Promise<{ session: Stripe.Checkout.Session; customer: Stripe.Customer }> {
+  const stripe = getStripe();
+  const plan = getPlan(input.planKey);
+  if (!plan) throw new Error(`Unknown plan_key: ${input.planKey}`);
+
+  const customer = await getOrCreateCustomer(input.member);
+  const productId = plan.productIdEnvKey ? process.env[plan.productIdEnvKey] : undefined;
+
+  const priceData: Stripe.Checkout.SessionCreateParams.LineItem.PriceData = {
+    currency: "usd",
+    unit_amount: input.monthlyCents,
+    recurring: { interval: "month" },
+    ...(productId
+      ? { product: productId }
+      : { product_data: { name: plan.label } }),
+  };
+
+  const trialDays = input.trialPeriodDays && input.trialPeriodDays > 0
+    ? Math.min(730, input.trialPeriodDays)
+    : undefined;
+
+  const session = await stripe.checkout.sessions.create({
+    mode: "subscription",
+    customer: customer.id,
+    client_reference_id: `member:${input.member.id}`,
+    line_items: [{ price_data: priceData, quantity: 1 }],
+    metadata: {
+      member_id: String(input.member.id),
+      plan_key: input.planKey,
+      monthly_cents: String(input.monthlyCents),
+      source: "migration",
+      ...(input.note ? { note: input.note } : {}),
+    },
+    subscription_data: {
+      ...(trialDays ? { trial_period_days: trialDays } : {}),
+      metadata: {
+        member_id: String(input.member.id),
+        plan_key: input.planKey,
+        monthly_cents: String(input.monthlyCents),
+        source: "migration",
+        ...(input.note ? { discount_note: input.note } : {}),
+      },
+    },
+    success_url: input.successUrl,
+    cancel_url: input.cancelUrl,
+    allow_promotion_codes: false,
+  });
+
+  return { session, customer };
+}
+
 export async function createCustomerPortalSession(
   member: Pick<Member, "id" | "name" | "email" | "stripe_customer_id">,
   returnUrl: string,

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CreditCard, Ban, Loader2 } from "lucide-react";
+import { CreditCard, Ban, Loader2, Link2, Copy, ExternalLink } from "lucide-react";
 import type { Subscription, Purchase } from "@/lib/supabase/types";
 
 interface Props {
@@ -14,6 +14,15 @@ interface Props {
   activeSubscription: Subscription | null;
   recentPurchases: Purchase[];
 }
+
+// Mirror of PLANS in apps/web/src/lib/stripe.ts — keep in sync.
+const PLAN_OPTIONS = [
+  { key: "cold_desk",    label: "Cold Desk",          defaultDollars: 500 },
+  { key: "hot_desk",     label: "Hot Desk",           defaultDollars: 250 },
+  { key: "member_5day",  label: "Member + 5 days/mo", defaultDollars: 100 },
+  { key: "member_2day",  label: "Member + 2 days/mo", defaultDollars: 50 },
+  { key: "member_basic", label: "Member",             defaultDollars: 20 },
+] as const;
 
 const statusStyle: Record<string, string> = {
   active: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
@@ -38,6 +47,58 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
   const [error, setError] = useState<string | null>(null);
   const [showRevoke, setShowRevoke] = useState(false);
   const [refundLast, setRefundLast] = useState(true);
+
+  // Generate-link modal state (for Xero migrations / new subs on existing members)
+  const [showGenerate, setShowGenerate] = useState(false);
+  const [planKey, setPlanKey] = useState<string>(PLAN_OPTIONS[0].key);
+  const [monthlyDollars, setMonthlyDollars] = useState<string>(String(PLAN_OPTIONS[0].defaultDollars));
+  const [trialDays, setTrialDays] = useState("0");
+  const [note, setNote] = useState("");
+  const [generated, setGenerated] = useState<{ url: string; suggested_email: string } | null>(null);
+  const [copiedField, setCopiedField] = useState<"url" | "email" | null>(null);
+
+  function selectPlan(key: string) {
+    setPlanKey(key);
+    const p = PLAN_OPTIONS.find((x) => x.key === key);
+    if (p) setMonthlyDollars(String(p.defaultDollars));
+  }
+
+  async function generate() {
+    setBusy(true);
+    setError(null);
+    try {
+      const monthlyCents = Math.round((parseFloat(monthlyDollars || "0") || 0) * 100);
+      if (monthlyCents < 100) {
+        setError("Monthly amount must be at least $1");
+        return;
+      }
+      const days = parseInt(trialDays || "0", 10) || 0;
+      const res = await fetch(`/api/admin/members/${memberId}/create-checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          plan_key: planKey,
+          monthly_cents: monthlyCents,
+          trial_period_days: days > 0 ? days : undefined,
+          note: note.trim() || undefined,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(data?.error ?? "Failed to generate checkout link");
+        return;
+      }
+      setGenerated({ url: data.checkout_url, suggested_email: data.suggested_email });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copy(value: string, field: "url" | "email") {
+    await navigator.clipboard.writeText(value);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 2000);
+  }
 
   async function revoke() {
     setBusy(true);
@@ -119,7 +180,135 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
             )}
           </div>
         ) : (
-          <p className="text-sm text-muted">No active subscription.</p>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-sm text-muted">No active subscription.</p>
+            <Button
+              size="sm"
+              onClick={() => { setShowGenerate(!showGenerate); setGenerated(null); }}
+              className="btn-glass text-xs h-7 gap-1.5"
+            >
+              <Link2 className="w-3.5 h-3.5" />
+              Generate Stripe link
+            </Button>
+          </div>
+        )}
+
+        {showGenerate && !generated && !activeSubscription && (
+          <div className="glass-panel p-3 border border-sage/20 space-y-3 text-sm">
+            <p className="text-xs text-muted">
+              Creates a Stripe Checkout link to send to {memberName}. Use this to migrate from Xero — pre-set their existing rate and use trial days to line up with their current cycle.
+            </p>
+            <div>
+              <p className="text-xs text-muted mb-1.5 font-medium">Plan</p>
+              <div className="flex gap-1.5 flex-wrap">
+                {PLAN_OPTIONS.map((p) => (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onClick={() => selectPlan(p.key)}
+                    className={`px-2 py-1 rounded text-xs border ${
+                      planKey === p.key
+                        ? "bg-sage/20 border-sage/50 text-sage"
+                        : "bg-white/5 border-white/10 text-muted hover:bg-white/10"
+                    }`}
+                  >
+                    {p.label} · ${p.defaultDollars}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-3 items-end">
+              <div>
+                <p className="text-xs text-muted mb-1">Monthly rate</p>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-muted">$</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={monthlyDollars}
+                    onChange={(e) => setMonthlyDollars(e.target.value)}
+                    className="w-20 bg-white/5 border border-white/10 rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
+                  />
+                  <span className="text-xs text-muted">/mo</span>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-muted mb-1">Trial days (delay first charge)</p>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min="0"
+                    max="730"
+                    value={trialDays}
+                    onChange={(e) => setTrialDays(e.target.value)}
+                    className="w-16 bg-white/5 border border-white/10 rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
+                  />
+                  <span className="text-xs text-muted">days</span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <p className="text-xs text-muted mb-1">Note (admin-only)</p>
+              <input
+                type="text"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="e.g. Migrating from Xero $300/mo"
+                className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" disabled={busy} onClick={generate} className="bg-sage/20 hover:bg-sage/40 text-sage border border-sage/30 text-xs gap-1 h-7">
+                {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Link2 className="w-3 h-3" />}
+                Generate link
+              </Button>
+              <Button size="sm" variant="ghost" disabled={busy} onClick={() => setShowGenerate(false)} className="text-muted text-xs h-7">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {generated && (
+          <div className="glass-panel p-3 border border-emerald-500/30 space-y-3 text-sm">
+            <p className="text-xs text-emerald-400 font-medium">
+              ✓ Link generated. Copy + send to {memberName}.
+            </p>
+            <div className="space-y-2">
+              <p className="text-xs text-muted">Checkout URL</p>
+              <div className="flex gap-1.5">
+                <code className="flex-1 bg-white/5 px-2 py-1.5 rounded text-xs truncate font-mono">
+                  {generated.url}
+                </code>
+                <Button size="sm" onClick={() => copy(generated.url, "url")} className="btn-glass text-xs h-7 gap-1">
+                  <Copy className="w-3 h-3" /> {copiedField === "url" ? "Copied" : "Copy"}
+                </Button>
+                <a href={generated.url} target="_blank" rel="noopener noreferrer">
+                  <Button size="sm" className="btn-glass text-xs h-7 gap-1">
+                    <ExternalLink className="w-3 h-3" /> Open
+                  </Button>
+                </a>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-muted">Suggested email (edit before sending)</p>
+                <Button size="sm" onClick={() => copy(generated.suggested_email, "email")} className="btn-glass text-xs h-7 gap-1">
+                  <Copy className="w-3 h-3" /> {copiedField === "email" ? "Copied" : "Copy"}
+                </Button>
+              </div>
+              <textarea
+                value={generated.suggested_email}
+                onChange={() => { /* read-only for the suggested template; admin should copy + edit in their mail client */ }}
+                readOnly
+                rows={11}
+                className="w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-xs font-mono focus:outline-none"
+              />
+            </div>
+            <Button size="sm" variant="ghost" onClick={() => { setGenerated(null); setShowGenerate(false); }} className="text-muted text-xs h-7">
+              Done
+            </Button>
+          </div>
         )}
 
         {recentPurchases.length > 0 && (

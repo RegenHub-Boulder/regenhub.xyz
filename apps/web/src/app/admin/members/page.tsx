@@ -222,6 +222,10 @@ export default function UsersPage() {
       result = result.filter((u) => u.member && !u.member.disabled);
     } else if (statusFilter === "disabled") {
       result = result.filter((u) => u.member?.disabled);
+    } else if (statusFilter === "no_subscription") {
+      // Migration backlog: a member exists, isn't disabled, but has no active
+      // Stripe subscription. Useful for working through Xero→Stripe moves.
+      result = result.filter((u) => u.member && !u.member.disabled && !u.subscription);
     }
 
     // Search
@@ -253,6 +257,8 @@ export default function UsersPage() {
       result = result.filter((m) => !m.disabled);
     } else if (statusFilter === "disabled") {
       result = result.filter((m) => m.disabled);
+    } else if (statusFilter === "no_subscription") {
+      result = result.filter((m) => !m.disabled && !m.subscription);
     }
 
     // Search
@@ -325,6 +331,7 @@ export default function UsersPage() {
             <option value="all">All statuses</option>
             <option value="active">Active</option>
             <option value="disabled">Disabled</option>
+            <option value="no_subscription">No subscription (migration backlog)</option>
           </select>
         </div>
       )}
