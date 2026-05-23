@@ -29,6 +29,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Member profile not found" }, { status: 404 });
   }
 
+  // Contributing-member rate ($20 vs $25 on single day passes) applies to anyone
+  // with an active paid subscription — checks both billable subs and the legacy
+  // member-type signal (hub_friend etc. read as members for pricing purposes).
+  const { data: activeSub } = await supabase
+    .from("subscriptions")
+    .select("id")
+    .eq("member_id", member.id)
+    .in("status", ["active", "trialing"])
+    .limit(1)
+    .maybeSingle();
+  const isMember = !!activeSub;
+
   const baseUrl =
     process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://regenhub.xyz";
 
@@ -36,6 +48,7 @@ export async function POST(req: Request) {
     const session = await createPassCheckoutSession({
       member,
       kind,
+      isMember,
       successUrl: `${baseUrl}/portal/passes?session_id={CHECKOUT_SESSION_ID}`,
       cancelUrl: `${baseUrl}/portal/passes?checkout=cancelled`,
     });

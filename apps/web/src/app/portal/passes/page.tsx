@@ -82,7 +82,7 @@ export default async function PassesPage({ searchParams }: PageProps) {
 
   const isFullMember = member.member_type !== "day_pass";
 
-  const [{ data: activeCodes }, { data: recentPurchases }, { data: recentGrants }] = await Promise.all([
+  const [{ data: activeCodes }, { data: recentPurchases }, { data: recentGrants }, { data: activeSub }] = await Promise.all([
     supabase
       .from("day_codes")
       .select("*")
@@ -101,7 +101,18 @@ export default async function PassesPage({ searchParams }: PageProps) {
       .eq("member_id", member.id)
       .order("created_at", { ascending: false })
       .limit(10),
+    supabase
+      .from("subscriptions")
+      .select("id")
+      .eq("member_id", member.id)
+      .in("status", ["active", "trialing"])
+      .limit(1)
+      .maybeSingle(),
   ]);
+
+  // Contributing-member rate ($20 vs $25 on single passes) — keep this in
+  // sync with the same check in /api/portal/buy-passes.
+  const isContributingMember = !!activeSub;
 
   return (
     <div className="space-y-8 max-w-3xl">
@@ -236,7 +247,15 @@ export default async function PassesPage({ searchParams }: PageProps) {
             className="glass-panel p-5 hover:bg-white/5 transition-colors group block text-left w-full"
           >
             <p className="font-semibold mb-1">Single Day Pass</p>
-            <p className="text-3xl font-bold text-gold mb-3">$25</p>
+            {isContributingMember ? (
+              <div className="mb-3 flex items-baseline gap-2">
+                <p className="text-3xl font-bold text-gold">$20</p>
+                <p className="text-sm text-muted line-through">$25</p>
+                <span className="text-xs bg-sage/20 text-sage px-2 py-0.5 rounded-full">member rate</span>
+              </div>
+            ) : (
+              <p className="text-3xl font-bold text-gold mb-3">$25</p>
+            )}
             <p className="text-xs text-muted group-hover:text-foreground transition-colors">
               1 door code &rarr; full day access &rarr;
             </p>
@@ -310,6 +329,29 @@ export default async function PassesPage({ searchParams }: PageProps) {
               ))}
           </div>
         </div>
+      )}
+
+      {/* Contributing-member nudge — only for non-subscribed users */}
+      {!isFullMember && !isContributingMember && (
+        <Card className="glass-panel border border-sage/30">
+          <CardContent className="p-6">
+            <div className="flex items-start gap-4">
+              <Ticket className="w-7 h-7 text-sage shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="font-semibold mb-1">Become a Contributing Member</h3>
+                <p className="text-sm text-muted mb-4">
+                  Save $5 per day pass (member rate $20 vs $25), join members-only events, and support the cooperative — starting at $20/month.
+                </p>
+                <Link href="/membership">
+                  <Button className="btn-primary-glass gap-2 text-sm">
+                    See membership tiers
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Membership upgrade prompt for day_pass members */}

@@ -51,12 +51,16 @@ export const PLANS = {
     defaultMonthlyCents: 50000,
     grantsMemberType: "cold_desk" as MemberType,
     productIdEnvKey: "STRIPE_PRODUCT_COLD_DESK",
+    selfServe: false, // physical access — admin approval required
+    description: "Your own reserved desk + permanent door code + 24/7 access. Full cooperative path.",
   },
   hot_desk: {
     label: "Hot Desk",
     defaultMonthlyCents: 25000,
     grantsMemberType: "hot_desk" as MemberType,
     productIdEnvKey: "STRIPE_PRODUCT_HOT_DESK",
+    selfServe: false, // physical access — admin approval required
+    description: "Permanent door code + 24/7 access to any open desk.",
   },
   member_5day: {
     label: "Member + 5 days/mo",
@@ -64,6 +68,8 @@ export const PLANS = {
     grantsMemberType: "day_pass" as MemberType,
     productIdEnvKey: "STRIPE_PRODUCT_MEMBER_5DAY",
     monthlyDayPasses: 5,
+    selfServe: true,
+    description: "Everything in Contributing Member, plus 5 day passes credited each month.",
   },
   member_2day: {
     label: "Member + 2 days/mo",
@@ -71,13 +77,17 @@ export const PLANS = {
     grantsMemberType: "day_pass" as MemberType,
     productIdEnvKey: "STRIPE_PRODUCT_MEMBER_2DAY",
     monthlyDayPasses: 2,
+    selfServe: true,
+    description: "Everything in Contributing Member, plus 2 day passes credited each month.",
   },
   member_basic: {
-    label: "Member",
+    label: "Contributing Member",
     defaultMonthlyCents: 2000,
     grantsMemberType: "day_pass" as MemberType,
     productIdEnvKey: "STRIPE_PRODUCT_MEMBER_BASIC",
     monthlyDayPasses: 0,
+    selfServe: true,
+    description: "Support the cooperative, attend members-only events, and get day passes at the member rate ($20 instead of $25).",
   },
 } as const satisfies Record<
   string,
@@ -87,6 +97,8 @@ export const PLANS = {
     grantsMemberType: MemberType | null;
     productIdEnvKey?: string;
     monthlyDayPasses?: number;
+    selfServe: boolean;
+    description: string;
   }
 >;
 
@@ -98,10 +110,28 @@ export interface PlanDef {
   grantsMemberType: MemberType | null;
   productIdEnvKey?: string;
   monthlyDayPasses?: number;
+  selfServe: boolean;
+  description: string;
 }
 
 export function getPlan(planKey: PlanKey): PlanDef | null {
   return (PLANS as Record<string, PlanDef | undefined>)[planKey] ?? null;
+}
+
+/** Plans anyone can subscribe to without admin approval (the contributing-member ladder). */
+export function getSelfServePlans(): { key: KnownPlanKey; def: PlanDef }[] {
+  return (Object.entries(PLANS) as Array<[KnownPlanKey, PlanDef]>)
+    .filter(([, def]) => def.selfServe)
+    .sort((a, b) => a[1].defaultMonthlyCents - b[1].defaultMonthlyCents)
+    .map(([key, def]) => ({ key, def }));
+}
+
+// Day pass pricing — members pay less. Public price → $25; member price → $20.
+export const DAY_PASS_MEMBER_CENTS = 2000;
+export const DAY_PASS_PUBLIC_CENTS = 2500;
+
+export function dayPassCentsFor(isMember: boolean): number {
+  return isMember ? DAY_PASS_MEMBER_CENTS : DAY_PASS_PUBLIC_CENTS;
 }
 
 export function planLabel(planKey: PlanKey): string {
@@ -222,7 +252,7 @@ export async function createApprovalCheckoutSession(
     },
     success_url: input.successUrl,
     cancel_url: input.cancelUrl,
-    allow_promotion_codes: false,
+    allow_promotion_codes: true,
   });
 
   return { session, customer, couponId };
@@ -298,7 +328,7 @@ export async function createMemberSubscriptionCheckout(
     },
     success_url: input.successUrl,
     cancel_url: input.cancelUrl,
-    allow_promotion_codes: false,
+    allow_promotion_codes: true,
   });
 
   return { session, customer };
@@ -323,8 +353,20 @@ export async function createCustomerPortalSession(
 export interface PassCheckoutInput {
   member: Pick<Member, "id" | "name" | "email" | "stripe_customer_id">;
   kind: PurchaseKind;
+  /** Contributing members ($20+ subscribers) get the discounted day-pass rate. 5-pack unaffected. */
+  isMember: boolean;
   successUrl: string;
   cancelUrl: string;
+}
+
+/**
+ * Compute the line-item cents for a pass purchase, applying member pricing
+ * to single day passes only ($20 vs $25). 5-packs are already discounted
+ * at $20/pass so they don't get an additional discount.
+ */
+function passLineItemCents(kind: PurchaseKind, isMember: boolean): number {
+  if (kind === "day_pass") return dayPassCentsFor(isMember);
+  return PASS_KINDS[kind].cents;
 }
 
 export async function createPassCheckoutSession(
@@ -332,6 +374,10 @@ export async function createPassCheckoutSession(
 ): Promise<Stripe.Checkout.Session> {
   const stripe = getStripe();
   const def = PASS_KINDS[input.kind];
+  const lineCents = passLineItemCents(input.kind, input.isMember);
+  const label = input.kind === "day_pass" && input.isMember
+    ? `${def.label} (member rate)`
+    : def.label;
 
   return stripe.checkout.sessions.create({
     mode: "payment",
@@ -340,8 +386,8 @@ export async function createPassCheckoutSession(
     line_items: [{
       price_data: {
         currency: "usd",
-        unit_amount: def.cents,
-        product_data: { name: def.label },
+        unit_amount: lineCents,
+        product_data: { name: label },
       },
       quantity: 1,
     }],
@@ -349,6 +395,7 @@ export async function createPassCheckoutSession(
       member_id: String(input.member.id),
       kind: input.kind,
       passes_granted: String(def.quantity),
+      member_rate: input.isMember ? "1" : "0",
     },
     payment_intent_data: {
       metadata: {

@@ -440,7 +440,7 @@ async function upsertSubscription(
   const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
   let { data: member } = await admin
     .from("members")
-    .select("id, name, day_passes_balance")
+    .select("id, name, email, day_passes_balance, supabase_user_id")
     .eq("stripe_customer_id", customerId)
     .maybeSingle();
 
@@ -450,7 +450,7 @@ async function upsertSubscription(
     if (Number.isFinite(memberId)) {
       const { data: m } = await admin
         .from("members")
-        .select("id, name, day_passes_balance")
+        .select("id, name, email, day_passes_balance, supabase_user_id")
         .eq("id", memberId)
         .maybeSingle();
       if (m) {
@@ -542,21 +542,42 @@ async function upsertSubscription(
       .update({ past_due_since: null, access_disabled_at: null })
       .eq("stripe_subscription_id", sub.id);
 
-    // Mark application complete + announce (only first time)
-    if (isNew && sub.metadata?.application_id) {
-      const appId = parseInt(sub.metadata.application_id, 10);
-      if (Number.isFinite(appId)) {
-        await admin
-          .from("applications")
-          .update({ checkout_completed_at: new Date().toISOString() })
-          .eq("id", appId);
+    // First-time activation side effects (new subscription, not a status flap)
+    if (isNew) {
+      // Mark the originating application complete (if there was one)
+      if (sub.metadata?.application_id) {
+        const appId = parseInt(sub.metadata.application_id, 10);
+        if (Number.isFinite(appId)) {
+          await admin
+            .from("applications")
+            .update({ checkout_completed_at: new Date().toISOString() })
+            .eq("id", appId);
+        }
       }
+
+      // If this new subscriber has no auth account yet (self-serve signup
+      // without prior login), send a magic link so they can claim their
+      // portal. Mirrors first-time day-pass buyer flow.
+      if (!member.supabase_user_id && member.email) {
+        const baseUrl =
+          process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://regenhub.xyz";
+        const { error: otpErr } = await admin.auth.signInWithOtp({
+          email: member.email,
+          options: {
+            emailRedirectTo: `${baseUrl}/auth/callback?next=/portal`,
+            shouldCreateUser: true,
+          },
+        });
+        if (otpErr) console.error("[Webhook] OTP send failed:", otpErr);
+      }
+
       const passesNote =
         member.day_passes_balance > 0
           ? ` (${member.day_passes_balance} guest passes carried forward)`
           : "";
+      const source = sub.metadata?.source ? ` · via ${sub.metadata.source}` : "";
       await notifyTelegram(
-        `🎉 *New member!*\n\n*${member.name}* is now on ${planLabel(planKey)} ($${monthlyCents / 100}/mo)${passesNote}.`,
+        `🎉 *New member!*\n\n*${member.name}* is now on ${planLabel(planKey)} ($${monthlyCents / 100}/mo)${passesNote}${source}.`,
       );
     }
   }
