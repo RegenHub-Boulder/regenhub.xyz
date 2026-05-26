@@ -82,8 +82,12 @@ async function notifyTelegramApplication(claim: {
           inline_keyboard: [
             [
               {
-                text: "✅ Approve",
+                text: "✅ Free day only",
                 callback_data: `freeday_approve_${claim.id}`,
+              },
+              {
+                text: "✅ Free day + Membership",
+                callback_data: `freeday_approve_membership_${claim.id}`,
               },
             ],
           ],

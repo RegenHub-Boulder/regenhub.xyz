@@ -75,31 +75,34 @@ export async function POST(req: Request) {
 
   const admin = createServiceClient();
 
-  // Find or create the member row.
-  let { data: member } = await admin
+  // Find the member row. We DON'T auto-create here anymore — self-serve
+  // subscription now requires explicit admin approval, which means a
+  // member record must already exist (created via the free-day flow OR
+  // by admin manually). If no record, return a friendly "please apply" msg.
+  const { data: member } = await admin
     .from("members")
-    .select("id, name, email, stripe_customer_id, member_type, supabase_user_id")
+    .select("id, name, email, stripe_customer_id, member_type, supabase_user_id, approved_for_membership")
     .eq("email", memberEmail)
     .maybeSingle();
 
   if (!member) {
-    const insertName = memberName || memberEmail.split("@")[0];
-    const { data: created, error: createErr } = await admin
-      .from("members")
-      .insert({
-        name: insertName,
-        email: memberEmail,
-        member_type: "day_pass",
-        supabase_user_id: user?.id ?? null,
-      })
-      .select("id, name, email, stripe_customer_id, member_type, supabase_user_id")
-      .single();
-    if (createErr || !created) {
-      console.error("[SelfServeSubscribe] member insert failed:", createErr);
-      return NextResponse.json({ error: "Failed to create member" }, { status: 500 });
-    }
-    member = created;
+    return NextResponse.json(
+      {
+        error: "We don't have a record for that email yet. Start with a free day at /freeday or reach out to boulder.regenhub@gmail.com.",
+      },
+      { status: 403 },
+    );
   }
+  if (!member.approved_for_membership) {
+    return NextResponse.json(
+      {
+        error: "This email isn't approved for membership yet. Reach out to boulder.regenhub@gmail.com — we'll get you set up.",
+      },
+      { status: 403 },
+    );
+  }
+  // Avoid unused-var lint on the supabase-only fields
+  void memberName;
 
   // Block double-subscribing: one active sub per member.
   const { data: existingSub } = await admin

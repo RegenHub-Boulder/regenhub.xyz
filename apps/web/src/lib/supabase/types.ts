@@ -104,6 +104,9 @@ export interface Database {
           profile_photo_url: string | null;
           show_in_directory: boolean;
           stripe_customer_id: string | null;
+          approved_for_membership: boolean;
+          approved_for_membership_at: string | null;
+          approved_for_membership_by: number | null;
           created_at: string;
           updated_at: string;
         };
@@ -126,6 +129,9 @@ export interface Database {
           skills?: string[] | null;
           profile_photo_url?: string | null;
           stripe_customer_id?: string | null;
+          approved_for_membership?: boolean;
+          approved_for_membership_at?: string | null;
+          approved_for_membership_by?: number | null;
         };
         Update: Partial<Database["public"]["Tables"]["members"]["Insert"]>;
         Relationships: [];

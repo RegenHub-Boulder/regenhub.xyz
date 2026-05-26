@@ -1,6 +1,6 @@
 import TelegramBot from "node-telegram-bot-api";
 import { db, findMemberByTelegram, findAdminByTelegram, type MemberRow } from "./db/supabase.js";
-import { sendEmail, freeDayApprovedEmail } from "./email.js";
+import { sendEmail, freeDayApprovedEmail, freeDayPlusMembershipApprovedEmail } from "./email.js";
 import {
   allocateSlotWithRetry,
   setUserCode,
@@ -383,8 +383,13 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
   }
 
   // ── Free day approval (any group member can approve) ──
-  if (data.startsWith("freeday_approve_")) {
-    const claimId = parseInt(data.replace("freeday_approve_", ""));
+  // Order matters: handle the more-specific callback first so its prefix
+  // doesn't get swallowed by the looser "freeday_approve_" match below.
+  if (data.startsWith("freeday_approve_membership_") || data.startsWith("freeday_approve_")) {
+    const withMembership = data.startsWith("freeday_approve_membership_");
+    const claimId = parseInt(
+      data.replace(withMembership ? "freeday_approve_membership_" : "freeday_approve_", ""),
+    );
     const { data: claim } = await db
       .from("free_day_claims")
       .select("id, name, email, status")
@@ -395,15 +400,44 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
       return bot.sendMessage(chatId, `Already ${claim.status}.`);
     }
     const approver = username ? `@${username}` : query.from.first_name;
+
+    // Flip the claim — trigger create_day_pass_member_on_approval auto-creates
+    // a day_pass member row keyed by email if one doesn't exist yet.
     await db
       .from("free_day_claims")
       .update({ status: "reserved", approved_by: approver })
       .eq("id", claimId);
 
-    // Email the applicant with their door-code link (fire-and-forget).
-    // The DB update has already happened; email is best-effort.
+    // If approving for membership too, flip the flag on the member.
+    // Resolve approver's member.id by their telegram username for audit.
+    if (withMembership) {
+      let approverMemberId: number | null = null;
+      if (username) {
+        const { data: approverMember } = await db
+          .from("members")
+          .select("id")
+          .eq("telegram_username", username)
+          .maybeSingle();
+        approverMemberId = approverMember?.id ?? null;
+      }
+      const { error: flagErr } = await db
+        .from("members")
+        .update({
+          approved_for_membership: true,
+          approved_for_membership_at: new Date().toISOString(),
+          approved_for_membership_by: approverMemberId,
+        })
+        .eq("email", claim.email);
+      if (flagErr) {
+        console.error("[FreeDay+Membership] Failed to set approval flag:", flagErr);
+      }
+    }
+
+    // Email the applicant — different template based on which button was hit.
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
-    const tpl = freeDayApprovedEmail({ name: claim.name, siteUrl });
+    const tpl = withMembership
+      ? freeDayPlusMembershipApprovedEmail({ name: claim.name, siteUrl })
+      : freeDayApprovedEmail({ name: claim.name, siteUrl });
     sendEmail({
       to: claim.email,
       subject: tpl.subject,
@@ -412,16 +446,15 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
       replyTo: "boulder.regenhub@gmail.com",
     })
       .then((ok) => {
-        if (ok) {
-          console.log(`[FreeDay] Approval email sent to ${claim.email}`);
-        }
+        if (ok) console.log(`[FreeDay] ${withMembership ? "+membership" : ""} email sent to ${claim.email}`);
       })
       .catch((err) => console.error("[FreeDay] Email send failed:", err));
 
     // Edit the original message to show who approved
     const originalText = query.message?.text ?? "";
+    const tag = withMembership ? "*Approved + Membership*" : "*Approved (free day only)*";
     return bot.editMessageText(
-      `✅ *Approved* by ${approver} · email sent to ${claim.email}\n\n${originalText}`,
+      `✅ ${tag} by ${approver} · email sent to ${claim.email}\n\n${originalText}`,
       {
         chat_id: chatId,
         message_id: query.message!.message_id,

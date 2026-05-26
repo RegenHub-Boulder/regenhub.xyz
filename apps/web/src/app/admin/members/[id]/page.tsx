@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { MemberForm } from "@/components/admin/MemberForm";
 import { AddPassesCard } from "@/components/admin/AddPassesCard";
 import { SubscriptionCard } from "@/components/admin/SubscriptionCard";
+import { MembershipApprovalCard } from "@/components/admin/MembershipApprovalCard";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Key, AlertCircle } from "lucide-react";
@@ -46,6 +47,17 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
 
   const pastDue = activeSubscription?.status === "past_due";
 
+  // Resolve the admin who approved this member for membership (if any) for audit display
+  let approvedByName: string | null = null;
+  if (member.approved_for_membership_by) {
+    const { data: approver } = await supabase
+      .from("members")
+      .select("name")
+      .eq("id", member.approved_for_membership_by)
+      .maybeSingle();
+    approvedByName = approver?.name ?? null;
+  }
+
   return (
     <div className="space-y-8 max-w-2xl">
       {pastDue && (
@@ -69,6 +81,15 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
         <p className="text-muted mt-1">{member.name}</p>
       </div>
       <MemberForm member={member} />
+      <MembershipApprovalCard
+        memberId={member.id}
+        memberName={member.name}
+        memberEmail={member.email}
+        approved={member.approved_for_membership}
+        approvedAt={member.approved_for_membership_at}
+        approvedByName={approvedByName}
+        hasActiveSubscription={!!activeSubscription}
+      />
       <SubscriptionCard
         memberId={member.id}
         memberName={member.name}
