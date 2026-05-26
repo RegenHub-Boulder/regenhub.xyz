@@ -13,7 +13,7 @@ const APPROVABLE_PLANS = [
   { key: "hot_desk",     label: "Hot Desk",           defaultDollars: 250 },
   { key: "member_5day",  label: "Member + 5 days/mo", defaultDollars: 100 },
   { key: "member_2day",  label: "Member + 2 days/mo", defaultDollars: 50 },
-  { key: "member_basic", label: "Member",             defaultDollars: 20 },
+  { key: "member_basic", label: "Interim Member",     defaultDollars: 30 },
 ] as const;
 
 type DurationChoice = "forever" | "repeating";

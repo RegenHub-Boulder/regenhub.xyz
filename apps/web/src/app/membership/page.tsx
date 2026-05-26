@@ -16,8 +16,8 @@ export const metadata: Metadata = {
 const PERKS = [
   "Member-only events (at least one per month)",
   "Day passes at the member rate ($20 instead of $25)",
+  "Monthly day passes accumulate — they never expire",
   "Connection to the regenerative cooperative community",
-  "Discounts on workshops + retreats (coming soon)",
 ];
 
 interface PageProps {

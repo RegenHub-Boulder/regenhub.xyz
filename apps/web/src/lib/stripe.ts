@@ -81,13 +81,13 @@ export const PLANS = {
     description: "Everything in Contributing Member, plus 2 day passes credited each month.",
   },
   member_basic: {
-    label: "Contributing Member",
-    defaultMonthlyCents: 2000,
+    label: "Interim Member",
+    defaultMonthlyCents: 3000,
     grantsMemberType: "day_pass" as MemberType,
     productIdEnvKey: "STRIPE_PRODUCT_MEMBER_BASIC",
-    monthlyDayPasses: 0,
+    monthlyDayPasses: 1,
     selfServe: true,
-    description: "Support the cooperative, attend members-only events, and get day passes at the member rate ($20 instead of $25).",
+    description: "Step into the cooperative — includes 1 coworking day per month (passes accumulate), member rate on additional day passes ($20 vs $25), and access to members-only events.",
   },
 } as const satisfies Record<
   string,

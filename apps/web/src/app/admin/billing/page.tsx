@@ -22,7 +22,7 @@ const planLabels: Record<string, string> = {
   hot_desk: "Hot Desk",
   member_5day: "Member + 5 days/mo",
   member_2day: "Member + 2 days/mo",
-  member_basic: "Member",
+  member_basic: "Interim Member",
   // Legacy
   social_events_1: "Social — 1 day/mo",
   social_events_5: "Social — 5 days/mo",

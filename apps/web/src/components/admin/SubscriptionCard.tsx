@@ -21,7 +21,7 @@ const PLAN_OPTIONS = [
   { key: "hot_desk",     label: "Hot Desk",           defaultDollars: 250 },
   { key: "member_5day",  label: "Member + 5 days/mo", defaultDollars: 100 },
   { key: "member_2day",  label: "Member + 2 days/mo", defaultDollars: 50 },
-  { key: "member_basic", label: "Member",             defaultDollars: 20 },
+  { key: "member_basic", label: "Interim Member",     defaultDollars: 30 },
 ] as const;
 
 const statusStyle: Record<string, string> = {
@@ -150,7 +150,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
                   : activeSubscription.plan_key === "hot_desk" ? "Hot Desk"
                   : activeSubscription.plan_key === "member_5day" ? "Member + 5 days/mo"
                   : activeSubscription.plan_key === "member_2day" ? "Member + 2 days/mo"
-                  : activeSubscription.plan_key === "member_basic" ? "Member"
+                  : activeSubscription.plan_key === "member_basic" ? "Interim Member"
                   : activeSubscription.plan_key}
               </span>
               <span className="text-muted">·</span>
@@ -333,7 +333,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
               Revoke <span className="font-semibold">{memberName}</span>&apos;s access?
               This sets <code>disabled = true</code> on the member record
               {activeSubscription && (
-                <span> and immediately cancels their <span className="font-semibold">{activeSubscription.plan_key === "cold_desk" ? "Cold Desk" : activeSubscription.plan_key === "hot_desk" ? "Hot Desk" : activeSubscription.plan_key === "member_5day" ? "Member + 5 days/mo" : activeSubscription.plan_key === "member_2day" ? "Member + 2 days/mo" : activeSubscription.plan_key === "member_basic" ? "Member" : activeSubscription.plan_key}</span> subscription in Stripe</span>
+                <span> and immediately cancels their <span className="font-semibold">{activeSubscription.plan_key === "cold_desk" ? "Cold Desk" : activeSubscription.plan_key === "hot_desk" ? "Hot Desk" : activeSubscription.plan_key === "member_5day" ? "Member + 5 days/mo" : activeSubscription.plan_key === "member_2day" ? "Member + 2 days/mo" : activeSubscription.plan_key === "member_basic" ? "Interim Member" : activeSubscription.plan_key}</span> subscription in Stripe</span>
               )}
               .
             </p>

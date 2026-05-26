@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import HubEssentials from "@/components/portal/HubEssentials";
 import InviteCard from "@/components/portal/InviteCard";
 import { ManageSubscriptionButton } from "@/components/portal/ManageSubscriptionButton";
+import { ChangePlanButton } from "@/components/portal/ChangePlanButton";
 
 export default async function PortalPage() {
   const supabase = await createClient();
@@ -81,12 +82,13 @@ export default async function PortalPage() {
         cancel_at_period_end: boolean;
         current_period_end: string | null;
         past_due_since: string | null;
+        discount_cents: number | null;
       }
     | null = null;
   if (member) {
     const { data } = await supabase
       .from("subscriptions")
-      .select("plan_key, monthly_cents, status, cancel_at_period_end, current_period_end, past_due_since")
+      .select("plan_key, monthly_cents, status, cancel_at_period_end, current_period_end, past_due_since, discount_cents")
       .eq("member_id", member.id)
       .in("status", ["active", "trialing", "past_due"])
       .order("created_at", { ascending: false })
@@ -94,6 +96,10 @@ export default async function PortalPage() {
       .maybeSingle();
     activeSubscription = data;
   }
+
+  // Self-serve plans can swap themselves; desk tiers require admin
+  const SELF_SERVE_KEYS = new Set(["member_basic", "member_2day", "member_5day"]);
+  const canChangePlan = !!activeSubscription && SELF_SERVE_KEYS.has(activeSubscription.plan_key);
 
   if (!member) {
     if (application) {
@@ -282,7 +288,7 @@ export default async function PortalPage() {
                         : activeSubscription.plan_key === "hot_desk" ? "Hot Desk"
                         : activeSubscription.plan_key === "member_5day" ? "Member + 5 days/mo"
                         : activeSubscription.plan_key === "member_2day" ? "Member + 2 days/mo"
-                        : activeSubscription.plan_key === "member_basic" ? "Member"
+                        : activeSubscription.plan_key === "member_basic" ? "Interim Member"
                         : activeSubscription.plan_key}
                       {" · "}${activeSubscription.monthly_cents / 100}/mo
                     </span>
@@ -317,7 +323,16 @@ export default async function PortalPage() {
                   </p>
                 )}
               </div>
-              <ManageSubscriptionButton />
+              <div className="flex gap-2 flex-wrap">
+                {canChangePlan && (
+                  <ChangePlanButton
+                    currentPlanKey={activeSubscription.plan_key}
+                    currentMonthlyCents={activeSubscription.monthly_cents}
+                    hasDiscount={(activeSubscription.discount_cents ?? 0) > 0}
+                  />
+                )}
+                <ManageSubscriptionButton />
+              </div>
             </div>
           </CardContent>
         </Card>

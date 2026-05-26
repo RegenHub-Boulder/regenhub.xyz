@@ -338,9 +338,9 @@ export default async function PassesPage({ searchParams }: PageProps) {
             <div className="flex items-start gap-4">
               <Ticket className="w-7 h-7 text-sage shrink-0 mt-0.5" />
               <div className="flex-1">
-                <h3 className="font-semibold mb-1">Become a Contributing Member</h3>
+                <h3 className="font-semibold mb-1">Become an Interim Member</h3>
                 <p className="text-sm text-muted mb-4">
-                  Save $5 per day pass (member rate $20 vs $25), join members-only events, and support the cooperative — starting at $20/month.
+                  $30/month includes 1 coworking day per month (passes never expire), member rate on additional day passes ($20 vs $25), and members-only events.
                 </p>
                 <Link href="/membership">
                   <Button className="btn-primary-glass gap-2 text-sm">
