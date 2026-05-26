@@ -110,7 +110,7 @@ export default async function PassesPage({ searchParams }: PageProps) {
       .maybeSingle(),
   ]);
 
-  // Contributing-member rate ($20 vs $25 on single passes) — keep this in
+  // Contributing-member rate ($25 vs $30 on single passes) — keep this in
   // sync with the same check in /api/portal/buy-passes.
   const isContributingMember = !!activeSub;
 
@@ -239,9 +239,9 @@ export default async function PassesPage({ searchParams }: PageProps) {
       <div>
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <ShoppingCart className="w-5 h-5 text-sage" />
-          {isFullMember ? "Buy guest passes" : "Get day passes"}
+          {isFullMember ? "Buy guest passes" : "Get a day pass"}
         </h2>
-        <div className="grid sm:grid-cols-2 gap-4">
+        <div className="max-w-sm">
           <BuyPassButton
             kind="day_pass"
             className="glass-panel p-5 hover:bg-white/5 transition-colors group block text-left w-full"
@@ -249,28 +249,15 @@ export default async function PassesPage({ searchParams }: PageProps) {
             <p className="font-semibold mb-1">Single Day Pass</p>
             {isContributingMember ? (
               <div className="mb-3 flex items-baseline gap-2">
-                <p className="text-3xl font-bold text-gold">$20</p>
-                <p className="text-sm text-muted line-through">$25</p>
+                <p className="text-3xl font-bold text-gold">$25</p>
+                <p className="text-sm text-muted line-through">$30</p>
                 <span className="text-xs bg-sage/20 text-sage px-2 py-0.5 rounded-full">member rate</span>
               </div>
             ) : (
-              <p className="text-3xl font-bold text-gold mb-3">$25</p>
+              <p className="text-3xl font-bold text-gold mb-3">$30</p>
             )}
             <p className="text-xs text-muted group-hover:text-foreground transition-colors">
               1 door code &rarr; full day access &rarr;
-            </p>
-          </BuyPassButton>
-          <BuyPassButton
-            kind="five_pack"
-            className="glass-panel p-5 hover:bg-white/5 transition-colors group block text-left w-full"
-          >
-            <div className="flex items-start justify-between">
-              <p className="font-semibold mb-1">5-Pack</p>
-              <span className="text-xs bg-sage/20 text-sage px-2 py-0.5 rounded-full">Save $25</span>
-            </div>
-            <p className="text-3xl font-bold text-gold mb-3">$100</p>
-            <p className="text-xs text-muted group-hover:text-foreground transition-colors">
-              5 door codes &rarr; best value &rarr;
             </p>
           </BuyPassButton>
         </div>
@@ -290,7 +277,7 @@ export default async function PassesPage({ searchParams }: PageProps) {
                 key: `p-${p.id}`,
                 date: p.created_at,
                 icon: <ShoppingCart className="w-4 h-4 text-sage" />,
-                title: p.kind === "five_pack" ? "5-Pack purchased" : "Day Pass purchased",
+                title: p.kind === "five_pack" ? "5-Pack purchased (legacy)" : "Day Pass purchased",
                 amount: `$${p.amount_cents / 100}`,
                 detail: `+${p.passes_granted} pass${p.passes_granted === 1 ? "" : "es"}`,
               })),
@@ -340,7 +327,7 @@ export default async function PassesPage({ searchParams }: PageProps) {
               <div className="flex-1">
                 <h3 className="font-semibold mb-1">Become an Interim Member</h3>
                 <p className="text-sm text-muted mb-4">
-                  $30/month includes 1 coworking day per month (passes never expire), member rate on additional day passes ($20 vs $25), and members-only events.
+                  $30/month includes 1 coworking day per month (passes never expire), member rate on additional day passes ($25 vs $30), and members-only events.
                 </p>
                 <Link href="/membership">
                   <Button className="btn-primary-glass gap-2 text-sm">

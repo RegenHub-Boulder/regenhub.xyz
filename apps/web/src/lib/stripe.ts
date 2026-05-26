@@ -6,12 +6,18 @@ let stripeClient: Stripe | null = null;
 // ---------- Day pass catalog ----------
 // One-time purchases. Pricing is set at Checkout-Session creation via
 // price_data — no Products or Prices need to exist in Stripe.
+//
+// `cents` here is the non-member fallback price; member pricing for
+// day_pass is computed at checkout via dayPassCentsFor(isMember).
+//
+// 5-pack is deprecated — left in the catalog so historical purchases
+// + in-flight checkouts still fulfill; not exposed in the new-purchase UI.
 export const PASS_KINDS: Record<
   PurchaseKind,
-  { label: string; cents: number; quantity: number }
+  { label: string; cents: number; quantity: number; deprecated?: boolean }
 > = {
-  day_pass:  { label: "Day Pass", cents: 2500,  quantity: 1 },
-  five_pack: { label: "5-Pack",   cents: 10000, quantity: 5 },
+  day_pass:  { label: "Day Pass", cents: 3000,  quantity: 1 },
+  five_pack: { label: "5-Pack",   cents: 10000, quantity: 5, deprecated: true },
 };
 // ---------------------------------------
 
@@ -87,7 +93,7 @@ export const PLANS = {
     productIdEnvKey: "STRIPE_PRODUCT_MEMBER_BASIC",
     monthlyDayPasses: 1,
     selfServe: true,
-    description: "Step into the cooperative — includes 1 coworking day per month (passes accumulate), member rate on additional day passes ($20 vs $25), and access to members-only events.",
+    description: "Step into the cooperative — includes 1 coworking day per month (passes accumulate), member rate on additional day passes ($25 vs $30), and access to members-only events.",
   },
 } as const satisfies Record<
   string,
@@ -126,9 +132,9 @@ export function getSelfServePlans(): { key: KnownPlanKey; def: PlanDef }[] {
     .map(([key, def]) => ({ key, def }));
 }
 
-// Day pass pricing — members pay less. Public price → $25; member price → $20.
-export const DAY_PASS_MEMBER_CENTS = 2000;
-export const DAY_PASS_PUBLIC_CENTS = 2500;
+// Day pass pricing — members pay less. Public price → $30; member price → $25.
+export const DAY_PASS_MEMBER_CENTS = 2500;
+export const DAY_PASS_PUBLIC_CENTS = 3000;
 
 export function dayPassCentsFor(isMember: boolean): number {
   return isMember ? DAY_PASS_MEMBER_CENTS : DAY_PASS_PUBLIC_CENTS;

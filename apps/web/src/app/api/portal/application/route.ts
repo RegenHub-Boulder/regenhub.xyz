@@ -49,7 +49,7 @@ export async function POST(req: Request) {
         telegram: telegramHandle,
         about: about?.trim() || null,
         why_join: why_join?.trim() || null,
-        membership_interest: membership_interest ?? "daypass_5pack",
+        membership_interest: membership_interest ?? "member_basic",
         status: "pending",
         updated_at: new Date().toISOString(),
       },

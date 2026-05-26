@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Member profile not found" }, { status: 404 });
   }
 
-  // Contributing-member rate ($20 vs $25 on single day passes) applies to anyone
+  // Contributing-member rate ($25 vs $30 on single day passes) applies to anyone
   // with an active paid subscription — checks both billable subs and the legacy
   // member-type signal (hub_friend etc. read as members for pricing purposes).
   const { data: activeSub } = await supabase

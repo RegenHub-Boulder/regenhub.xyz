@@ -4,15 +4,15 @@ import type { MembershipInterest } from "@/lib/supabase/types";
 
 const interestLabels: Record<string, string> = {
   daypass_single: "Day Pass",
-  daypass_5pack: "5-Pack Day Passes",
   member_basic: "Interim Member ($30/mo, 1 day/mo)",
   member_2day: "Member + 2 days/mo ($50/mo)",
   member_5day: "Member + 5 days/mo ($100/mo)",
-  // Legacy keys
-  social_events_1: "Social — 1 day/mo",
-  social_events_5: "Social — 5 days/mo",
+  // Legacy keys kept for historical applications
+  daypass_5pack: "5-Pack Day Passes (legacy)",
+  social_events_1: "Social — 1 day/mo (legacy)",
+  social_events_5: "Social — 5 days/mo (legacy)",
   hot_desk: "Hot Desk",
-  reserved_desk: "Reserved Desk",
+  reserved_desk: "Cold Desk",
   community: "Community",
 };
 
@@ -92,7 +92,7 @@ export async function POST(req: Request) {
         telegram: telegramHandle,
         about: about?.trim() || null,
         why_join: why_join?.trim() || null,
-        membership_interest: membership_interest ?? "daypass_5pack",
+        membership_interest: membership_interest ?? "member_basic",
         status: "pending",
         updated_at: new Date().toISOString(),
       },
@@ -111,7 +111,7 @@ export async function POST(req: Request) {
     telegram: telegramHandle,
     about: about?.trim() || null,
     why_join: why_join?.trim() || null,
-    membership_interest: membership_interest ?? "daypass_5pack",
+    membership_interest: membership_interest ?? "member_basic",
   });
 
   // Send magic link so they can sign in and track their application

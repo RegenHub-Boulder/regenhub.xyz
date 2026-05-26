@@ -23,7 +23,6 @@ import {
   UserCheck,
   Ticket,
   Key,
-  Mail,
 } from "lucide-react";
 import HubEssentials from "@/components/portal/HubEssentials";
 import regenHubFull from "@/assets/regenhub-full.svg";
@@ -302,13 +301,13 @@ export default function FreeDayForm({
               <CardContent className="p-6">
                 <Ticket className="w-8 h-8 text-gold mb-3" />
                 <h3 className="font-semibold mb-1">Day Passes</h3>
-                <p className="text-2xl font-bold text-gold mb-2">$25/day</p>
+                <p className="text-2xl font-bold text-gold mb-2">$30/day</p>
                 <p className="text-sm text-muted mb-4">
-                  Come back anytime with a day pass. No commitment, just buy a pass and get a door code.
+                  Come back anytime with a day pass. $25 for contributing members. No commitment, just buy a pass and get a door code.
                 </p>
                 <Link href="/portal/passes">
                   <Button className="btn-primary-glass w-full gap-2">
-                    Get Day Passes
+                    Get a Day Pass
                     <ArrowRight className="w-4 h-4" />
                   </Button>
                 </Link>
@@ -318,17 +317,17 @@ export default function FreeDayForm({
             <Card className="glass-panel hover-lift">
               <CardContent className="p-6">
                 <Key className="w-8 h-8 text-sage mb-3" />
-                <h3 className="font-semibold mb-1">Desk Membership</h3>
-                <p className="text-2xl font-bold text-gold mb-2">$250/mo</p>
+                <h3 className="font-semibold mb-1">Become a Member</h3>
+                <p className="text-2xl font-bold text-gold mb-2">From $30/mo</p>
                 <p className="text-sm text-muted mb-4">
-                  Get your own desk, a permanent door code, 24/7 access, and a path to co-op ownership.
+                  Monthly day passes that accumulate, member rate on extras, members-only events. Desk membership too if you want a permanent code.
                 </p>
-                <a href="mailto:boulder.regenhub@gmail.com?subject=Interested in desk membership">
+                <Link href="/membership">
                   <Button className="btn-glass w-full gap-2">
-                    <Mail className="w-4 h-4" />
-                    Inquire
+                    See tiers
+                    <ArrowRight className="w-4 h-4" />
                   </Button>
-                </a>
+                </Link>
               </CardContent>
             </Card>
           </div>
@@ -399,23 +398,23 @@ export default function FreeDayForm({
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="text-center">
                 <Ticket className="w-6 h-6 text-gold mx-auto mb-2" />
-                <p className="text-sm font-medium mb-1">Day Pass — $25</p>
+                <p className="text-sm font-medium mb-1">Day Pass — $30 ($25 members)</p>
                 <p className="text-xs text-muted mb-3">No commitment, just show up</p>
                 <Link href="/portal/passes">
                   <Button size="sm" className="btn-primary-glass gap-1.5 text-xs">
-                    Get passes <ArrowRight className="w-3 h-3" />
+                    Get a pass <ArrowRight className="w-3 h-3" />
                   </Button>
                 </Link>
               </div>
               <div className="text-center">
                 <Key className="w-6 h-6 text-sage mx-auto mb-2" />
-                <p className="text-sm font-medium mb-1">Desk — $250/mo</p>
-                <p className="text-xs text-muted mb-3">Your own desk + 24/7 access</p>
-                <a href="mailto:boulder.regenhub@gmail.com?subject=Interested in desk membership">
+                <p className="text-sm font-medium mb-1">Membership — from $30/mo</p>
+                <p className="text-xs text-muted mb-3">Monthly day passes + member rate</p>
+                <Link href="/membership">
                   <Button size="sm" className="btn-glass gap-1.5 text-xs">
-                    <Mail className="w-3 h-3" /> Inquire
+                    See tiers <ArrowRight className="w-3 h-3" />
                   </Button>
-                </a>
+                </Link>
               </div>
             </div>
           </div>

@@ -12,9 +12,8 @@ import { Loader2, CheckCircle, ArrowLeft } from "lucide-react";
 import regenHubFull from "@/assets/regenhub-full.svg";
 
 const ACCESS_OPTIONS = [
-  { value: "daypass_5pack", label: "5-Pack Day Passes ($100)", desc: "Flexible drop-in access — buy a 5-pack and use them whenever you need a desk" },
-  { value: "daypass_single", label: "Single Day Pass ($25)", desc: "Occasional drop-in access, one at a time" },
-  { value: "member_basic", label: "Interim Member ($30/mo)", desc: "Member access + 1 coworking day per month + member rate on additional day passes" },
+  { value: "daypass_single", label: "Single Day Pass ($30, or $25 for members)", desc: "Occasional drop-in access, one at a time" },
+  { value: "member_basic", label: "Interim Member ($30/mo, 1 day/mo)", desc: "Member access + 1 coworking day per month (passes accumulate) + member rate on additional day passes" },
   { value: "member_2day", label: "Member + 2 days/mo ($50/mo)", desc: "Member access plus 2 days of coworking per month, auto-credited" },
   { value: "member_5day", label: "Member + 5 days/mo ($100/mo)", desc: "Member access plus 5 days of coworking per month, auto-credited" },
   { value: "hot_desk", label: "Hot Desk ($250/mo)", desc: "Permanent door code, 24/7 access, full membership benefits" },
@@ -34,7 +33,7 @@ export default function ApplyForm({ authenticatedEmail }: Props) {
     telegram: "",
     about: "",
     why_join: "",
-    membership_interest: "daypass_5pack" as "daypass_5pack" | "daypass_single" | "hot_desk" | "reserved_desk" | "member_basic" | "member_2day" | "member_5day",
+    membership_interest: "member_basic" as "daypass_5pack" | "daypass_single" | "hot_desk" | "reserved_desk" | "member_basic" | "member_2day" | "member_5day",
   });
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);

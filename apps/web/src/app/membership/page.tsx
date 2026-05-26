@@ -10,12 +10,12 @@ import { Check, Sparkles, ArrowRight } from "lucide-react";
 export const metadata: Metadata = {
   title: "Membership — RegenHub",
   description:
-    "Join the cooperative as a contributing member. Three tiers from $20/mo, monthly day passes, and member events.",
+    "Join the cooperative as a contributing member. Three tiers from $30/mo, monthly day passes, and member events.",
 };
 
 const PERKS = [
   "Member-only events (at least one per month)",
-  "Day passes at the member rate ($20 instead of $25)",
+  "Day passes at the member rate ($25 instead of $30)",
   "Monthly day passes accumulate — they never expire",
   "Connection to the regenerative cooperative community",
 ];

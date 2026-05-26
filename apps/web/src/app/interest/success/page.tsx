@@ -52,20 +52,20 @@ export default function InterestSuccessPage() {
                 </Card>
               </Link>
 
-              <a href="mailto:boulder.regenhub@gmail.com?subject=Interested in desk membership">
+              <Link href="/membership">
                 <Card className="glass-panel hover-lift cursor-pointer h-full">
                   <CardContent className="p-4">
                     <Key className="w-6 h-6 text-sage mb-2" />
                     <p className="font-medium text-sm mb-1">See Membership</p>
                     <p className="text-xs text-muted">
-                      Desks from $250/mo. Permanent code, 24/7 access.
+                      From $30/mo. Monthly day passes, member events, member rate on extras.
                     </p>
                     <p className="text-xs text-sage mt-2 inline-flex items-center gap-1">
-                      Inquire <ArrowRight className="w-3 h-3" />
+                      See tiers <ArrowRight className="w-3 h-3" />
                     </p>
                   </CardContent>
                 </Card>
-              </a>
+              </Link>
             </div>
 
             <Link href="/">
