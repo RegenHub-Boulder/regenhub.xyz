@@ -7,13 +7,10 @@ export const metadata = { title: "Admin — RegenHub" };
 
 const links: NavLink[] = [
   { href: "/admin", label: "Overview" },
-  { href: "/admin/billing", label: "Billing" },
-  { href: "/admin/claims", label: "Free Days" },
-  { href: "/admin/applications", label: "Applications" },
-  { href: "/admin/interests", label: "Interests" },
+  { href: "/admin/pipeline", label: "Pipeline" },
   { href: "/admin/members", label: "Members" },
-  { href: "/admin/codes", label: "Live Codes" },
-  { href: "/admin/lock", label: "Lock Sync" },
+  { href: "/admin/billing", label: "Billing" },
+  { href: "/admin/access", label: "Access" },
   { href: "/portal", label: "Portal", accent: true },
 ];
 

@@ -113,7 +113,7 @@ export default async function AdminPage() {
           </Card>
         </Link>
 
-        <Link href="/admin/codes">
+        <Link href="/admin/access?tab=codes">
           <Card className="glass-panel hover-lift cursor-pointer">
             <CardContent className="p-5">
               <Key className="w-6 h-6 text-sage mb-2" />
@@ -129,7 +129,7 @@ export default async function AdminPage() {
           </Card>
         </Link>
 
-        <Link href="/admin/applications">
+        <Link href="/admin/pipeline?tab=applications">
           <Card className="glass-panel hover-lift cursor-pointer">
             <CardContent className="p-5">
               <ClipboardList className="w-6 h-6 text-sage mb-2" />
@@ -142,7 +142,7 @@ export default async function AdminPage() {
           </Card>
         </Link>
 
-        <Link href="/admin/claims">
+        <Link href="/admin/pipeline?tab=freedays">
           <Card className="glass-panel hover-lift cursor-pointer">
             <CardContent className="p-5">
               <Calendar className="w-6 h-6 text-sage mb-2" />
@@ -164,7 +164,7 @@ export default async function AdminPage() {
           <CardContent className="p-5">
             <p className="text-xs text-muted mb-3">Quick Actions</p>
             <div className="flex flex-col gap-2">
-              <Link href="/admin/codes">
+              <Link href="/admin/access?tab=codes">
                 <Button size="sm" className="btn-primary-glass w-full gap-2 text-xs">
                   <Zap className="w-3.5 h-3.5" /> Quick Code
                 </Button>
@@ -219,7 +219,7 @@ export default async function AdminPage() {
               <h3 className="text-sm font-semibold flex items-center gap-2">
                 <ClipboardList className="w-4 h-4 text-sage" /> Recent Applications
               </h3>
-              <Link href="/admin/applications" className="text-xs text-muted hover:text-foreground">View all</Link>
+              <Link href="/admin/pipeline?tab=applications" className="text-xs text-muted hover:text-foreground">View all</Link>
             </div>
             <div className="space-y-3">
               {(recentApps ?? []).length === 0 ? (
@@ -253,12 +253,12 @@ export default async function AdminPage() {
               <h3 className="text-sm font-semibold flex items-center gap-2">
                 <Key className="w-4 h-4 text-sage" /> Recent Codes
               </h3>
-              <Link href="/admin/codes" className="text-xs text-muted hover:text-foreground">View all</Link>
+              <Link href="/admin/access?tab=codes" className="text-xs text-muted hover:text-foreground">View all</Link>
             </div>
             <div className="space-y-3">
               {(recentCodes ?? []).length === 0 ? (
                 <p className="text-xs text-muted">
-                  No codes yet. <Link href="/admin/codes" className="text-sage hover:underline">Issue one →</Link>
+                  No codes yet. <Link href="/admin/access?tab=codes" className="text-sage hover:underline">Issue one →</Link>
                 </p>
               ) : (
                 recentCodes!.map((c: Record<string, unknown>) => (

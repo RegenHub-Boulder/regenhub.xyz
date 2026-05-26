@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import type { Subscription, Purchase, PassGrant, WebhookEvent } from "@/lib/supabase/types";
 import { SendPaymentReminderButton } from "@/components/admin/SendPaymentReminderButton";
+import { CollapsibleSection } from "@/components/admin/CollapsibleSection";
 
 export const metadata = { title: "Billing — Admin" };
 
@@ -372,38 +373,40 @@ export default async function BillingPage() {
         </CardContent>
       </Card>
 
-      {/* Monthly day-pass grants (auto-credited from social-tier renewals) */}
+      {/* Monthly day-pass grants — collapsed by default since it's reference data */}
       {recentGrants.length > 0 && (
-        <Card className="glass-panel">
-          <CardContent className="p-5">
-            <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+        <CollapsibleSection
+          title={
+            <h3 className="text-sm font-semibold flex items-center gap-2">
               <Gift className="w-4 h-4 text-sage" />
               Monthly auto-grants
               <span className="text-xs text-muted font-normal">(latest {recentGrants.length})</span>
             </h3>
-            <p className="text-xs text-muted mb-3">
-              Day passes auto-credited to social-tier members when their subscription invoice succeeds.
-            </p>
-            <div className="space-y-2">
-              {recentGrants.map((g) => (
-                <Link
-                  key={g.id}
-                  href={g.members ? `/admin/members/${g.members.id}` : "#"}
-                  className="flex items-center justify-between gap-3 py-2 px-3 rounded hover:bg-white/5 transition-colors"
-                >
-                  <div>
-                    <p className="text-sm font-medium">{g.members?.name ?? "(unknown)"}</p>
-                    <p className="text-xs text-muted">{planLabels[g.plan_key] ?? g.plan_key}</p>
-                  </div>
-                  <div className="text-right text-xs">
-                    <p className="font-medium text-sage">+{g.passes_granted} pass{g.passes_granted === 1 ? "" : "es"}</p>
-                    <p className="text-muted">{fmtDate(g.created_at)}</p>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+          }
+          hint={`${recentGrants.length} grants logged`}
+        >
+          <p className="text-xs text-muted mb-3">
+            Day passes auto-credited to social-tier members when their subscription invoice succeeds.
+          </p>
+          <div className="space-y-2">
+            {recentGrants.map((g) => (
+              <Link
+                key={g.id}
+                href={g.members ? `/admin/members/${g.members.id}` : "#"}
+                className="flex items-center justify-between gap-3 py-2 px-3 rounded hover:bg-white/5 transition-colors"
+              >
+                <div>
+                  <p className="text-sm font-medium">{g.members?.name ?? "(unknown)"}</p>
+                  <p className="text-xs text-muted">{planLabels[g.plan_key] ?? g.plan_key}</p>
+                </div>
+                <div className="text-right text-xs">
+                  <p className="font-medium text-sage">+{g.passes_granted} pass{g.passes_granted === 1 ? "" : "es"}</p>
+                  <p className="text-muted">{fmtDate(g.created_at)}</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </CollapsibleSection>
       )}
 
       {/* Recent day-pass purchases */}
@@ -442,11 +445,11 @@ export default async function BillingPage() {
         </CardContent>
       </Card>
 
-      {/* Stripe webhook delivery log — ops visibility into what Stripe sent */}
+      {/* Stripe webhook delivery log — collapsed by default; auto-expands if failures present */}
       {events.length > 0 && (
-        <Card className={`glass-panel ${failedEvents.length > 0 ? "border border-amber-500/30" : ""}`}>
-          <CardContent className="p-5">
-            <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+        <CollapsibleSection
+          title={
+            <h3 className="text-sm font-semibold flex items-center gap-2">
               <Activity className="w-4 h-4 text-sage" />
               Stripe webhook activity
               <span className="text-xs text-muted font-normal">(last {events.length})</span>
@@ -456,10 +459,14 @@ export default async function BillingPage() {
                 </Badge>
               )}
             </h3>
-            <p className="text-xs text-muted mb-3">
-              Every Stripe event we receive is logged here. Failed events show up so we can investigate why a customer&apos;s subscription isn&apos;t reflecting correctly.
-            </p>
-            <div className="overflow-x-auto">
+          }
+          hint={`${events.length} events`}
+          defaultOpen={failedEvents.length > 0}
+        >
+          <p className="text-xs text-muted mb-3">
+            Every Stripe event we receive is logged here. Failed events show up so we can investigate why a customer&apos;s subscription isn&apos;t reflecting correctly.
+          </p>
+          <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-white/10 text-left text-muted">
@@ -507,8 +514,7 @@ export default async function BillingPage() {
                 </tbody>
               </table>
             </div>
-          </CardContent>
-        </Card>
+        </CollapsibleSection>
       )}
     </div>
   );

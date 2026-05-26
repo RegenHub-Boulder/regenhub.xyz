@@ -85,7 +85,7 @@ function MemberCard({ name, email, badge, telegram, slot, passes, lastSignIn, ac
   );
 }
 
-function AuthUserRow({ u }: { u: AdminUser }) {
+function AuthUserRow({ u, showMoreCols }: { u: AdminUser; showMoreCols: boolean }) {
   const displayName = u.member?.name ?? u.application?.name ?? null;
   const nameNode = (
     <>
@@ -119,12 +119,14 @@ function AuthUserRow({ u }: { u: AdminUser }) {
             {subBadge(u.subscription)}
           </div>
         </td>
-        <td className="px-4 py-3 text-muted text-sm">{u.member?.telegram_username ?? "—"}</td>
+        {showMoreCols && <td className="px-4 py-3 text-muted text-sm">{u.member?.telegram_username ?? "—"}</td>}
         <td className="px-4 py-3 text-muted font-mono text-sm">{u.member?.pin_code_slot ?? "—"}</td>
         <td className="px-4 py-3 text-muted text-sm">{u.member ? u.member.day_passes_balance : "—"}</td>
-        <td className="px-4 py-3 text-muted text-xs">
-          {u.lastSignIn ? new Date(u.lastSignIn).toLocaleDateString() : "Never"}
-        </td>
+        {showMoreCols && (
+          <td className="px-4 py-3 text-muted text-xs">
+            {u.lastSignIn ? new Date(u.lastSignIn).toLocaleDateString() : "Never"}
+          </td>
+        )}
         <td className="px-4 py-3">{action}</td>
       </tr>
       {/* Mobile card */}
@@ -142,7 +144,7 @@ function AuthUserRow({ u }: { u: AdminUser }) {
   );
 }
 
-function LegacyMemberRow({ m }: { m: LegacyMemberWithSub }) {
+function LegacyMemberRow({ m, showMoreCols }: { m: LegacyMemberWithSub; showMoreCols: boolean }) {
   const nameNode = (
     <>
       {m.name}
@@ -167,10 +169,10 @@ function LegacyMemberRow({ m }: { m: LegacyMemberWithSub }) {
             {subBadge(m.subscription)}
           </div>
         </td>
-        <td className="px-4 py-3 text-muted text-sm">{m.telegram_username ?? "—"}</td>
+        {showMoreCols && <td className="px-4 py-3 text-muted text-sm">{m.telegram_username ?? "—"}</td>}
         <td className="px-4 py-3 text-muted font-mono text-sm">{m.pin_code_slot ?? "—"}</td>
         <td className="px-4 py-3 text-muted text-sm">{m.day_passes_balance}</td>
-        <td className="px-4 py-3 text-muted text-xs">—</td>
+        {showMoreCols && <td className="px-4 py-3 text-muted text-xs">—</td>}
         <td className="px-4 py-3">{action}</td>
       </tr>
       <MemberCard
@@ -187,6 +189,25 @@ function LegacyMemberRow({ m }: { m: LegacyMemberWithSub }) {
   );
 }
 
+function SkeletonTable() {
+  return (
+    <div className="glass-panel overflow-hidden">
+      <div className="space-y-px">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="grid grid-cols-12 gap-3 px-4 py-3.5 border-b border-white/5 last:border-0">
+            <div className="col-span-3 h-3.5 rounded bg-white/5 animate-pulse" />
+            <div className="col-span-3 h-3.5 rounded bg-white/5 animate-pulse" />
+            <div className="col-span-2 h-3.5 rounded bg-white/5 animate-pulse" />
+            <div className="col-span-1 h-3.5 rounded bg-white/5 animate-pulse" />
+            <div className="col-span-1 h-3.5 rounded bg-white/5 animate-pulse" />
+            <div className="col-span-2 h-3.5 rounded bg-white/5 animate-pulse" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function UsersPage() {
   const [data, setData] = useState<AdminUsersResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -195,6 +216,9 @@ export default function UsersPage() {
   // Default to "active" so the directory isn't cluttered with disabled accounts;
   // toggle to "disabled" or "all" via the filter dropdown when needed.
   const [statusFilter, setStatusFilter] = useState<string>("active");
+  const [page, setPage] = useState(0);
+  const [showMoreCols, setShowMoreCols] = useState(false);
+  const PAGE_SIZE = 25;
 
   useEffect(() => {
     fetch("/api/admin/users")
@@ -202,6 +226,13 @@ export default function UsersPage() {
       .then(setData)
       .catch(() => setError("Failed to load users"));
   }, []);
+
+  // Filter handlers also reset to page 0 — keeps the user from landing on
+  // an empty page when the filter shrinks the result set. Done inline
+  // rather than via useEffect to avoid the cascading-render lint rule.
+  const handleSearchChange = (v: string) => { setSearch(v); setPage(0); };
+  const handleTypeChange = (v: string) => { setTypeFilter(v); setPage(0); };
+  const handleStatusChange = (v: string) => { setStatusFilter(v); setPage(0); };
 
   const noProfileCount = data?.users.filter((u) => !u.member).length ?? 0;
 
@@ -299,12 +330,12 @@ export default function UsersPage() {
             <Input
               placeholder="Search by name, email, or Telegram..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="glass-input pl-9 pr-8"
             />
             {search && (
               <button
-                onClick={() => setSearch("")}
+                onClick={() => handleSearchChange("")}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-foreground"
               >
                 <X className="w-4 h-4" />
@@ -313,7 +344,7 @@ export default function UsersPage() {
           </div>
           <select
             value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
+            onChange={(e) => handleTypeChange(e.target.value)}
             className="rounded-md px-3 py-2 text-sm glass-input"
           >
             <option value="all">All types</option>
@@ -325,7 +356,7 @@ export default function UsersPage() {
           </select>
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => handleStatusChange(e.target.value)}
             className="rounded-md px-3 py-2 text-sm glass-input"
           >
             <option value="all">All statuses</option>
@@ -339,57 +370,111 @@ export default function UsersPage() {
       {error && <p className="text-red-400 text-sm">{error}</p>}
 
       {!data ? (
-        <div className="glass-panel p-8 text-center text-muted text-sm">Loading...</div>
-      ) : (
-        <>
-          {/* Desktop table */}
-          <div className="glass-panel overflow-x-auto hidden sm:block">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-white/10 text-left text-muted whitespace-nowrap">
-                  <th className="px-4 py-3 font-medium">Name</th>
-                  <th className="px-4 py-3 font-medium">Email</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Telegram</th>
-                  <th className="px-4 py-3 font-medium">Slot</th>
-                  <th className="px-4 py-3 font-medium">Passes</th>
-                  <th className="px-4 py-3 font-medium">Last sign-in</th>
-                  <th className="px-4 py-3 font-medium"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredUsers.map((u) => (
-                  <AuthUserRow key={u.authId} u={u} />
-                ))}
-                {filteredLegacy.map((m) => (
-                  <LegacyMemberRow key={`legacy-${m.id}`} m={m} />
-                ))}
-              </tbody>
-            </table>
+        <SkeletonTable />
+      ) : (() => {
+        // Tag rows by kind so we can render either component over a unified paginated list
+        type Row =
+          | { kind: "user"; key: string; u: AdminUser }
+          | { kind: "legacy"; key: string; m: LegacyMemberWithSub };
+        const rows: Row[] = [
+          ...filteredUsers.map((u) => ({ kind: "user" as const, key: `u-${u.authId}`, u })),
+          ...filteredLegacy.map((m) => ({ kind: "legacy" as const, key: `l-${m.id}`, m })),
+        ];
+        const totalRows = rows.length;
+        const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
+        const safePage = Math.min(page, totalPages - 1);
+        const pageRows = rows.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
-            {filteredUsers.length === 0 && filteredLegacy.length === 0 && (
-              <p className="text-center text-muted text-sm py-8">
-                {search ? "No matching users." : "No users yet."}
+        return (
+          <>
+            {/* Toggle for low-priority columns */}
+            <div className="flex items-center justify-between flex-wrap gap-2 -mt-2">
+              <p className="text-xs text-muted">
+                Showing {totalRows === 0 ? 0 : safePage * PAGE_SIZE + 1}–{Math.min(totalRows, (safePage + 1) * PAGE_SIZE)} of {totalRows}
               </p>
-            )}
-          </div>
+              <button
+                type="button"
+                onClick={() => setShowMoreCols(!showMoreCols)}
+                className="text-xs text-muted hover:text-foreground"
+              >
+                {showMoreCols ? "Hide" : "Show"} Telegram + last sign-in
+              </button>
+            </div>
 
-          {/* Mobile card list */}
-          <div className="space-y-3 sm:hidden">
-            {filteredUsers.map((u) => (
-              <AuthUserRow key={u.authId} u={u} />
-            ))}
-            {filteredLegacy.map((m) => (
-              <LegacyMemberRow key={`legacy-${m.id}`} m={m} />
-            ))}
-            {filteredUsers.length === 0 && filteredLegacy.length === 0 && (
-              <div className="glass-panel p-8 text-center text-muted text-sm">
-                {search ? "No matching users." : "No users yet."}
+            {/* Desktop table */}
+            <div className="glass-panel overflow-x-auto hidden sm:block">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/10 text-left text-muted whitespace-nowrap">
+                    <th className="px-4 py-3 font-medium">Name</th>
+                    <th className="px-4 py-3 font-medium">Email</th>
+                    <th className="px-4 py-3 font-medium">Status</th>
+                    {showMoreCols && <th className="px-4 py-3 font-medium">Telegram</th>}
+                    <th className="px-4 py-3 font-medium">Slot</th>
+                    <th className="px-4 py-3 font-medium">Passes</th>
+                    {showMoreCols && <th className="px-4 py-3 font-medium">Last sign-in</th>}
+                    <th className="px-4 py-3 font-medium"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRows.map((r) =>
+                    r.kind === "user"
+                      ? <AuthUserRow key={r.key} u={r.u} showMoreCols={showMoreCols} />
+                      : <LegacyMemberRow key={r.key} m={r.m} showMoreCols={showMoreCols} />
+                  )}
+                </tbody>
+              </table>
+
+              {pageRows.length === 0 && (
+                <p className="text-center text-muted text-sm py-8">
+                  {search ? "No matching users." : "No users yet."}
+                </p>
+              )}
+            </div>
+
+            {/* Mobile card list */}
+            <div className="space-y-3 sm:hidden">
+              {pageRows.map((r) =>
+                r.kind === "user"
+                  ? <AuthUserRow key={r.key} u={r.u} showMoreCols={showMoreCols} />
+                  : <LegacyMemberRow key={r.key} m={r.m} showMoreCols={showMoreCols} />
+              )}
+              {pageRows.length === 0 && (
+                <div className="glass-panel p-8 text-center text-muted text-sm">
+                  {search ? "No matching users." : "No users yet."}
+                </div>
+              )}
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 pt-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={safePage === 0}
+                  onClick={() => setPage(safePage - 1)}
+                  className="btn-glass text-xs"
+                >
+                  ← Prev
+                </Button>
+                <span className="text-xs text-muted px-2">
+                  Page {safePage + 1} of {totalPages}
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={safePage >= totalPages - 1}
+                  onClick={() => setPage(safePage + 1)}
+                  className="btn-glass text-xs"
+                >
+                  Next →
+                </Button>
               </div>
             )}
-          </div>
-        </>
-      )}
+          </>
+        );
+      })()}
 
       <div className="flex flex-wrap gap-4 text-xs text-muted">
         <span className="flex items-center gap-1.5">
