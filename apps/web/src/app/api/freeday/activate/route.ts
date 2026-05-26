@@ -149,9 +149,10 @@ export async function POST() {
     );
   }
 
-  // Check date: claimed_date must be today (Mountain Time)
+  // Legacy date check: if the claim has a specific date, it must be today.
+  // New claims have NULL claimed_date and skip this — they activate any weekday.
   const today = getTodayMountain();
-  if (claim.claimed_date !== today) {
+  if (claim.claimed_date && claim.claimed_date !== today) {
     const dateStr = new Date(
       claim.claimed_date + "T12:00:00"
     ).toLocaleDateString("en-US", {
@@ -162,6 +163,17 @@ export async function POST() {
     return NextResponse.json(
       {
         error: `Your free day is reserved for ${dateStr}. Come back then to get your code!`,
+      },
+      { status: 400 }
+    );
+  }
+
+  // Both paths still require a weekday — door codes only valid during business hours.
+  const todayDayOfWeek = new Date(today + "T12:00:00").getDay(); // 0=Sun, 6=Sat
+  if (todayDayOfWeek === 0 || todayDayOfWeek === 6) {
+    return NextResponse.json(
+      {
+        error: "Free days are only available Monday through Friday. Come back during the week!",
       },
       { status: 400 }
     );

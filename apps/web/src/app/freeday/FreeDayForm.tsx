@@ -31,7 +31,8 @@ export type FreeDayClaim = {
   id: number;
   email: string;
   name: string;
-  claimed_date: string;
+  /** Legacy — older claims have a chosen date. New claims store null and activate any weekday. */
+  claimed_date: string | null;
   day_code_id: number | null;
   status: "pending" | "reserved" | "activated" | "expired" | "cancelled";
 };
@@ -61,32 +62,6 @@ function getTodayString(): string {
   return toMountainDateString(new Date());
 }
 
-/** Get the next weekday (Mon-Fri) as YYYY-MM-DD in Mountain Time */
-function getNextWeekday(): string {
-  const now = new Date();
-  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const mtDayName = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Denver",
-    weekday: "short",
-  }).format(now);
-  const dayIndex = dayNames.indexOf(mtDayName);
-  const d = new Date(now);
-  if (dayIndex === 0) d.setDate(d.getDate() + 1); // Sun → Mon
-  if (dayIndex === 6) d.setDate(d.getDate() + 2); // Sat → Mon
-  return toMountainDateString(d);
-}
-
-function getMaxDateString(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 30);
-  return toMountainDateString(d);
-}
-
-function isWeekend(dateStr: string): boolean {
-  const day = new Date(dateStr + "T12:00:00").getDay();
-  return day === 0 || day === 6;
-}
-
 function formatDate(dateStr: string): string {
   return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", {
     weekday: "long",
@@ -112,10 +87,9 @@ export default function FreeDayForm({
   const router = useRouter();
   const today = getTodayString();
 
-  // Form state
+  // Form state — no date input anymore; claim now, visit any weekday
   const [name, setName] = useState("");
   const [email, setEmail] = useState(authenticatedEmail ?? "");
-  const [claimedDate, setClaimedDate] = useState(getNextWeekday());
   const [about, setAbout] = useState("");
   const [whyJoin, setWhyJoin] = useState("");
   const [knowAtHub, setKnowAtHub] = useState("");
@@ -152,7 +126,6 @@ export default function FreeDayForm({
         body: JSON.stringify({
           name,
           email: authenticatedEmail ?? email,
-          claimed_date: claimedDate,
           invite_code: inviter?.invite_code || undefined,
           about: about.trim() || undefined,
           why_join: whyJoin.trim() || undefined,
@@ -243,11 +216,10 @@ export default function FreeDayForm({
               Application Under Review
             </h1>
             <p className="text-muted mb-2">
-              Your free day application for{" "}
-              <strong className="text-foreground">
-                {formatDate(claim.claimed_date)}
-              </strong>{" "}
-              is being reviewed.
+              Your free day application is being reviewed.
+              {claim.claimed_date && (
+                <> Originally requested for <strong className="text-foreground">{formatDate(claim.claimed_date)}</strong>.</>
+              )}
             </p>
             <p className="text-sm text-muted mb-6">
               A community member will approve your visit shortly. Check back
@@ -288,11 +260,11 @@ export default function FreeDayForm({
               Hope You Enjoyed Your Day!
             </h1>
             <p className="text-muted">
-              Your free day on{" "}
-              <strong className="text-foreground">
-                {formatDate(claim.claimed_date)}
-              </strong>{" "}
-              has passed. Here&apos;s how to come back.
+              {claim.claimed_date ? (
+                <>Your free day on <strong className="text-foreground">{formatDate(claim.claimed_date)}</strong> has passed. Here&apos;s how to come back.</>
+              ) : (
+                <>Your free day has been used. Here&apos;s how to come back.</>
+              )}
             </p>
           </div>
 
@@ -423,9 +395,11 @@ export default function FreeDayForm({
     );
   }
 
-  // ── Render: Reserved for a future date ──────────────────────
+  // ── Render: Legacy reserved-for-future-date branch ─────────────
+  // Only relevant for old claims created before we removed the date
+  // picker. New claims store NULL claimed_date and skip this branch.
 
-  if (claim?.status === "reserved" && claim.claimed_date !== today) {
+  if (claim?.status === "reserved" && claim.claimed_date && claim.claimed_date !== today) {
     return (
       <div className="min-h-screen flex items-center justify-center px-6">
         <Card className="glass-panel-strong max-w-md w-full">
@@ -459,9 +433,9 @@ export default function FreeDayForm({
     );
   }
 
-  // ── Render: Reserved for today — activate button ────────────
+  // ── Render: Reserved — activate button (today or anytime) ───────
 
-  if (claim?.status === "reserved" && claim.claimed_date === today) {
+  if (claim?.status === "reserved" && (!claim.claimed_date || claim.claimed_date === today)) {
     return (
       <div className="min-h-screen flex items-center justify-center px-6">
         <Card className="glass-panel-strong max-w-md w-full">
@@ -594,33 +568,10 @@ export default function FreeDayForm({
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="date">When would you like to come in? *</Label>
-                <Input
-                  id="date"
-                  type="date"
-                  value={claimedDate}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setClaimedDate(val);
-                    if (isWeekend(val)) {
-                      setError("Free day passes are available Monday through Friday only");
-                    } else {
-                      setError(null);
-                    }
-                  }}
-                  min={today}
-                  max={getMaxDateString()}
-                  required
-                  className="glass-input"
-                />
-                <p className="text-xs text-muted">
-                  {isWeekend(claimedDate)
-                    ? "⚠️ Weekends are not available — please select a weekday (Mon–Fri)."
-                    : claimedDate === today
-                      ? "Today — you'll get your door code right away after confirming your email."
-                      : `${formatDate(claimedDate)} — come back to this page on that day to get your code.`}
-                </p>
+              <div className="glass-panel-subtle p-3 text-sm text-muted">
+                You can use your free day any weekday between 8 AM and 6 PM Mountain Time —
+                no need to pick a specific date now. Once your application is approved,
+                you&apos;ll get an email with a link to grab your door code on the day you come in.
               </div>
 
               {/* Application questions — shown when no invite */}
@@ -670,7 +621,7 @@ export default function FreeDayForm({
 
               <Button
                 type="submit"
-                disabled={loading || isWeekend(claimedDate)}
+                disabled={loading}
                 className="btn-primary-glass w-full py-3 text-base font-semibold gap-2"
               >
                 {loading ? (

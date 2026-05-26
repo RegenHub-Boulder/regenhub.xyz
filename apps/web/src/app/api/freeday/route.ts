@@ -6,7 +6,6 @@ import { createServiceClient } from "@/lib/supabase/admin";
 async function notifyTelegramInvited(claim: {
   name: string;
   email: string;
-  claimed_date: string;
   inviter_name: string;
   know_at_hub?: string;
 }) {
@@ -14,17 +13,12 @@ async function notifyTelegramInvited(claim: {
   const chatId = process.env.TELEGRAM_GROUP_CHAT_ID;
   if (!token || !chatId) return;
 
-  const dateStr = new Date(claim.claimed_date + "T12:00:00").toLocaleDateString(
-    "en-US",
-    { weekday: "long", month: "long", day: "numeric" }
-  );
-
   const lines = [
     `🎟️ *Free Day*`,
     ``,
     `*${claim.name}*  ·  ${claim.email}`,
-    `Date: ${dateStr}`,
     `Invited by: *${claim.inviter_name}*`,
+    `Visits any weekday`,
   ];
   if (claim.know_at_hub) lines.push(`Knows: ${claim.know_at_hub}`);
 
@@ -49,7 +43,6 @@ async function notifyTelegramApplication(claim: {
   id: number;
   name: string;
   email: string;
-  claimed_date: string;
   about: string;
   why_join: string;
   know_at_hub?: string;
@@ -58,16 +51,11 @@ async function notifyTelegramApplication(claim: {
   const chatId = process.env.TELEGRAM_GROUP_CHAT_ID;
   if (!token || !chatId) return;
 
-  const dateStr = new Date(claim.claimed_date + "T12:00:00").toLocaleDateString(
-    "en-US",
-    { weekday: "long", month: "long", day: "numeric" }
-  );
-
   const lines = [
     `🎟️ *Free Day Application*`,
     ``,
     `*${claim.name}*  ·  ${claim.email}`,
-    `Date: ${dateStr}`,
+    `Visits any weekday`,
   ];
   if (claim.know_at_hub) {
     lines.push(`Knows at hub: ${claim.know_at_hub}`);
@@ -111,52 +99,24 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
 
-  const { name, email, claimed_date, invite_code, about, why_join, know_at_hub } = body as {
+  const { name, email, invite_code, about, why_join, know_at_hub } = body as {
     name?: string;
     email?: string;
-    claimed_date?: string;
     invite_code?: string;
     about?: string;
     why_join?: string;
     know_at_hub?: string;
   };
 
-  if (!name?.trim() || !email?.trim() || !claimed_date) {
+  if (!name?.trim() || !email?.trim()) {
     return NextResponse.json(
-      { error: "Name, email, and date are required" },
+      { error: "Name and email are required" },
       { status: 400 }
     );
   }
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: "Invalid email address" }, { status: 400 });
-  }
-
-  // Validate date: must be today or up to 30 days out, weekdays only
-  const dateVal = new Date(claimed_date + "T12:00:00");
-  if (isNaN(dateVal.getTime())) {
-    return NextResponse.json({ error: "Invalid date" }, { status: 400 });
-  }
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const maxDate = new Date(today);
-  maxDate.setDate(maxDate.getDate() + 30);
-
-  if (dateVal < today || dateVal > maxDate) {
-    return NextResponse.json(
-      { error: "Date must be today or within the next 30 days" },
-      { status: 400 }
-    );
-  }
-
-  // Free day passes are only available Monday–Friday
-  const dayOfWeek = dateVal.getDay(); // 0=Sun, 6=Sat
-  if (dayOfWeek === 0 || dayOfWeek === 6) {
-    return NextResponse.json(
-      { error: "Free day passes are available Monday through Friday only" },
-      { status: 400 }
-    );
   }
 
   const admin = createServiceClient();
@@ -208,14 +168,14 @@ export async function POST(req: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Insert the claim
+  // Insert the claim — claimed_date is now NULL by design (visit any weekday)
   const status = inviter ? "reserved" : "pending";
   const { data: inserted, error: dbError } = await admin
     .from("free_day_claims")
     .insert({
       email: normalizedEmail,
       name: name.trim(),
-      claimed_date,
+      claimed_date: null,
       status,
       supabase_user_id: user?.id ?? null,
       invited_by_member_id: inviter?.id ?? null,
@@ -243,7 +203,6 @@ export async function POST(req: Request) {
     notifyTelegramInvited({
       name: name.trim(),
       email: normalizedEmail,
-      claimed_date,
       inviter_name: inviter.name,
       know_at_hub: know_at_hub?.trim() || undefined,
     });
@@ -252,7 +211,6 @@ export async function POST(req: Request) {
       id: inserted.id,
       name: name.trim(),
       email: normalizedEmail,
-      claimed_date,
       about: about!.trim(),
       why_join: why_join!.trim(),
       know_at_hub: know_at_hub?.trim() || undefined,

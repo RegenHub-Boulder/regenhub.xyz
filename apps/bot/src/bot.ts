@@ -1,5 +1,6 @@
 import TelegramBot from "node-telegram-bot-api";
 import { db, findMemberByTelegram, findAdminByTelegram, type MemberRow } from "./db/supabase.js";
+import { sendEmail, freeDayApprovedEmail } from "./email.js";
 import {
   allocateSlotWithRetry,
   setUserCode,
@@ -386,7 +387,7 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
     const claimId = parseInt(data.replace("freeday_approve_", ""));
     const { data: claim } = await db
       .from("free_day_claims")
-      .select("id, name, status")
+      .select("id, name, email, status")
       .eq("id", claimId)
       .single();
     if (!claim) return bot.sendMessage(chatId, "Claim not found.");
@@ -398,10 +399,29 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
       .from("free_day_claims")
       .update({ status: "reserved", approved_by: approver })
       .eq("id", claimId);
+
+    // Email the applicant with their door-code link (fire-and-forget).
+    // The DB update has already happened; email is best-effort.
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
+    const tpl = freeDayApprovedEmail({ name: claim.name, siteUrl });
+    sendEmail({
+      to: claim.email,
+      subject: tpl.subject,
+      html: tpl.html,
+      text: tpl.text,
+      replyTo: "boulder.regenhub@gmail.com",
+    })
+      .then((ok) => {
+        if (ok) {
+          console.log(`[FreeDay] Approval email sent to ${claim.email}`);
+        }
+      })
+      .catch((err) => console.error("[FreeDay] Email send failed:", err));
+
     // Edit the original message to show who approved
     const originalText = query.message?.text ?? "";
     return bot.editMessageText(
-      `✅ *Approved* by ${approver}\n\n${originalText}`,
+      `✅ *Approved* by ${approver} · email sent to ${claim.email}\n\n${originalText}`,
       {
         chat_id: chatId,
         message_id: query.message!.message_id,
