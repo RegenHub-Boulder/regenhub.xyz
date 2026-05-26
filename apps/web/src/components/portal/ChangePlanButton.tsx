@@ -5,13 +5,15 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Loader2, ArrowUpDown, Check } from "lucide-react";
 
-// Mirror of self-serve PLANS — keep in sync with apps/web/src/lib/stripe.ts.
-// Listed in cost order so the modal renders naturally as a ladder.
-const SELF_SERVE_PLANS = [
-  { key: "member_basic", label: "Interim Member",       dollars: 30,  passes: 1 },
-  { key: "member_2day",  label: "Member + 2 days/mo",   dollars: 50,  passes: 2 },
-  { key: "member_5day",  label: "Member + 5 days/mo",   dollars: 100, passes: 5 },
-] as const;
+import { getSelfServePlans } from "@/lib/plans";
+
+// Cheapest first so the ladder reads naturally upward
+const SELF_SERVE_PLANS = getSelfServePlans().map(({ key, def }) => ({
+  key,
+  label: def.label,
+  dollars: def.defaultMonthlyCents / 100,
+  passes: def.monthlyDayPasses ?? 0,
+}));
 
 interface Props {
   currentPlanKey: string;

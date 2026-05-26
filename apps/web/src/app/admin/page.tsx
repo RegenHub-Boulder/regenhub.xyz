@@ -192,7 +192,9 @@ export default async function AdminPage() {
             </div>
             <div className="space-y-3">
               {(recentMembers ?? []).length === 0 ? (
-                <p className="text-xs text-muted">No members yet.</p>
+                <p className="text-xs text-muted">
+                  No members yet. <Link href="/admin/members/new" className="text-sage hover:underline">Add one →</Link>
+                </p>
               ) : (
                 recentMembers!.map((m) => (
                   <Link key={m.id} href={`/admin/members/${m.id}`} className="flex items-center justify-between gap-2 group">
@@ -221,7 +223,9 @@ export default async function AdminPage() {
             </div>
             <div className="space-y-3">
               {(recentApps ?? []).length === 0 ? (
-                <p className="text-xs text-muted">No applications yet.</p>
+                <p className="text-xs text-muted">
+                  No applications yet. They come in via <Link href="/freeday" className="text-sage hover:underline">/freeday</Link>.
+                </p>
               ) : (
                 recentApps!.map((a) => (
                   <div key={a.id} className="flex items-center justify-between gap-2">
@@ -253,7 +257,9 @@ export default async function AdminPage() {
             </div>
             <div className="space-y-3">
               {(recentCodes ?? []).length === 0 ? (
-                <p className="text-xs text-muted">No codes yet.</p>
+                <p className="text-xs text-muted">
+                  No codes yet. <Link href="/admin/codes" className="text-sage hover:underline">Issue one →</Link>
+                </p>
               ) : (
                 recentCodes!.map((c: Record<string, unknown>) => (
                   <div key={c.id as number} className="flex items-center justify-between gap-2">

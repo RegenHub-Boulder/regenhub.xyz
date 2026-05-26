@@ -6,15 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Check, X, MessageSquare, Copy, ExternalLink, Loader2, Tag } from "lucide-react";
 import type { Application, ApplicationStatus } from "@/lib/supabase/types";
 
-// Plan catalog — keep in sync with apps/web/src/lib/stripe.ts PLANS.
-// Mirrored here so the admin UI doesn't have to import server-only code.
-const APPROVABLE_PLANS = [
-  { key: "cold_desk",    label: "Cold Desk",          defaultDollars: 500 },
-  { key: "hot_desk",     label: "Hot Desk",           defaultDollars: 250 },
-  { key: "member_5day",  label: "Member + 5 days/mo", defaultDollars: 100 },
-  { key: "member_2day",  label: "Member + 2 days/mo", defaultDollars: 50 },
-  { key: "member_basic", label: "Interim Member",     defaultDollars: 30 },
-] as const;
+import { getAllPlansSorted } from "@/lib/plans";
+
+const APPROVABLE_PLANS = getAllPlansSorted()
+  .sort((a, b) => b.def.defaultMonthlyCents - a.def.defaultMonthlyCents) // most expensive first to match historical order
+  .map(({ key, def }) => ({
+    key,
+    label: def.label,
+    defaultDollars: def.defaultMonthlyCents / 100,
+  }));
 
 type DurationChoice = "forever" | "repeating";
 

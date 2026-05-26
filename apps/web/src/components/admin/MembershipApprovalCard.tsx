@@ -106,6 +106,10 @@ export function MembershipApprovalCard({
             : `${memberName} cannot subscribe to a contributing membership until approved.`}
           {" "}Desk tier ($250 / $500) approvals still go through the application flow.
         </p>
+        <p className="text-xs text-muted italic">
+          This gates whether they <em>can</em> subscribe.
+          See the Billing card below for whether they <em>currently are</em> subscribed.
+        </p>
 
         {approved && approvedAt && (
           <p className="text-xs text-muted">

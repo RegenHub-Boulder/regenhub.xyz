@@ -27,6 +27,20 @@ export default async function ActiveCodesPage() {
   const codes = codesResult.data as CodeWithMember[] | null;
   const members = membersResult.data;
 
+  // For the empty-state helper: count recently-inactive codes so admins
+  // can see "yeah, things have been happening, just not right now"
+  let recentInactiveCount = 0;
+  if (!codes?.length) {
+    // eslint-disable-next-line react-hooks/purity -- server component, renders once per request
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { count } = await supabase
+      .from("day_codes")
+      .select("*", { count: "exact", head: true })
+      .eq("is_active", false)
+      .gte("created_at", since);
+    recentInactiveCount = count ?? 0;
+  }
+
   const now = new Date();
 
   return (
@@ -39,7 +53,15 @@ export default async function ActiveCodesPage() {
       <QuickCodeForm members={members ?? []} />
 
       {!codes?.length ? (
-        <div className="glass-panel p-8 text-center text-muted">No active codes right now.</div>
+        <div className="glass-panel p-8 text-center space-y-1">
+          <p className="text-muted">No active codes right now.</p>
+          {recentInactiveCount > 0 && (
+            <p className="text-xs text-muted">
+              {recentInactiveCount} expired or revoked in the last 7 days.
+            </p>
+          )}
+          <p className="text-xs text-muted">Issue one above ↑</p>
+        </div>
       ) : (
         <>
           {/* Desktop table */}

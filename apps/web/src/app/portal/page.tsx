@@ -9,6 +9,7 @@ import HubEssentials from "@/components/portal/HubEssentials";
 import InviteCard from "@/components/portal/InviteCard";
 import { ManageSubscriptionButton } from "@/components/portal/ManageSubscriptionButton";
 import { ChangePlanButton } from "@/components/portal/ChangePlanButton";
+import { planLabel } from "@/lib/plans";
 
 export default async function PortalPage() {
   const supabase = await createClient();
@@ -283,14 +284,7 @@ export default async function PortalPage() {
                   Membership
                   {activeSubscription.plan_key && (
                     <span className="text-muted font-normal ml-2 text-sm">
-                      ·{" "}
-                      {activeSubscription.plan_key === "cold_desk" ? "Cold Desk"
-                        : activeSubscription.plan_key === "hot_desk" ? "Hot Desk"
-                        : activeSubscription.plan_key === "member_5day" ? "Member + 5 days/mo"
-                        : activeSubscription.plan_key === "member_2day" ? "Member + 2 days/mo"
-                        : activeSubscription.plan_key === "member_basic" ? "Interim Member"
-                        : activeSubscription.plan_key}
-                      {" · "}${activeSubscription.monthly_cents / 100}/mo
+                      · {planLabel(activeSubscription.plan_key)} · ${activeSubscription.monthly_cents / 100}/mo
                     </span>
                   )}
                 </h3>

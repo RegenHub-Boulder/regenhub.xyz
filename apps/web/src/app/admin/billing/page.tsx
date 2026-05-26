@@ -14,19 +14,20 @@ import {
   Activity,
 } from "lucide-react";
 import type { Subscription, Purchase, PassGrant, WebhookEvent } from "@/lib/supabase/types";
+import { SendPaymentReminderButton } from "@/components/admin/SendPaymentReminderButton";
 
 export const metadata = { title: "Billing — Admin" };
 
-const planLabels: Record<string, string> = {
-  cold_desk: "Cold Desk",
-  hot_desk: "Hot Desk",
-  member_5day: "Member + 5 days/mo",
-  member_2day: "Member + 2 days/mo",
-  member_basic: "Interim Member",
-  // Legacy
+import { planLabel } from "@/lib/plans";
+
+// Legacy plan keys not in current PLANS still need labels for historical rows
+const legacyLabels: Record<string, string> = {
   social_events_1: "Social — 1 day/mo",
   social_events_5: "Social — 5 days/mo",
 };
+const planLabels: Record<string, string> = new Proxy({}, {
+  get: (_, key: string) => legacyLabels[key] ?? planLabel(key),
+});
 
 const statusStyle: Record<string, string> = {
   active: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
@@ -220,22 +221,27 @@ export default async function BillingPage() {
               {pastDueSubs.map((s) => {
                 const days = daysSince(s.past_due_since);
                 return (
-                  <Link
+                  <div
                     key={s.id}
-                    href={s.members ? `/admin/members/${s.members.id}` : "#"}
                     className="flex items-center justify-between gap-3 py-2 px-3 rounded hover:bg-white/5 transition-colors"
                   >
-                    <div>
-                      <p className="text-sm font-medium">{s.members?.name ?? "(unknown member)"}</p>
-                      <p className="text-xs text-muted">{s.members?.email}</p>
-                    </div>
-                    <div className="text-right text-xs">
-                      <p className="text-red-400">{days != null ? `${days}d past due` : "past due"}</p>
-                      <p className="text-muted">
-                        {planLabels[s.plan_key] ?? s.plan_key} · {fmtMoney(s.monthly_cents)}/mo
-                      </p>
-                    </div>
-                  </Link>
+                    <Link
+                      href={s.members ? `/admin/members/${s.members.id}` : "#"}
+                      className="flex-1 flex items-center justify-between gap-3"
+                    >
+                      <div>
+                        <p className="text-sm font-medium">{s.members?.name ?? "(unknown member)"}</p>
+                        <p className="text-xs text-muted">{s.members?.email}</p>
+                      </div>
+                      <div className="text-right text-xs">
+                        <p className="text-red-400">{days != null ? `${days}d past due` : "past due"}</p>
+                        <p className="text-muted">
+                          {planLabels[s.plan_key] ?? s.plan_key} · {fmtMoney(s.monthly_cents)}/mo
+                        </p>
+                      </div>
+                    </Link>
+                    {s.members && <SendPaymentReminderButton memberId={s.members.id} />}
+                  </div>
                 );
               })}
             </div>

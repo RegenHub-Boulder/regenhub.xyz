@@ -40,14 +40,17 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Link href="/" className="text-forest font-bold text-lg">RegenHub</Link>
             <span className="text-xs bg-gold/20 text-gold px-2 py-0.5 rounded-full font-medium">Admin</span>
             <div className="hidden sm:flex gap-4 text-sm">
-              <Link href="/admin" className="text-muted hover:text-foreground transition-colors">Overview</Link>
-              <Link href="/admin/billing" className="text-muted hover:text-foreground transition-colors">Billing</Link>
-              <Link href="/admin/claims" className="text-muted hover:text-foreground transition-colors">Free Days</Link>
-              <Link href="/admin/applications" className="text-muted hover:text-foreground transition-colors">Applications</Link>
-              <Link href="/admin/interests" className="text-muted hover:text-foreground transition-colors">Interests</Link>
-              <Link href="/admin/members" className="text-muted hover:text-foreground transition-colors">Members</Link>
-              <Link href="/admin/codes" className="text-muted hover:text-foreground transition-colors">Live Codes</Link>
-              <Link href="/admin/lock" className="text-muted hover:text-foreground transition-colors">Lock Sync</Link>
+              {links
+                .filter((l) => !l.accent) // accent links (Portal) render separately below
+                .map((l) => (
+                  <Link
+                    key={l.href}
+                    href={l.href}
+                    className="text-muted hover:text-foreground transition-colors"
+                  >
+                    {l.label}
+                  </Link>
+                ))}
             </div>
           </div>
           <Link href="/portal" className="text-sm text-muted hover:text-foreground transition-colors">

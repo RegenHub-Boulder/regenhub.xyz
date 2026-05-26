@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CreditCard, Ban, Loader2, Link2, Copy, ExternalLink } from "lucide-react";
 import type { Subscription, Purchase } from "@/lib/supabase/types";
+import { getAllPlansSorted, planLabel } from "@/lib/plans";
 
 interface Props {
   memberId: number;
@@ -15,14 +16,14 @@ interface Props {
   recentPurchases: Purchase[];
 }
 
-// Mirror of PLANS in apps/web/src/lib/stripe.ts — keep in sync.
-const PLAN_OPTIONS = [
-  { key: "cold_desk",    label: "Cold Desk",          defaultDollars: 500 },
-  { key: "hot_desk",     label: "Hot Desk",           defaultDollars: 250 },
-  { key: "member_5day",  label: "Member + 5 days/mo", defaultDollars: 100 },
-  { key: "member_2day",  label: "Member + 2 days/mo", defaultDollars: 50 },
-  { key: "member_basic", label: "Interim Member",     defaultDollars: 30 },
-] as const;
+// Sourced from lib/plans (most-expensive-first to match the historical layout)
+const PLAN_OPTIONS = getAllPlansSorted()
+  .sort((a, b) => b.def.defaultMonthlyCents - a.def.defaultMonthlyCents)
+  .map(({ key, def }) => ({
+    key,
+    label: def.label,
+    defaultDollars: def.defaultMonthlyCents / 100,
+  }));
 
 const statusStyle: Record<string, string> = {
   active: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
@@ -145,14 +146,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
                 {activeSubscription.status}
               </Badge>
               <span className="text-muted">·</span>
-              <span>
-                {activeSubscription.plan_key === "cold_desk" ? "Cold Desk"
-                  : activeSubscription.plan_key === "hot_desk" ? "Hot Desk"
-                  : activeSubscription.plan_key === "member_5day" ? "Member + 5 days/mo"
-                  : activeSubscription.plan_key === "member_2day" ? "Member + 2 days/mo"
-                  : activeSubscription.plan_key === "member_basic" ? "Interim Member"
-                  : activeSubscription.plan_key}
-              </span>
+              <span>{planLabel(activeSubscription.plan_key)}</span>
               <span className="text-muted">·</span>
               <span className="text-foreground">${activeSubscription.monthly_cents / 100}/mo</span>
               {activeSubscription.cancel_at_period_end && (
@@ -333,7 +327,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
               Revoke <span className="font-semibold">{memberName}</span>&apos;s access?
               This sets <code>disabled = true</code> on the member record
               {activeSubscription && (
-                <span> and immediately cancels their <span className="font-semibold">{activeSubscription.plan_key === "cold_desk" ? "Cold Desk" : activeSubscription.plan_key === "hot_desk" ? "Hot Desk" : activeSubscription.plan_key === "member_5day" ? "Member + 5 days/mo" : activeSubscription.plan_key === "member_2day" ? "Member + 2 days/mo" : activeSubscription.plan_key === "member_basic" ? "Interim Member" : activeSubscription.plan_key}</span> subscription in Stripe</span>
+                <span> and immediately cancels their <span className="font-semibold">{planLabel(activeSubscription.plan_key)}</span> subscription in Stripe</span>
               )}
               .
             </p>

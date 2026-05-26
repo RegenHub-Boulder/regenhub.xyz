@@ -132,6 +132,40 @@ export function freeDayPlusMembershipApprovedEmail(args: { name: string; siteUrl
 }
 
 /**
+ * Sent when admin pings a past-due member to update their payment method.
+ * Links to /portal where they can open the Stripe Customer Portal.
+ */
+export function paymentReminderEmail(args: {
+  name: string;
+  planLabel: string;
+  monthlyDollars: number;
+  siteUrl: string;
+  daysOverdue: number | null;
+}) {
+  const firstName = args.name.split(" ")[0];
+  const link = `${args.siteUrl.replace(/\/$/, "")}/portal`;
+  const overdueLine = args.daysOverdue
+    ? `Your card has been failing for ${args.daysOverdue} day${args.daysOverdue === 1 ? "" : "s"}.`
+    : `Your last payment didn't go through.`;
+  return {
+    subject: "Update your RegenHub payment method",
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+        <p>Hi ${firstName},</p>
+        <p>Quick note &mdash; your ${args.planLabel} subscription ($${args.monthlyDollars}/mo) needs attention. ${overdueLine} Stripe will keep retrying for a few days but it&rsquo;s easiest to just update your card.</p>
+        <p style="margin: 24px 0;">
+          <a href="${link}" style="background: #2d5e3e; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Update payment method</a>
+        </p>
+        <p>Click the link, sign in, then hit &ldquo;Manage subscription&rdquo; &mdash; that opens the Stripe portal where you can swap your card.</p>
+        <p>Reply to this email if anything&rsquo;s off &mdash; we&rsquo;re happy to chat.</p>
+        <p>&mdash; RegenHub</p>
+      </div>
+    `,
+    text: `Hi ${firstName},\n\nQuick note — your ${args.planLabel} subscription ($${args.monthlyDollars}/mo) needs attention. ${overdueLine} Stripe will keep retrying for a few days but it's easiest to just update your card.\n\nUpdate payment method: ${link}\n\nClick the link, sign in, then hit "Manage subscription" — that opens the Stripe portal where you can swap your card.\n\nReply to this email if anything's off — we're happy to chat.\n\n— RegenHub`,
+  };
+}
+
+/**
  * Sent when admin approves an existing member to subscribe (via the
  * member-detail admin toggle, not the freeday flow). Skips the freeday
  * pitch since they're already on the inside.
