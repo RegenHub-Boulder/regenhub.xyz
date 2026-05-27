@@ -14,21 +14,34 @@ function subBadge(sub: AdminUserSubscription | null) {
   const dollars = `$${(sub.monthly_cents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}/mo`;
   if (sub.status === "past_due") {
     return (
-      <Badge className="text-xs bg-red-500/20 text-red-400 border-red-500/30" title="Payment failed">
+      <Badge className="text-sm bg-red-500/20 text-red-400 border-red-500/30" title="Payment failed">
         {dollars} · past due
       </Badge>
     );
   }
   if (sub.cancel_at_period_end) {
     return (
-      <Badge className="text-xs bg-amber-500/20 text-amber-400 border-amber-500/30" title="Cancelling at period end">
+      <Badge className="text-sm bg-amber-500/20 text-amber-400 border-amber-500/30" title="Cancelling at period end">
         {dollars} · canceling
       </Badge>
     );
   }
   return (
-    <Badge className="text-xs bg-sage/20 text-sage border-sage/30" title="Active subscription">
+    <Badge className="text-sm bg-sage/20 text-sage border-sage/30" title="Active subscription">
       {dollars}
+    </Badge>
+  );
+}
+
+/** Member is approved to subscribe but hasn't yet — distinct from active subscriber. */
+function approvalBadge(approved: boolean | undefined, hasSub: boolean) {
+  if (hasSub || !approved) return null;
+  return (
+    <Badge
+      className="text-sm bg-sage/10 text-sage border-sage/30"
+      title="Approved to subscribe (hasn't yet)"
+    >
+      ✓ Approved
     </Badge>
   );
 }
@@ -37,21 +50,21 @@ type LegacyMemberWithSub = Member & { subscription: AdminUserSubscription | null
 
 function memberStatusBadge(member: Member | null) {
   if (!member) {
-    return <Badge className="text-xs bg-yellow-500/20 text-yellow-400 border-yellow-500/30">No Profile</Badge>;
+    return <Badge className="text-sm bg-yellow-500/20 text-yellow-400 border-yellow-500/30">No Profile</Badge>;
   }
   if (member.disabled) {
-    return <Badge variant="destructive" className="text-xs">Disabled</Badge>;
+    return <Badge variant="destructive" className="text-sm">Disabled</Badge>;
   }
   if (member.member_type === "cold_desk") {
-    return <Badge className="text-xs bg-green-500/20 text-green-400 border-green-500/30">Cold Desk</Badge>;
+    return <Badge className="text-sm bg-green-500/20 text-green-400 border-green-500/30">Cold Desk</Badge>;
   }
   if (member.member_type === "hot_desk") {
-    return <Badge className="text-xs bg-emerald-500/20 text-emerald-400 border-emerald-500/30">Hot Desk</Badge>;
+    return <Badge className="text-sm bg-emerald-500/20 text-emerald-400 border-emerald-500/30">Hot Desk</Badge>;
   }
   if (member.member_type === "hub_friend") {
-    return <Badge className="text-xs bg-purple-500/20 text-purple-400 border-purple-500/30">Hub Friend</Badge>;
+    return <Badge className="text-sm bg-purple-500/20 text-purple-400 border-purple-500/30">Hub Friend</Badge>;
   }
-  return <Badge className="text-xs bg-blue-500/20 text-blue-400 border-blue-500/30">Day Pass</Badge>;
+  return <Badge className="text-sm bg-blue-500/20 text-blue-400 border-blue-500/30">Day Pass</Badge>;
 }
 
 // ── Mobile card view ──
@@ -117,6 +130,7 @@ function AuthUserRow({ u, showMoreCols }: { u: AdminUser; showMoreCols: boolean 
           <div className="flex items-center gap-1.5 flex-wrap">
             {memberStatusBadge(u.member)}
             {subBadge(u.subscription)}
+            {approvalBadge(u.member?.approved_for_membership, !!u.subscription)}
           </div>
         </td>
         {showMoreCols && <td className="px-4 py-3 text-muted text-sm">{u.member?.telegram_username ?? "—"}</td>}
@@ -167,6 +181,7 @@ function LegacyMemberRow({ m, showMoreCols }: { m: LegacyMemberWithSub; showMore
           <div className="flex items-center gap-1.5 flex-wrap">
             {memberStatusBadge(m)}
             {subBadge(m.subscription)}
+            {approvalBadge(m.approved_for_membership, !!m.subscription)}
           </div>
         </td>
         {showMoreCols && <td className="px-4 py-3 text-muted text-sm">{m.telegram_username ?? "—"}</td>}

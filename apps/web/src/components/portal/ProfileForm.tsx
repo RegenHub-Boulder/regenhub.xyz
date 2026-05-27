@@ -16,6 +16,7 @@ interface Member {
   ethereum_address: string | null;
   bio: string | null;
   skills: string[] | null;
+  profile_photo_url: string | null;
   member_type: string;
 }
 
@@ -26,6 +27,7 @@ export function ProfileForm({ member }: { member: Member }) {
     skills: (member.skills ?? []).join(", "),
     telegram_username: member.telegram_username ?? "",
     ethereum_address: member.ethereum_address ?? "",
+    profile_photo_url: member.profile_photo_url ?? "",
   });
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -60,6 +62,7 @@ export function ProfileForm({ member }: { member: Member }) {
           skills: skills.length ? skills : null,
           telegram_username: form.telegram_username || null,
           ethereum_address: form.ethereum_address || null,
+          profile_photo_url: form.profile_photo_url || null,
         }),
       });
       const json = await res.json();
@@ -109,6 +112,31 @@ export function ProfileForm({ member }: { member: Member }) {
               className="glass-input"
             />
             <p className="text-xs text-muted">Used for Telegram bot commands (/mycode, /newcode, etc.)</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="photo">Profile photo URL</Label>
+            <div className="flex items-center gap-3">
+              {form.profile_photo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element -- user-provided arbitrary URL; Image's optimizer rejects unknown hosts
+                <img
+                  src={form.profile_photo_url}
+                  alt="Profile preview"
+                  className="w-12 h-12 rounded-full object-cover border border-white/10 shrink-0"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-sage/15 border border-white/10 shrink-0" />
+              )}
+              <Input
+                id="photo"
+                value={form.profile_photo_url}
+                onChange={set("profile_photo_url")}
+                placeholder="https://… (paste any image URL)"
+                className="glass-input"
+              />
+            </div>
+            <p className="text-xs text-muted">Shown in the member directory on the home page. Use a Gravatar URL, your social-media avatar, or any public image.</p>
           </div>
 
           <div className="space-y-2">

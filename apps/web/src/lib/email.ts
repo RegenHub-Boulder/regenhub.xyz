@@ -165,6 +165,100 @@ export function paymentReminderEmail(args: {
   };
 }
 
+export interface DigestData {
+  pendingApplications: number;
+  pendingFreeDays: number;
+  pastDueSubs: number;
+  newApplicationsYesterday: number;
+  newSignupsYesterday: number;
+  newMembersYesterday: number;
+  yesterdayVisits: { name: string; code: string; at: string }[];
+  lockSyncFailed: number | null;
+  siteUrl: string;
+}
+
+/**
+ * Daily admin digest — sent once a day by /api/cron/admin-digest.
+ * Skips entirely if there's nothing to report (no pending work + no
+ * recent activity), so admins don't get noise on quiet days.
+ */
+export function adminDigestEmail(d: DigestData): { subject: string; html: string; text: string } | null {
+  const hasActionable =
+    d.pendingApplications + d.pendingFreeDays + d.pastDueSubs + (d.lockSyncFailed ?? 0) > 0;
+  const hasActivity =
+    d.newApplicationsYesterday + d.newSignupsYesterday + d.newMembersYesterday + d.yesterdayVisits.length > 0;
+  if (!hasActionable && !hasActivity) return null;
+
+  const base = d.siteUrl.replace(/\/$/, "");
+  const dateLabel = new Date().toLocaleDateString("en-US", {
+    timeZone: "America/Denver",
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+
+  const subject = hasActionable
+    ? `RegenHub admin — ${d.pendingApplications + d.pendingFreeDays + d.pastDueSubs} needs your attention`
+    : `RegenHub admin — ${dateLabel}`;
+
+  const lines: string[] = [`<p>Morning — quick rundown for ${dateLabel}.</p>`];
+  const textLines: string[] = [`Morning — quick rundown for ${dateLabel}.`, ""];
+
+  if (hasActionable) {
+    lines.push(`<h3 style="color:#cb904d;margin-top:24px;margin-bottom:8px;">Needs attention</h3><ul style="line-height:1.7;padding-left:20px;">`);
+    textLines.push("NEEDS ATTENTION");
+    if (d.pendingApplications) {
+      lines.push(`<li><strong>${d.pendingApplications}</strong> membership application${d.pendingApplications === 1 ? "" : "s"} pending — <a href="${base}/admin/pipeline?tab=applications">review →</a></li>`);
+      textLines.push(`- ${d.pendingApplications} membership applications pending: ${base}/admin/pipeline?tab=applications`);
+    }
+    if (d.pendingFreeDays) {
+      lines.push(`<li><strong>${d.pendingFreeDays}</strong> free-day claim${d.pendingFreeDays === 1 ? "" : "s"} pending — <a href="${base}/admin/pipeline?tab=freedays">review →</a></li>`);
+      textLines.push(`- ${d.pendingFreeDays} free-day claims pending: ${base}/admin/pipeline?tab=freedays`);
+    }
+    if (d.pastDueSubs) {
+      lines.push(`<li><strong>${d.pastDueSubs}</strong> subscription${d.pastDueSubs === 1 ? "" : "s"} past due — <a href="${base}/admin/billing">review →</a></li>`);
+      textLines.push(`- ${d.pastDueSubs} subscriptions past due: ${base}/admin/billing`);
+    }
+    if (d.lockSyncFailed) {
+      lines.push(`<li><strong>${d.lockSyncFailed}</strong> lock-sync failure${d.lockSyncFailed === 1 ? "" : "s"} from the last run — <a href="${base}/admin/access?tab=sync">retry →</a></li>`);
+      textLines.push(`- ${d.lockSyncFailed} lock-sync failures: ${base}/admin/access?tab=sync`);
+    }
+    lines.push("</ul>");
+    textLines.push("");
+  }
+
+  if (hasActivity) {
+    lines.push(`<h3 style="color:#2d5e3e;margin-top:24px;margin-bottom:8px;">Yesterday</h3><ul style="line-height:1.7;padding-left:20px;">`);
+    textLines.push("YESTERDAY");
+    if (d.newSignupsYesterday) {
+      lines.push(`<li>${d.newSignupsYesterday} interest signup${d.newSignupsYesterday === 1 ? "" : "s"}</li>`);
+      textLines.push(`- ${d.newSignupsYesterday} interest signups`);
+    }
+    if (d.newApplicationsYesterday) {
+      lines.push(`<li>${d.newApplicationsYesterday} new application${d.newApplicationsYesterday === 1 ? "" : "s"}</li>`);
+      textLines.push(`- ${d.newApplicationsYesterday} new applications`);
+    }
+    if (d.newMembersYesterday) {
+      lines.push(`<li>${d.newMembersYesterday} new paying member${d.newMembersYesterday === 1 ? "" : "s"} 🎉</li>`);
+      textLines.push(`- ${d.newMembersYesterday} new paying members`);
+    }
+    if (d.yesterdayVisits.length) {
+      lines.push(`<li>${d.yesterdayVisits.length} door access${d.yesterdayVisits.length === 1 ? "" : "es"}: ${d.yesterdayVisits.map((v) => v.name).join(", ")}</li>`);
+      textLines.push(`- ${d.yesterdayVisits.length} door accesses: ${d.yesterdayVisits.map((v) => v.name).join(", ")}`);
+    }
+    lines.push("</ul>");
+  }
+
+  lines.push(`<p style="margin-top:24px;"><a href="${base}/admin">Open the admin dashboard →</a></p>`);
+  textLines.push("", `Open the admin dashboard: ${base}/admin`);
+
+  return {
+    subject,
+    html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1a1a1a;line-height:1.55;">${lines.join("")}</div>`,
+    text: textLines.join("\n"),
+  };
+}
+
 /**
  * Sent when admin approves an existing member to subscribe (via the
  * member-detail admin toggle, not the freeday flow). Skips the freeday

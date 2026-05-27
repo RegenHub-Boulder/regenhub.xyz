@@ -3,7 +3,8 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Users, Key, Zap, UserPlus, AlertTriangle, ClipboardList, Calendar, DollarSign } from "lucide-react";
+import { Users, Key, Zap, UserPlus, AlertTriangle, ClipboardList, Calendar, DollarSign, Inbox } from "lucide-react";
+import { FunnelCard } from "@/components/admin/FunnelCard";
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -28,10 +29,17 @@ export default async function AdminPage() {
     { count: reservedClaimCount },
     // Subscriptions snapshot for the MRR card
     { data: billingSubs },
+    // Funnel counts
+    { count: interestsCount },
+    { count: freedaysCount },
+    { count: applicationsCount },
+    { count: subscribersCount },
     // Recent activity
     { data: recentMembers },
     { data: recentApps },
     { data: recentCodes },
+    // Lock-sync failures from the last run (for needs-attention)
+    { data: lastSyncRun },
   ] = await Promise.all([
     supabase.from("members").select("*", { count: "exact", head: true }).eq("disabled", false),
     supabase.from("day_codes").select("*", { count: "exact", head: true }).eq("is_active", true),
@@ -51,10 +59,17 @@ export default async function AdminPage() {
     admin.from("free_day_claims").select("*", { count: "exact", head: true }).eq("status", "reserved"),
     // Subscriptions — only the billable rows (active/trialing/past_due)
     supabase.from("subscriptions").select("monthly_cents, status").in("status", ["active", "trialing", "past_due"]),
+    // Funnel stages — all-time totals
+    supabase.from("interests").select("*", { count: "exact", head: true }),
+    admin.from("free_day_claims").select("*", { count: "exact", head: true }),
+    supabase.from("applications").select("*", { count: "exact", head: true }),
+    supabase.from("subscriptions").select("*", { count: "exact", head: true })
+      .in("status", ["active", "trialing", "past_due", "canceled"]),
     // Recent activity
     supabase.from("members").select("id, name, member_type, created_at").eq("disabled", false).order("created_at", { ascending: false }).limit(5),
     supabase.from("applications").select("id, name, email, status, created_at").order("created_at", { ascending: false }).limit(5),
     supabase.from("day_codes").select("id, code, label, pin_slot, is_active, created_at, members(name)").order("created_at", { ascending: false }).limit(5),
+    supabase.from("lock_sync_runs").select("failed, created_at").order("created_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
 
   const subs = billingSubs ?? [];
@@ -71,12 +86,79 @@ export default async function AdminPage() {
     { label: "Day Pass", count: dayPassCount ?? 0, color: "text-blue-400" },
   ];
 
+  // Needs-attention items — surfaces actionable issues at the top of the page.
+  // Each item links to the page where the admin can act on it.
+  const attentionItems: { label: string; href: string; color: "amber" | "red" }[] = [];
+  if ((pendingAppCount ?? 0) > 0) {
+    attentionItems.push({
+      label: `${pendingAppCount} membership application${pendingAppCount === 1 ? "" : "s"} pending review`,
+      href: "/admin/pipeline?tab=applications",
+      color: "amber",
+    });
+  }
+  if ((pendingClaimCount ?? 0) > 0) {
+    attentionItems.push({
+      label: `${pendingClaimCount} free-day claim${pendingClaimCount === 1 ? "" : "s"} pending review`,
+      href: "/admin/pipeline?tab=freedays",
+      color: "amber",
+    });
+  }
+  if (pastDueCount > 0) {
+    attentionItems.push({
+      label: `${pastDueCount} subscription${pastDueCount === 1 ? "" : "s"} past due`,
+      href: "/admin/billing",
+      color: "red",
+    });
+  }
+  if ((lastSyncRun as { failed: number; created_at: string } | null)?.failed) {
+    attentionItems.push({
+      label: `Last lock sync had ${(lastSyncRun as { failed: number }).failed} failure${(lastSyncRun as { failed: number }).failed === 1 ? "" : "s"}`,
+      href: "/admin/access?tab=sync",
+      color: "red",
+    });
+  }
+
+  // Funnel stages — all-time
+  const funnelStages = [
+    { key: "interests",    label: "Interest signups",    count: interestsCount ?? 0 },
+    { key: "freedays",     label: "Free-day claims",     count: freedaysCount ?? 0 },
+    { key: "applications", label: "Applications",        count: applicationsCount ?? 0 },
+    { key: "subscribers",  label: "Subscribed (any)",    count: subscribersCount ?? 0 },
+  ];
+
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold text-forest">Admin Dashboard</h1>
         <p className="text-muted mt-1">RegenHub cooperative management</p>
       </div>
+
+      {/* Needs attention */}
+      {attentionItems.length > 0 && (
+        <Card className="glass-panel border border-amber-500/30">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Inbox className="w-4 h-4 text-amber-400" />
+              <h3 className="text-sm font-semibold text-amber-400">Needs attention</h3>
+            </div>
+            <ul className="space-y-1.5">
+              {attentionItems.map((item) => (
+                <li key={item.label}>
+                  <Link
+                    href={item.href}
+                    className={`text-sm flex items-center gap-2 hover:underline ${
+                      item.color === "red" ? "text-red-400" : "text-amber-400"
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${item.color === "red" ? "bg-red-400" : "bg-amber-400"}`} />
+                    {item.label} →
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats grid */}
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
@@ -178,6 +260,9 @@ export default async function AdminPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Funnel — interest → freeday → application → subscriber */}
+      <FunnelCard stages={funnelStages} />
 
       {/* Recent activity */}
       <div className="grid lg:grid-cols-3 gap-6">

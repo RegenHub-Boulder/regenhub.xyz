@@ -9,6 +9,7 @@ import HubEssentials from "@/components/portal/HubEssentials";
 import InviteCard from "@/components/portal/InviteCard";
 import { ManageSubscriptionButton } from "@/components/portal/ManageSubscriptionButton";
 import { ChangePlanButton } from "@/components/portal/ChangePlanButton";
+import { OnboardingChecklist } from "@/components/portal/OnboardingChecklist";
 import { planLabel } from "@/lib/plans";
 
 export default async function PortalPage() {
@@ -198,6 +199,16 @@ export default async function PortalPage() {
           </p>
         )}
       </div>
+
+      {isNewMember && (
+        <OnboardingChecklist
+          needsPinCode={isFullMember}
+          hasPinCode={!!member.pin_code}
+          hasPhoto={!!member.profile_photo_url}
+          hasBio={!!member.bio}
+          hasTelegram={!!member.telegram_username}
+        />
+      )}
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {isFullMember && (
