@@ -16,6 +16,7 @@ import {
 import type { Subscription, Purchase, PassGrant, WebhookEvent } from "@/lib/supabase/types";
 import { SendPaymentReminderButton } from "@/components/admin/SendPaymentReminderButton";
 import { CollapsibleSection } from "@/components/admin/CollapsibleSection";
+import { CouponsSection } from "@/components/admin/CouponsSection";
 
 export const metadata = { title: "Billing — Admin" };
 
@@ -372,6 +373,9 @@ export default async function BillingPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Promo codes — standing discount codes (work-exchange, subsidized desks, etc.) */}
+      <CouponsSection />
 
       {/* Monthly day-pass grants — collapsed by default since it's reference data */}
       {recentGrants.length > 0 && (
