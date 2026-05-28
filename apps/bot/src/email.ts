@@ -87,22 +87,23 @@ export function freeDayPlusMembershipApprovedEmail(args: { name: string; siteUrl
         <p style="margin: 16px 0;">
           <a href="${base}/freeday" style="background: #2d5e3e; color: white; padding: 10px 18px; border-radius: 8px; text-decoration: none; display: inline-block;">Get my free-day code</a>
         </p>
-        <p><strong>2. RegenHub membership.</strong> You&rsquo;re also cleared to sign up for a contributing membership when you&rsquo;re ready:</p>
+        <p><strong>2. RegenHub membership.</strong> You&rsquo;re also cleared to sign up for any tier when you&rsquo;re ready:</p>
         <ul style="line-height: 1.7; padding-left: 20px;">
-          <li><strong>Interim Member</strong> &mdash; $30/mo, 1 coworking day per month, member rate on extras</li>
+          <li><strong>Member + 1 day/mo</strong> &mdash; $30/mo, 1 coworking day per month, member rate on extras</li>
           <li><strong>Member + 2 days/mo</strong> &mdash; $50/mo</li>
           <li><strong>Member + 5 days/mo</strong> &mdash; $100/mo</li>
+          <li><strong>Hot Desk</strong> &mdash; $250/mo, permanent door code + 24/7 access to any open desk</li>
+          <li><strong>Cold Desk</strong> &mdash; $500/mo, your own reserved desk + permanent door code + 24/7 access</li>
         </ul>
-        <p>Day passes accumulate &mdash; they never expire. Plus members get day passes at $25 instead of $30, and access to members-only events.</p>
+        <p>Day passes accumulate &mdash; they never expire. Plus members get day passes at $25 instead of $30, and access to members-only events. Desk tiers auto-allocate your PIN on signup.</p>
         <p style="margin: 16px 0;">
           <a href="${base}/membership" style="background: #2d5e3e; color: white; padding: 10px 18px; border-radius: 8px; text-decoration: none; display: inline-block;">See membership tiers</a>
         </p>
-        <p>Looking for a permanent desk ($250 Hot Desk / $500 Cold Desk)? Reply to this email and we&rsquo;ll set up a quick chat &mdash; those go through a conversation rather than instant checkout.</p>
         <p><strong>Address:</strong> 1515 Walnut St, Suite 200, Boulder, CO</p>
         <p>Any questions, just reply.</p>
         <p>See you soon,<br>RegenHub</p>
       </div>
     `,
-    text: `Hi ${firstName},\n\nWelcome — you're approved on two fronts:\n\n1. Your free day visit. Come any weekday between 8 AM and 6 PM. On the day you arrive, grab your door code here:\n${base}/freeday\n\n2. RegenHub membership. You're also cleared to sign up for a contributing membership when you're ready:\n- Interim Member — $30/mo, 1 coworking day per month, member rate on extras\n- Member + 2 days/mo — $50/mo\n- Member + 5 days/mo — $100/mo\n\nDay passes accumulate — they never expire. Plus members get day passes at $25 instead of $30, and access to members-only events.\n\nSee tiers: ${base}/membership\n\nLooking for a permanent desk ($250 Hot Desk / $500 Cold Desk)? Reply to this email and we'll set up a quick chat — those go through a conversation rather than instant checkout.\n\nAddress: 1515 Walnut St, Suite 200, Boulder, CO\n\nAny questions, just reply.\n\nSee you soon,\nRegenHub`,
+    text: `Hi ${firstName},\n\nWelcome — you're approved on two fronts:\n\n1. Your free day visit. Come any weekday between 8 AM and 6 PM. On the day you arrive, grab your door code here:\n${base}/freeday\n\n2. RegenHub membership. You're also cleared to sign up for any tier when you're ready:\n- Member + 1 day/mo — $30/mo, 1 coworking day per month, member rate on extras\n- Member + 2 days/mo — $50/mo\n- Member + 5 days/mo — $100/mo\n- Hot Desk — $250/mo, permanent door code + 24/7 access to any open desk\n- Cold Desk — $500/mo, your own reserved desk + permanent door code + 24/7 access\n\nDay passes accumulate — they never expire. Plus members get day passes at $25 instead of $30, and access to members-only events. Desk tiers auto-allocate your PIN on signup.\n\nSee tiers: ${base}/membership\n\nAddress: 1515 Walnut St, Suite 200, Boulder, CO\n\nAny questions, just reply.\n\nSee you soon,\nRegenHub`,
   };
 }

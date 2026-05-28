@@ -113,7 +113,7 @@ export function freeDayPlusMembershipApprovedEmail(args: { name: string; siteUrl
         </p>
         <p><strong>2. RegenHub membership.</strong> You&rsquo;re also cleared to sign up for a contributing membership when you&rsquo;re ready:</p>
         <ul style="line-height: 1.7; padding-left: 20px;">
-          <li><strong>Interim Member</strong> &mdash; $30/mo, 1 coworking day per month, member rate on extras</li>
+          <li><strong>Member + 1 day/mo</strong> &mdash; $30/mo, 1 coworking day per month, member rate on extras</li>
           <li><strong>Member + 2 days/mo</strong> &mdash; $50/mo</li>
           <li><strong>Member + 5 days/mo</strong> &mdash; $100/mo</li>
           <li><strong>Hot Desk</strong> &mdash; $250/mo, permanent door code + 24/7 access to any open desk</li>
@@ -128,7 +128,7 @@ export function freeDayPlusMembershipApprovedEmail(args: { name: string; siteUrl
         <p>See you soon,<br>RegenHub</p>
       </div>
     `,
-    text: `Hi ${firstName},\n\nWelcome — you're approved on two fronts:\n\n1. Your free day visit. Come any weekday between 8 AM and 6 PM. On the day you arrive, grab your door code here:\n${base}/freeday\n\n2. RegenHub membership. You're also cleared to sign up for any tier when you're ready:\n- Interim Member — $30/mo, 1 coworking day per month, member rate on extras\n- Member + 2 days/mo — $50/mo\n- Member + 5 days/mo — $100/mo\n- Hot Desk — $250/mo, permanent door code + 24/7 access to any open desk\n- Cold Desk — $500/mo, your own reserved desk + permanent door code + 24/7 access\n\nDay passes accumulate — they never expire. Plus members get day passes at $25 instead of $30, and access to members-only events. Desk tiers auto-allocate your PIN on signup.\n\nSee tiers: ${base}/membership\n\nAddress: 1515 Walnut St, Suite 200, Boulder, CO\n\nAny questions, just reply.\n\nSee you soon,\nRegenHub`,
+    text: `Hi ${firstName},\n\nWelcome — you're approved on two fronts:\n\n1. Your free day visit. Come any weekday between 8 AM and 6 PM. On the day you arrive, grab your door code here:\n${base}/freeday\n\n2. RegenHub membership. You're also cleared to sign up for any tier when you're ready:\n- Member + 1 day/mo — $30/mo, 1 coworking day per month, member rate on extras\n- Member + 2 days/mo — $50/mo\n- Member + 5 days/mo — $100/mo\n- Hot Desk — $250/mo, permanent door code + 24/7 access to any open desk\n- Cold Desk — $500/mo, your own reserved desk + permanent door code + 24/7 access\n\nDay passes accumulate — they never expire. Plus members get day passes at $25 instead of $30, and access to members-only events. Desk tiers auto-allocate your PIN on signup.\n\nSee tiers: ${base}/membership\n\nAddress: 1515 Walnut St, Suite 200, Boulder, CO\n\nAny questions, just reply.\n\nSee you soon,\nRegenHub`,
   };
 }
 
@@ -275,7 +275,7 @@ export function membershipApprovedEmail(args: { name: string; siteUrl: string })
         <p>Hi ${firstName},</p>
         <p>You&rsquo;re approved to subscribe to a RegenHub membership whenever you&rsquo;re ready. Five tiers:</p>
         <ul style="line-height: 1.7; padding-left: 20px;">
-          <li><strong>Interim Member</strong> &mdash; $30/mo, 1 coworking day per month, member rate on extras</li>
+          <li><strong>Member + 1 day/mo</strong> &mdash; $30/mo, 1 coworking day per month, member rate on extras</li>
           <li><strong>Member + 2 days/mo</strong> &mdash; $50/mo</li>
           <li><strong>Member + 5 days/mo</strong> &mdash; $100/mo</li>
           <li><strong>Hot Desk</strong> &mdash; $250/mo, permanent door code + 24/7 access to any open desk</li>
@@ -289,6 +289,6 @@ export function membershipApprovedEmail(args: { name: string; siteUrl: string })
         <p>&mdash; RegenHub</p>
       </div>
     `,
-    text: `Hi ${firstName},\n\nYou're approved to subscribe to a RegenHub membership whenever you're ready. Five tiers:\n\n- Interim Member — $30/mo, 1 coworking day per month, member rate on extras\n- Member + 2 days/mo — $50/mo\n- Member + 5 days/mo — $100/mo\n- Hot Desk — $250/mo, permanent door code + 24/7 access to any open desk\n- Cold Desk — $500/mo, your own reserved desk + permanent door code + 24/7 access\n\nDay passes accumulate — they never expire. Plus members get day passes at $25 instead of $30, and access to members-only events. Desk tiers auto-allocate your PIN on signup.\n\nSee tiers: ${base}/membership\n\nAny questions, just reply.\n\n— RegenHub`,
+    text: `Hi ${firstName},\n\nYou're approved to subscribe to a RegenHub membership whenever you're ready. Five tiers:\n\n- Member + 1 day/mo — $30/mo, 1 coworking day per month, member rate on extras\n- Member + 2 days/mo — $50/mo\n- Member + 5 days/mo — $100/mo\n- Hot Desk — $250/mo, permanent door code + 24/7 access to any open desk\n- Cold Desk — $500/mo, your own reserved desk + permanent door code + 24/7 access\n\nDay passes accumulate — they never expire. Plus members get day passes at $25 instead of $30, and access to members-only events. Desk tiers auto-allocate your PIN on signup.\n\nSee tiers: ${base}/membership\n\nAny questions, just reply.\n\n— RegenHub`,
   };
 }

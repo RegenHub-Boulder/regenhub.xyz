@@ -13,7 +13,7 @@ import regenHubFull from "@/assets/regenhub-full.svg";
 
 const ACCESS_OPTIONS = [
   { value: "daypass_single", label: "Single Day Pass ($30, or $25 for members)", desc: "Occasional drop-in access, one at a time" },
-  { value: "member_basic", label: "Interim Member ($30/mo, 1 day/mo)", desc: "Member access + 1 coworking day per month (passes accumulate) + member rate on additional day passes" },
+  { value: "member_basic", label: "Member + 1 day/mo ($30/mo)", desc: "Member access + 1 coworking day per month (passes accumulate) + member rate on additional day passes" },
   { value: "member_2day", label: "Member + 2 days/mo ($50/mo)", desc: "Member access plus 2 days of coworking per month, auto-credited" },
   { value: "member_5day", label: "Member + 5 days/mo ($100/mo)", desc: "Member access plus 5 days of coworking per month, auto-credited" },
   { value: "hot_desk", label: "Hot Desk ($250/mo)", desc: "Permanent door code, 24/7 access, full membership benefits" },

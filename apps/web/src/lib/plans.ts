@@ -78,7 +78,7 @@ export const PLANS = {
     description: "Everything in Contributing Member, plus 2 day passes credited each month.",
   },
   member_basic: {
-    label: "Interim Member",
+    label: "Member + 1 day/mo",
     defaultMonthlyCents: 3000,
     grantsMemberType: "day_pass" as MemberType,
     productIdEnvKey: "STRIPE_PRODUCT_MEMBER_BASIC",

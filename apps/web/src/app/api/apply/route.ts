@@ -4,7 +4,7 @@ import type { MembershipInterest } from "@/lib/supabase/types";
 
 const interestLabels: Record<string, string> = {
   daypass_single: "Day Pass",
-  member_basic: "Interim Member ($30/mo, 1 day/mo)",
+  member_basic: "Member + 1 day/mo ($30/mo)",
   member_2day: "Member + 2 days/mo ($50/mo)",
   member_5day: "Member + 5 days/mo ($100/mo)",
   // Legacy keys kept for historical applications

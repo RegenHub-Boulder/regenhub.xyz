@@ -21,7 +21,7 @@ interface SubscribeBody {
  * POST /api/membership/subscribe
  *
  * Self-serve subscription signup for any tier flagged `selfServe` in
- * lib/plans.ts — currently every tier from $30 Interim Member up to
+ * lib/plans.ts — currently every tier from $30 Member+1 day up to
  * $500 Cold Desk. The only real gate is `approved_for_membership`:
  * everyone needs to go through the free-day → approval flow before
  * they can attach a card.
