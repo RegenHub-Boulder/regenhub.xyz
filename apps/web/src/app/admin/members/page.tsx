@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -224,13 +225,18 @@ function SkeletonTable() {
 }
 
 export default function UsersPage() {
+  const searchParams = useSearchParams();
   const [data, setData] = useState<AdminUsersResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   // Default to "active" so the directory isn't cluttered with disabled accounts;
   // toggle to "disabled" or "all" via the filter dropdown when needed.
-  const [statusFilter, setStatusFilter] = useState<string>("active");
+  // Honor ?status=… from the URL so deep links (e.g. "Needs attention"
+  // pointing here for the migration backlog) land on the right view.
+  const [statusFilter, setStatusFilter] = useState<string>(
+    searchParams.get("status") ?? "active",
+  );
   const [page, setPage] = useState(0);
   const [showMoreCols, setShowMoreCols] = useState(false);
   const PAGE_SIZE = 25;

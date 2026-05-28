@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import Link from "next/link";
-import { Key, Ticket, User, ClipboardList, CheckCircle, Clock, MessageCircle, Zap, Calendar, ArrowRight, AlertCircle } from "lucide-react";
+import { Key, Ticket, User, ClipboardList, CheckCircle, Clock, MessageCircle, Zap, Calendar, ArrowRight, AlertCircle, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import HubEssentials from "@/components/portal/HubEssentials";
 import InviteCard from "@/components/portal/InviteCard";
@@ -342,6 +342,32 @@ export default async function PortalPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Existing desk members who pre-date Stripe — need an admin-issued
+          checkout link since desk tiers aren't self-serve. */}
+      {(member.member_type === "cold_desk" || member.member_type === "hot_desk") &&
+        !activeSubscription && (
+          <Card className="glass-panel border border-gold/30 bg-gold/[0.03]">
+            <CardContent className="p-6">
+              <div className="flex items-start gap-4">
+                <CreditCard className="w-7 h-7 text-gold shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <h3 className="font-semibold mb-1">Set up automatic billing</h3>
+                  <p className="text-sm text-muted mb-3">
+                    You&apos;re a {typeLabel} member, but we haven&apos;t moved your billing to Stripe yet.
+                    Reach out and we&apos;ll send you a one-click subscription link to switch over.
+                  </p>
+                  <a href="mailto:boulder.regenhub@gmail.com?subject=Stripe%20billing%20setup">
+                    <Button className="btn-glass gap-2 text-sm">
+                      Email admin
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  </a>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
       {/* Upgrade prompt only for day_pass members WITHOUT an active sub
           (free/intro users — paying social members shouldn't see "apply") */}

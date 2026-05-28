@@ -40,6 +40,10 @@ export default async function AdminPage() {
     { data: recentCodes },
     // Lock-sync failures from the last run (for needs-attention)
     { data: lastSyncRun },
+    // Desk members (for "paid type, no Stripe sub" callout)
+    { data: deskMembers },
+    // member_ids that have an active/trialing/past_due subscription
+    { data: subbedMemberIds },
   ] = await Promise.all([
     supabase.from("members").select("*", { count: "exact", head: true }).eq("disabled", false),
     supabase.from("day_codes").select("*", { count: "exact", head: true }).eq("is_active", true),
@@ -70,7 +74,12 @@ export default async function AdminPage() {
     supabase.from("applications").select("id, name, email, status, created_at").order("created_at", { ascending: false }).limit(5),
     supabase.from("day_codes").select("id, code, label, pin_slot, is_active, created_at, members(name)").order("created_at", { ascending: false }).limit(5),
     supabase.from("lock_sync_runs").select("failed, created_at").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("members").select("id, name").eq("disabled", false).in("member_type", ["cold_desk", "hot_desk"]),
+    supabase.from("subscriptions").select("member_id").in("status", ["active", "trialing", "past_due"]),
   ]);
+
+  const subbedSet = new Set((subbedMemberIds ?? []).map((s) => s.member_id));
+  const unbilledDeskCount = (deskMembers ?? []).filter((m) => !subbedSet.has(m.id)).length;
 
   const subs = billingSubs ?? [];
   const payingCount = subs.length;
@@ -108,6 +117,13 @@ export default async function AdminPage() {
       label: `${pastDueCount} subscription${pastDueCount === 1 ? "" : "s"} past due`,
       href: "/admin/billing",
       color: "red",
+    });
+  }
+  if (unbilledDeskCount > 0) {
+    attentionItems.push({
+      label: `${unbilledDeskCount} desk member${unbilledDeskCount === 1 ? "" : "s"} not on Stripe — send a checkout link`,
+      href: "/admin/members?status=no_subscription",
+      color: "amber",
     });
   }
   if ((lastSyncRun as { failed: number; created_at: string } | null)?.failed) {
