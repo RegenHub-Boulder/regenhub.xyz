@@ -9,7 +9,8 @@ import { ShieldCheck, Mail, Loader2, Armchair } from "lucide-react";
 
 interface Props {
   memberId: number;
-  memberName: string;
+  /** Currently unused — kept on the caller for parity with other admin cards. */
+  memberName?: string;
   memberEmail: string | null;
   approved: boolean;
   approvedAt: string | null;
@@ -32,7 +33,6 @@ function fmtDate(iso: string | null): string {
 
 export function MembershipApprovalCard({
   memberId,
-  memberName,
   memberEmail,
   approved: initialApproved,
   approvedAt,

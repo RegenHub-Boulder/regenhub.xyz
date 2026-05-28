@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CreditCard, Ban, Loader2, Link2, Copy, ExternalLink } from "lucide-react";
+import { CreditCard, Ban, Loader2, Link2, Copy, ExternalLink, Gift } from "lucide-react";
 import type { Subscription, Purchase } from "@/lib/supabase/types";
 import { getAllPlansSorted, planLabel } from "@/lib/plans";
 
@@ -58,6 +58,13 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
   const [generated, setGenerated] = useState<{ url: string; suggested_email: string } | null>(null);
   const [copiedField, setCopiedField] = useState<"url" | "email" | null>(null);
 
+  // Credit modal state — applies a customer-balance credit on the member's Stripe
+  // customer (e.g. for Xero/Stripe migration overlap or goodwill).
+  const [showCredit, setShowCredit] = useState(false);
+  const [creditDollars, setCreditDollars] = useState("25");
+  const [creditNote, setCreditNote] = useState("");
+  const [creditApplied, setCreditApplied] = useState<{ applied_cents: number; balance_cents: number } | null>(null);
+
   function selectPlan(key: string) {
     setPlanKey(key);
     const p = PLAN_OPTIONS.find((x) => x.key === key);
@@ -101,6 +108,39 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
     setTimeout(() => setCopiedField(null), 2000);
   }
 
+  async function applyCredit() {
+    setBusy(true);
+    setError(null);
+    try {
+      const dollars = parseFloat(creditDollars || "0") || 0;
+      if (dollars <= 0) {
+        setError("Enter a credit amount greater than $0");
+        return;
+      }
+      if (!creditNote.trim()) {
+        setError("A note is required for the audit trail");
+        return;
+      }
+      const res = await fetch(`/api/admin/members/${memberId}/apply-credit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dollars, note: creditNote.trim() }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(data?.error ?? "Failed to apply credit");
+        return;
+      }
+      setCreditApplied({
+        applied_cents: -(data.balance_cents as number),
+        balance_cents: -(data.ending_balance_cents as number),
+      });
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function revoke() {
     setBusy(true);
     setError(null);
@@ -130,13 +170,22 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
             <CreditCard className="w-5 h-5 text-sage" />
             <h3 className="font-semibold">Billing</h3>
           </div>
-          <Button
-            size="sm"
-            onClick={() => setShowRevoke(!showRevoke)}
-            className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 text-xs gap-1 h-7"
-          >
-            <Ban className="w-3 h-3" /> Revoke access
-          </Button>
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              size="sm"
+              onClick={() => { setShowCredit(!showCredit); setCreditApplied(null); }}
+              className="bg-gold/20 hover:bg-gold/40 text-gold border border-gold/30 text-xs gap-1 h-7"
+            >
+              <Gift className="w-3 h-3" /> Apply credit
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => setShowRevoke(!showRevoke)}
+              className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 text-xs gap-1 h-7"
+            >
+              <Ban className="w-3 h-3" /> Revoke access
+            </Button>
+          </div>
         </div>
 
         {activeSubscription ? (
@@ -318,6 +367,86 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {showCredit && (
+          <div className="glass-panel p-3 border border-gold/30 space-y-3 text-sm">
+            <p className="text-xs text-muted">
+              Apply a customer-balance credit on {memberName}&apos;s Stripe customer.
+              Auto-applied to their next invoice. Used for migration overlap (paid
+              via Xero and Stripe for the same period), goodwill gestures, etc.
+            </p>
+            {creditApplied ? (
+              <div className="space-y-2">
+                <p className="text-xs text-sage">
+                  ✓ Credited ${(creditApplied.applied_cents / 100).toFixed(2)}. New balance on
+                  Stripe customer: ${(creditApplied.balance_cents / 100).toFixed(2)} (credit toward
+                  next invoice).
+                </p>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setShowCredit(false);
+                    setCreditApplied(null);
+                    setCreditNote("");
+                  }}
+                  className="text-muted text-xs"
+                >
+                  Close
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-3 items-end">
+                  <div>
+                    <p className="text-xs text-muted mb-1">Amount</p>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs text-muted">$</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="500"
+                        step="1"
+                        value={creditDollars}
+                        onChange={(e) => setCreditDollars(e.target.value)}
+                        className="w-20 bg-white/5 border border-white/10 rounded px-2 py-1 text-sm focus:outline-none focus:border-gold/50"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-[180px]">
+                    <p className="text-xs text-muted mb-1">Reason (saved to Stripe)</p>
+                    <input
+                      type="text"
+                      value={creditNote}
+                      onChange={(e) => setCreditNote(e.target.value)}
+                      placeholder="e.g. 3-day Xero/Stripe overlap"
+                      className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-sm focus:outline-none focus:border-gold/50"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    disabled={busy}
+                    onClick={applyCredit}
+                    className="bg-gold/20 hover:bg-gold/40 text-gold border border-gold/30 text-xs gap-1 h-7"
+                  >
+                    {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Gift className="w-3 h-3" />}
+                    Apply ${parseFloat(creditDollars || "0") || 0} credit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setShowCredit(false)}
+                    className="text-muted text-xs h-7"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         )}
 
