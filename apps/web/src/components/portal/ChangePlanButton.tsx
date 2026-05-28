@@ -105,7 +105,7 @@ export function ChangePlanButton({ currentPlanKey, currentMonthlyCents, hasDisco
 
           <div className="pt-2 border-t border-white/5">
             <p className="text-xs text-muted">
-              Need a desk-tier change (Hot/Cold)? Reply to <a href="mailto:boulder.regenhub@gmail.com" className="text-sage hover:underline">boulder.regenhub@gmail.com</a> — those go through a quick conversation since they involve physical access.
+              Switching off a desk tier still needs an admin touch — email <a href="mailto:boulder.regenhub@gmail.com" className="text-sage hover:underline">boulder.regenhub@gmail.com</a> so we can reclaim your door code.
             </p>
           </div>
 

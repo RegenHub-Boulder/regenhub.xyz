@@ -48,7 +48,7 @@ export const PLANS = {
     defaultMonthlyCents: 50000,
     grantsMemberType: "cold_desk" as MemberType,
     productIdEnvKey: "STRIPE_PRODUCT_COLD_DESK",
-    selfServe: false,
+    selfServe: true,
     description: "Your own reserved desk + permanent door code + 24/7 access. Full cooperative path.",
   },
   hot_desk: {
@@ -56,7 +56,7 @@ export const PLANS = {
     defaultMonthlyCents: 25000,
     grantsMemberType: "hot_desk" as MemberType,
     productIdEnvKey: "STRIPE_PRODUCT_HOT_DESK",
-    selfServe: false,
+    selfServe: true,
     description: "Permanent door code + 24/7 access to any open desk.",
   },
   member_5day: {

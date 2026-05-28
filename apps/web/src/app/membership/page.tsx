@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { getSelfServePlans, PLANS } from "@/lib/stripe";
+import { getSelfServePlans } from "@/lib/stripe";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SubscribeButton } from "@/components/membership/SubscribeButton";
@@ -10,14 +10,23 @@ import { Check, Sparkles, ArrowRight } from "lucide-react";
 export const metadata: Metadata = {
   title: "Membership — RegenHub",
   description:
-    "Join the cooperative as a contributing member. Three tiers from $30/mo, monthly day passes, and member events.",
+    "Join the cooperative as a contributing member. Five tiers from $30/mo, including desk membership with 24/7 access.",
 };
 
-const PERKS = [
-  "Member-only events (at least one per month)",
+// Perks shown on every social tier card
+const SOCIAL_PERKS = [
   "Day passes at the member rate ($25 instead of $30)",
   "Monthly day passes accumulate — they never expire",
+  "Member-only events (at least one per month)",
   "Connection to the regenerative cooperative community",
+];
+
+// Perks shown on every desk tier card
+const DESK_PERKS = [
+  "Permanent door code, 24/7 access",
+  "Member-only events (at least one per month)",
+  "Guest day passes at the member rate ($25)",
+  "Path to co-op ownership",
 ];
 
 interface PageProps {
@@ -48,16 +57,18 @@ export default async function MembershipPage({ searchParams }: PageProps) {
         .maybeSingle(),
     ]);
     hasActiveSub = !!existingSub;
-    // If we have a member record, use its flag. If not, treat as unapproved
-    // (auto-creating a member at signup time isn't a path anymore — must
-    // come through freeday or admin add).
     approvedForMembership = existingMember?.approved_for_membership ?? false;
   }
   const showNotApprovedBanner = user !== null && approvedForMembership === false && !hasActiveSub;
 
-  const plans = getSelfServePlans();
-  const deskPlans = (Object.entries(PLANS) as Array<[keyof typeof PLANS, (typeof PLANS)[keyof typeof PLANS]]>)
-    .filter(([, def]) => !def.selfServe);
+  // Split self-serve plans into social ladder + desk tiers for separate layouts.
+  const allSelfServe = getSelfServePlans();
+  const socialPlans = allSelfServe.filter(
+    ({ def }) => def.grantsMemberType !== "cold_desk" && def.grantsMemberType !== "hot_desk",
+  );
+  const deskPlans = allSelfServe.filter(
+    ({ def }) => def.grantsMemberType === "cold_desk" || def.grantsMemberType === "hot_desk",
+  );
 
   return (
     <div className="min-h-screen px-6 py-12">
@@ -67,9 +78,11 @@ export default async function MembershipPage({ searchParams }: PageProps) {
             <Sparkles className="w-4 h-4" />
             RegenHub Membership
           </p>
-          <h1 className="text-4xl sm:text-5xl font-bold text-forest">Become a Contributing Member</h1>
+          <h1 className="text-4xl sm:text-5xl font-bold text-forest">Pick your tier</h1>
           <p className="text-muted max-w-2xl mx-auto">
-            Support the cooperative, get member pricing on day passes, and step into a community building economic democracy in Boulder.
+            Step into a cooperative building economic democracy in Boulder. Contributing tiers
+            ($30–$100/mo) support the space and unlock member events. Desk tiers ($250–$500/mo)
+            add a permanent door code and 24/7 access.
           </p>
         </header>
 
@@ -91,7 +104,6 @@ export default async function MembershipPage({ searchParams }: PageProps) {
           </div>
         )}
 
-        {/* Signed-in but not approved to subscribe yet */}
         {showNotApprovedBanner && (
           <div className="glass-panel p-5 border border-amber-500/30 max-w-2xl mx-auto text-center space-y-3">
             <p className="font-medium">Apply for membership first</p>
@@ -112,69 +124,133 @@ export default async function MembershipPage({ searchParams }: PageProps) {
           </div>
         )}
 
-        {/* Self-serve plans */}
+        {/* Contributing tiers ($30 / $50 / $100) */}
         {!hasActiveSub && (
-          <div className="grid md:grid-cols-3 gap-5">
-            {plans.map(({ key, def }, idx) => {
-              const isFeatured = key === "member_2day";
-              const dollars = def.defaultMonthlyCents / 100;
-              const passNote = def.monthlyDayPasses
-                ? `${def.monthlyDayPasses} day pass${def.monthlyDayPasses === 1 ? "" : "es"} credited monthly`
-                : "Buy day passes at the member rate";
-              return (
-                <Card
-                  key={key}
-                  className={`glass-panel relative ${isFeatured ? "border border-sage/40" : ""}`}
-                >
-                  {isFeatured && (
-                    <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-sage text-forest text-xs font-semibold px-3 py-0.5 rounded-full">
-                      Most popular
-                    </span>
-                  )}
-                  <CardContent className="p-6 space-y-5 flex flex-col h-full">
-                    <div>
-                      <p className="text-xs text-muted uppercase tracking-wider mb-1">Tier {idx + 1}</p>
-                      <h3 className="text-xl font-semibold text-forest">{def.label}</h3>
-                      <div className="flex items-baseline gap-1 mt-2">
-                        <span className="text-4xl font-bold text-gold">${dollars}</span>
-                        <span className="text-sm text-muted">/month</span>
-                      </div>
-                    </div>
-                    <p className="text-sm text-foreground/80">{def.description}</p>
-                    <div className="border-t border-white/10 pt-4 space-y-2 flex-1">
-                      {PERKS.map((p) => (
-                        <div key={p} className="flex items-start gap-2 text-sm">
-                          <Check className="w-4 h-4 text-sage shrink-0 mt-0.5" />
-                          <span className="text-muted">{p}</span>
+          <section className="space-y-5">
+            <div className="text-center">
+              <h2 className="text-2xl font-semibold text-forest">Contributing Member</h2>
+              <p className="text-sm text-muted mt-1">Support the cooperative + accumulate day passes</p>
+            </div>
+            <div className="grid md:grid-cols-3 gap-5">
+              {socialPlans.map(({ key, def }) => {
+                const isFeatured = key === "member_2day";
+                const dollars = def.defaultMonthlyCents / 100;
+                return (
+                  <Card
+                    key={key}
+                    className={`glass-panel relative ${isFeatured ? "border border-sage/40" : ""}`}
+                  >
+                    {isFeatured && (
+                      <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-sage text-forest text-xs font-semibold px-3 py-0.5 rounded-full">
+                        Most popular
+                      </span>
+                    )}
+                    <CardContent className="p-6 space-y-5 flex flex-col h-full">
+                      <div>
+                        <h3 className="text-xl font-semibold text-forest">{def.label}</h3>
+                        <div className="flex items-baseline gap-1 mt-2">
+                          <span className="text-4xl font-bold text-gold">${dollars}</span>
+                          <span className="text-sm text-muted">/month</span>
                         </div>
-                      ))}
-                      {def.monthlyDayPasses ? (
+                      </div>
+                      <p className="text-sm text-foreground/80">{def.description}</p>
+                      <div className="border-t border-white/10 pt-4 space-y-2 flex-1">
+                        {def.monthlyDayPasses ? (
+                          <div className="flex items-start gap-2 text-sm">
+                            <Check className="w-4 h-4 text-sage shrink-0 mt-0.5" />
+                            <span className="text-foreground font-medium">
+                              {def.monthlyDayPasses} day pass{def.monthlyDayPasses === 1 ? "" : "es"} credited monthly
+                            </span>
+                          </div>
+                        ) : null}
+                        {SOCIAL_PERKS.map((p) => (
+                          <div key={p} className="flex items-start gap-2 text-sm">
+                            <Check className="w-4 h-4 text-sage shrink-0 mt-0.5" />
+                            <span className="text-muted">{p}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {showNotApprovedBanner ? (
+                        <Link href="/freeday" className="block">
+                          <Button className={isFeatured ? "btn-primary-glass w-full" : "btn-glass w-full"}>
+                            Apply via free day →
+                          </Button>
+                        </Link>
+                      ) : (
+                        <SubscribeButton
+                          planKey={key}
+                          isAuthenticated={!!user}
+                          authedEmail={user?.email}
+                          cta={isFeatured ? "Subscribe — most popular" : "Subscribe"}
+                          className={isFeatured ? "btn-primary-glass w-full" : "btn-glass w-full"}
+                        />
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* Desk tiers ($250 / $500) */}
+        {!hasActiveSub && deskPlans.length > 0 && (
+          <section className="space-y-5 pt-4">
+            <div className="text-center">
+              <h2 className="text-2xl font-semibold text-forest">Desk Member</h2>
+              <p className="text-sm text-muted mt-1">Permanent door code + 24/7 access — limited availability</p>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-5 max-w-3xl mx-auto">
+              {deskPlans.map(({ key, def }) => {
+                const dollars = def.defaultMonthlyCents / 100;
+                const isCold = def.grantsMemberType === "cold_desk";
+                return (
+                  <Card key={key} className="glass-panel border border-forest/30">
+                    <CardContent className="p-6 space-y-5 flex flex-col h-full">
+                      <div>
+                        <h3 className="text-xl font-semibold text-forest">{def.label}</h3>
+                        <div className="flex items-baseline gap-1 mt-2">
+                          <span className="text-4xl font-bold text-gold">${dollars}</span>
+                          <span className="text-sm text-muted">/month</span>
+                        </div>
+                      </div>
+                      <p className="text-sm text-foreground/80">{def.description}</p>
+                      <div className="border-t border-white/10 pt-4 space-y-2 flex-1">
                         <div className="flex items-start gap-2 text-sm">
                           <Check className="w-4 h-4 text-sage shrink-0 mt-0.5" />
-                          <span className="text-foreground font-medium">{passNote}</span>
+                          <span className="text-foreground font-medium">
+                            {isCold ? "Your own reserved desk" : "Any open desk"}
+                          </span>
                         </div>
-                      ) : null}
-                    </div>
-                    {showNotApprovedBanner ? (
-                      <Link href="/freeday" className="block">
-                        <Button className={isFeatured ? "btn-primary-glass w-full" : "btn-glass w-full"}>
-                          Apply via free day →
-                        </Button>
-                      </Link>
-                    ) : (
-                      <SubscribeButton
-                        planKey={key}
-                        isAuthenticated={!!user}
-                        authedEmail={user?.email}
-                        cta={isFeatured ? "Subscribe — most popular" : "Subscribe"}
-                        className={isFeatured ? "btn-primary-glass w-full" : "btn-glass w-full"}
-                      />
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
+                        {DESK_PERKS.map((p) => (
+                          <div key={p} className="flex items-start gap-2 text-sm">
+                            <Check className="w-4 h-4 text-sage shrink-0 mt-0.5" />
+                            <span className="text-muted">{p}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {showNotApprovedBanner ? (
+                        <Link href="/freeday" className="block">
+                          <Button className="btn-glass w-full">Apply via free day →</Button>
+                        </Link>
+                      ) : (
+                        <SubscribeButton
+                          planKey={key}
+                          isAuthenticated={!!user}
+                          authedEmail={user?.email}
+                          cta={`Subscribe — ${def.label}`}
+                          className="btn-primary-glass w-full"
+                        />
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted text-center max-w-xl mx-auto">
+              Your permanent PIN gets auto-allocated on subscription. New desks are first-come, first-served — reach out if you want to chat about timing or sliding-scale rates.
+            </p>
+          </section>
         )}
 
         {/* Promo code hint */}
@@ -182,34 +258,6 @@ export default async function MembershipPage({ searchParams }: PageProps) {
           <p className="text-sm text-muted">
             Have a promotion code (cohort discount, trial, etc.)? Paste it on the Stripe checkout page after clicking Subscribe.
           </p>
-        </div>
-
-        {/* Desk membership note */}
-        <div className="border-t border-white/10 pt-10 space-y-5">
-          <h2 className="text-2xl font-semibold text-center text-forest">Looking for a desk?</h2>
-          <p className="text-sm text-muted text-center max-w-2xl mx-auto">
-            Desk memberships include a permanent door code and 24/7 access. Because the building has limited desks, these go through a quick application + conversation rather than instant checkout.
-          </p>
-          <div className="grid sm:grid-cols-2 gap-4 max-w-2xl mx-auto">
-            {deskPlans.map(([key, def]) => (
-              <Card key={key} className="glass-panel">
-                <CardContent className="p-5 space-y-2">
-                  <div className="flex items-baseline justify-between">
-                    <h3 className="font-semibold">{def.label}</h3>
-                    <span className="text-sm text-muted">${def.defaultMonthlyCents / 100}/mo</span>
-                  </div>
-                  <p className="text-xs text-muted">{def.description}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          <div className="text-center">
-            <Link href="/freeday">
-              <Button className="btn-glass gap-2">
-                Start with a free day visit <ArrowRight className="w-4 h-4" />
-              </Button>
-            </Link>
-          </div>
         </div>
 
         {/* Footer link */}

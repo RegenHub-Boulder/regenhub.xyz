@@ -11,14 +11,14 @@ interface ChangePlanBody {
 /**
  * POST /api/portal/change-plan
  *
- * Lets a contributing member swap between self-serve tiers ($30/$50/$100)
- * without admin involvement. Discounts attached to the subscription
- * (e.g. LVB cohort coupons) carry forward automatically — Stripe keeps
- * the coupon on the subscription across item changes.
+ * Lets a member swap to any self-serve tier — including desk tiers
+ * ($250/$500) — without admin involvement on the target side. Discounts
+ * attached to the subscription (e.g. LVB cohort coupons) carry forward
+ * automatically: Stripe keeps the coupon on the subscription across item
+ * changes.
  *
- * Desk tiers are NOT allowed here — they require admin approval because
- * of physical access. Switching FROM a desk tier is also blocked
- * (downgrades from desk happen via admin revoke + new approval).
+ * Switching FROM a desk tier IS blocked here — downgrading off a desk
+ * needs an admin touch to revoke the door code and free the PIN slot.
  *
  * Uses create_prorations so members aren't surprised by an immediate
  * charge; the difference shows up on their next renewal invoice.
@@ -43,7 +43,7 @@ export async function POST(req: Request) {
   }
   if (!target.selfServe) {
     return NextResponse.json(
-      { error: "Desk tier changes require admin approval — get in touch." },
+      { error: "That plan can't be picked self-serve — get in touch." },
       { status: 400 },
     );
   }
@@ -74,11 +74,17 @@ export async function POST(req: Request) {
     );
   }
 
-  // Block leaving a desk tier via self-serve (admin only)
+  // Block leaving a desk tier via self-serve — admins reclaim the door code
+  // and free the PIN slot, which the change-plan path doesn't do.
   const current = getPlan(sub.plan_key);
-  if (current && !current.selfServe) {
+  const onDesk =
+    current?.grantsMemberType === "cold_desk" || current?.grantsMemberType === "hot_desk";
+  if (onDesk) {
     return NextResponse.json(
-      { error: "Desk tier changes require admin approval — get in touch." },
+      {
+        error:
+          "Switching off a desk tier still needs an admin touch so we can reclaim your door code. Email boulder.regenhub@gmail.com.",
+      },
       { status: 400 },
     );
   }

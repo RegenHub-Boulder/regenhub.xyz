@@ -102,9 +102,8 @@ export function MembershipApprovalCard({
 
         <p className="text-sm text-muted">
           {approved
-            ? `${memberName} can self-serve subscribe to any contributing tier ($30 / $50 / $100) at /membership.`
-            : `${memberName} cannot subscribe to a contributing membership until approved.`}
-          {" "}Desk tier ($250 / $500) approvals still go through the application flow.
+            ? `${memberName} can self-serve subscribe to any tier ($30 / $50 / $100 / $250 / $500) at /membership. Desk tiers auto-allocate a PIN on activation.`
+            : `${memberName} cannot subscribe to a membership until approved.`}
         </p>
         <p className="text-xs text-muted italic">
           This gates whether they <em>can</em> subscribe.

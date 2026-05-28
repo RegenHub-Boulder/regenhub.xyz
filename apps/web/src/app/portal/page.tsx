@@ -10,7 +10,7 @@ import InviteCard from "@/components/portal/InviteCard";
 import { ManageSubscriptionButton } from "@/components/portal/ManageSubscriptionButton";
 import { ChangePlanButton } from "@/components/portal/ChangePlanButton";
 import { OnboardingChecklist } from "@/components/portal/OnboardingChecklist";
-import { planLabel } from "@/lib/plans";
+import { planLabel, getPlan } from "@/lib/plans";
 
 export default async function PortalPage() {
   const supabase = await createClient();
@@ -99,9 +99,14 @@ export default async function PortalPage() {
     activeSubscription = data;
   }
 
-  // Self-serve plans can swap themselves; desk tiers require admin
-  const SELF_SERVE_KEYS = new Set(["member_basic", "member_2day", "member_5day"]);
-  const canChangePlan = !!activeSubscription && SELF_SERVE_KEYS.has(activeSubscription.plan_key);
+  // Whether the member can swap plans via the in-portal change-plan flow.
+  // Source of truth is lib/plans.ts (selfServe flag). Members ON a desk tier
+  // are blocked at the route level since leaving a desk needs admin code revocation.
+  const currentPlanDef = activeSubscription ? getPlan(activeSubscription.plan_key) : null;
+  const onDesk =
+    currentPlanDef?.grantsMemberType === "cold_desk" ||
+    currentPlanDef?.grantsMemberType === "hot_desk";
+  const canChangePlan = !!activeSubscription && (currentPlanDef?.selfServe ?? false) && !onDesk;
 
   if (!member) {
     if (application) {
@@ -343,8 +348,7 @@ export default async function PortalPage() {
         </Card>
       )}
 
-      {/* Existing desk members who pre-date Stripe — need an admin-issued
-          checkout link since desk tiers aren't self-serve. */}
+      {/* Existing desk members who pre-date Stripe — now self-serve. */}
       {(member.member_type === "cold_desk" || member.member_type === "hot_desk") &&
         !activeSubscription && (
           <Card className="glass-panel border border-gold/30 bg-gold/[0.03]">
@@ -355,14 +359,15 @@ export default async function PortalPage() {
                   <h3 className="font-semibold mb-1">Set up automatic billing</h3>
                   <p className="text-sm text-muted mb-3">
                     You&apos;re a {typeLabel} member, but we haven&apos;t moved your billing to Stripe yet.
-                    Reach out and we&apos;ll send you a one-click subscription link to switch over.
+                    Pick your tier on the membership page to set up automatic monthly billing —
+                    one click and you&apos;re on the new system.
                   </p>
-                  <a href="mailto:boulder.regenhub@gmail.com?subject=Stripe%20billing%20setup">
-                    <Button className="btn-glass gap-2 text-sm">
-                      Email admin
+                  <Link href="/membership">
+                    <Button className="btn-primary-glass gap-2 text-sm">
+                      Choose a plan
                       <ArrowRight className="w-4 h-4" />
                     </Button>
-                  </a>
+                  </Link>
                 </div>
               </div>
             </CardContent>

@@ -20,9 +20,11 @@ interface SubscribeBody {
 /**
  * POST /api/membership/subscribe
  *
- * Self-serve subscription signup for the contributing-member ladder
- * (member_basic, member_2day, member_5day). Desk tiers ($250/$500) are
- * NOT allowed here — they require admin approval and go through /apply.
+ * Self-serve subscription signup for any tier flagged `selfServe` in
+ * lib/plans.ts — currently every tier from $30 Interim Member up to
+ * $500 Cold Desk. The only real gate is `approved_for_membership`:
+ * everyone needs to go through the free-day → approval flow before
+ * they can attach a card.
  *
  * Works for both authenticated and unauthenticated users:
  * - Authed: uses the linked member record
