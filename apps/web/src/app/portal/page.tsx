@@ -100,7 +100,7 @@ export default async function PortalPage() {
   }
 
   // Whether the member can swap plans via the in-portal change-plan flow.
-  // Source of truth is lib/plans.ts (selfServe flag). Members ON a desk tier
+  // Source of truth is lib/plans.ts (selfServe flag). Members ON a Full Access tier
   // are blocked at the route level since leaving a desk needs admin code revocation.
   const currentPlanDef = activeSubscription ? getPlan(activeSubscription.plan_key) : null;
   const onDesk =
@@ -382,17 +382,24 @@ export default async function PortalPage() {
             <div className="flex items-start gap-4">
               <Key className="w-7 h-7 text-sage shrink-0 mt-0.5" />
               <div>
-                <h3 className="font-semibold mb-1">Ready for a permanent desk?</h3>
+                <h3 className="font-semibold mb-1">Ready to become a Member?</h3>
                 <p className="text-sm text-muted mb-3">
-                  Members get a permanent door code, 24/7 access, and a path to co-op ownership.
-                  Hot Desk is $250/month, Cold Desk (reserved) is $500/month.
+                  Members get day passes, member-rate pricing, and a path to co-op ownership.
+                  Full Access tiers ($250 Hot Desk / $500 Cold Desk) add a permanent door code and 24/7 access.
                 </p>
-                <Link href="/freeday">
-                  <Button className="btn-glass gap-2 text-sm">
-                    Apply for membership
-                    <ArrowRight className="w-4 h-4" />
-                  </Button>
-                </Link>
+                <div className="flex gap-2 flex-wrap">
+                  <Link href="/apply">
+                    <Button className="btn-primary-glass gap-2 text-sm">
+                      Apply to join
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  </Link>
+                  <Link href="/freeday">
+                    <Button className="btn-glass gap-2 text-sm">
+                      Try a free day first
+                    </Button>
+                  </Link>
+                </div>
               </div>
             </div>
           </CardContent>

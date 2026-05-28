@@ -103,7 +103,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error:
-          "Desk tiers need an extra approval step. Apply at /apply (or reach out to boulder.regenhub@gmail.com) and we'll set it up.",
+          "Full Access tiers (Hot/Cold Desk) need an extra welcome chat. Apply at /apply or reach out to boulder.regenhub@gmail.com and we'll get you set up.",
       },
       { status: 403 },
     );

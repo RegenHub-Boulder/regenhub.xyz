@@ -86,8 +86,8 @@ export default async function MembershipPage({ searchParams }: PageProps) {
           <h1 className="text-4xl sm:text-5xl font-bold text-forest">Pick your tier</h1>
           <p className="text-muted max-w-2xl mx-auto">
             Step into a cooperative building economic democracy in Boulder. Contributing tiers
-            ($30–$100/mo) support the space and unlock member events. Desk tiers ($250–$500/mo)
-            add a permanent door code and 24/7 access.
+            ($30–$100/mo) support the space and unlock member events. Full Access ($250–$500/mo)
+            adds a permanent door code and 24/7 access.
           </p>
         </header>
 
@@ -131,19 +131,19 @@ export default async function MembershipPage({ searchParams }: PageProps) {
 
         {showDeskGate && (
           <div className="glass-panel p-5 border border-gold/30 max-w-2xl mx-auto text-center space-y-3">
-            <p className="font-medium">Desk tiers need one more step</p>
+            <p className="font-medium">Full Access needs one more step</p>
             <p className="text-sm text-muted">
-              You&apos;re cleared for the Contributing Member tiers below. Desk tiers
-              ($250 Hot Desk / $500 Cold Desk) involve a dedicated spot, so they get an
-              extra admin review — reach out and we&apos;ll get you set up.
+              You&apos;re cleared for the Contributing Member tiers below. Full Access
+              ($250 Hot Desk / $500 Cold Desk) involves 24/7 access + a permanent door
+              code, so we set up a quick chat first — reach out and we&apos;ll get you welcomed in.
             </p>
             <div className="flex gap-3 justify-center flex-wrap">
               <Link href="/apply">
                 <Button className="btn-primary-glass gap-2">
-                  Request desk approval <ArrowRight className="w-4 h-4" />
+                  Request Full Access <ArrowRight className="w-4 h-4" />
                 </Button>
               </Link>
-              <a href="mailto:boulder.regenhub@gmail.com?subject=Desk%20membership">
+              <a href="mailto:boulder.regenhub@gmail.com?subject=Full%20Access%20membership">
                 <Button className="btn-glass">Email us</Button>
               </a>
             </div>
@@ -219,11 +219,11 @@ export default async function MembershipPage({ searchParams }: PageProps) {
           </section>
         )}
 
-        {/* Desk tiers ($250 / $500) */}
+        {/* Full Access tiers ($250 / $500) */}
         {!hasActiveSub && deskPlans.length > 0 && (
           <section className="space-y-5 pt-4">
             <div className="text-center">
-              <h2 className="text-2xl font-semibold text-forest">Desk Member</h2>
+              <h2 className="text-2xl font-semibold text-forest">Full Access</h2>
               <p className="text-sm text-muted mt-1">Permanent door code + 24/7 access — limited availability</p>
             </div>
             <div className="grid sm:grid-cols-2 gap-5 max-w-3xl mx-auto">
@@ -261,7 +261,7 @@ export default async function MembershipPage({ searchParams }: PageProps) {
                         </Link>
                       ) : showDeskGate ? (
                         <Link href="/apply" className="block">
-                          <Button className="btn-glass w-full">Request desk approval →</Button>
+                          <Button className="btn-glass w-full">Request Full Access →</Button>
                         </Link>
                       ) : (
                         <SubscribeButton
@@ -278,7 +278,7 @@ export default async function MembershipPage({ searchParams }: PageProps) {
               })}
             </div>
             <p className="text-xs text-muted text-center max-w-xl mx-auto">
-              Your permanent PIN gets auto-allocated on subscription. New desks are first-come, first-served — reach out if you want to chat about timing or sliding-scale rates.
+              Your permanent PIN gets auto-allocated on subscription. Cold Desks are first-come, first-served — reach out if you want to chat about timing or sliding-scale rates.
             </p>
           </section>
         )}

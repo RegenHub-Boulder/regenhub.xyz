@@ -16,8 +16,8 @@ const ACCESS_OPTIONS = [
   { value: "member_basic", label: "Member + 1 day/mo ($30/mo)", desc: "Member access + 1 coworking day per month (passes accumulate) + member rate on additional day passes" },
   { value: "member_2day", label: "Member + 2 days/mo ($50/mo)", desc: "Member access plus 2 days of coworking per month, auto-credited" },
   { value: "member_5day", label: "Member + 5 days/mo ($100/mo)", desc: "Member access plus 5 days of coworking per month, auto-credited" },
-  { value: "hot_desk", label: "Hot Desk ($250/mo)", desc: "Permanent door code, 24/7 access, full membership benefits" },
-  { value: "reserved_desk", label: "Cold Desk — Reserved ($500/mo)", desc: "Your own dedicated desk, always available, full cooperative membership" },
+  { value: "hot_desk", label: "Full Access — Hot Desk ($250/mo)", desc: "Permanent door code, 24/7 access to any open desk. We'll reach out for a quick chat before activating — Full Access is a deeper commitment." },
+  { value: "reserved_desk", label: "Full Access — Cold Desk ($500/mo)", desc: "Your own reserved desk + permanent door code + 24/7 access. We'll reach out for a quick chat before activating — Full Access is a deeper commitment." },
 ] as const;
 
 type Props = {

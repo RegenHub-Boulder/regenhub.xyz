@@ -269,6 +269,7 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
                 { label: "Telegram", href: "https://t.me/+Mg1PLuT9pX9mMGVh", external: true },
                 { label: "Email", href: "mailto:boulder.regenhub@gmail.com", external: false },
                 { label: "Free Day", href: "/freeday", external: false },
+                { label: "Apply", href: "/apply", external: false },
                 { label: "Stay in Touch", href: "/interest", external: false },
                 { label: "Events", href: "https://lu.ma/regenhub", external: true },
                 { label: "Portal", href: "/portal", external: false },

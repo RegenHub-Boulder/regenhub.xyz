@@ -11,8 +11,8 @@ const interestLabels: Record<string, string> = {
   daypass_5pack: "5-Pack Day Passes (legacy)",
   social_events_1: "Social — 1 day/mo (legacy)",
   social_events_5: "Social — 5 days/mo (legacy)",
-  hot_desk: "Hot Desk",
-  reserved_desk: "Cold Desk",
+  hot_desk: "Full Access — Hot Desk",
+  reserved_desk: "Full Access — Cold Desk",
   community: "Community",
 };
 

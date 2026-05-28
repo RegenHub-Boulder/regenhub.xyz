@@ -142,11 +142,11 @@ export function MembershipApprovalCard({
           </Button>
         </div>
 
-        {/* Desk approval row */}
+        {/* Full Access approval row (Hot $250 / Cold $500) */}
         <div className="space-y-3 pt-3 border-t border-white/5">
           <div className="flex items-center gap-2 flex-wrap">
             <Armchair className="w-4 h-4 text-gold" />
-            <p className="text-sm font-medium">Desk (Hot $250 / Cold $500)</p>
+            <p className="text-sm font-medium">Full Access (Hot $250 / Cold $500)</p>
             {approvedForDesk ? (
               <Badge className="text-xs bg-gold/20 text-gold border-gold/30">Approved</Badge>
             ) : (
@@ -154,8 +154,9 @@ export function MembershipApprovalCard({
             )}
           </div>
           <p className="text-xs text-muted">
-            Granting desk approval also grants membership approval (the more permissive flag).
-            Desk subs auto-allocate a PIN slot on Stripe activation.
+            Grant after the welcome chat. Full Access approval also grants membership
+            approval (the more permissive flag). Subscriptions auto-allocate a PIN slot
+            on Stripe activation.
           </p>
           {approvedForDesk && approvedForDeskAt && (
             <p className="text-xs text-muted">
@@ -174,7 +175,7 @@ export function MembershipApprovalCard({
             }
           >
             {busy === "toggleDesk" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Armchair className="w-3 h-3" />}
-            {approvedForDesk ? "Revoke desk approval" : "Approve for desk"}
+            {approvedForDesk ? "Revoke Full Access approval" : "Approve for Full Access"}
           </Button>
         </div>
 

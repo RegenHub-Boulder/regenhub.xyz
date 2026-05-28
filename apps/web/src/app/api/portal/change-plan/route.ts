@@ -83,7 +83,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error:
-          "Switching off a desk tier still needs an admin touch so we can reclaim your door code. Email boulder.regenhub@gmail.com.",
+          "Switching off Full Access still needs an admin touch so we can reclaim your door code. Email boulder.regenhub@gmail.com.",
       },
       { status: 400 },
     );
