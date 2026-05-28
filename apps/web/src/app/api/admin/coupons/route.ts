@@ -78,9 +78,14 @@ type PromoNewShape = Stripe.PromotionCode & {
 
 function toView(pc: PromoNewShape): AdminCouponView | null {
   const couponRef = pc.promotion?.coupon;
-  // Skip if not expanded (string) or missing entirely (orphan, deleted, etc.)
-  const c = typeof couponRef === "object" && couponRef !== null ? couponRef : null;
-  if (!c) return null;
+  // Skip if:
+  //   - not expanded (string, just the id)
+  //   - missing entirely (orphan)
+  //   - Stripe returned the "deleted stub": { id, object, deleted: true }
+  //     (the stub has no amount/duration so we can't render a useful row)
+  if (typeof couponRef !== "object" || couponRef === null) return null;
+  if ((couponRef as { deleted?: boolean }).deleted === true) return null;
+  const c = couponRef;
   const productIds: string[] = c.applies_to?.products ?? [];
   const planKeys = productIds.map(productIdToPlanKey).filter((k): k is string => !!k);
   return {
