@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Ticket, Plus, Loader2, X } from "lucide-react";
+import { Ticket, Plus, Loader2, X, Trash2 } from "lucide-react";
 import { CollapsibleSection } from "@/components/admin/CollapsibleSection";
 import { getAllPlansSorted } from "@/lib/plans";
 import type { AdminCouponView } from "@/app/api/admin/coupons/route";
@@ -34,6 +34,10 @@ export function CouponsSection() {
   const [createErr, setCreateErr] = useState<string | null>(null);
 
   // Form state
+  // Track which row is in "are you sure?" delete mode (promo id)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
   const [code, setCode] = useState("");
   const [discountType, setDiscountType] = useState<"amount" | "percent">("amount");
   const [amount, setAmount] = useState("");
@@ -127,6 +131,27 @@ export function CouponsSection() {
     }
   }
 
+  async function deleteCode(promoId: string) {
+    setDeletingId(promoId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/coupons/${promoId}`, { method: "DELETE" });
+      const raw = await res.text();
+      let data: { error?: string } | null = null;
+      if (raw) {
+        try { data = JSON.parse(raw); } catch { /* keep null */ }
+      }
+      if (!res.ok) {
+        setError(data?.error ?? `HTTP ${res.status}${raw ? `: ${raw.slice(0, 120)}` : ""}`);
+        return;
+      }
+      setConfirmDeleteId(null);
+      load();
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   async function toggleActive(promoId: string, next: boolean) {
     try {
       const res = await fetch(`/api/admin/coupons/${promoId}`, {
@@ -216,14 +241,51 @@ export function CouponsSection() {
                         )}
                       </td>
                       <td className="py-2 px-2 text-right">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => toggleActive(c.promotion_code_id, !c.active)}
-                          className="text-xs h-6 px-2 text-muted hover:text-foreground"
-                        >
-                          {c.active ? "Deactivate" : "Reactivate"}
-                        </Button>
+                        {confirmDeleteId === c.promotion_code_id ? (
+                          <div className="flex items-center gap-1 justify-end">
+                            <span className="text-xs text-red-400 mr-1">Delete?</span>
+                            <Button
+                              size="sm"
+                              disabled={deletingId === c.promotion_code_id}
+                              onClick={() => deleteCode(c.promotion_code_id)}
+                              className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 text-xs h-6 px-2"
+                            >
+                              {deletingId === c.promotion_code_id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                "Confirm"
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="text-xs h-6 px-2 text-muted"
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 justify-end">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => toggleActive(c.promotion_code_id, !c.active)}
+                              className="text-xs h-6 px-2 text-muted hover:text-foreground"
+                            >
+                              {c.active ? "Deactivate" : "Reactivate"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setConfirmDeleteId(c.promotion_code_id)}
+                              className="text-xs h-6 px-2 text-muted hover:text-red-400"
+                              title="Delete the underlying coupon — irreversible"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}
