@@ -40,26 +40,31 @@ export default async function MembershipPage({ searchParams }: PageProps) {
   const wasCancelled = params.cancelled === "1";
 
   // Pre-check: signed-in user state determines what CTAs to show.
+  // IMPORTANT: filter the subscription lookup by member_id explicitly.
+  // RLS's admin policy returns ALL subscriptions, so an unfiltered query
+  // would falsely report "you already have a membership" when an admin
+  // visits this page without their own subscription.
   let hasActiveSub = false;
   let approvedForMembership: boolean | null = null; // null = unauthed; UI shows generic CTA
   let approvedForDesk = false;
   if (user) {
-    const [{ data: existingSub }, { data: existingMember }] = await Promise.all([
-      supabase
-        .from("subscriptions")
-        .select("id")
-        .in("status", ["active", "trialing", "past_due", "incomplete"])
-        .limit(1)
-        .maybeSingle(),
-      supabase
-        .from("members")
-        .select("approved_for_membership, approved_for_desk")
-        .eq("supabase_user_id", user.id)
-        .maybeSingle(),
-    ]);
-    hasActiveSub = !!existingSub;
+    const { data: existingMember } = await supabase
+      .from("members")
+      .select("id, approved_for_membership, approved_for_desk")
+      .eq("supabase_user_id", user.id)
+      .maybeSingle();
     approvedForMembership = existingMember?.approved_for_membership ?? false;
     approvedForDesk = existingMember?.approved_for_desk ?? false;
+    if (existingMember?.id) {
+      const { data: existingSub } = await supabase
+        .from("subscriptions")
+        .select("id")
+        .eq("member_id", existingMember.id)
+        .in("status", ["active", "trialing", "past_due", "incomplete"])
+        .limit(1)
+        .maybeSingle();
+      hasActiveSub = !!existingSub;
+    }
   }
   const showNotApprovedBanner = user !== null && approvedForMembership === false && !hasActiveSub;
   // Show desk-not-approved card only when they ARE approved for membership
