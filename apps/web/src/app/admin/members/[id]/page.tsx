@@ -54,16 +54,26 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
 
   const pastDue = activeSubscription?.status === "past_due";
 
-  // Resolve the admin who approved this member for membership (if any) for audit display
-  let approvedByName: string | null = null;
-  if (member.approved_for_membership_by) {
-    const { data: approver } = await supabase
+  // Resolve approver names (membership + desk) for audit display
+  const approverIds = [
+    member.approved_for_membership_by,
+    member.approved_for_desk_by,
+  ].filter((id): id is number => typeof id === "number");
+  const uniqueApproverIds = Array.from(new Set(approverIds));
+  let approverNameMap = new Map<number, string>();
+  if (uniqueApproverIds.length > 0) {
+    const { data: approvers } = await supabase
       .from("members")
-      .select("name")
-      .eq("id", member.approved_for_membership_by)
-      .maybeSingle();
-    approvedByName = approver?.name ?? null;
+      .select("id, name")
+      .in("id", uniqueApproverIds);
+    approverNameMap = new Map((approvers ?? []).map((a) => [a.id, a.name]));
   }
+  const approvedByName = member.approved_for_membership_by
+    ? approverNameMap.get(member.approved_for_membership_by) ?? null
+    : null;
+  const approvedForDeskByName = member.approved_for_desk_by
+    ? approverNameMap.get(member.approved_for_desk_by) ?? null
+    : null;
 
   const memberTypeLabel =
     member.member_type === "cold_desk" ? "Cold Desk"
@@ -161,6 +171,9 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
                 approved={member.approved_for_membership}
                 approvedAt={member.approved_for_membership_at}
                 approvedByName={approvedByName}
+                approvedForDesk={member.approved_for_desk}
+                approvedForDeskAt={member.approved_for_desk_at}
+                approvedForDeskByName={approvedForDeskByName}
                 hasActiveSubscription={!!activeSubscription}
               />
             </>

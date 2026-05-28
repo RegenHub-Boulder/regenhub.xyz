@@ -42,6 +42,7 @@ export default async function MembershipPage({ searchParams }: PageProps) {
   // Pre-check: signed-in user state determines what CTAs to show.
   let hasActiveSub = false;
   let approvedForMembership: boolean | null = null; // null = unauthed; UI shows generic CTA
+  let approvedForDesk = false;
   if (user) {
     const [{ data: existingSub }, { data: existingMember }] = await Promise.all([
       supabase
@@ -52,14 +53,18 @@ export default async function MembershipPage({ searchParams }: PageProps) {
         .maybeSingle(),
       supabase
         .from("members")
-        .select("approved_for_membership")
+        .select("approved_for_membership, approved_for_desk")
         .eq("supabase_user_id", user.id)
         .maybeSingle(),
     ]);
     hasActiveSub = !!existingSub;
     approvedForMembership = existingMember?.approved_for_membership ?? false;
+    approvedForDesk = existingMember?.approved_for_desk ?? false;
   }
   const showNotApprovedBanner = user !== null && approvedForMembership === false && !hasActiveSub;
+  // Show desk-not-approved card only when they ARE approved for membership
+  // but not yet for desks — otherwise the generic not-approved banner covers it.
+  const showDeskGate = user !== null && approvedForMembership === true && !approvedForDesk && !hasActiveSub;
 
   // Split self-serve plans into social ladder + desk tiers for separate layouts.
   const allSelfServe = getSelfServePlans();
@@ -106,18 +111,39 @@ export default async function MembershipPage({ searchParams }: PageProps) {
 
         {showNotApprovedBanner && (
           <div className="glass-panel p-5 border border-amber-500/30 max-w-2xl mx-auto text-center space-y-3">
-            <p className="font-medium">Apply for membership first</p>
+            <p className="font-medium">Apply to join first</p>
             <p className="text-sm text-muted">
               We approve membership signups manually so we can welcome each member personally.
-              Start with a free day visit (best way to meet us!) or reach out via email if you&apos;ve already connected.
+              Apply directly, or try a free day visit first.
             </p>
             <div className="flex gap-3 justify-center flex-wrap">
-              <Link href="/freeday">
+              <Link href="/apply">
                 <Button className="btn-primary-glass gap-2">
-                  Claim a free day <ArrowRight className="w-4 h-4" />
+                  Apply to join <ArrowRight className="w-4 h-4" />
                 </Button>
               </Link>
-              <a href="mailto:boulder.regenhub@gmail.com?subject=Membership approval">
+              <Link href="/freeday">
+                <Button className="btn-glass">Try a free day first</Button>
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {showDeskGate && (
+          <div className="glass-panel p-5 border border-gold/30 max-w-2xl mx-auto text-center space-y-3">
+            <p className="font-medium">Desk tiers need one more step</p>
+            <p className="text-sm text-muted">
+              You&apos;re cleared for the Contributing Member tiers below. Desk tiers
+              ($250 Hot Desk / $500 Cold Desk) involve a dedicated spot, so they get an
+              extra admin review — reach out and we&apos;ll get you set up.
+            </p>
+            <div className="flex gap-3 justify-center flex-wrap">
+              <Link href="/apply">
+                <Button className="btn-primary-glass gap-2">
+                  Request desk approval <ArrowRight className="w-4 h-4" />
+                </Button>
+              </Link>
+              <a href="mailto:boulder.regenhub@gmail.com?subject=Desk%20membership">
                 <Button className="btn-glass">Email us</Button>
               </a>
             </div>
@@ -171,9 +197,9 @@ export default async function MembershipPage({ searchParams }: PageProps) {
                         ))}
                       </div>
                       {showNotApprovedBanner ? (
-                        <Link href="/freeday" className="block">
+                        <Link href="/apply" className="block">
                           <Button className={isFeatured ? "btn-primary-glass w-full" : "btn-glass w-full"}>
-                            Apply via free day →
+                            Apply to join →
                           </Button>
                         </Link>
                       ) : (
@@ -230,8 +256,12 @@ export default async function MembershipPage({ searchParams }: PageProps) {
                         ))}
                       </div>
                       {showNotApprovedBanner ? (
-                        <Link href="/freeday" className="block">
-                          <Button className="btn-glass w-full">Apply via free day →</Button>
+                        <Link href="/apply" className="block">
+                          <Button className="btn-glass w-full">Apply to join →</Button>
+                        </Link>
+                      ) : showDeskGate ? (
+                        <Link href="/apply" className="block">
+                          <Button className="btn-glass w-full">Request desk approval →</Button>
                         </Link>
                       ) : (
                         <SubscribeButton

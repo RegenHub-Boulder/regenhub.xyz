@@ -107,6 +107,9 @@ export interface Database {
           approved_for_membership: boolean;
           approved_for_membership_at: string | null;
           approved_for_membership_by: number | null;
+          approved_for_desk: boolean;
+          approved_for_desk_at: string | null;
+          approved_for_desk_by: number | null;
           created_at: string;
           updated_at: string;
         };

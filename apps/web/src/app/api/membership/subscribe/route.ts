@@ -83,22 +83,35 @@ export async function POST(req: Request) {
   // by admin manually). If no record, return a friendly "please apply" msg.
   const { data: member } = await admin
     .from("members")
-    .select("id, name, email, stripe_customer_id, member_type, supabase_user_id, approved_for_membership")
+    .select("id, name, email, stripe_customer_id, member_type, supabase_user_id, approved_for_membership, approved_for_desk")
     .eq("email", memberEmail)
     .maybeSingle();
 
   if (!member) {
     return NextResponse.json(
       {
-        error: "We don't have a record for that email yet. Start with a free day at /freeday or reach out to boulder.regenhub@gmail.com.",
+        error: "We don't have a record for that email yet. Apply at /apply or start with a free day at /freeday.",
       },
       { status: 403 },
     );
   }
-  if (!member.approved_for_membership) {
+
+  // Three-level gate: membership for social tiers, desk for desk tiers.
+  const isDeskTier =
+    plan.grantsMemberType === "cold_desk" || plan.grantsMemberType === "hot_desk";
+  if (isDeskTier && !member.approved_for_desk) {
     return NextResponse.json(
       {
-        error: "This email isn't approved for membership yet. Reach out to boulder.regenhub@gmail.com — we'll get you set up.",
+        error:
+          "Desk tiers need an extra approval step. Apply at /apply (or reach out to boulder.regenhub@gmail.com) and we'll set it up.",
+      },
+      { status: 403 },
+    );
+  }
+  if (!isDeskTier && !member.approved_for_membership) {
+    return NextResponse.json(
+      {
+        error: "This email isn't approved for membership yet. Apply at /apply or reach out to boulder.regenhub@gmail.com.",
       },
       { status: 403 },
     );
