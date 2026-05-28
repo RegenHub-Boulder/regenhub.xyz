@@ -47,12 +47,19 @@ export function CouponsSection() {
     setError(null);
     try {
       const res = await fetch("/api/admin/coupons");
-      const data = await res.json();
+      // Read as text first so a non-JSON body (HTML error page, empty stream
+      // from a mid-response crash) surfaces as a real status code instead of
+      // the cryptic "Unexpected end of JSON input".
+      const raw = await res.text();
+      let data: { codes?: AdminCouponView[]; error?: string } | null = null;
+      if (raw) {
+        try { data = JSON.parse(raw); } catch { /* keep null */ }
+      }
       if (!res.ok) {
-        setError(data?.error ?? "Failed to load");
+        setError(data?.error ?? `HTTP ${res.status}${raw ? `: ${raw.slice(0, 120)}` : ""}`);
         return;
       }
-      setCodes(data.codes);
+      setCodes(data?.codes ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
     }
@@ -103,9 +110,13 @@ export function CouponsSection() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
+      const raw = await res.text();
+      let data: { error?: string } | null = null;
+      if (raw) {
+        try { data = JSON.parse(raw); } catch { /* keep null */ }
+      }
       if (!res.ok) {
-        setCreateErr(data?.error ?? "Create failed");
+        setCreateErr(data?.error ?? `HTTP ${res.status}${raw ? `: ${raw.slice(0, 120)}` : ""}`);
         return;
       }
       resetForm();
@@ -124,8 +135,12 @@ export function CouponsSection() {
         body: JSON.stringify({ active: next }),
       });
       if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        setError(data?.error ?? "Update failed");
+        const raw = await res.text();
+        let data: { error?: string } | null = null;
+        if (raw) {
+          try { data = JSON.parse(raw); } catch { /* keep null */ }
+        }
+        setError(data?.error ?? `HTTP ${res.status}${raw ? `: ${raw.slice(0, 120)}` : ""}`);
         return;
       }
       load();

@@ -68,11 +68,14 @@ function summarize(planKeys: string[]): string {
 }
 
 // Stripe v20 doesn't surface .coupon on PromotionCode in types even after expand;
-// we know it's there because we passed expand: ["data.coupon"] on list().
-type PromoWithCoupon = Stripe.PromotionCode & { coupon: Stripe.Coupon };
+// we pass expand: ["data.coupon"] but a code's coupon CAN come back undefined
+// when the underlying coupon was deleted (orphan), so toView returns null in
+// that case and the caller filters.
+type PromoMaybeCoupon = Stripe.PromotionCode & { coupon?: Stripe.Coupon };
 
-function toView(pc: PromoWithCoupon): AdminCouponView {
+function toView(pc: PromoMaybeCoupon): AdminCouponView | null {
   const c = pc.coupon;
+  if (!c) return null;
   const productIds: string[] = c.applies_to?.products ?? [];
   const planKeys = productIds.map(productIdToPlanKey).filter((k): k is string => !!k);
   return {
@@ -107,16 +110,25 @@ export async function GET() {
   const auth = await requireAdmin();
   if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-  const stripe = getStripe();
-  const list = await stripe.promotionCodes.list({ limit: 100, expand: ["data.coupon"] });
-  // Sort: active first, then by created desc
-  const views = (list.data as PromoWithCoupon[])
-    .map(toView)
-    .sort((a, b) => {
-      if (a.active !== b.active) return a.active ? -1 : 1;
-      return b.created_at.localeCompare(a.created_at);
+  try {
+    const stripe = getStripe();
+    const list = await stripe.promotionCodes.list({
+      limit: 100,
+      expand: ["data.coupon"],
     });
-  return NextResponse.json({ codes: views });
+    const views = (list.data as PromoMaybeCoupon[])
+      .map(toView)
+      .filter((v): v is AdminCouponView => v !== null)
+      .sort((a, b) => {
+        if (a.active !== b.active) return a.active ? -1 : 1;
+        return b.created_at.localeCompare(a.created_at);
+      });
+    return NextResponse.json({ codes: views });
+  } catch (err) {
+    console.error("[Coupons list] error:", err);
+    const msg = err instanceof Error ? err.message : "Failed to list promo codes";
+    return NextResponse.json({ error: msg }, { status: 502 });
+  }
 }
 
 interface CreateBody {
