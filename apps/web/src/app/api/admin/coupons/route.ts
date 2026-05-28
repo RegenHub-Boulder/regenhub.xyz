@@ -67,14 +67,19 @@ function summarize(planKeys: string[]): string {
     .join(", ");
 }
 
-// Stripe v20 doesn't surface .coupon on PromotionCode in types even after expand;
-// we pass expand: ["data.coupon"] but a code's coupon CAN come back undefined
-// when the underlying coupon was deleted (orphan), so toView returns null in
-// that case and the caller filters.
-type PromoMaybeCoupon = Stripe.PromotionCode & { coupon?: Stripe.Coupon };
+// The Stripe API now nests the coupon under a `promotion` wrapper:
+//   pc.promotion = { type: 'coupon', coupon: '<id or Coupon>' }
+// The TS types still expose the deprecated top-level `coupon` field, so we
+// declare the real shape and read from there. We expand `data.promotion.coupon`
+// on the list call to inline the full Coupon object.
+type PromoNewShape = Stripe.PromotionCode & {
+  promotion?: { type: "coupon"; coupon?: string | Stripe.Coupon };
+};
 
-function toView(pc: PromoMaybeCoupon): AdminCouponView | null {
-  const c = pc.coupon;
+function toView(pc: PromoNewShape): AdminCouponView | null {
+  const couponRef = pc.promotion?.coupon;
+  // Skip if not expanded (string) or missing entirely (orphan, deleted, etc.)
+  const c = typeof couponRef === "object" && couponRef !== null ? couponRef : null;
   if (!c) return null;
   const productIds: string[] = c.applies_to?.products ?? [];
   const planKeys = productIds.map(productIdToPlanKey).filter((k): k is string => !!k);
@@ -114,9 +119,9 @@ export async function GET() {
     const stripe = getStripe();
     const list = await stripe.promotionCodes.list({
       limit: 100,
-      expand: ["data.coupon"],
+      expand: ["data.promotion.coupon"],
     });
-    const views = (list.data as PromoMaybeCoupon[])
+    const views = (list.data as PromoNewShape[])
       .map(toView)
       .filter((v): v is AdminCouponView => v !== null)
       .sort((a, b) => {
