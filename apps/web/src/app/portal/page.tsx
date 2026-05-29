@@ -10,6 +10,8 @@ import InviteCard from "@/components/portal/InviteCard";
 import { ManageSubscriptionButton } from "@/components/portal/ManageSubscriptionButton";
 import { ChangePlanButton } from "@/components/portal/ChangePlanButton";
 import { OnboardingChecklist } from "@/components/portal/OnboardingChecklist";
+import { HubActivityCard } from "@/components/portal/HubActivityCard";
+import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { planLabel, getPlan } from "@/lib/plans";
 
 export default async function PortalPage() {
@@ -98,6 +100,47 @@ export default async function PortalPage() {
       .maybeSingle();
     activeSubscription = data;
   }
+
+  // Hub activity counts for the "what's happening today" card. When the HA
+  // → /api/access-events bridge starts firing, access_logs gets the real
+  // signal; until then we fall back to day_codes counts as the best-we-have.
+  /* eslint-disable react-hooks/purity -- server component, renders once per request */
+  const dayStartIso = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.toISOString(); })();
+  const sixHoursAgoIso = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+  const nowIso = new Date().toISOString();
+  /* eslint-enable react-hooks/purity */
+  const adminClient = createServiceClient();
+  const [
+    { count: activeGuestCodes },
+    { count: guestCodesToday },
+    { count: fullMembersCount },
+    { data: hereNowRows },
+  ] = await Promise.all([
+    supabase
+      .from("day_codes")
+      .select("*", { count: "exact", head: true })
+      .eq("is_active", true)
+      .gt("expires_at", nowIso),
+    supabase
+      .from("day_codes")
+      .select("*", { count: "exact", head: true })
+      .gte("issued_at", dayStartIso),
+    supabase
+      .from("members")
+      .select("*", { count: "exact", head: true })
+      .eq("disabled", false)
+      .in("member_type", ["cold_desk", "hot_desk", "hub_friend"]),
+    // Distinct members who unlocked in the last 6 hours — true "here now"
+    // signal. Uses service client because access_logs RLS hides other
+    // members from the authed user.
+    adminClient
+      .from("access_logs")
+      .select("member_id")
+      .eq("result", "granted")
+      .gte("created_at", sixHoursAgoIso)
+      .not("member_id", "is", null),
+  ]);
+  const hereNowCount = new Set((hereNowRows ?? []).map((r) => r.member_id)).size;
 
   // Whether the member can swap plans via the in-portal change-plan flow.
   // Source of truth is lib/plans.ts (selfServe flag). Members ON a Full Access tier
@@ -214,6 +257,15 @@ export default async function PortalPage() {
           hasTelegram={!!member.telegram_username}
         />
       )}
+
+      <HubActivityCard
+        hereNow={hereNowCount}
+        activeGuestCodes={activeGuestCodes ?? 0}
+        guestCodesToday={guestCodesToday ?? 0}
+        fullMembers={fullMembersCount ?? 0}
+      />
+
+      <InstallPrompt />
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {isFullMember && (

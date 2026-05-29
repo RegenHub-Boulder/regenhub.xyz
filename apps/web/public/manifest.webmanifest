@@ -1,0 +1,30 @@
+{
+  "name": "RegenHub Boulder",
+  "short_name": "RegenHub",
+  "description": "Member portal for RegenHub Boulder — door code, day passes, membership.",
+  "start_url": "/portal",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0e1410",
+  "theme_color": "#2d5e3e",
+  "icons": [
+    {
+      "src": "/regenhub-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "My Door Code",
+      "url": "/portal/my-code",
+      "description": "Show your permanent PIN — works offline."
+    },
+    {
+      "name": "Day Passes",
+      "url": "/portal/passes"
+    }
+  ]
+}
