@@ -182,6 +182,16 @@ export async function POST() {
   const code = generateRandomCode();
   const expiresAt = calculateFreeDayExpiration();
 
+  // The free-day approval trigger (migration 016) auto-creates a day_pass
+  // member when status flips to 'reserved' — so by the time we get here the
+  // member row exists. Look it up so we can link day_code.member_id correctly
+  // (without this the unlock event lands in access_logs as "unattributed").
+  const { data: linkedMember } = await admin
+    .from("members")
+    .select("id")
+    .eq("email", claim.email)
+    .maybeSingle();
+
   // Atomic slot claim: INSERT-with-retry against the partial unique index.
   // If a concurrent request claims the chosen slot first, retry with the
   // next free one.
@@ -200,7 +210,7 @@ export async function POST() {
         .from("day_codes")
         .insert({
           day_pass_id: null,
-          member_id: null,
+          member_id: linkedMember?.id ?? null,
           label: `Free Day: ${claim.name}`,
           code,
           pin_slot: slot,
