@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { clearUserCode, formatLockStatus } from "@regenhub/shared";
 
 const GRACE_DAYS = 7;
 
@@ -51,15 +52,17 @@ export async function POST(req: Request) {
     id: number;
     member_id: number;
     stripe_subscription_id: string;
+    plan_key: string;
     past_due_since: string | null;
-    members: { name: string } | null;
+    members: { name: string; pin_code_slot: number | null; member_type: string } | null;
   };
 
   // Find subscriptions in their grace window that are past the cutoff and
-  // haven't already been disabled.
+  // haven't already been disabled. Pulls the member's PIN slot + type so we
+  // can revoke door access in the same pass.
   const { data: stale, error } = await admin
     .from("subscriptions")
-    .select("id, member_id, stripe_subscription_id, past_due_since, members(name)")
+    .select("id, member_id, stripe_subscription_id, plan_key, past_due_since, members(name, pin_code_slot, member_type)")
     .lt("past_due_since", cutoff)
     .is("access_disabled_at", null)
     .not("past_due_since", "is", null)
@@ -81,15 +84,37 @@ export async function POST(req: Request) {
         .eq("id", row.id);
       if (subErr) throw subErr;
 
+      // If they were a Full member (cold/hot desk), revoke the door code:
+      // clear the slot, null the pin, and push null to the Z-Wave lock.
+      // Hub friends + social tiers don't have permanent PINs so this is a no-op.
+      const wasFullMember =
+        row.members?.member_type === "cold_desk" || row.members?.member_type === "hot_desk";
+      const slot = row.members?.pin_code_slot ?? null;
+      const memberUpdate: { member_type: "day_pass"; pin_code_slot?: null; pin_code?: null } = {
+        member_type: "day_pass",
+      };
+      let lockRevokeNote = "";
+      if (wasFullMember && slot) {
+        memberUpdate.pin_code_slot = null;
+        memberUpdate.pin_code = null;
+        try {
+          const lockResults = await clearUserCode(slot);
+          lockRevokeNote = `\n\n🔒 Cleared PIN slot ${slot}: ${formatLockStatus(lockResults)}`;
+        } catch (err) {
+          console.error(`[PastDueCron] Lock revoke failed for slot ${slot}:`, err);
+          lockRevokeNote = `\n\n⚠️ *Action needed:* Lock revoke failed for slot ${slot}. Run Lock Sync from /admin/access.`;
+        }
+      }
+
       const { error: memErr } = await admin
         .from("members")
-        .update({ member_type: "day_pass" })
+        .update(memberUpdate)
         .eq("id", row.member_id);
       if (memErr) throw memErr;
 
       const name = row.members?.name ?? "A member";
       await notifyTelegram(
-        `🔒 *Access downgraded*\n\n${name}'s payment failed >7 days ago. Moved to day-pass status.`,
+        `🔒 *Access downgraded*\n\n${name}'s payment failed >7 days ago. Moved to day-pass status.${lockRevokeNote}`,
       );
       results.push({ subscription_id: row.id, member_id: row.member_id, ok: true });
     } catch (err) {

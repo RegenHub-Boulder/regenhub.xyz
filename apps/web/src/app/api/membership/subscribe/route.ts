@@ -22,7 +22,7 @@ interface SubscribeBody {
  *
  * Self-serve subscription signup for any tier flagged `selfServe` in
  * lib/plans.ts — currently every tier from $30 Member+1 day up to
- * $500 Cold Desk. The only real gate is `approved_for_membership`:
+ * $500 Cold Desk. The only real gate is `approved_for_daily`:
  * everyone needs to go through the free-day → approval flow before
  * they can attach a card.
  *
@@ -83,7 +83,7 @@ export async function POST(req: Request) {
   // by admin manually). If no record, return a friendly "please apply" msg.
   const { data: member } = await admin
     .from("members")
-    .select("id, name, email, stripe_customer_id, member_type, supabase_user_id, approved_for_membership, approved_for_desk")
+    .select("id, name, email, stripe_customer_id, member_type, supabase_user_id, approved_for_daily, approved_for_full")
     .eq("email", memberEmail)
     .maybeSingle();
 
@@ -99,7 +99,7 @@ export async function POST(req: Request) {
   // Three-level gate: membership for social tiers, desk for desk tiers.
   const isDeskTier =
     plan.grantsMemberType === "cold_desk" || plan.grantsMemberType === "hot_desk";
-  if (isDeskTier && !member.approved_for_desk) {
+  if (isDeskTier && !member.approved_for_full) {
     return NextResponse.json(
       {
         error:
@@ -108,7 +108,7 @@ export async function POST(req: Request) {
       { status: 403 },
     );
   }
-  if (!isDeskTier && !member.approved_for_membership) {
+  if (!isDeskTier && !member.approved_for_daily) {
     return NextResponse.json(
       {
         error: "This email isn't approved for membership yet. Apply at /apply or reach out to boulder.regenhub@gmail.com.",

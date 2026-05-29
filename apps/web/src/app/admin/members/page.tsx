@@ -131,7 +131,7 @@ function AuthUserRow({ u, showMoreCols }: { u: AdminUser; showMoreCols: boolean 
           <div className="flex items-center gap-1.5 flex-wrap">
             {memberStatusBadge(u.member)}
             {subBadge(u.subscription)}
-            {approvalBadge(u.member?.approved_for_membership, !!u.subscription)}
+            {approvalBadge(u.member?.approved_for_daily, !!u.subscription)}
           </div>
         </td>
         {showMoreCols && <td className="px-4 py-3 text-muted text-sm">{u.member?.telegram_username ?? "—"}</td>}
@@ -182,7 +182,7 @@ function LegacyMemberRow({ m, showMoreCols }: { m: LegacyMemberWithSub; showMore
           <div className="flex items-center gap-1.5 flex-wrap">
             {memberStatusBadge(m)}
             {subBadge(m.subscription)}
-            {approvalBadge(m.approved_for_membership, !!m.subscription)}
+            {approvalBadge(m.approved_for_daily, !!m.subscription)}
           </div>
         </td>
         {showMoreCols && <td className="px-4 py-3 text-muted text-sm">{m.telegram_username ?? "—"}</td>}

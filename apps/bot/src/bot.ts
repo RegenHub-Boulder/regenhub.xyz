@@ -423,9 +423,9 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
       const { error: flagErr } = await db
         .from("members")
         .update({
-          approved_for_membership: true,
-          approved_for_membership_at: new Date().toISOString(),
-          approved_for_membership_by: approverMemberId,
+          approved_for_daily: true,
+          approved_for_daily_at: new Date().toISOString(),
+          approved_for_daily_by: approverMemberId,
         })
         .eq("email", claim.email);
       if (flagErr) {

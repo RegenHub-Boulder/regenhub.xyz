@@ -5,14 +5,15 @@ import { createServiceClient } from "@/lib/supabase/admin";
 /**
  * PATCH /api/admin/members/[id]/approve-membership
  *
- * Toggle either the membership-level or desk-level approval flag on a member.
+ * Toggle either the daily-membership or full-membership approval flag on a member.
  * Silent — no email fires from this endpoint by design (admin uses a separate
  * .../send-approval-email endpoint to notify the member when ready).
  *
- * Body: { approved: boolean, level?: "membership" | "desk" }
- *   - level defaults to "membership" (back-compat with existing UI)
- *   - Granting desk approval also grants membership approval (implies)
- *   - Revoking desk approval does NOT revoke membership approval
+ * Body: { approved: boolean, level?: "daily" | "full" }
+ *   - level defaults to "daily"
+ *   - Legacy values "membership"/"desk" still accepted for back-compat
+ *   - Granting Full approval also grants Daily approval (implies)
+ *   - Revoking Full does NOT revoke Daily
  */
 export async function PATCH(
   req: Request,
@@ -35,32 +36,36 @@ export async function PATCH(
   const memberId = parseInt(idParam, 10);
   if (!memberId) return NextResponse.json({ error: "Invalid member id" }, { status: 400 });
 
+  // Accept new names ("daily"/"full") + accept legacy ("membership"/"desk")
+  // so any stale Telegram approve links keep working through the rename.
   const body = (await req.json().catch(() => null)) as {
     approved?: boolean;
-    level?: "membership" | "desk";
+    level?: "daily" | "full" | "membership" | "desk";
   } | null;
   if (typeof body?.approved !== "boolean") {
     return NextResponse.json({ error: "approved (boolean) required" }, { status: 400 });
   }
-  const level = body.level ?? "membership";
+  const rawLevel = body.level ?? "daily";
+  const level: "daily" | "full" =
+    rawLevel === "desk" || rawLevel === "full" ? "full" : "daily";
 
   const admin = createServiceClient();
   const now = new Date().toISOString();
 
   const update: Record<string, unknown> = {};
-  if (level === "membership") {
-    update.approved_for_membership = body.approved;
-    update.approved_for_membership_at = body.approved ? now : null;
-    update.approved_for_membership_by = body.approved ? adminMember.id : null;
+  if (level === "daily") {
+    update.approved_for_daily = body.approved;
+    update.approved_for_daily_at = body.approved ? now : null;
+    update.approved_for_daily_by = body.approved ? adminMember.id : null;
   } else {
-    // Desk approval implies membership approval — flip both on grant.
-    update.approved_for_desk = body.approved;
-    update.approved_for_desk_at = body.approved ? now : null;
-    update.approved_for_desk_by = body.approved ? adminMember.id : null;
+    // Full implies Daily — flip both on grant.
+    update.approved_for_full = body.approved;
+    update.approved_for_full_at = body.approved ? now : null;
+    update.approved_for_full_by = body.approved ? adminMember.id : null;
     if (body.approved) {
-      update.approved_for_membership = true;
-      update.approved_for_membership_at = now;
-      update.approved_for_membership_by = adminMember.id;
+      update.approved_for_daily = true;
+      update.approved_for_daily_at = now;
+      update.approved_for_daily_by = adminMember.id;
     }
   }
 

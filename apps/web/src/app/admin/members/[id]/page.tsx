@@ -56,8 +56,8 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
 
   // Resolve approver names (membership + desk) for audit display
   const approverIds = [
-    member.approved_for_membership_by,
-    member.approved_for_desk_by,
+    member.approved_for_daily_by,
+    member.approved_for_full_by,
   ].filter((id): id is number => typeof id === "number");
   const uniqueApproverIds = Array.from(new Set(approverIds));
   let approverNameMap = new Map<number, string>();
@@ -68,11 +68,11 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
       .in("id", uniqueApproverIds);
     approverNameMap = new Map((approvers ?? []).map((a) => [a.id, a.name]));
   }
-  const approvedByName = member.approved_for_membership_by
-    ? approverNameMap.get(member.approved_for_membership_by) ?? null
+  const approvedByName = member.approved_for_daily_by
+    ? approverNameMap.get(member.approved_for_daily_by) ?? null
     : null;
-  const approvedForDeskByName = member.approved_for_desk_by
-    ? approverNameMap.get(member.approved_for_desk_by) ?? null
+  const approvedForFullByName = member.approved_for_full_by
+    ? approverNameMap.get(member.approved_for_full_by) ?? null
     : null;
 
   const memberTypeLabel =
@@ -137,10 +137,16 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
               {activeSubscription.cancel_at_period_end && " · canceling"}
             </Badge>
           )}
-          {member.approved_for_membership && !activeSubscription && (
+          {member.approved_for_daily && !member.approved_for_full && !activeSubscription && (
             <Badge className="text-xs bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
               <ShieldCheck className="w-3 h-3 mr-0.5 inline" />
-              Approved to subscribe
+              Approved (Daily)
+            </Badge>
+          )}
+          {member.approved_for_full && !activeSubscription && (
+            <Badge className="text-xs bg-gold/10 text-gold border-gold/20">
+              <ShieldCheck className="w-3 h-3 mr-0.5 inline" />
+              Approved (Full)
             </Badge>
           )}
           {member.disabled && (
@@ -168,12 +174,12 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
                 memberId={member.id}
                 memberName={member.name}
                 memberEmail={member.email}
-                approved={member.approved_for_membership}
-                approvedAt={member.approved_for_membership_at}
+                approved={member.approved_for_daily}
+                approvedAt={member.approved_for_daily_at}
                 approvedByName={approvedByName}
-                approvedForDesk={member.approved_for_desk}
-                approvedForDeskAt={member.approved_for_desk_at}
-                approvedForDeskByName={approvedForDeskByName}
+                approvedForFull={member.approved_for_full}
+                approvedForFullAt={member.approved_for_full_at}
+                approvedForFullByName={approvedForFullByName}
                 hasActiveSubscription={!!activeSubscription}
               />
             </>

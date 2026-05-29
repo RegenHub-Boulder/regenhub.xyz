@@ -15,9 +15,9 @@ interface Props {
   approved: boolean;
   approvedAt: string | null;
   approvedByName: string | null;
-  approvedForDesk: boolean;
-  approvedForDeskAt: string | null;
-  approvedForDeskByName: string | null;
+  approvedForFull: boolean;
+  approvedForFullAt: string | null;
+  approvedForFullByName: string | null;
   hasActiveSubscription: boolean;
 }
 
@@ -37,22 +37,22 @@ export function MembershipApprovalCard({
   approved: initialApproved,
   approvedAt,
   approvedByName,
-  approvedForDesk: initialDeskApproved,
-  approvedForDeskAt,
-  approvedForDeskByName,
+  approvedForFull: initialDeskApproved,
+  approvedForFullAt,
+  approvedForFullByName,
   hasActiveSubscription,
 }: Props) {
   const router = useRouter();
   const [approved, setApproved] = useState(initialApproved);
-  const [approvedForDesk, setApprovedForDesk] = useState(initialDeskApproved);
-  const [busy, setBusy] = useState<"toggle" | "toggleDesk" | "email" | null>(null);
+  const [approvedForFull, setApprovedForFull] = useState(initialDeskApproved);
+  const [busy, setBusy] = useState<"toggle" | "toggleFull" | "email" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [emailStatus, setEmailStatus] = useState<"sent" | null>(null);
 
-  async function toggle(level: "membership" | "desk") {
-    const isDesk = level === "desk";
-    const next = !(isDesk ? approvedForDesk : approved);
-    setBusy(isDesk ? "toggleDesk" : "toggle");
+  async function toggle(level: "daily" | "full") {
+    const isFull = level === "full";
+    const next = !(isFull ? approvedForFull : approved);
+    setBusy(isFull ? "toggleFull" : "toggle");
     setError(null);
     try {
       const res = await fetch(`/api/admin/members/${memberId}/approve-membership`, {
@@ -65,9 +65,9 @@ export function MembershipApprovalCard({
         setError(data?.error ?? "Update failed");
         return;
       }
-      if (isDesk) {
-        setApprovedForDesk(next);
-        // Granting desk implies membership — reflect locally
+      if (isFull) {
+        setApprovedForFull(next);
+        // Granting Full implies Daily — reflect locally
         if (next) setApproved(true);
       } else {
         setApproved(next);
@@ -110,11 +110,11 @@ export function MembershipApprovalCard({
           free-day claim. These two gate self-serve subscription.
         </p>
 
-        {/* Membership approval row */}
+        {/* Daily-membership approval row (social tiers $30/$50/$100) */}
         <div className="space-y-3 pt-1">
           <div className="flex items-center gap-2 flex-wrap">
             <ShieldCheck className="w-4 h-4 text-sage" />
-            <p className="text-sm font-medium">Membership (social tiers: $30 / $50 / $100)</p>
+            <p className="text-sm font-medium">Daily Member ($30 / $50 / $100)</p>
             {approved ? (
               <Badge className="text-xs bg-emerald-500/20 text-emerald-400 border-emerald-500/30">Approved</Badge>
             ) : (
@@ -130,7 +130,7 @@ export function MembershipApprovalCard({
           <Button
             size="sm"
             disabled={busy !== null}
-            onClick={() => toggle("membership")}
+            onClick={() => toggle("daily")}
             className={
               approved
                 ? "btn-glass text-xs h-7 gap-1"
@@ -138,44 +138,44 @@ export function MembershipApprovalCard({
             }
           >
             {busy === "toggle" ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
-            {approved ? "Revoke membership approval" : "Approve for membership"}
+            {approved ? "Revoke Daily approval" : "Approve for Daily"}
           </Button>
         </div>
 
-        {/* Full Access approval row (Hot $250 / Cold $500) */}
+        {/* Full-membership approval row (Hot $250 / Cold $500) */}
         <div className="space-y-3 pt-3 border-t border-white/5">
           <div className="flex items-center gap-2 flex-wrap">
             <Armchair className="w-4 h-4 text-gold" />
-            <p className="text-sm font-medium">Full Access (Hot $250 / Cold $500)</p>
-            {approvedForDesk ? (
+            <p className="text-sm font-medium">Full Member (Hot $250 / Cold $500)</p>
+            {approvedForFull ? (
               <Badge className="text-xs bg-gold/20 text-gold border-gold/30">Approved</Badge>
             ) : (
               <Badge className="text-xs bg-white/10 text-muted border-white/20">Not approved</Badge>
             )}
           </div>
           <p className="text-xs text-muted">
-            Grant after the welcome chat. Full Access approval also grants membership
+            Grant after the welcome chat. Full Member approval also grants Daily
             approval (the more permissive flag). Subscriptions auto-allocate a PIN slot
             on Stripe activation.
           </p>
-          {approvedForDesk && approvedForDeskAt && (
+          {approvedForFull && approvedForFullAt && (
             <p className="text-xs text-muted">
-              Granted {fmtDate(approvedForDeskAt)}
-              {approvedForDeskByName && <> by <span className="text-sage">{approvedForDeskByName}</span></>}
+              Granted {fmtDate(approvedForFullAt)}
+              {approvedForFullByName && <> by <span className="text-sage">{approvedForFullByName}</span></>}
             </p>
           )}
           <Button
             size="sm"
             disabled={busy !== null}
-            onClick={() => toggle("desk")}
+            onClick={() => toggle("full")}
             className={
-              approvedForDesk
+              approvedForFull
                 ? "btn-glass text-xs h-7 gap-1"
                 : "bg-gold/20 hover:bg-gold/40 text-gold border border-gold/30 text-xs h-7 gap-1"
             }
           >
-            {busy === "toggleDesk" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Armchair className="w-3 h-3" />}
-            {approvedForDesk ? "Revoke Full Access approval" : "Approve for Full Access"}
+            {busy === "toggleFull" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Armchair className="w-3 h-3" />}
+            {approvedForFull ? "Revoke Full approval" : "Approve for Full"}
           </Button>
         </div>
 
@@ -185,7 +185,7 @@ export function MembershipApprovalCard({
           </p>
         )}
 
-        {(approved || approvedForDesk) && memberEmail && (
+        {(approved || approvedForFull) && memberEmail && (
           <div className="pt-3 border-t border-white/5">
             <Button
               size="sm"

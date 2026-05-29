@@ -67,7 +67,7 @@ export async function PATCH(request: Request) {
 
   if (isApprovalTransition && approve_for_membership) {
     // The free-day trigger has already created (or found) a day_pass member
-    // for this email. Flip approved_for_membership on that member.
+    // for this email. Flip approved_for_daily on that member.
     const { data: adminMember } = await admin
       .from("members")
       .select("id")
@@ -77,9 +77,9 @@ export async function PATCH(request: Request) {
     const { error: flagErr } = await admin
       .from("members")
       .update({
-        approved_for_membership: true,
-        approved_for_membership_at: new Date().toISOString(),
-        approved_for_membership_by: adminMember?.id ?? null,
+        approved_for_daily: true,
+        approved_for_daily_at: new Date().toISOString(),
+        approved_for_daily_by: adminMember?.id ?? null,
       })
       .eq("email", prev.email);
     if (flagErr) {

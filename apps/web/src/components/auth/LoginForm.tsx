@@ -7,13 +7,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 
-export function LoginForm() {
+interface Props {
+  /** Banner to show above the form — used to surface ?error=… from the auth callback. */
+  initialBanner?: string | null;
+}
+
+export function LoginForm({ initialBanner = null }: Props = {}) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialBanner);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

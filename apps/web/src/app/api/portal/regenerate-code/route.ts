@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/admin";
 import { setUserCode, formatLockStatus, generateRandomCode, LOCK_FAILURE_MSG } from "@regenhub/shared";
 
 export async function POST(req: Request) {
@@ -45,7 +46,12 @@ export async function POST(req: Request) {
       );
     }
 
-    const { error } = await supabase
+    // Service client because direct UPDATE on members is REVOKE'd from
+    // authenticated (migration 031). We've already confirmed the caller owns
+    // this member row via the SELECT above, so the .eq("id", member.id)
+    // scopes the write to their own row.
+    const admin = createServiceClient();
+    const { error } = await admin
       .from("members")
       .update({ pin_code: newCode })
       .eq("id", member.id);

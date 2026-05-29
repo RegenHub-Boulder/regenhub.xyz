@@ -45,16 +45,16 @@ export default async function MembershipPage({ searchParams }: PageProps) {
   // would falsely report "you already have a membership" when an admin
   // visits this page without their own subscription.
   let hasActiveSub = false;
-  let approvedForMembership: boolean | null = null; // null = unauthed; UI shows generic CTA
-  let approvedForDesk = false;
+  let approvedForDaily: boolean | null = null; // null = unauthed; UI shows generic CTA
+  let approvedForFull = false;
   if (user) {
     const { data: existingMember } = await supabase
       .from("members")
-      .select("id, approved_for_membership, approved_for_desk")
+      .select("id, approved_for_daily, approved_for_full")
       .eq("supabase_user_id", user.id)
       .maybeSingle();
-    approvedForMembership = existingMember?.approved_for_membership ?? false;
-    approvedForDesk = existingMember?.approved_for_desk ?? false;
+    approvedForDaily = existingMember?.approved_for_daily ?? false;
+    approvedForFull = existingMember?.approved_for_full ?? false;
     if (existingMember?.id) {
       const { data: existingSub } = await supabase
         .from("subscriptions")
@@ -66,10 +66,10 @@ export default async function MembershipPage({ searchParams }: PageProps) {
       hasActiveSub = !!existingSub;
     }
   }
-  const showNotApprovedBanner = user !== null && approvedForMembership === false && !hasActiveSub;
+  const showNotApprovedBanner = user !== null && approvedForDaily === false && !hasActiveSub;
   // Show desk-not-approved card only when they ARE approved for membership
   // but not yet for desks — otherwise the generic not-approved banner covers it.
-  const showDeskGate = user !== null && approvedForMembership === true && !approvedForDesk && !hasActiveSub;
+  const showDeskGate = user !== null && approvedForDaily === true && !approvedForFull && !hasActiveSub;
 
   // Split self-serve plans into social ladder + desk tiers for separate layouts.
   const allSelfServe = getSelfServePlans();

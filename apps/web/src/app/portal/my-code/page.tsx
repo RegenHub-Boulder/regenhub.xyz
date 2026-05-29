@@ -20,11 +20,34 @@ export default async function MyCodePage() {
     .eq("supabase_user_id", user.id)
     .single();
 
-  if (!member || member.member_type === "day_pass") {
+  if (!member) {
+    // Authenticated but no member row linked yet — usually means the email on
+    // their auth user hasn't been reconciled with an existing member record.
+    return (
+      <div className="glass-panel p-8 text-center max-w-md mx-auto mt-8">
+        <AlertCircle className="w-8 h-8 text-amber-400 mx-auto mb-3" />
+        <h2 className="font-semibold mb-2">Account not linked yet</h2>
+        <p className="text-sm text-muted mb-5">
+          We didn&apos;t find a member record for this sign-in. If you have an existing
+          account, head to your portal to link it; otherwise apply to join.
+        </p>
+        <div className="flex gap-2 justify-center flex-wrap">
+          <Link href="/portal">
+            <Button className="btn-glass">Go to portal</Button>
+          </Link>
+          <Link href="/apply">
+            <Button className="btn-primary-glass">Apply to join</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (member.member_type === "day_pass") {
     return (
       <div className="glass-panel p-8 text-center max-w-md mx-auto mt-8">
         <AlertCircle className="w-8 h-8 text-muted mx-auto mb-3" />
-        <h2 className="font-semibold mb-2">Permanent codes are for desk members</h2>
+        <h2 className="font-semibold mb-2">Permanent codes are for Full Members</h2>
         <p className="text-sm text-muted mb-5">
           You&apos;re on a day-pass plan, so you generate a fresh code for each visit on the Passes page.
         </p>

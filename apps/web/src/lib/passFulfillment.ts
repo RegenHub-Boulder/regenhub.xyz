@@ -61,20 +61,6 @@ export async function fulfillPassPurchase(
     return { status: "skipped", reason: "no kind in session metadata" };
   }
 
-  // Idempotency check: if we already recorded this session, no-op
-  const { data: existing } = await admin
-    .from("purchases")
-    .select("id, member_id, passes_granted")
-    .eq("stripe_checkout_session", session.id)
-    .maybeSingle();
-  if (existing) {
-    return {
-      status: "already_processed",
-      member_id: existing.member_id ?? undefined,
-      passes_granted: existing.passes_granted,
-    };
-  }
-
   // Resolve member: client_reference_id > email > auto-create
   const customerEmail =
     session.customer_details?.email ??
@@ -136,34 +122,55 @@ export async function fulfillPassPurchase(
 
   const passesToGrant = def.quantity;
 
-  // Atomic increment
+  // CLAIM-THEN-INCREMENT: insert the audit row first, treat unique-violation
+  // (23505) as "another caller already processed this session" and short-circuit
+  // BEFORE any balance change. This is the race-safe pattern — if we did SELECT
+  // → check → INSERT instead, the webhook + the /portal/passes success page
+  // could both pass the SELECT and both increment, doubling the balance.
+  const paymentIntent =
+    typeof session.payment_intent === "string"
+      ? session.payment_intent
+      : (session.payment_intent?.id ?? null);
+
+  const { error: insertErr } = await admin.from("purchases").insert({
+    member_id: memberId,
+    stripe_checkout_session: session.id,
+    stripe_payment_intent: paymentIntent,
+    kind,
+    amount_cents: session.amount_total ?? def.cents,
+    passes_granted: passesToGrant,
+    email: customerEmail,
+  });
+
+  if (insertErr) {
+    if ((insertErr as { code?: string }).code === "23505") {
+      // Another caller already claimed this session → look up + report.
+      const { data: existing } = await admin
+        .from("purchases")
+        .select("member_id, passes_granted")
+        .eq("stripe_checkout_session", session.id)
+        .maybeSingle();
+      return {
+        status: "already_processed",
+        member_id: existing?.member_id ?? memberId,
+        passes_granted: existing?.passes_granted ?? passesToGrant,
+      };
+    }
+    console.error("[PassFulfillment] purchases insert failed:", insertErr);
+    throw insertErr;
+  }
+
+  // We're the winner — apply the credit atomically.
   const { data: newBalance, error: rpcError } = await admin.rpc(
     "increment_day_pass_balance",
     { p_member_id: memberId, p_amount: passesToGrant },
   );
   if (rpcError) {
     console.error("[PassFulfillment] balance increment failed:", rpcError);
+    // Best-effort rollback of the audit row so a retry can succeed.
+    await admin.from("purchases").delete().eq("stripe_checkout_session", session.id);
     throw rpcError;
   }
-
-  // Audit row — UNIQUE on stripe_checkout_session is our second-line idempotency guard
-  const paymentIntent =
-    typeof session.payment_intent === "string"
-      ? session.payment_intent
-      : (session.payment_intent?.id ?? null);
-
-  await admin.from("purchases").upsert(
-    {
-      member_id: memberId,
-      stripe_checkout_session: session.id,
-      stripe_payment_intent: paymentIntent,
-      kind,
-      amount_cents: session.amount_total ?? def.cents,
-      passes_granted: passesToGrant,
-      email: customerEmail,
-    },
-    { onConflict: "stripe_checkout_session" },
-  );
 
   console.log(
     `[PassFulfillment] +${passesToGrant} passes for ${memberName} (id=${memberId}) → balance=${newBalance}`,

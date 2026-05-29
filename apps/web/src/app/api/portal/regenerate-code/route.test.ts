@@ -5,6 +5,10 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
 }));
 
+vi.mock("@/lib/supabase/admin", () => ({
+  createServiceClient: vi.fn(),
+}));
+
 vi.mock("@regenhub/shared", () => ({
   setUserCode: vi.fn(),
   formatLockStatus: vi.fn(() => "Code set on front door and back door"),
@@ -14,6 +18,7 @@ vi.mock("@regenhub/shared", () => ({
 
 import { POST } from "./route";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/admin";
 import { setUserCode } from "@regenhub/shared";
 
 const okMember = {
@@ -53,7 +58,9 @@ describe("POST /api/portal/regenerate-code", () => {
       auth: { user: { id: "user-1", email: "a@b.co" } },
       selects: { members: { data: okMember } },
     });
+    const adminSb = makeSupabaseMock({});
     vi.mocked(createClient).mockResolvedValue(sb as never);
+    vi.mocked(createServiceClient).mockReturnValue(adminSb as never);
 
     const res = await POST(makeRequest());
     const json = await res.json();
@@ -62,8 +69,10 @@ describe("POST /api/portal/regenerate-code", () => {
     expect(json.code).toBe("424242");
     expect(json.lock_status).toBe("Code set on front door and back door");
     expect(setUserCode).toHaveBeenCalledWith(12, "424242");
-    // The members table should have been touched twice: SELECT then UPDATE.
+    // The members table is read via the authed client, then written via the
+    // service-role client (RLS UPDATE on members is locked down per mig 031).
     expect(sb.from).toHaveBeenCalledWith("members");
+    expect(adminSb.from).toHaveBeenCalledWith("members");
   });
 
   it("accepts a custom 4–8 digit code and uses it instead of a random one", async () => {
@@ -71,7 +80,9 @@ describe("POST /api/portal/regenerate-code", () => {
       auth: { user: { id: "user-1", email: "a@b.co" } },
       selects: { members: { data: okMember } },
     });
+    const adminSb = makeSupabaseMock({});
     vi.mocked(createClient).mockResolvedValue(sb as never);
+    vi.mocked(createServiceClient).mockReturnValue(adminSb as never);
 
     const res = await POST(makeRequest({ code: "13579" }));
     const json = await res.json();

@@ -80,17 +80,45 @@ export async function POST(request: Request) {
 
   const admin = createServiceClient();
 
-  // Insert a tracking row up front. ON CONFLICT lets Stripe redeliveries
-  // (same event.id) refresh in place rather than insert twice.
+  // Try to claim this event. INSERT not UPSERT so a Stripe redelivery (same
+  // event.id) hits 23505 instead of silently refreshing — that lets us
+  // short-circuit the handler and skip duplicate side effects (welcome
+  // Telegram, second magic link, etc). If the prior attempt errored, allow
+  // a retry: delete the old "error" row and re-claim.
   const startedAt = Date.now();
-  await admin.from("webhook_events").upsert(
-    {
-      stripe_event_id: event.id,
-      event_type: event.type,
-      status: "processing",
-    },
-    { onConflict: "stripe_event_id" },
-  );
+  const { error: claimErr } = await admin.from("webhook_events").insert({
+    stripe_event_id: event.id,
+    event_type: event.type,
+    status: "processing",
+  });
+
+  if (claimErr) {
+    if ((claimErr as { code?: string }).code === "23505") {
+      // Duplicate event id. Check the existing row's status.
+      const { data: existing } = await admin
+        .from("webhook_events")
+        .select("status")
+        .eq("stripe_event_id", event.id)
+        .maybeSingle();
+      const existingStatus = existing?.status ?? "unknown";
+
+      if (existingStatus === "ok" || existingStatus === "data_error") {
+        // Already processed successfully or marked unprocessable — ack and skip.
+        console.log(`[Stripe] Duplicate event ${event.id} (${existingStatus}) — skipping side effects`);
+        return NextResponse.json({ received: true, deduped: true, prior_status: existingStatus });
+      }
+
+      // Prior attempt errored (status='error') or is still in-flight ('processing').
+      // Allow the retry to proceed by resetting the row.
+      await admin
+        .from("webhook_events")
+        .update({ status: "processing", error_message: null, completed_at: null })
+        .eq("stripe_event_id", event.id);
+    } else {
+      console.error("[Stripe] webhook_events insert failed:", claimErr);
+      return NextResponse.json({ error: "Tracking failed" }, { status: 500 });
+    }
+  }
 
   // Capture the resolved member_id (if any) and the final status, then write back
   let resolvedMemberId: number | null = null;

@@ -10,7 +10,7 @@ import { sendEmail, membershipApprovedEmail } from "@/lib/email";
  * from the toggle endpoint so admins can flip approval silently and
  * choose when to send the email (e.g., after a personal note).
  *
- * Only valid for members who already have approved_for_membership=true.
+ * Only valid for members who already have approved_for_daily=true.
  */
 export async function POST(
   req: Request,
@@ -36,7 +36,7 @@ export async function POST(
   const admin = createServiceClient();
   const { data: member } = await admin
     .from("members")
-    .select("id, name, email, approved_for_membership")
+    .select("id, name, email, approved_for_daily")
     .eq("id", memberId)
     .single();
 
@@ -46,7 +46,7 @@ export async function POST(
   if (!member.email) {
     return NextResponse.json({ error: "Member has no email" }, { status: 400 });
   }
-  if (!member.approved_for_membership) {
+  if (!member.approved_for_daily) {
     return NextResponse.json(
       { error: "Member isn't marked as approved yet — flip the toggle first." },
       { status: 400 },
