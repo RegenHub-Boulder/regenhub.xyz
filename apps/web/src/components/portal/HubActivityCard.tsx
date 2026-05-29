@@ -13,6 +13,8 @@ interface Props {
   fullMembers: number;
   /** Co-op members get the "Zoom in →" link to the access log. */
   canZoomIn?: boolean;
+  /** Optional: the most recent attributed entry — shown subtly to convey freshness. */
+  lastEntry?: { memberName: string; whenIso: string } | null;
 }
 
 /**
@@ -22,7 +24,25 @@ interface Props {
  * (wired via Home Assistant). Until that flow is hot, we surface the proxy
  * signals (day-code activity) so the card is still useful from day one.
  */
-export function HubActivityCard({ hereNow, activeGuestCodes, guestCodesToday, fullMembers, canZoomIn = false }: Props) {
+function formatRelative(iso: string): string {
+  const then = new Date(iso).getTime();
+  const ms = Date.now() - then;
+  if (ms < 0) return "just now";
+  const mins = Math.round(ms / 60_000);
+  if (mins < 1) return "just now";
+  if (mins === 1) return "1 min ago";
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(mins / 60);
+  if (hours === 1) return "1 hour ago";
+  if (hours < 24) return `${hours} hours ago`;
+  return new Date(iso).toLocaleDateString("en-US", {
+    timeZone: "America/Denver",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+export function HubActivityCard({ hereNow, activeGuestCodes, guestCodesToday, fullMembers, canZoomIn = false, lastEntry = null }: Props) {
   // Don't bother rendering on quiet days — if nothing's happening, the card
   // just adds noise to /portal.
   if (hereNow === 0 && activeGuestCodes === 0 && guestCodesToday === 0) return null;
@@ -74,14 +94,24 @@ export function HubActivityCard({ hereNow, activeGuestCodes, guestCodesToday, fu
           </p>
         )}
 
-        {canZoomIn && (
-          <div className="mt-3 pt-3 border-t border-white/5">
-            <Link
-              href="/portal/access-log"
-              className="text-xs text-sage hover:text-sage/80 flex items-center gap-1 inline-flex"
-            >
-              Zoom in — who&apos;s entered the hub <ChevronRight className="w-3 h-3" />
-            </Link>
+        {(canZoomIn || lastEntry) && (
+          <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between gap-3 flex-wrap">
+            {lastEntry ? (
+              <p className="text-xs text-muted">
+                Last in: <span className="text-foreground">{lastEntry.memberName}</span>
+                <span className="text-muted/70"> · {formatRelative(lastEntry.whenIso)}</span>
+              </p>
+            ) : (
+              <span />
+            )}
+            {canZoomIn && (
+              <Link
+                href="/portal/access-log"
+                className="text-xs text-sage hover:text-sage/80 flex items-center gap-1"
+              >
+                Zoom in <ChevronRight className="w-3 h-3" />
+              </Link>
+            )}
           </div>
         )}
       </CardContent>

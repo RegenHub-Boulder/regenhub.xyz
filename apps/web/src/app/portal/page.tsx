@@ -142,6 +142,30 @@ export default async function PortalPage() {
   ]);
   const hereNowCount = new Set((hereNowRows ?? []).map((r) => r.member_id)).size;
 
+  // Most recent attributed entry — for the freshness signal on the card.
+  // Co-op-gated like the access log itself: only show names to co-op members + admins.
+  let lastEntry: { memberName: string; whenIso: string } | null = null;
+  if (member && (member.is_coop_member || member.is_admin)) {
+    const { data: lastRow } = await adminClient
+      .from("access_logs")
+      .select("created_at, member_id")
+      .eq("result", "granted")
+      .not("member_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (lastRow?.member_id) {
+      const { data: lastMember } = await adminClient
+        .from("members")
+        .select("name")
+        .eq("id", lastRow.member_id)
+        .maybeSingle();
+      if (lastMember?.name) {
+        lastEntry = { memberName: lastMember.name, whenIso: lastRow.created_at };
+      }
+    }
+  }
+
   // Whether the member can swap plans via the in-portal change-plan flow.
   // Source of truth is lib/plans.ts (selfServe flag). Members ON a Full Access tier
   // are blocked at the route level since leaving a desk needs admin code revocation.
@@ -264,6 +288,7 @@ export default async function PortalPage() {
         guestCodesToday={guestCodesToday ?? 0}
         fullMembers={fullMembersCount ?? 0}
         canZoomIn={!!member.is_coop_member || !!member.is_admin}
+        lastEntry={lastEntry}
       />
 
       <InstallPrompt />
