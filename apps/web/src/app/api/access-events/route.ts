@@ -70,9 +70,10 @@ export async function POST(req: Request) {
 
   const admin = createServiceClient();
   let memberId = body.member_id ?? null;
+  let dayCodeLabel: string | null = null;
 
   // Try to resolve via PIN slot if the caller didn't give us a member id.
-  if (!memberId && typeof body.slot === "number") {
+  if (!memberId && typeof body.slot === "number" && body.slot > 0) {
     // Members (permanent slots 1-100)
     const { data: memberHit } = await admin
       .from("members")
@@ -81,27 +82,65 @@ export async function POST(req: Request) {
       .maybeSingle();
     if (memberHit) {
       memberId = memberHit.id;
-    } else {
-      // Day codes (slots 101-200)
-      const { data: dayHit } = await admin
+    } else if (body.slot >= 101 && body.slot <= 200) {
+      // Day codes (slots 101-200). First try active; fall back to the most
+      // recent code at that slot regardless of is_active, because the lock
+      // might fire the unlock event a moment after the code expired (or for
+      // free-day visitors who don't have a linked member, the label still
+      // tells us who they are).
+      let { data: dayHit } = await admin
         .from("day_codes")
-        .select("member_id")
+        .select("member_id, label")
         .eq("pin_slot", body.slot)
         .eq("is_active", true)
         .order("issued_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+      if (!dayHit) {
+        const fallback = await admin
+          .from("day_codes")
+          .select("member_id, label")
+          .eq("pin_slot", body.slot)
+          .order("issued_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        dayHit = fallback.data;
+      }
       if (dayHit?.member_id) memberId = dayHit.member_id;
+      if (dayHit?.label) dayCodeLabel = dayHit.label;
     }
   }
+
+  // Compose the final note. Append the day-code label (e.g. "Free Day: Austen Henry")
+  // when we have one but no member_id — gives the access log a name to show.
+  const finalNote = dayCodeLabel && !memberId
+    ? `${body.note ?? ""} · ${dayCodeLabel}`.trim()
+    : body.note ?? null;
 
   const { error } = await admin.from("access_logs").insert({
     method: body.method,
     slot: body.slot ?? null,
     member_id: memberId,
     result: body.result ?? "granted",
-    note: body.note ?? null,
+    note: finalNote,
   });
+
+  // Dedup: if this is an attributed entry, delete any anonymous polling-cron
+  // entries for the same lock that landed within the last 5 seconds — they're
+  // the same physical unlock, just caught by the dumber writer first.
+  if (!error && (memberId || (body.slot && body.slot > 0)) && body.note) {
+    const lockHint = body.note.toLowerCase().match(/(lock\.[a-z_]+)/)?.[1];
+    if (lockHint) {
+      const cutoff = new Date(Date.now() - 5_000).toISOString();
+      await admin
+        .from("access_logs")
+        .delete()
+        .like("note", `HA:%${lockHint}%`)
+        .is("member_id", null)
+        .is("slot", null)
+        .gte("created_at", cutoff);
+    }
+  }
 
   if (error) {
     console.error("[AccessEvents] insert error:", error);

@@ -54,26 +54,35 @@ function formatDay(iso: string, todayMs: number): string {
 /**
  * Try to derive a friendly lock label from the `note` field.
  *
- * The note can come in several shapes depending on which writer captured it:
- *  - "HA:lock.front_door_lock"               (polling cron — entity_id)
- *  - "lock.front_door_lock / Keypad unlock"  (older automation w/ entity_id)
- *  - "Yale YRL226 / Keypad unlock"           (newer automation w/ device name)
- *  - "node_2 / Keypad unlock"                (fallback to node_id)
- *  - "Roundtrip test from API"               (manual)
+ * Possible shapes:
+ *  - "HA:lock.front_door_lock"
+ *  - "lock.front_door_lock / Keypad unlock operation"
+ *  - "Assure Key Free Lever Touchscreen / Keypad unlock operation"  (front door's HA device name)
+ *  - "node_2 / Keypad unlock"
+ *  - "... · Free Day: Austen Henry"  (day-code attribution suffix from /api/access-events)
  */
 function lockLabel(note: string | null): string {
   if (!note) return "Unknown lock";
   const n = note.toLowerCase();
-  if (n.includes("front") || n.includes("yrl226") || n.includes("yrl256") || n.includes("node_2")) return "Front door";
-  if (n.includes("back") || n.includes("yrd410") || n.includes("yrd420") || n.includes("node_3")) return "Back door";
-  return note.split(" / ")[0] ?? note;
+  if (n.includes("front") || n.includes("lever") || n.includes("yrl226") || n.includes("yrl256") || n.includes("node_2")) return "Front door";
+  if (n.includes("back") || n.includes("deadbolt") || n.includes("yrd410") || n.includes("yrd420") || n.includes("node_3")) return "Back door";
+  return note.split(" / ")[0]?.split(" · ")[0] ?? note;
 }
 
-/** What kind of entry: attributed / guest day code / anonymous polling */
-function entryKind(row: AccessLogRow): "attributed" | "guest" | "polling" | "denied" {
+/** Extract the "· Free Day: X" trailing label, if present. */
+function guestLabel(note: string | null): string | null {
+  if (!note) return null;
+  const m = note.match(/·\s*(.+)$/);
+  return m?.[1]?.trim() ?? null;
+}
+
+/** What kind of entry: attributed / guest day code / manual thumb-turn / anonymous polling */
+function entryKind(row: AccessLogRow): "attributed" | "guest" | "manual" | "polling" | "denied" {
   if (row.result === "denied") return "denied";
   if (row.member_id) return "attributed";
   if (row.slot && row.slot >= 101 && row.slot <= 200) return "guest";
+  // Slot 0 + "Manual unlock" note = somebody used the inside thumb-turn.
+  if (row.slot === 0 || (row.note ?? "").toLowerCase().includes("manual unlock")) return "manual";
   return "polling";
 }
 
@@ -207,11 +216,19 @@ export default async function AccessLogPage() {
                           )}
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-foreground truncate">
-                              {m ? m.name : kind === "guest" ? "Guest day code" : kind === "denied" ? "Denied entry" : "Unattributed"}
+                              {m
+                                ? m.name
+                                : kind === "guest"
+                                  ? guestLabel(r.note) ?? "Guest day code"
+                                  : kind === "manual"
+                                    ? "Inside thumb-turn"
+                                    : kind === "denied"
+                                      ? "Denied entry"
+                                      : "Unattributed"}
                             </p>
                             <p className="text-xs text-muted truncate">
                               {lockLabel(r.note)}
-                              {r.slot != null && (
+                              {r.slot != null && r.slot > 0 && (
                                 <span className="ml-1 text-muted/60">· slot {r.slot}</span>
                               )}
                             </p>
@@ -224,6 +241,11 @@ export default async function AccessLogPage() {
                           {kind === "guest" && (
                             <Badge className="text-[10px] bg-gold/15 text-gold border-gold/30">
                               guest
+                            </Badge>
+                          )}
+                          {kind === "manual" && (
+                            <Badge className="text-[10px] bg-blue-500/15 text-blue-400 border-blue-500/30">
+                              thumb-turn
                             </Badge>
                           )}
                           {kind === "polling" && (
