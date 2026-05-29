@@ -51,11 +51,21 @@ function formatDay(iso: string, todayMs: number): string {
   });
 }
 
-/** Front door / back door / unknown from the `note` field. */
+/**
+ * Try to derive a friendly lock label from the `note` field.
+ *
+ * The note can come in several shapes depending on which writer captured it:
+ *  - "HA:lock.front_door_lock"               (polling cron — entity_id)
+ *  - "lock.front_door_lock / Keypad unlock"  (older automation w/ entity_id)
+ *  - "Yale YRL226 / Keypad unlock"           (newer automation w/ device name)
+ *  - "node_2 / Keypad unlock"                (fallback to node_id)
+ *  - "Roundtrip test from API"               (manual)
+ */
 function lockLabel(note: string | null): string {
   if (!note) return "Unknown lock";
-  if (note.includes("front")) return "Front door";
-  if (note.includes("back")) return "Back door";
+  const n = note.toLowerCase();
+  if (n.includes("front") || n.includes("yrl226") || n.includes("yrl256") || n.includes("node_2")) return "Front door";
+  if (n.includes("back") || n.includes("yrd410") || n.includes("yrd420") || n.includes("node_3")) return "Back door";
   return note.split(" / ")[0] ?? note;
 }
 

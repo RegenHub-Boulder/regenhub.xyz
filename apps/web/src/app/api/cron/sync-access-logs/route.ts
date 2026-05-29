@@ -100,6 +100,29 @@ export async function POST(req: Request) {
       });
 
       for (const s of fresh) {
+        // Dedup: if the keypad automation already wrote an attributed entry
+        // for this lock within ±60 seconds, skip — that row has slot+member
+        // attribution and a real note, this would just be a duplicate.
+        const when = new Date(s.last_changed!).getTime();
+        const winStart = new Date(when - 60_000).toISOString();
+        const winEnd = new Date(when + 60_000).toISOString();
+        const { data: nearby } = await admin
+          .from("access_logs")
+          .select("id, note, slot")
+          .gte("created_at", winStart)
+          .lte("created_at", winEnd)
+          .not("slot", "is", null)
+          .limit(5);
+        const attributedForThisLock = (nearby ?? []).some((r) => {
+          const note = (r.note ?? "").toLowerCase();
+          // The automation writes notes like "Yale YRL226 / Keypad unlock..."
+          // or "lock.front_door_lock / ...". Match if the entity short-name
+          // appears anywhere in the note.
+          const short = entity.split(".").pop() ?? entity;
+          return note.includes(short) || (entity.includes("front") && note.includes("front")) || (entity.includes("back") && note.includes("back"));
+        });
+        if (attributedForThisLock) continue;
+
         const { error } = await admin.from("access_logs").insert({
           method: "pin",
           slot: null,
