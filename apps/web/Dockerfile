@@ -35,6 +35,10 @@ WORKDIR /app/apps/web
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# curl is used by Coolify scheduled tasks to hit the cron endpoints
+# from inside the container — alpine base image doesn't include it.
+RUN apk add --no-cache curl
+
 RUN addgroup --system --gid 1001 nodejs && \
     adduser  --system --uid  1001 nextjs
 
