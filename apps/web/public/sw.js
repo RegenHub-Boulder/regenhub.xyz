@@ -1,15 +1,13 @@
-// RegenHub service worker — keeps the door code accessible when cell is bad.
+// RegenHub service worker — makes the door-code page snappier on revisits.
 //
 // Strategy per route family:
 //   /portal/my-code           network-first, fall back to cache (24h)
-//   /portal/my-code (page)    same — keeps RSC + HTML usable offline
 //   anything else             network-only (don't cache stale member data)
 //
-// We deliberately do NOT cache API routes or auth state. The door-code page
-// is server-rendered with the current PIN baked into the HTML, so the cached
-// HTML still shows the right code as long as the member's PIN hasn't changed
-// since the last visit. If they rotate their code while offline, they'll
-// need to come back online — but the keypad would have the new code already.
+// We deliberately do NOT cache API routes or auth state. The main value of
+// the SW is faster repeat loads on the page members hit most often — and a
+// last-known-good fallback if the network blips mid-load. Most members
+// remember their PIN anyway; this is convenience, not a fallback strategy.
 
 const CACHE_NAME = 'regenhub-doorcode-v1';
 const DOOR_CODE_PATH = '/portal/my-code';

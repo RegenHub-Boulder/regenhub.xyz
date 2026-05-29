@@ -19,8 +19,7 @@
   "shortcuts": [
     {
       "name": "My Door Code",
-      "url": "/portal/my-code",
-      "description": "Show your permanent PIN — works offline."
+      "url": "/portal/my-code"
     },
     {
       "name": "Day Passes",

@@ -65,9 +65,9 @@ export function InstallPrompt() {
       <div className="flex items-start gap-3">
         <Download className="w-5 h-5 text-sage shrink-0 mt-0.5" />
         <div className="flex-1">
-          <p className="text-sm font-medium">Install RegenHub on your phone</p>
+          <p className="text-sm font-medium">Add RegenHub to your home screen</p>
           <p className="text-xs text-muted mt-1">
-            Your door code works offline so you can unlock the door even with bad cell signal.
+            One tap to your door code, passes, and profile — no browser chrome in the way.
           </p>
           <div className="flex gap-2 mt-3">
             <Button size="sm" onClick={accept} className="btn-primary-glass text-xs h-7 gap-1">
