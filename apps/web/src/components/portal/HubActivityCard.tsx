@@ -1,4 +1,5 @@
-import { Activity, Users, DoorOpen } from "lucide-react";
+import Link from "next/link";
+import { Activity, Users, DoorOpen, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 
 interface Props {
@@ -10,6 +11,8 @@ interface Props {
   guestCodesToday: number;
   /** Total Full members in the system (potential population). */
   fullMembers: number;
+  /** Co-op members get the "Zoom in →" link to the access log. */
+  canZoomIn?: boolean;
 }
 
 /**
@@ -19,7 +22,7 @@ interface Props {
  * (wired via Home Assistant). Until that flow is hot, we surface the proxy
  * signals (day-code activity) so the card is still useful from day one.
  */
-export function HubActivityCard({ hereNow, activeGuestCodes, guestCodesToday, fullMembers }: Props) {
+export function HubActivityCard({ hereNow, activeGuestCodes, guestCodesToday, fullMembers, canZoomIn = false }: Props) {
   // Don't bother rendering on quiet days — if nothing's happening, the card
   // just adds noise to /portal.
   if (hereNow === 0 && activeGuestCodes === 0 && guestCodesToday === 0) return null;
@@ -69,6 +72,17 @@ export function HubActivityCard({ hereNow, activeGuestCodes, guestCodesToday, fu
           <p className="text-[10px] text-muted mt-3 italic">
             Real-time presence kicks in once HA → /api/access-events is wired.
           </p>
+        )}
+
+        {canZoomIn && (
+          <div className="mt-3 pt-3 border-t border-white/5">
+            <Link
+              href="/portal/access-log"
+              className="text-xs text-sage hover:text-sage/80 flex items-center gap-1 inline-flex"
+            >
+              Zoom in — who&apos;s entered the hub <ChevronRight className="w-3 h-3" />
+            </Link>
+          </div>
         )}
       </CardContent>
     </Card>

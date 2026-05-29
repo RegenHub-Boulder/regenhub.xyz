@@ -263,6 +263,7 @@ export default async function PortalPage() {
         activeGuestCodes={activeGuestCodes ?? 0}
         guestCodesToday={guestCodesToday ?? 0}
         fullMembers={fullMembersCount ?? 0}
+        canZoomIn={!!member.is_coop_member || !!member.is_admin}
       />
 
       <InstallPrompt />
