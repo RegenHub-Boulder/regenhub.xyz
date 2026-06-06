@@ -60,7 +60,6 @@ export async function POST(
     subject: tpl.subject,
     html: tpl.html,
     text: tpl.text,
-    replyTo: "boulder.regenhub@gmail.com",
   });
 
   if (!sent) {

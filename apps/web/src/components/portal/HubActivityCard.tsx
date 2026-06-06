@@ -88,12 +88,6 @@ export function HubActivityCard({ hereNow, activeGuestCodes, guestCodesToday, fu
           </div>
         </div>
 
-        {!hasLiveData && (
-          <p className="text-[10px] text-muted mt-3 italic">
-            Real-time presence kicks in once HA → /api/access-events is wired.
-          </p>
-        )}
-
         {(canZoomIn || lastEntry) && (
           <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between gap-3 flex-wrap">
             {lastEntry ? (

@@ -341,8 +341,10 @@ export default async function PassesPage({ searchParams }: PageProps) {
         </Card>
       )}
 
-      {/* Membership upgrade prompt for day_pass members */}
-      {!isFullMember && (
+      {/* Full Access upgrade prompt — only for contributing members who don't
+          have a sub yet (day-pass members see the "Become a Member" card above
+          instead, which is the more on-ramp-friendly next step). */}
+      {!isFullMember && isContributingMember && (
         <Card className="glass-panel border border-forest/20">
           <CardContent className="p-6">
             <div className="flex items-start gap-4">
@@ -350,12 +352,12 @@ export default async function PassesPage({ searchParams }: PageProps) {
               <div className="flex-1">
                 <h3 className="font-semibold mb-1">Ready for your own desk?</h3>
                 <p className="text-sm text-muted mb-4">
-                  Desk members get a permanent door code, 24/7 access, and a path to co-op ownership.
+                  Full Access members get a permanent door code, 24/7 access, and a path to co-op ownership.
                   Hot Desk is $250/month, Cold Desk (reserved) is $500/month.
                 </p>
-                <Link href="/freeday">
+                <Link href="/membership">
                   <Button className="btn-glass gap-2 text-sm">
-                    Apply for membership
+                    See Full Access tiers
                     <ArrowRight className="w-4 h-4" />
                   </Button>
                 </Link>

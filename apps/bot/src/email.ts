@@ -57,24 +57,27 @@ export async function sendEmail(input: SendEmailInput): Promise<boolean> {
 
 export function freeDayApprovedEmail(args: { name: string; siteUrl: string }) {
   const firstName = args.name.split(" ")[0];
-  const link = `${args.siteUrl.replace(/\/$/, "")}/freeday`;
+  const base = args.siteUrl.replace(/\/$/, "");
   return {
-    subject: "Your RegenHub free day is approved",
+    subject: "Your RegenHub day pass is ready",
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
         <p>Hi ${firstName},</p>
-        <p>You&rsquo;re approved for a free day at RegenHub. Come visit any weekday between 8&nbsp;AM and 6&nbsp;PM.</p>
-        <p>On the day you arrive, click the link below to grab your door code:</p>
-        <p style="margin: 24px 0;">
-          <a href="${link}" style="background: #2d5e3e; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Get my door code</a>
+        <p>You&rsquo;re cleared to visit RegenHub — <strong>a day pass is waiting in your account.</strong></p>
+        <p>When you&rsquo;re ready to come in any weekday between 8&nbsp;AM and 6&nbsp;PM:</p>
+        <p style="margin: 20px 0;">
+          <a href="${base}/portal/passes" style="background: #2d5e3e; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Get my door code</a>
         </p>
-        <p>You'll get a 6-digit code valid until 6&nbsp;PM that day. The code works for the front door keypad.</p>
-        <p><strong>Address:</strong><br>1515 Walnut St, Suite 200<br>Boulder, CO</p>
-        <p>Any questions? Just reply to this email.</p>
+        <p>You&rsquo;ll sign in with your email (no password — we&rsquo;ll send you a one-time link), tap <strong>Generate code</strong>, and get a 6-digit PIN valid until 6&nbsp;PM that day. Use it at the front-door keypad.</p>
+        <h3 style="margin-top: 28px;">When you arrive</h3>
+        <p style="margin: 6px 0;"><strong>Address:</strong> 1515 Walnut St, Suite 200, Boulder, CO</p>
+        <p style="margin: 6px 0;"><strong>Hours:</strong> Monday&ndash;Friday, 8&nbsp;AM&ndash;6&nbsp;PM</p>
+        <p style="margin: 6px 0;">Type your code followed by the <strong>#</strong> key at the keypad, then pull the handle when the green LED appears. Suite 200 is on the second floor; we&rsquo;ll be around — please say hi.</p>
+        <p>Any questions, just reply to this email — replies go straight to us.</p>
         <p>See you soon,<br>RegenHub</p>
       </div>
     `,
-    text: `Hi ${firstName},\n\nYou're approved for a free day at RegenHub. Come visit any weekday between 8 AM and 6 PM.\n\nOn the day you arrive, grab your door code here:\n${link}\n\nYou'll get a 6-digit code valid until 6 PM that day. The code works for the front door keypad.\n\nAddress: 1515 Walnut St, Suite 200, Boulder, CO\n\nAny questions? Just reply to this email.\n\nSee you soon,\nRegenHub`,
+    text: `Hi ${firstName},\n\nYou're cleared to visit RegenHub — a day pass is waiting in your account.\n\nWhen you're ready to come in any weekday between 8 AM and 6 PM, sign in at:\n${base}/portal/passes\n\nWe'll email you a one-time sign-in link (no password). Tap "Generate code" and you'll get a 6-digit PIN valid until 6 PM that day. Use it at the front-door keypad.\n\nWhen you arrive:\nAddress: 1515 Walnut St, Suite 200, Boulder, CO\nHours: Monday–Friday, 8 AM–6 PM\nType your code followed by # at the keypad, then pull the handle when the green LED appears. Suite 200 is on the second floor — please say hi when you find us.\n\nAny questions, just reply to this email — replies go straight to us.\n\nSee you soon,\nRegenHub`,
   };
 }
 
@@ -87,9 +90,9 @@ export function freeDayPlusMembershipApprovedEmail(args: { name: string; siteUrl
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
         <p>Hi ${firstName},</p>
         <p>Welcome — you&rsquo;re approved on two fronts:</p>
-        <p><strong>1. Your free day visit.</strong> Come any weekday between 8&nbsp;AM and 6&nbsp;PM. On the day you arrive, grab your door code here:</p>
+        <p><strong>1. Your day pass — already in your account.</strong> Come any weekday between 8&nbsp;AM and 6&nbsp;PM. When you&rsquo;re ready, sign in and tap <strong>Generate code</strong>:</p>
         <p style="margin: 16px 0;">
-          <a href="${base}/freeday" style="background: #2d5e3e; color: white; padding: 10px 18px; border-radius: 8px; text-decoration: none; display: inline-block;">Get my free-day code</a>
+          <a href="${base}/portal/passes" style="background: #2d5e3e; color: white; padding: 10px 18px; border-radius: 8px; text-decoration: none; display: inline-block;">Get my door code</a>
         </p>
         <p><strong>2. RegenHub membership.</strong> You&rsquo;re also cleared to sign up for any tier when you&rsquo;re ready:</p>
         <ul style="line-height: 1.7; padding-left: 20px;">
@@ -108,6 +111,6 @@ export function freeDayPlusMembershipApprovedEmail(args: { name: string; siteUrl
         <p>See you soon,<br>RegenHub</p>
       </div>
     `,
-    text: `Hi ${firstName},\n\nWelcome — you're approved on two fronts:\n\n1. Your free day visit. Come any weekday between 8 AM and 6 PM. On the day you arrive, grab your door code here:\n${base}/freeday\n\n2. RegenHub membership. You're also cleared to sign up for any tier when you're ready:\n- Member + 1 day/mo — $30/mo, 1 coworking day per month, member rate on extras\n- Member + 2 days/mo — $50/mo\n- Member + 5 days/mo — $100/mo\n- Hot Desk — $250/mo, permanent door code + 24/7 access to any open desk\n- Cold Desk — $500/mo, your own reserved desk + permanent door code + 24/7 access\n\nDay passes accumulate — they never expire. Plus members get day passes at $25 instead of $30, and access to members-only events. Full Access tiers (Hot/Cold Desk) auto-allocate your PIN on signup.\n\nSee tiers: ${base}/membership\n\nAddress: 1515 Walnut St, Suite 200, Boulder, CO\n\nAny questions, just reply.\n\nSee you soon,\nRegenHub`,
+    text: `Hi ${firstName},\n\nWelcome — you're approved on two fronts:\n\n1. Your day pass is already in your account. Come any weekday between 8 AM and 6 PM. Sign in at ${base}/portal/passes and tap "Generate code" to get your 6-digit PIN.\n\n2. RegenHub membership. You're also cleared to sign up for any tier when you're ready:\n- Member + 1 day/mo — $30/mo, 1 coworking day per month, member rate on extras\n- Member + 2 days/mo — $50/mo\n- Member + 5 days/mo — $100/mo\n- Hot Desk — $250/mo, permanent door code + 24/7 access to any open desk\n- Cold Desk — $500/mo, your own reserved desk + permanent door code + 24/7 access\n\nDay passes accumulate — they never expire. Plus members get day passes at $25 instead of $30, and access to members-only events. Full Access tiers (Hot/Cold Desk) auto-allocate your PIN on signup.\n\nSee tiers: ${base}/membership\n\nAddress: 1515 Walnut St, Suite 200, Boulder, CO\n\nAny questions, just reply.\n\nSee you soon,\nRegenHub`,
   };
 }

@@ -22,12 +22,20 @@ const SUPPRESS_MS = 30 * 24 * 60 * 60 * 1000;
  * iOS Safari doesn't fire beforeinstallprompt, so we skip the nudge there —
  * Apple makes "Add to Home Screen" a manual step regardless.
  */
-export function InstallPrompt() {
+interface InstallPromptProps {
+  /** Render only when the user has had a successful visit (or has been around long
+   *  enough) so we don't ask first-time visitors to install before they've used
+   *  the thing once. The page passes false to skip rendering entirely. */
+  eligible?: boolean;
+}
+
+export function InstallPrompt({ eligible = true }: InstallPromptProps = {}) {
   const [evt, setEvt] = useState<BeforeInstallPromptEvent | null>(null);
   const [hidden, setHidden] = useState(true);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (!eligible) return;
 
     // Already installed?
     if (window.matchMedia("(display-mode: standalone)").matches) return;
@@ -43,7 +51,9 @@ export function InstallPrompt() {
     };
     window.addEventListener("beforeinstallprompt", handler);
     return () => window.removeEventListener("beforeinstallprompt", handler);
-  }, []);
+  }, [eligible]);
+
+  if (!eligible) return null;
 
   if (hidden || !evt) return null;
 

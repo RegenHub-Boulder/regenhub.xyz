@@ -443,7 +443,6 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
       subject: tpl.subject,
       html: tpl.html,
       text: tpl.text,
-      replyTo: "boulder.regenhub@gmail.com",
     })
       .then((ok) => {
         if (ok) console.log(`[FreeDay] ${withMembership ? "+membership" : ""} email sent to ${claim.email}`);

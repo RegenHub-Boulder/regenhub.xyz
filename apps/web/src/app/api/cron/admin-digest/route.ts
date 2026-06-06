@@ -102,7 +102,6 @@ export async function POST(req: Request) {
       subject: tpl.subject,
       html: tpl.html,
       text: tpl.text,
-      replyTo: "boulder.regenhub@gmail.com",
     });
     results.push({ email: a.email!, ok: sent });
   }

@@ -97,7 +97,6 @@ export async function PATCH(request: Request) {
       subject: tpl.subject,
       html: tpl.html,
       text: tpl.text,
-      replyTo: "boulder.regenhub@gmail.com",
     }).catch((err) => console.error("[AdminClaims] email send failed:", err));
   }
 

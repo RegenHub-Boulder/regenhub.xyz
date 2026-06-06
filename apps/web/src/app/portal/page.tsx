@@ -142,6 +142,27 @@ export default async function PortalPage() {
   ]);
   const hereNowCount = new Set((hereNowRows ?? []).map((r) => r.member_id)).size;
 
+  // Install-prompt eligibility: don't nag first-time visitors before they've
+  // actually used the space once. Eligible iff they have a granted access_log
+  // entry OR their account is at least a day old (a proxy: someone returning
+  // after a long gap probably knows what they're doing).
+  let installPromptEligible = false;
+  if (member) {
+    const accountAgeMs2 = Date.now() - new Date(member.created_at).getTime();
+    if (accountAgeMs2 > 24 * 60 * 60 * 1000) {
+      installPromptEligible = true;
+    } else {
+      const { data: ownEntry } = await adminClient
+        .from("access_logs")
+        .select("id")
+        .eq("member_id", member.id)
+        .eq("result", "granted")
+        .limit(1)
+        .maybeSingle();
+      installPromptEligible = !!ownEntry;
+    }
+  }
+
   // Most recent attributed entry — for the freshness signal on the card.
   // Co-op-gated like the access log itself: only show names to co-op members + admins.
   let lastEntry: { memberName: string; whenIso: string } | null = null;
@@ -232,10 +253,16 @@ export default async function PortalPage() {
   const isFullMember = member.member_type !== "day_pass";
   const typeLabel = member.member_type === "cold_desk" ? "Cold Desk" : member.member_type === "hot_desk" ? "Hot Desk" : member.member_type === "hub_friend" ? "Hub Friend" : "Day Pass";
 
-  // Show onboarding expanded for new members (no pin code set or account < 7 days old)
+  // Show onboarding expanded for new members (no pin code set or account < 7 days old).
+  // Specifically suppress the profile-fill checklist for unredeemed day-pass members:
+  // asking for a photo / bio / Telegram before they've even walked in once is wrong-
+  // shape. They earn the prompt after a successful access_log entry or by becoming a
+  // contributing/full member.
   // eslint-disable-next-line react-hooks/purity -- server component, renders once
   const accountAgeMs = Date.now() - new Date(member.created_at).getTime();
   const isNewMember = !member.pin_code || accountAgeMs < 7 * 24 * 60 * 60 * 1000;
+  const checklistAppliesToThisMember = isFullMember || installPromptEligible;
+  const showOnboardingChecklist = isNewMember && checklistAppliesToThisMember;
 
   const interestSignupLabel = interestSignup
     ? new Date(interestSignup.created_at).toLocaleDateString("en-US", {
@@ -272,7 +299,7 @@ export default async function PortalPage() {
         )}
       </div>
 
-      {isNewMember && (
+      {showOnboardingChecklist && (
         <OnboardingChecklist
           needsPinCode={isFullMember}
           hasPinCode={!!member.pin_code}
@@ -291,7 +318,7 @@ export default async function PortalPage() {
         lastEntry={lastEntry}
       />
 
-      <InstallPrompt />
+      <InstallPrompt eligible={installPromptEligible} />
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {isFullMember && (
