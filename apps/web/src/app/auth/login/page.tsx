@@ -10,12 +10,14 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 interface PageProps {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; next?: string }>;
 }
 
 export default async function LoginPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const banner = params.error ? (ERROR_MESSAGES[params.error] ?? null) : null;
+  // Only honor next params that look like internal paths to avoid open redirects.
+  const safeNext = params.next && /^\/[a-zA-Z0-9_\-/?=&]*$/.test(params.next) ? params.next : undefined;
 
   return (
     <div className="min-h-screen flex items-center justify-center px-6">
@@ -27,7 +29,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
               Enter your email — we&apos;ll send a one-time sign-in link. Check your inbox (and spam folder, just in case).
             </p>
           </div>
-          <LoginForm initialBanner={banner} />
+          <LoginForm initialBanner={banner} next={safeNext} />
         </div>
       </div>
     </div>

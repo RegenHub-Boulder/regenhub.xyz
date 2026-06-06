@@ -10,9 +10,11 @@ import { createClient } from "@/lib/supabase/client";
 interface Props {
   /** Banner to show above the form — used to surface ?error=… from the auth callback. */
   initialBanner?: string | null;
+  /** Optional post-login destination (e.g. "/apply"). Defaults to /portal. */
+  next?: string;
 }
 
-export function LoginForm({ initialBanner = null }: Props = {}) {
+export function LoginForm({ initialBanner = null, next = "/portal" }: Props = {}) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
@@ -26,10 +28,11 @@ export function LoginForm({ initialBanner = null }: Props = {}) {
     setError(null);
 
     const supabase = createClient();
+    const callbackUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: callbackUrl,
       },
     });
 
@@ -57,7 +60,7 @@ export function LoginForm({ initialBanner = null }: Props = {}) {
       setError(error.message);
       setLoading(false);
     } else {
-      router.push("/portal");
+      router.push(next);
     }
   };
 

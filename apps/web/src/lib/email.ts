@@ -24,8 +24,18 @@ export interface SendEmailInput {
   text?: string;
   /** Override the From address. */
   from?: string;
-  /** Reply-to (e.g. so reply goes to boulder.regenhub@gmail.com) */
+  /** Override reply-to. Defaults to defaultReplyTo() — Aaron's personal inbox
+   *  for member coordination so replies don't sit unread in a shared address. */
   replyTo?: string;
+}
+
+/** Default reply-to for transactional mail. Going through Aaron directly is
+ *  more responsive than the shared boulder.regenhub@gmail.com inbox today.
+ *  Override via EMAIL_REPLY_TO env var (set in Coolify if it ever changes).
+ *  TODO: once gmail forwarding from boulder.regenhub@gmail.com → ag@unforced.org
+ *  is set up, this default can flip back to the brand-aligned address. */
+function defaultReplyTo(): string {
+  return process.env.EMAIL_REPLY_TO ?? "ag@unforced.org";
 }
 
 /**
@@ -48,7 +58,7 @@ export async function sendEmail(input: SendEmailInput): Promise<boolean> {
       subject: input.subject,
       html: input.html,
       text: input.text ?? input.html.replace(/<[^>]+>/g, ""),
-      ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+      replyTo: input.replyTo ?? defaultReplyTo(),
     });
     if (error) {
       console.error("[email] Resend send error:", error);

@@ -17,6 +17,10 @@ function defaultFrom(): string {
   return process.env.EMAIL_FROM ?? "RegenHub <noreply@mail.unforced.dev>";
 }
 
+function defaultReplyTo(): string {
+  return process.env.EMAIL_REPLY_TO ?? "ag@unforced.org";
+}
+
 export interface SendEmailInput {
   to: string;
   subject: string;
@@ -38,7 +42,7 @@ export async function sendEmail(input: SendEmailInput): Promise<boolean> {
       subject: input.subject,
       html: input.html,
       text: input.text ?? input.html.replace(/<[^>]+>/g, ""),
-      ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+      replyTo: input.replyTo ?? defaultReplyTo(),
     });
     if (error) {
       console.error("[email] Resend send error:", error);
