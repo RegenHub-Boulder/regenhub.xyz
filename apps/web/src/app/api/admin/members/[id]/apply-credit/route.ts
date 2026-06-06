@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { getStripe, getOrCreateCustomer, isStripeConfigured } from "@/lib/stripe";
+import { logAction, AuditAction } from "@/lib/auditLog";
 
 /**
  * POST /api/admin/members/[id]/apply-credit
@@ -96,6 +97,22 @@ export async function POST(
         .update({ stripe_customer_id: customer.id })
         .eq("id", member.id);
     }
+
+    await logAction(
+      {
+        action: AuditAction.CREDIT_APPLIED,
+        actorMemberId: adminMember.id,
+        target: { table: "members", id: member.id },
+        payload: {
+          amount_cents: amountCents,
+          dollars,
+          note,
+          stripe_transaction_id: txn.id,
+          stripe_customer_id: customer.id,
+        },
+      },
+      admin,
+    );
 
     return NextResponse.json({
       ok: true,

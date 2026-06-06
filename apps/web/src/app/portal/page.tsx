@@ -11,6 +11,7 @@ import { ManageSubscriptionButton } from "@/components/portal/ManageSubscription
 import { ChangePlanButton } from "@/components/portal/ChangePlanButton";
 import { OnboardingChecklist } from "@/components/portal/OnboardingChecklist";
 import { HubActivityCard } from "@/components/portal/HubActivityCard";
+import { DayPassRedemptionHero } from "@/components/portal/DayPassRedemptionHero";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { planLabel, getPlan } from "@/lib/plans";
 
@@ -148,6 +149,7 @@ export default async function PortalPage() {
   // after a long gap probably knows what they're doing).
   let installPromptEligible = false;
   if (member) {
+    // eslint-disable-next-line react-hooks/purity -- server component, renders once per request
     const accountAgeMs2 = Date.now() - new Date(member.created_at).getTime();
     if (accountAgeMs2 > 24 * 60 * 60 * 1000) {
       installPromptEligible = true;
@@ -296,6 +298,8 @@ export default async function PortalPage() {
           </p>
         )}
       </div>
+
+      <DayPassRedemptionHero member={member} />
 
       {isNewMember && (
         <OnboardingChecklist

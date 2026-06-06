@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { logAction, AuditAction } from "@/lib/auditLog";
 
 /**
  * PATCH /api/admin/members/[id]/approve-membership
@@ -75,6 +76,18 @@ export async function PATCH(
     console.error("[ApproveMembership] update error:", error);
     return NextResponse.json({ error: "Update failed" }, { status: 500 });
   }
+
+  await logAction(
+    {
+      action: level === "full"
+        ? (body.approved ? AuditAction.FULL_ACCESS_APPROVED : AuditAction.FULL_ACCESS_REVOKED)
+        : (body.approved ? AuditAction.MEMBERSHIP_APPROVED : AuditAction.MEMBERSHIP_REVOKED),
+      actorMemberId: adminMember.id,
+      target: { table: "members", id: memberId },
+      payload: { level, approved: body.approved, implies_membership: level === "full" && body.approved },
+    },
+    admin,
+  );
 
   return NextResponse.json({ ok: true, approved: body.approved, level });
 }

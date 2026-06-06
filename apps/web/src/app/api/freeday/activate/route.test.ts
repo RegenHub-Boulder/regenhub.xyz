@@ -1,5 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { makeSupabaseMock } from "../../../../../test/mockSupabase";
+
+// Freeze "now" at a known weekday (Monday 2026-06-08 noon Mountain) so the
+// route's weekday + claimed-date checks don't fail depending on what day the
+// test actually runs.
+const FROZEN_NOW_MS = new Date("2026-06-08T18:00:00.000Z").getTime();
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
@@ -30,27 +35,32 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { setUserCode, allocateSlotWithRetry } from "@regenhub/shared";
 
-/** YYYY-MM-DD in Mountain Time today (matches the route's date check). */
-function todayMT(): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Denver" }).format(new Date());
-}
+// Frozen date (above) is Monday 2026-06-08 — match the claim's reserved date
+// so the route's "claimed_date === today" check passes.
+const FROZEN_TODAY_MT = "2026-06-08";
 
 const reservedClaim = {
   id: 11,
   email: "guest@example.com",
   name: "Test Guest",
   status: "reserved",
-  claimed_date: todayMT(),
+  claimed_date: FROZEN_TODAY_MT,
   supabase_user_id: "user-1",
   day_code_id: null,
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(FROZEN_NOW_MS));
   vi.mocked(setUserCode).mockResolvedValue([{ entity: "lock.front", ok: true }]);
   // Default: no telegram bot token configured, notifyTelegram is a no-op.
   delete process.env.TELEGRAM_BOT_TOKEN;
   delete process.env.TELEGRAM_GROUP_CHAT_ID;
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("POST /api/freeday/activate", () => {
@@ -69,7 +79,12 @@ describe("POST /api/freeday/activate", () => {
   it("returns a code, programs the lock, and updates the claim on happy path", async () => {
     const sb = makeSupabaseMock({ auth: { user: { id: "user-1", email: "guest@example.com" } } });
     const admin = makeSupabaseMock({
-      selects: { free_day_claims: { data: reservedClaim } },
+      selects: {
+        free_day_claims: { data: reservedClaim },
+        // /api/freeday/activate now looks up the auto-created member to link
+        // the day_code's member_id (see migration 016 + the 2026-06 unification).
+        members: { data: { id: 42 } },
+      },
     });
     vi.mocked(createClient).mockResolvedValue(sb as never);
     vi.mocked(createServiceClient).mockReturnValue(admin as never);

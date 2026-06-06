@@ -2,12 +2,13 @@
 
 import { AdminTabs, type TabDef } from "./AdminTabs";
 
-export type TabKey = "overview" | "billing" | "access";
+export type TabKey = "overview" | "billing" | "access" | "activity";
 
 const TABS: TabDef<TabKey>[] = [
   { key: "overview", label: "Overview" },
   { key: "billing",  label: "Billing" },
   { key: "access",   label: "Access" },
+  { key: "activity", label: "Activity" },
 ];
 
 interface Props {

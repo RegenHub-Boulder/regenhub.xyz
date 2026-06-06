@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/admin";
 import { notFound } from "next/navigation";
 import { MemberForm } from "@/components/admin/MemberForm";
 import { AddPassesCard } from "@/components/admin/AddPassesCard";
@@ -6,6 +7,7 @@ import { SubscriptionCard } from "@/components/admin/SubscriptionCard";
 import { MembershipApprovalCard } from "@/components/admin/MembershipApprovalCard";
 import { AdminRevokeCodeButton } from "@/components/admin/AdminRevokeCodeButton";
 import { MemberDetailTabs } from "@/components/admin/MemberDetailTabs";
+import { MemberActivityTimeline } from "@/components/admin/MemberActivityTimeline";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Key, AlertCircle, ShieldCheck, Mail, AtSign } from "lucide-react";
@@ -74,6 +76,32 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
   const approvedForFullByName = member.approved_for_full_by
     ? approverNameMap.get(member.approved_for_full_by) ?? null
     : null;
+
+  // Fetch admin_actions targeting this member (joined with actor name) for the Activity tab.
+  // Service client because admin_actions RLS is admins-only-read; this page itself is an admin page.
+  const adminClient = createServiceClient();
+  const { data: rawActions } = await adminClient
+    .from("admin_actions")
+    .select("id, action, payload, created_at, actor_member_id")
+    .eq("target_table", "members")
+    .eq("target_id", String(member.id))
+    .order("created_at", { ascending: false })
+    .limit(50);
+  const actorIds = Array.from(
+    new Set((rawActions ?? []).map((r) => r.actor_member_id).filter((id): id is number => id != null)),
+  );
+  const actorNameMap = new Map<number, string>();
+  if (actorIds.length > 0) {
+    const { data: actors } = await adminClient.from("members").select("id, name").in("id", actorIds);
+    for (const a of actors ?? []) actorNameMap.set(a.id, a.name);
+  }
+  const activityRows = (rawActions ?? []).map((r) => ({
+    id: r.id,
+    action: r.action,
+    actor_name: r.actor_member_id ? actorNameMap.get(r.actor_member_id) ?? null : null,
+    payload: r.payload,
+    created_at: r.created_at,
+  }));
 
   const memberTypeLabel =
     member.member_type === "cold_desk" ? "Cold Desk"
@@ -263,6 +291,7 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
               )}
             </>
           ),
+          activity: <MemberActivityTimeline rows={activityRows} />,
         }}
       </MemberDetailTabs>
     </div>

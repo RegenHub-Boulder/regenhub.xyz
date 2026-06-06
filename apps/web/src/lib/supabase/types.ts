@@ -330,6 +330,28 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["lock_sync_runs"]["Insert"]>;
         Relationships: [];
       };
+      admin_actions: {
+        Row: {
+          id: number;
+          actor_member_id: number | null;
+          action: string;
+          target_table: string | null;
+          target_id: string | null;
+          idempotency_key: string | null;
+          payload: Record<string, unknown>;
+          created_at: string;
+        };
+        Insert: {
+          actor_member_id?: number | null;
+          action: string;
+          target_table?: string | null;
+          target_id?: string | null;
+          idempotency_key?: string | null;
+          payload?: Record<string, unknown>;
+        };
+        Update: Partial<Database["public"]["Tables"]["admin_actions"]["Insert"]>;
+        Relationships: [];
+      };
       webhook_events: {
         Row: {
           id: number;
