@@ -13,13 +13,7 @@ function getResend(): Resend | null {
   return resendClient;
 }
 
-function defaultFrom(): string {
-  return process.env.EMAIL_FROM ?? "RegenHub <noreply@mail.unforced.dev>";
-}
-
-function defaultReplyTo(): string {
-  return process.env.EMAIL_REPLY_TO ?? "ag@unforced.org";
-}
+import { defaultEmailFrom as defaultFrom, defaultEmailReplyTo as defaultReplyTo } from "@regenhub/shared";
 
 export interface SendEmailInput {
   to: string;

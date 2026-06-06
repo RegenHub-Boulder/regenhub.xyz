@@ -12,9 +12,7 @@ export function isEmailConfigured(): boolean {
   return !!process.env.RESEND_API_KEY && !!process.env.EMAIL_FROM;
 }
 
-function defaultFrom(): string {
-  return process.env.EMAIL_FROM ?? "RegenHub <noreply@mail.unforced.dev>";
-}
+import { defaultEmailFrom as defaultFrom, defaultEmailReplyTo as defaultReplyTo } from "@regenhub/shared";
 
 export interface SendEmailInput {
   to: string;
@@ -29,14 +27,6 @@ export interface SendEmailInput {
   replyTo?: string;
 }
 
-/** Default reply-to for transactional mail. Going through Aaron directly is
- *  more responsive than the shared boulder.regenhub@gmail.com inbox today.
- *  Override via EMAIL_REPLY_TO env var (set in Coolify if it ever changes).
- *  TODO: once gmail forwarding from boulder.regenhub@gmail.com → ag@unforced.org
- *  is set up, this default can flip back to the brand-aligned address. */
-function defaultReplyTo(): string {
-  return process.env.EMAIL_REPLY_TO ?? "ag@unforced.org";
-}
 
 /**
  * Send a transactional email via Resend.

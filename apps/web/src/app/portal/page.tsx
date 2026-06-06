@@ -254,15 +254,13 @@ export default async function PortalPage() {
   const typeLabel = member.member_type === "cold_desk" ? "Cold Desk" : member.member_type === "hot_desk" ? "Hot Desk" : member.member_type === "hub_friend" ? "Hub Friend" : "Day Pass";
 
   // Show onboarding expanded for new members (no pin code set or account < 7 days old).
-  // Specifically suppress the profile-fill checklist for unredeemed day-pass members:
-  // asking for a photo / bio / Telegram before they've even walked in once is wrong-
-  // shape. They earn the prompt after a successful access_log entry or by becoming a
-  // contributing/full member.
+  // Day-pass folks see it too — the checklist is about orienting people to the
+  // culture (photo helps the directory, Telegram is where the community lives,
+  // bio helps members find common interests), not just about preparing them for
+  // their first visit.
   // eslint-disable-next-line react-hooks/purity -- server component, renders once
   const accountAgeMs = Date.now() - new Date(member.created_at).getTime();
   const isNewMember = !member.pin_code || accountAgeMs < 7 * 24 * 60 * 60 * 1000;
-  const checklistAppliesToThisMember = isFullMember || installPromptEligible;
-  const showOnboardingChecklist = isNewMember && checklistAppliesToThisMember;
 
   const interestSignupLabel = interestSignup
     ? new Date(interestSignup.created_at).toLocaleDateString("en-US", {
@@ -299,7 +297,7 @@ export default async function PortalPage() {
         )}
       </div>
 
-      {showOnboardingChecklist && (
+      {isNewMember && (
         <OnboardingChecklist
           needsPinCode={isFullMember}
           hasPinCode={!!member.pin_code}

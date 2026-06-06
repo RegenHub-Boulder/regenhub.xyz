@@ -17,3 +17,5 @@ export {
 } from "./homeAssistant.js";
 
 export { allocateSlotWithRetry } from "./slotAllocation.js";
+
+export { defaultEmailFrom, defaultEmailReplyTo } from "./email.js";
