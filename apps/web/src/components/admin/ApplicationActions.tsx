@@ -82,6 +82,10 @@ export function ApplicationActions({
   }
 
   async function reject() { await patch({ status: "rejected" }); }
+  async function close() {
+    if (!confirm("Close this application as already handled? Use this when the applicant has been onboarded through another path (e.g. they already have a member account or subscription). It clears the queue without rejecting them.")) return;
+    await patch({ status: "closed" });
+  }
   async function revertToPending() { await patch({ status: "pending" }); }
   async function saveNotes() {
     const ok = await patch({ admin_notes: notes });
@@ -165,6 +169,15 @@ export function ApplicationActions({
             <Button
               size="sm"
               disabled={busy}
+              onClick={close}
+              className="btn-glass text-xs gap-1 h-7 px-2"
+              title="Use when the applicant has already been onboarded via another path"
+            >
+              Close as handled
+            </Button>
+            <Button
+              size="sm"
+              disabled={busy}
               onClick={reject}
               className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 text-xs gap-1 h-7 px-2"
             >
@@ -172,7 +185,7 @@ export function ApplicationActions({
             </Button>
           </>
         )}
-        {(status === "approved" || status === "rejected") && (
+        {(status === "approved" || status === "rejected" || status === "closed") && (
           <Button
             size="sm"
             disabled={busy}

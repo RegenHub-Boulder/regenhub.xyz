@@ -25,9 +25,10 @@ const statusStyle: Record<ApplicationStatus, string> = {
   pending: "border-amber-400/50 text-amber-400",
   approved: "border-emerald-400/50 text-emerald-400",
   rejected: "border-red-400/50 text-red-400",
+  closed:   "border-white/20 text-muted",
 };
 
-const statusTabs = ["all", "pending", "approved", "rejected"] as const;
+const statusTabs = ["all", "pending", "approved", "rejected", "closed"] as const;
 
 export function ApplicationsFilter({
   applications,

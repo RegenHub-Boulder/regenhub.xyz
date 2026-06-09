@@ -1,5 +1,5 @@
 export type MemberType = "cold_desk" | "hot_desk" | "hub_friend" | "day_pass";
-export type ApplicationStatus = "pending" | "approved" | "rejected";
+export type ApplicationStatus = "pending" | "approved" | "rejected" | "closed";
 export type MembershipInterest =
   | "daypass_single"
   | "daypass_5pack"
