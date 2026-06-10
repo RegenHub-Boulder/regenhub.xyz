@@ -180,9 +180,21 @@ function eventRow(e: LumaEvent): string {
   </tr>`;
 }
 
+/**
+ * Whether the "numbers" transparency block is included in outgoing issues.
+ * OFF by default while the Xero→Stripe migration is in flight (the MRR and
+ * member counts under-report reality until everyone's moved over). Flip
+ * NEWSLETTER_INCLUDE_STATS=true in Coolify (runtime env — no redeploy) once
+ * the data is trustworthy.
+ */
+export function newsletterIncludesStats(): boolean {
+  return process.env.NEWSLETTER_INCLUDE_STATS === "true";
+}
+
 export function renderNewsletterHtml(issue: CompiledIssue, recipientEmail: string, siteUrl: string): string {
   const { stats } = issue;
   const base = siteUrl.replace(/\/$/, "");
+  const includeStats = newsletterIncludesStats();
   const mrr = `$${(stats.mrrCents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 
   const noteHtml = issue.note
@@ -202,13 +214,8 @@ export function renderNewsletterHtml(issue: CompiledIssue, recipientEmail: strin
     .map((t) => `<tr><td style="padding: 3px 12px 3px 0; color: #555; font-size: 14px;">${t.label}</td><td style="padding: 3px 0; font-weight: 600; font-size: 14px;">${t.count}</td></tr>`)
     .join("");
 
-  return `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
-      <p style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: #2d5e3e; margin-bottom: 4px;">RegenHub dispatch</p>
-      <h2 style="margin: 0 0 14px;">News from the cooperative</h2>
-      ${noteHtml}
-      ${eventsHtml}
-      <h3 style="margin: 28px 0 8px;">The numbers (last two weeks)</h3>
+  const statsHtml = includeStats
+    ? `<h3 style="margin: 28px 0 8px;">The numbers (last two weeks)</h3>
       <p style="font-size: 13px; color: #555; margin: 0 0 8px;">As a cooperative, we share the same numbers we look at — ${stats.monthLabel}.</p>
       <table style="width: 100%; border-collapse: collapse; margin: 8px 0;">
         <tr><td style="padding: 3px 12px 3px 0; color: #555; font-size: 14px;">Monthly recurring revenue</td><td style="padding: 3px 0; font-weight: 600; font-size: 14px;">${mrr}</td></tr>
@@ -218,8 +225,17 @@ export function renderNewsletterHtml(issue: CompiledIssue, recipientEmail: strin
         <tr><td style="padding: 3px 12px 3px 0; color: #555; font-size: 14px;">Day codes issued</td><td style="padding: 3px 0; font-weight: 600; font-size: 14px;">${stats.dayCodesIssued}</td></tr>
         <tr><td style="padding: 3px 12px 3px 0; color: #555; font-size: 14px;">Free-day signups</td><td style="padding: 3px 0; font-weight: 600; font-size: 14px;">${stats.freeDaySignups}</td></tr>
       </table>
-      <table style="border-collapse: collapse; margin: 4px 0 12px;">${tierRows}</table>
-      <p style="font-size: 14px;">Want to co-work with us? <a href="${base}/freeday" style="color: #2d5e3e;">Claim a free day</a> or <a href="${base}/membership" style="color: #2d5e3e;">see membership tiers</a>.</p>
+      <table style="border-collapse: collapse; margin: 4px 0 12px;">${tierRows}</table>`
+    : "";
+
+  return `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+      <p style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: #2d5e3e; margin-bottom: 4px;">RegenHub dispatch</p>
+      <h2 style="margin: 0 0 14px;">News from the cooperative</h2>
+      ${noteHtml}
+      ${eventsHtml}
+      ${statsHtml}
+      <p style="font-size: 14px; margin-top: 24px;">Want to co-work with us? <a href="${base}/freeday" style="color: #2d5e3e;">Claim a free day</a> or <a href="${base}/membership" style="color: #2d5e3e;">see membership tiers</a>.</p>
       <p style="font-size: 14px;">Questions or ideas — just reply, it goes straight to a human.</p>
       <p style="font-size: 14px;">With gratitude,<br>RegenHub<br><span style="color: #888; font-size: 12px;">1515 Walnut St, Suite 200, Boulder, CO</span></p>
       <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0 12px;" />
@@ -234,6 +250,7 @@ export function renderNewsletterHtml(issue: CompiledIssue, recipientEmail: strin
 export function renderNewsletterText(issue: CompiledIssue, recipientEmail: string, siteUrl: string): string {
   const { stats } = issue;
   const base = siteUrl.replace(/\/$/, "");
+  const includeStats = newsletterIncludesStats();
   const mrr = `$${(stats.mrrCents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
   const noteText = issue.note ? `\n${issue.note.text}${issue.note.author ? `\n— ${issue.note.author}` : ""}\n` : "";
   const eventsText = issue.events.length > 0
@@ -243,6 +260,9 @@ export function renderNewsletterText(issue: CompiledIssue, recipientEmail: strin
       }).join("\n") + "\n\nFull calendar: https://lu.ma/regenhub\n"
     : "\nEvents calendar: https://lu.ma/regenhub\n";
   const tierText = stats.tierCounts.map((t) => `  ${t.label}: ${t.count}`).join("\n");
+  const statsText = includeStats
+    ? `\nTHE NUMBERS (${stats.monthLabel})\nMonthly recurring revenue: ${mrr}\nPaying members: ${stats.payingMembers}\nNew members: ${stats.newMembers}\nDoor entries: ${stats.totalVisits}\nDay codes issued: ${stats.dayCodesIssued}\nFree-day signups: ${stats.freeDaySignups}\n\nMembers by tier:\n${tierText}\n`
+    : "";
 
-  return `REGENHUB DISPATCH\n${noteText}${eventsText}\nTHE NUMBERS (${stats.monthLabel})\nMonthly recurring revenue: ${mrr}\nPaying members: ${stats.payingMembers}\nNew members: ${stats.newMembers}\nDoor entries: ${stats.totalVisits}\nDay codes issued: ${stats.dayCodesIssued}\nFree-day signups: ${stats.freeDaySignups}\n\nMembers by tier:\n${tierText}\n\nCome co-work: ${base}/freeday · Membership: ${base}/membership\n\nQuestions or ideas — just reply, it goes straight to a human.\n\nWith gratitude,\nRegenHub\n1515 Walnut St, Suite 200, Boulder, CO\n\nUnsubscribe: ${unsubscribeUrl(recipientEmail, siteUrl)}`;
+  return `REGENHUB DISPATCH\n${noteText}${eventsText}${statsText}\nCome co-work: ${base}/freeday · Membership: ${base}/membership\n\nQuestions or ideas — just reply, it goes straight to a human.\n\nWith gratitude,\nRegenHub\n1515 Walnut St, Suite 200, Boulder, CO\n\nUnsubscribe: ${unsubscribeUrl(recipientEmail, siteUrl)}`;
 }

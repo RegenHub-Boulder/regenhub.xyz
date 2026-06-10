@@ -51,9 +51,11 @@ export function NewsletterCard() {
         </div>
         <p className="text-xs text-muted">
           Sends automatically every other Tuesday (odd ISO weeks) to all members +
-          the interests list: your note above, upcoming Luma events, and the
-          last-two-weeks numbers. Preview compiles the real issue and sends it
-          only to you.
+          the interests list: your note above + upcoming Luma events. The
+          transparency-numbers section is OFF while the Stripe migration settles —
+          flip <code className="text-foreground">NEWSLETTER_INCLUDE_STATS=true</code> in
+          Coolify when the data is trustworthy. Preview compiles the real issue
+          and sends it only to you.
         </p>
         <Button size="sm" disabled={busy} onClick={preview} className="btn-glass text-xs gap-1 h-7">
           {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Eye className="w-3 h-3" />}
