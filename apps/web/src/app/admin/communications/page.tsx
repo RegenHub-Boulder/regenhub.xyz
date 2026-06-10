@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { CommunicationsComposer } from "@/components/admin/CommunicationsComposer";
+import { DigestNoteCard } from "@/components/admin/DigestNoteCard";
 
 export const metadata: Metadata = { title: "Communications — Admin" };
 
@@ -14,6 +15,7 @@ export default function CommunicationsPage() {
           only targets members who haven&apos;t already received this batch.
         </p>
       </div>
+      <DigestNoteCard />
       <CommunicationsComposer />
     </div>
   );

@@ -330,6 +330,23 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["lock_sync_runs"]["Insert"]>;
         Relationships: [];
       };
+      digest_notes: {
+        Row: {
+          id: number;
+          note: string;
+          author_member_id: number | null;
+          created_at: string;
+          consumed_at: string | null;
+        };
+        Insert: {
+          note: string;
+          author_member_id?: number | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["digest_notes"]["Insert"]> & {
+          consumed_at?: string | null;
+        };
+        Relationships: [];
+      };
       admin_actions: {
         Row: {
           id: number;

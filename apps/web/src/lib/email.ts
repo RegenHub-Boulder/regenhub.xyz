@@ -295,3 +295,143 @@ export function membershipApprovedEmail(args: { name: string; siteUrl: string })
     text: `Hi ${firstName},\n\nYou're approved to subscribe to a RegenHub membership whenever you're ready. Five tiers:\n\n- Member + 1 day/mo — $30/mo, 1 coworking day per month, member rate on extras\n- Member + 2 days/mo — $50/mo\n- Member + 5 days/mo — $100/mo\n- Hot Desk — $250/mo, permanent door code + 24/7 access to any open desk\n- Cold Desk — $500/mo, your own reserved desk + permanent door code + 24/7 access\n\nDay passes accumulate — they never expire. Plus members get day passes at $25 instead of $30, and access to members-only events. Full Access tiers (Hot/Cold Desk) auto-allocate your PIN on signup.\n\nSee tiers: ${base}/membership\n\nAny questions, just reply.\n\n— RegenHub`,
   };
 }
+
+// ============================================================
+// Lifecycle nudges (Bet 1) — warm, short, one idea per email
+// ============================================================
+
+/** Member was approved + has a pass but never came in. */
+export function nudgeNeverVisitedEmail(args: { name: string; balance: number; siteUrl: string }) {
+  const firstName = args.name.split(" ")[0];
+  const base = args.siteUrl.replace(/\/$/, "");
+  const passes = args.balance === 1 ? "a day pass" : `${args.balance} day passes`;
+  return {
+    subject: `${firstName}, your RegenHub day pass is still waiting`,
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+        <p>Hi ${firstName},</p>
+        <p>Just a friendly nudge — you still have ${passes} sitting in your RegenHub account, ready whenever you are.</p>
+        <p>We're open Monday&ndash;Friday, 8&nbsp;AM&ndash;6&nbsp;PM at 1515 Walnut St, Suite 200, Boulder. When you're ready to come in:</p>
+        <p style="margin: 20px 0;">
+          <a href="${base}/portal/passes" style="background: #2d5e3e; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Get my door code</a>
+        </p>
+        <p>No pressure, no expiration — your pass keeps. We'd just love to meet you.</p>
+        <p>Any questions, just reply.</p>
+        <p>See you soon,<br>RegenHub</p>
+      </div>
+    `,
+    text: `Hi ${firstName},\n\nJust a friendly nudge — you still have ${passes} sitting in your RegenHub account, ready whenever you are.\n\nWe're open Monday–Friday, 8 AM–6 PM at 1515 Walnut St, Suite 200, Boulder. When you're ready to come in, grab your door code:\n${base}/portal/passes\n\nNo pressure, no expiration — your pass keeps. We'd just love to meet you.\n\nAny questions, just reply.\n\nSee you soon,\nRegenHub`,
+  };
+}
+
+/** Member visited at least once, hasn't been back in a bit. */
+export function nudgeComeBackEmail(args: { name: string; balance: number; siteUrl: string }) {
+  const firstName = args.name.split(" ")[0];
+  const base = args.siteUrl.replace(/\/$/, "");
+  const passLine = args.balance > 0
+    ? `You still have ${args.balance === 1 ? "a day pass" : `${args.balance} day passes`} in your account — `
+    : "";
+  return {
+    subject: `${firstName}, come co-work with us again?`,
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+        <p>Hi ${firstName},</p>
+        <p>It was lovely having you at the hub — we'd love to see you again. ${passLine}the door's open Monday&ndash;Friday, 8&nbsp;AM&ndash;6&nbsp;PM.</p>
+        <p style="margin: 20px 0;">
+          <a href="${base}/portal/passes" style="background: #2d5e3e; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Plan my next visit</a>
+        </p>
+        <p>And if RegenHub is starting to feel like your kind of place, membership starts at $30/month with a coworking day included — <a href="${base}/membership" style="color: #2d5e3e;">have a look at the tiers</a> whenever you're curious.</p>
+        <p>Any questions, just reply.</p>
+        <p>Warmly,<br>RegenHub</p>
+      </div>
+    `,
+    text: `Hi ${firstName},\n\nIt was lovely having you at the hub — we'd love to see you again. ${passLine}the door's open Monday–Friday, 8 AM–6 PM.\n\nPlan your next visit: ${base}/portal/passes\n\nAnd if RegenHub is starting to feel like your kind of place, membership starts at $30/month with a coworking day included — see the tiers at ${base}/membership whenever you're curious.\n\nAny questions, just reply.\n\nWarmly,\nRegenHub`,
+  };
+}
+
+/** Member used their last pass. The moment of maximum motivation. */
+export function nudgeBalanceEmptyEmail(args: { name: string; siteUrl: string }) {
+  const firstName = args.name.split(" ")[0];
+  const base = args.siteUrl.replace(/\/$/, "");
+  return {
+    subject: `${firstName}, the easy way back into the hub`,
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+        <p>Hi ${firstName},</p>
+        <p>You've used up your day passes — thanks for spending those days with us. If RegenHub is working for you, here are the two easy ways back in:</p>
+        <ul style="line-height: 1.8; padding-left: 20px;">
+          <li><strong>Become a member from $30/month</strong> — includes a coworking day every month (they accumulate and never expire), member pricing on extras, and members-only events. <a href="${base}/membership" style="color: #2d5e3e;">See the tiers</a></li>
+          <li><strong>Grab a single day pass</strong> for $30 whenever you need one. <a href="${base}/portal/passes" style="color: #2d5e3e;">Buy a pass</a></li>
+        </ul>
+        <p>The membership math works out better after one visit a month — and it supports the cooperative.</p>
+        <p>Any questions, just reply — happy to help you pick.</p>
+        <p>Warmly,<br>RegenHub</p>
+      </div>
+    `,
+    text: `Hi ${firstName},\n\nYou've used up your day passes — thanks for spending those days with us. If RegenHub is working for you, here are the two easy ways back in:\n\n1. Become a member from $30/month — includes a coworking day every month (they accumulate and never expire), member pricing on extras, and members-only events. See tiers: ${base}/membership\n\n2. Grab a single day pass for $30 whenever you need one: ${base}/portal/passes\n\nThe membership math works out better after one visit a month — and it supports the cooperative.\n\nAny questions, just reply — happy to help you pick.\n\nWarmly,\nRegenHub`,
+  };
+}
+
+// ============================================================
+// Hub health digest (Bet 2) — radical transparency lite
+// ============================================================
+
+export interface HubDigestStats {
+  monthLabel: string;           // "May 2026"
+  mrrCents: number;
+  payingMembers: number;
+  tierCounts: { label: string; count: number }[];
+  newMembers: number;
+  totalVisits: number;
+  distinctVisitors: number;
+  dayCodesIssued: number;
+  freeDaySignups: number;
+}
+
+export function hubHealthDigestEmail(args: {
+  stats: HubDigestStats;
+  note: string | null;
+  noteAuthor: string | null;
+  siteUrl: string;
+}) {
+  const { stats } = args;
+  const base = args.siteUrl.replace(/\/$/, "");
+  const mrr = `$${(stats.mrrCents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+  const tierRows = stats.tierCounts
+    .map((t) => `<tr><td style="padding: 4px 12px 4px 0; color: #555;">${t.label}</td><td style="padding: 4px 0; font-weight: 600;">${t.count}</td></tr>`)
+    .join("");
+  const tierText = stats.tierCounts.map((t) => `  ${t.label}: ${t.count}`).join("\n");
+  const noteHtml = args.note
+    ? `<div style="background: #f0f4f1; border-left: 3px solid #2d5e3e; padding: 14px 18px; margin: 22px 0; border-radius: 0 8px 8px 0;">
+        <p style="margin: 0; white-space: pre-wrap;">${args.note}</p>
+        ${args.noteAuthor ? `<p style="margin: 8px 0 0; font-size: 13px; color: #555;">— ${args.noteAuthor}</p>` : ""}
+      </div>`
+    : "";
+  const noteText = args.note ? `\n${args.note}${args.noteAuthor ? `\n— ${args.noteAuthor}` : ""}\n` : "";
+
+  return {
+    subject: `RegenHub pulse — ${stats.monthLabel}`,
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+        <p style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: #2d5e3e; margin-bottom: 4px;">Hub pulse · ${stats.monthLabel}</p>
+        <h2 style="margin: 0 0 16px;">How the cooperative is doing</h2>
+        <p>As a cooperative, we believe everyone who's part of RegenHub should see how it's going — the numbers below are the same ones we look at.</p>
+        ${noteHtml}
+        <table style="width: 100%; border-collapse: collapse; margin: 18px 0;">
+          <tr><td style="padding: 4px 12px 4px 0; color: #555;">Monthly recurring revenue</td><td style="padding: 4px 0; font-weight: 600;">${mrr}</td></tr>
+          <tr><td style="padding: 4px 12px 4px 0; color: #555;">Paying members</td><td style="padding: 4px 0; font-weight: 600;">${stats.payingMembers}</td></tr>
+          <tr><td style="padding: 4px 12px 4px 0; color: #555;">New members this month</td><td style="padding: 4px 0; font-weight: 600;">${stats.newMembers}</td></tr>
+          <tr><td style="padding: 4px 12px 4px 0; color: #555;">Door entries</td><td style="padding: 4px 0; font-weight: 600;">${stats.totalVisits}</td></tr>
+          <tr><td style="padding: 4px 12px 4px 0; color: #555;">Distinct visitors</td><td style="padding: 4px 0; font-weight: 600;">${stats.distinctVisitors}</td></tr>
+          <tr><td style="padding: 4px 12px 4px 0; color: #555;">Day codes issued</td><td style="padding: 4px 0; font-weight: 600;">${stats.dayCodesIssued}</td></tr>
+          <tr><td style="padding: 4px 12px 4px 0; color: #555;">Free-day signups</td><td style="padding: 4px 0; font-weight: 600;">${stats.freeDaySignups}</td></tr>
+        </table>
+        <p style="font-size: 14px; color: #555; margin-bottom: 4px;">Members by tier:</p>
+        <table style="border-collapse: collapse; margin: 4px 0 18px;">${tierRows}</table>
+        <p>Questions, ideas, or want to get more involved in the cooperative? Just reply — it goes straight to a human.</p>
+        <p>With gratitude,<br>RegenHub</p>
+      </div>
+    `,
+    text: `HUB PULSE — ${stats.monthLabel}\n\nAs a cooperative, we believe everyone who's part of RegenHub should see how it's going — these are the same numbers we look at.\n${noteText}\nMonthly recurring revenue: ${mrr}\nPaying members: ${stats.payingMembers}\nNew members this month: ${stats.newMembers}\nDoor entries: ${stats.totalVisits}\nDistinct visitors: ${stats.distinctVisitors}\nDay codes issued: ${stats.dayCodesIssued}\nFree-day signups: ${stats.freeDaySignups}\n\nMembers by tier:\n${tierText}\n\nQuestions, ideas, or want to get more involved in the cooperative? Just reply — it goes straight to a human.\n\nWith gratitude,\nRegenHub\n\n${base}`,
+  };
+}
