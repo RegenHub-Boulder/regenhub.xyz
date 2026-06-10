@@ -37,6 +37,11 @@ const NEVER_VISITED_AFTER_DAYS = 7;
 const FOLLOWUP_MIN_DAYS = 3;
 const FOLLOWUP_MAX_DAYS = 30;
 const SEND_DELAY_MS = 300;
+/** Daily send cap. Backlogs (e.g. the first-ever run) drip out over several
+ *  days instead of blasting everyone at once — gentler + better deliverability.
+ *  Most-engaged nudge types are processed first (balance_empty before
+ *  followup before never_visited) because the loop preserves type priority. */
+const MAX_SENDS_PER_RUN = 5;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -112,8 +117,9 @@ export async function POST(req: Request) {
     .gte("created_at", cooldownCutoff);
   const cooled = new Set((recentNudges ?? []).map((r) => r.target_id));
 
-  const results: Array<{ member_id: number; type: NudgeType; sent: boolean; reason?: string }> = [];
-
+  // Pass 1: decide the (single) most-specific applicable nudge per member.
+  type Candidate = { member: (typeof members)[number]; type: NudgeType; visits: number };
+  const candidates: Candidate[] = [];
   for (const m of members) {
     if (subbed.has(m.id)) continue;
     if (cooled.has(String(m.id))) continue;
@@ -124,7 +130,6 @@ export async function POST(req: Request) {
     const ageDays = (now - new Date(m.created_at).getTime()) / 86_400_000;
     const daysSinceVisit = last ? (now - last) / 86_400_000 : null;
 
-    // Decide the (single) most-specific applicable nudge.
     let type: NudgeType | null = null;
     if (visitsN > 0 && m.day_passes_balance === 0) {
       type = "balance_empty";
@@ -133,7 +138,23 @@ export async function POST(req: Request) {
     } else if (visitsN === 0 && m.day_passes_balance > 0 && ageDays >= NEVER_VISITED_AFTER_DAYS) {
       type = "never_visited";
     }
-    if (!type) continue;
+    if (type) candidates.push({ member: m, type, visits: visitsN });
+  }
+
+  // Pass 2: process up to MAX_SENDS_PER_RUN, hottest leads first. Members
+  // above the cap simply wait for tomorrow's run — the conditions re-evaluate
+  // and they get picked up then.
+  const TYPE_PRIORITY: Record<NudgeType, number> = {
+    balance_empty: 0,
+    first_visit_followup: 1,
+    never_visited: 2,
+  };
+  candidates.sort((a, b) => TYPE_PRIORITY[a.type] - TYPE_PRIORITY[b.type]);
+
+  const results: Array<{ member_id: number; type: NudgeType; sent: boolean; reason?: string }> = [];
+
+  for (const { member: m, type, visits: visitsN } of candidates) {
+    if (results.filter((r) => r.sent).length >= MAX_SENDS_PER_RUN) break;
 
     // Per-type forever-idempotency: claim the key BEFORE sending. If the key
     // already exists this member got this nudge before — skip.
@@ -157,7 +178,7 @@ export async function POST(req: Request) {
       : type === "first_visit_followup" ? nudgeComeBackEmail({ name: m.name, balance: m.day_passes_balance, siteUrl })
       : nudgeNeverVisitedEmail({ name: m.name, balance: m.day_passes_balance, siteUrl });
 
-    const sent = await sendEmail({ to: m.email, subject: tpl.subject, html: tpl.html, text: tpl.text });
+    const sent = await sendEmail({ to: m.email!, subject: tpl.subject, html: tpl.html, text: tpl.text });
     results.push({ member_id: m.id, type, sent });
     await sleep(SEND_DELAY_MS);
   }
@@ -175,7 +196,9 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     checked: members.length,
+    eligible: candidates.length,
     nudged: sentCount,
+    deferred_to_next_run: Math.max(0, candidates.length - results.length),
     results,
   });
 }
