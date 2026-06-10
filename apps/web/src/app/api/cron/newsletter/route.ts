@@ -14,8 +14,9 @@ import {
  * POST /api/cron/newsletter
  *
  * Biweekly newsletter to members + the interests list. Scheduled WEEKLY in
- * Coolify (Tuesdays); the route itself only proceeds on EVEN ISO weeks, which
- * yields a true every-other-week cadence without cron gymnastics.
+ * Coolify (Tuesdays); the route itself only proceeds on ODD ISO weeks, which
+ * yields a true every-other-week cadence without cron gymnastics. (Odd chosen
+ * so the first issue lands Tuesday 2026-06-16, ISO week 25.)
  *
  * Body { force: true } skips the parity check (for manual off-cycle sends).
  *
@@ -40,8 +41,8 @@ export async function POST(req: Request) {
 
   const body = (await req.json().catch(() => ({}))) as { force?: boolean };
   const { week } = isoWeek(new Date());
-  if (week % 2 !== 0 && !body.force) {
-    return NextResponse.json({ skipped: true, reason: `odd ISO week (${week}) — biweekly cadence sends on even weeks` });
+  if (week % 2 !== 1 && !body.force) {
+    return NextResponse.json({ skipped: true, reason: `even ISO week (${week}) — biweekly cadence sends on odd weeks` });
   }
 
   const admin = createServiceClient();

@@ -50,7 +50,7 @@ export function NewsletterCard() {
           <h3 className="text-sm font-semibold">Biweekly newsletter</h3>
         </div>
         <p className="text-xs text-muted">
-          Sends automatically every other Tuesday (even ISO weeks) to all members +
+          Sends automatically every other Tuesday (odd ISO weeks) to all members +
           the interests list: your note above, upcoming Luma events, and the
           last-two-weeks numbers. Preview compiles the real issue and sends it
           only to you.
