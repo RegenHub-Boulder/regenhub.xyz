@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { CommunicationsComposer } from "@/components/admin/CommunicationsComposer";
 import { DigestNoteCard } from "@/components/admin/DigestNoteCard";
+import { NewsletterCard } from "@/components/admin/NewsletterCard";
 
 export const metadata: Metadata = { title: "Communications — Admin" };
 
@@ -16,6 +17,7 @@ export default function CommunicationsPage() {
         </p>
       </div>
       <DigestNoteCard />
+      <NewsletterCard />
       <CommunicationsComposer />
     </div>
   );

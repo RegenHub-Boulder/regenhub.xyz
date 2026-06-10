@@ -55,12 +55,12 @@ export function DigestNoteCard() {
       <CardContent className="p-5 space-y-3">
         <div className="flex items-center gap-2">
           <PenLine className="w-4 h-4 text-gold" />
-          <h3 className="text-sm font-semibold">Monthly digest note</h3>
+          <h3 className="text-sm font-semibold">Newsletter note</h3>
         </div>
         <p className="text-xs text-muted">
-          A short human note from you that leads the next &quot;hub pulse&quot; email
-          (sent to all members on the 1st of each month, alongside the stats).
-          Write it any time — the next digest picks it up automatically.
+          A short human note from you that leads the next newsletter issue
+          (biweekly, alongside upcoming events + the numbers). Write it any
+          time — the next send picks it up automatically.
         </p>
         <textarea
           value={note}
