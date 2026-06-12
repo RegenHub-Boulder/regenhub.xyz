@@ -75,7 +75,7 @@ export async function POST(req: Request) {
   // Candidate pool: active day-pass members with an email.
   const { data: members } = await admin
     .from("members")
-    .select("id, name, email, day_passes_balance, created_at")
+    .select("id, name, email, telegram_username, day_passes_balance, created_at")
     .eq("member_type", "day_pass")
     .eq("disabled", false)
     .not("email", "is", null);
@@ -189,7 +189,14 @@ export async function POST(req: Request) {
       .filter((r) => r.sent)
       .map((r) => {
         const m = members.find((x) => x.id === r.member_id);
-        return `  · ${m?.name ?? r.member_id} — ${r.type.replace(/_/g, " ")}`;
+        // Include the Telegram handle so anyone in the admin chat can follow
+        // up with a personal DM alongside the automated email. Escape
+        // underscores — the message is sent with parse_mode=Markdown and a
+        // bare @some_user would corrupt (or kill) the whole message.
+        const tg = m?.telegram_username
+          ? ` (@${m.telegram_username.replace(/^@+/, "").replace(/_/g, "\\_")})`
+          : "";
+        return `  · ${m?.name ?? r.member_id}${tg} — ${r.type.replace(/_/g, " ")}`;
       });
     await notifyTelegram(`📬 *Lifecycle nudges sent* (${sentCount})\n\n${lines.join("\n")}`);
   }
