@@ -28,23 +28,61 @@ export async function PATCH(request: Request) {
     }
   }
 
+  const admin = createServiceClient();
+
+  // Telegram handle op-sec: the bot resolves members by the sender's handle,
+  // so a handle may only live on one member row (enforced by a unique index,
+  // migration 036). Pre-check here for a friendly error instead of a 500.
+  let normalizedTelegram: string | null | undefined = undefined;
+  if (telegram_username !== undefined) {
+    const t = String(telegram_username ?? "").trim().replace(/^@+/, "");
+    if (t === "") {
+      normalizedTelegram = null;
+    } else if (!/^[a-zA-Z0-9_]{5,32}$/.test(t)) {
+      return NextResponse.json(
+        { error: "Telegram username must be 5-32 characters (letters, numbers, underscore)" },
+        { status: 400 },
+      );
+    } else {
+      // Historic rows may store the handle with a leading @ — match both forms.
+      const { data: holder } = await admin
+        .from("members")
+        .select("id, supabase_user_id")
+        .or(`telegram_username.ilike.${t},telegram_username.ilike.@${t}`)
+        .maybeSingle();
+      if (holder && holder.supabase_user_id !== user.id) {
+        return NextResponse.json(
+          { error: "That Telegram username is already linked to another member. If it's yours, email us and we'll sort it out." },
+          { status: 409 },
+        );
+      }
+      normalizedTelegram = t;
+    }
+  }
+
   // Service client + an explicit supabase_user_id filter is what scopes this
   // write to the caller's own row. Don't add columns to the update payload
   // unless they're safe for self-edit.
-  const admin = createServiceClient();
   const { error } = await admin
     .from("members")
     .update({
       ...(name !== undefined && { name }),
       ...(bio !== undefined && { bio }),
       ...(skills !== undefined && { skills }),
-      ...(telegram_username !== undefined && { telegram_username }),
+      ...(normalizedTelegram !== undefined && { telegram_username: normalizedTelegram }),
       ...(ethereum_address !== undefined && { ethereum_address }),
       ...(profile_photo_url !== undefined && { profile_photo_url }),
     })
     .eq("supabase_user_id", user.id);
 
   if (error) {
+    // 23505 = the unique index caught a race the pre-check missed.
+    if ((error as { code?: string }).code === "23505") {
+      return NextResponse.json(
+        { error: "That Telegram username is already linked to another member." },
+        { status: 409 },
+      );
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

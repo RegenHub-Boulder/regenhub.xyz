@@ -46,6 +46,7 @@ async function notifyTelegramApplication(claim: {
   about: string;
   why_join: string;
   know_at_hub?: string;
+  telegram?: string;
 }) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_GROUP_CHAT_ID;
@@ -57,6 +58,9 @@ async function notifyTelegramApplication(claim: {
     `*${claim.name}*  ·  ${claim.email}`,
     `Visits any weekday`,
   ];
+  if (claim.telegram) {
+    lines.push(`Telegram: @${claim.telegram.replace(/_/g, "\\_")}`);
+  }
   if (claim.know_at_hub) {
     lines.push(`Knows at hub: ${claim.know_at_hub}`);
   }
@@ -103,14 +107,23 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
 
-  const { name, email, invite_code, about, why_join, know_at_hub } = body as {
+  const { name, email, invite_code, about, why_join, know_at_hub, telegram } = body as {
     name?: string;
     email?: string;
     invite_code?: string;
     about?: string;
     why_join?: string;
     know_at_hub?: string;
+    telegram?: string;
   };
+
+  // Normalize the Telegram handle: strip @, validate shape (Telegram allows
+  // 5-32 chars of a-z, 0-9, underscore). Invalid handles are silently dropped
+  // rather than blocking the signup — the handle is a nice-to-have.
+  const telegramHandle = (() => {
+    const t = telegram?.trim().replace(/^@+/, "") ?? "";
+    return /^[a-zA-Z0-9_]{5,32}$/.test(t) ? t : null;
+  })();
 
   if (!name?.trim() || !email?.trim()) {
     return NextResponse.json(
@@ -186,6 +199,7 @@ export async function POST(req: Request) {
       about: about?.trim() || null,
       why_join: why_join?.trim() || null,
       know_at_hub: know_at_hub?.trim() || null,
+      telegram: telegramHandle,
     })
     .select("id")
     .single();
@@ -218,6 +232,7 @@ export async function POST(req: Request) {
       about: about!.trim(),
       why_join: why_join!.trim(),
       know_at_hub: know_at_hub?.trim() || undefined,
+      telegram: telegramHandle ?? undefined,
     });
   }
 

@@ -93,6 +93,7 @@ export default function FreeDayForm({
   const [about, setAbout] = useState("");
   const [whyJoin, setWhyJoin] = useState("");
   const [knowAtHub, setKnowAtHub] = useState("");
+  const [telegram, setTelegram] = useState("");
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -130,6 +131,7 @@ export default function FreeDayForm({
           about: about.trim() || undefined,
           why_join: whyJoin.trim() || undefined,
           know_at_hub: knowAtHub.trim() || undefined,
+          telegram: telegram.trim() || undefined,
         }),
       });
       const json = await res.json();
@@ -611,6 +613,18 @@ export default function FreeDayForm({
                       value={knowAtHub}
                       onChange={(e) => setKnowAtHub(e.target.value)}
                       placeholder="Member name(s), or how you heard about us — optional but helpful"
+                      className="w-full rounded-md px-3 py-2 text-sm glass-input"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="telegram">Telegram username</Label>
+                    <input
+                      id="telegram"
+                      type="text"
+                      value={telegram}
+                      onChange={(e) => setTelegram(e.target.value)}
+                      placeholder="@yourhandle — optional; our community lives on Telegram"
                       className="w-full rounded-md px-3 py-2 text-sm glass-input"
                     />
                   </div>
