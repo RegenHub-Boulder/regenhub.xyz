@@ -18,6 +18,7 @@ import {
   calculateDayPassExpiration,
   calculateExpiration,
 } from "./helpers/slotManager.js";
+import { handleHoldOpen, handleRelock, startDoorHoldLoop } from "./doorHolds.js";
 
 async function getUsedDayCodeSlots(): Promise<Set<number>> {
   const { data } = await db.from("day_codes").select("pin_slot").eq("is_active", true);
@@ -90,6 +91,8 @@ async function handleHelp(msg: TelegramBot.Message) {
   } else {
     text += `/daypass — Get a temporary door code\n`;
   }
+  text += `/holdopen [front|back|both] [2h] — Hold door(s) unlocked for an event\n`;
+  text += `/relock — End any hold + lock all doors\n`;
   text += `\n📋 *Account*\n`;
   text += `/status — Your profile & pass balance\n`;
   text += `/email — View or update your email\n`;
@@ -1051,10 +1054,15 @@ export function startBot() {
   bot.onText(/\/changetype/, handleChangeType);
   bot.onText(/\/coop(?:\s+(.+))?/, handleCoop);
   bot.onText(/\/admin/, handleAdmin);
+  bot.onText(/\/holdopen(?:\s+(.+))?/, (msg, match) => handleHoldOpen(bot, msg, match));
+  bot.onText(/\/relock/, (msg) => handleRelock(bot, msg));
 
   bot.on("callback_query", handleCallback);
   bot.on("message", handleMessage);
   bot.on("polling_error", (e) => console.error("[Bot] Polling error:", e.message));
+
+  // Door hold-open keep-alive (resumes any active hold after a restart)
+  startDoorHoldLoop(bot);
 
   // Graceful shutdown — stop polling cleanly on container stop
   const shutdown = async (signal: string) => {

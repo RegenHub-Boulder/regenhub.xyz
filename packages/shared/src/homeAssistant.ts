@@ -168,3 +168,49 @@ export function formatLockWarning(results: LockResult[]): string | null {
 export const LOCK_FAILURE_MSG = `Couldn't reach the door locks after multiple attempts. This is usually temporary — try again in a few minutes. If it keeps happening, contact ${SUPPORT_CONTACT}.`;
 
 export { SUPPORT_CONTACT };
+
+// ── Door hold-open support (happy hours etc) ────────────────
+
+/** Resolve "front" / "back" / "both" to entity IDs from HA_LOCK_ENTITIES. */
+export function resolveDoorEntities(which: "front" | "back" | "both"): string[] {
+  if (which === "both") return [...LOCK_ENTITIES];
+  return LOCK_ENTITIES.filter((e) => e.includes(which));
+}
+
+/** All configured lock entity IDs. */
+export function getLockEntities(): string[] {
+  return [...LOCK_ENTITIES];
+}
+
+/**
+ * Unlock specific door(s). Used by the bot's hold-open keep-alive — HA's
+ * own auto-lock automation stays untouched and will relock within ~5 min,
+ * so callers must re-call this on an interval to HOLD a door open. That's
+ * deliberate: if the caller dies, doors fail back to locked.
+ */
+export async function unlockDoors(entities: string[]): Promise<LockResult[]> {
+  const results = await Promise.allSettled(
+    entities.map((entity) =>
+      haPostWithRetry("/services/lock/unlock", { entity_id: entity }, 1),
+    ),
+  );
+  return results.map((r, i) => ({
+    entity: entities[i],
+    ok: r.status === "fulfilled",
+    error: r.status === "rejected" ? String(r.reason) : undefined,
+  }));
+}
+
+/** Lock specific door(s). */
+export async function lockDoors(entities: string[]): Promise<LockResult[]> {
+  const results = await Promise.allSettled(
+    entities.map((entity) =>
+      haPostWithRetry("/services/lock/lock", { entity_id: entity }, 2),
+    ),
+  );
+  return results.map((r, i) => ({
+    entity: entities[i],
+    ok: r.status === "fulfilled",
+    error: r.status === "rejected" ? String(r.reason) : undefined,
+  }));
+}
