@@ -5,6 +5,9 @@ import {
   lockDoors,
   resolveDoorEntities,
   formatLockStatus,
+  getEntityState,
+  setAutomationEnabled,
+  autoLockAutomationEntity,
 } from "@regenhub/shared";
 
 /**
@@ -13,24 +16,25 @@ import {
  * /holdopen [front|back|both] [duration]  — keep door(s) unlocked
  * /relock                                  — end all holds, lock everything
  *
- * SAFETY MODEL (the important part):
- * We never disable Home Assistant's auto-lock automation. The bot re-unlocks
- * held doors every 4 minutes; HA's auto-lock fires at 5. If this bot process
- * dies, crashes, or loses network — the doors relock themselves within ~5
- * minutes. The failure mode is always "locked", never "open all night".
+ * BATTERY + SAFETY MODEL:
+ * On hold start we SUSPEND Home Assistant's auto-lock automation and unlock
+ * once — two motor actuations per event total (open at start, lock at end),
+ * zero Z-Wave radio chatter in between. The keep-alive tick only READS lock
+ * state from HA's cache (no radio); it re-unlocks only if someone manually
+ * thumb-turned a held door shut.
  *
- * Guardrails:
- *  - duration default 2h, hard cap 5h
- *  - only one active hold at a time (a new /holdopen supersedes the old one)
- *  - 10-minute warning in the chat before auto-relock, with extend hint
- *  - loud chat notifications on hold start / extend / relock
- *  - members-only (resolved by Telegram handle), logged with attribution
+ * Because the automation is suspended, "what if the bot dies" is covered by
+ * layers instead of polling:
+ *   1. this loop relocks + re-arms the automation at expiry
+ *   2. the web app's door-watchdog cron (separate container, every 5 min)
+ *      re-arms + locks if it sees the automation off with no active hold
+ *   3. an HA-native failsafe automation re-arms after 6h off, no matter what
  */
 
-const KEEPALIVE_MS = 4 * 60 * 1000;       // re-unlock cadence (< HA's 5-min auto-lock)
+const TICK_MS = 4 * 60 * 1000;
 const DEFAULT_HOURS = 2;
 const MAX_HOURS = 5;
-const WARNING_MS = 10 * 60 * 1000;        // warn this long before expiry
+const WARNING_MS = 10 * 60 * 1000;
 
 const TZ = process.env.TIMEZONE ?? "America/Denver";
 
@@ -82,6 +86,15 @@ async function releaseHold(id: number, reason: string) {
     .eq("id", id);
 }
 
+/** End-of-hold sequence: lock doors, re-arm auto-lock. Returns lock results message. */
+async function endHold(doors: string[]): Promise<{ ok: boolean; statusMsg: string }> {
+  const results = await lockDoors(doors);
+  const rearmed = await setAutomationEnabled(autoLockAutomationEntity(), true);
+  const ok = results.every((r) => r.ok) && rearmed;
+  const statusMsg = `${formatLockStatus(results)}${rearmed ? "" : " · ⚠️ auto-lock automation re-arm FAILED"}`;
+  return { ok, statusMsg };
+}
+
 // ── Commands ─────────────────────────────────────────────────
 
 export async function handleHoldOpen(
@@ -95,7 +108,6 @@ export async function handleHoldOpen(
     return bot.sendMessage(chatId, "Members only — I don't recognize your Telegram handle. Link it via /email or ask an admin.");
   }
 
-  // Args: /holdopen [front|back|both] [duration]
   const args = (match?.[1] ?? "").trim().split(/\s+/).filter(Boolean);
   let which: "front" | "back" | "both" = "both";
   let durationArg: string | undefined;
@@ -131,14 +143,17 @@ export async function handleHoldOpen(
     return bot.sendMessage(chatId, "Couldn't save the hold — doors NOT held. Try again.");
   }
 
+  // Suspend auto-lock FIRST, then unlock — otherwise the automation could
+  // relock between our unlock and the suspend.
+  const suspended = await setAutomationEnabled(autoLockAutomationEntity(), false);
   const results = await unlockDoors(entities);
   const okCount = results.filter((r) => r.ok).length;
 
   if (okCount === 0) {
-    // Unlock failed entirely — clean up so the keep-alive doesn't keep trying silently
     const fresh = await activeHolds();
     for (const h of fresh) await releaseHold(h.id, "unlock_failed");
-    return bot.sendMessage(chatId, `⚠️ Couldn't unlock ${doorLabel(entities)} — ${formatLockStatus(results)}. No hold active.`);
+    await setAutomationEnabled(autoLockAutomationEntity(), true);
+    return bot.sendMessage(chatId, `⚠️ Couldn't unlock ${doorLabel(entities)} — ${formatLockStatus(results)}. No hold active; auto-lock re-armed.`);
   }
 
   const capNote = durationArg && parseDuration(durationArg)! >= MAX_HOURS * 3_600_000
@@ -153,10 +168,11 @@ export async function handleHoldOpen(
       `Unlocked until *${fmtTime(until)}*${capNote}, then auto-relocks.`,
       `Started by ${member.name}.`,
       ``,
-      `I'll re-unlock every few minutes to keep it open and warn here 10 minutes before relocking.`,
+      `Auto-lock is suspended for the duration (battery-friendly — no motor cycling). I'll warn here 10 minutes before relocking.`,
       `End early any time with /relock.`,
+      !suspended ? `\n⚠️ Couldn't suspend the auto-lock automation — the door may relock itself in ~5 min. Check HA.` : ``,
       formatLockStatus(results).includes("fail") ? `\n⚠️ Note: ${formatLockStatus(results)}` : ``,
-    ].join("\n"),
+    ].filter(Boolean).join("\n"),
     { parse_mode: "Markdown" },
   );
 }
@@ -171,27 +187,29 @@ export async function handleRelock(bot: TelegramBot, msg: TelegramBot.Message) {
   const holds = await activeHolds();
   const entities = holds.length > 0
     ? Array.from(new Set(holds.flatMap((h) => h.doors)))
-    : resolveDoorEntities("both"); // no hold? lock everything anyway — /relock is a panic button
+    : resolveDoorEntities("both"); // no hold? /relock is also a panic button
 
   for (const h of holds) await releaseHold(h.id, "manual");
-  const results = await lockDoors(entities);
-  const allOk = results.every((r) => r.ok);
+  const { ok, statusMsg } = await endHold(entities);
 
   return bot.sendMessage(
     chatId,
-    allOk
-      ? `🔒 ${doorLabel(entities)} locked${holds.length > 0 ? ` — hold ended by ${member.name}` : ""}. Status: ${formatLockStatus(results)}`
-      : `⚠️ Tried to lock ${doorLabel(entities)} but: ${formatLockStatus(results)}. CHECK THE DOORS.`,
+    ok
+      ? `🔒 ${doorLabel(entities)} locked${holds.length > 0 ? ` — hold ended by ${member.name}` : ""}. Auto-lock re-armed. (${statusMsg})`
+      : `⚠️ Relock issues for ${doorLabel(entities)}: ${statusMsg}. CHECK THE DOORS.`,
   );
 }
 
-// ── Keep-alive loop ──────────────────────────────────────────
+// ── Keep-alive / reconcile loop ──────────────────────────────
 
 /**
- * Started once at bot boot. Every 4 minutes:
- *  - expired holds → lock doors, mark released, notify chat
- *  - holds expiring within 10 min → one-time warning in chat
- *  - still-active holds → re-unlock (beats HA's 5-min auto-lock)
+ * Every 4 minutes:
+ *  - expired holds → endHold() + notify
+ *  - holds expiring within 10 min → one-time warning
+ *  - active holds → READ each door's state from HA cache (no radio);
+ *    re-unlock only doors that read "locked" (someone thumb-turned them)
+ *  - no holds → verify auto-lock automation is armed (cheap state read);
+ *    re-arm if a crash left it off
  */
 export function startDoorHoldLoop(bot: TelegramBot) {
   const groupChat = process.env.TELEGRAM_GROUP_CHAT_ID;
@@ -199,30 +217,39 @@ export function startDoorHoldLoop(bot: TelegramBot) {
   const tick = async () => {
     try {
       const holds = await activeHolds();
-      if (holds.length === 0) return;
       const now = Date.now();
+
+      if (holds.length === 0) {
+        // Reconcile: if a crash left the automation suspended, re-arm it.
+        const state = await getEntityState(autoLockAutomationEntity());
+        if (state === "off") {
+          await setAutomationEnabled(autoLockAutomationEntity(), true);
+          await lockDoors(resolveDoorEntities("both"));
+          if (groupChat) {
+            await bot.sendMessage(groupChat, "🛡️ Door watchdog (bot): auto-lock was suspended with no active hold — re-armed and locked the doors.").catch(() => {});
+          }
+        }
+        return;
+      }
 
       for (const hold of holds) {
         const untilMs = new Date(hold.hold_until).getTime();
 
         if (now >= untilMs) {
-          // Expired → relock + notify
           await releaseHold(hold.id, "expired");
-          const results = await lockDoors(hold.doors);
-          const ok = results.every((r) => r.ok);
+          const { ok, statusMsg } = await endHold(hold.doors);
           if (groupChat) {
             await bot.sendMessage(
               groupChat,
               ok
                 ? `🔒 Hold-open ended — ${doorLabel(hold.doors)} relocked on schedule.`
-                : `🚨 Hold-open ended but relock FAILED for ${doorLabel(hold.doors)}: ${formatLockStatus(results)}. PLEASE CHECK THE DOORS.`,
+                : `🚨 Hold-open ended but relock had problems for ${doorLabel(hold.doors)}: ${statusMsg}. PLEASE CHECK THE DOORS.`,
             ).catch(() => {});
           }
           continue;
         }
 
         if (!hold.warned_at && untilMs - now <= WARNING_MS) {
-          // 10-minute warning, once
           await db.from("door_holds").update({ warned_at: new Date().toISOString() }).eq("id", hold.id);
           if (groupChat) {
             await bot.sendMessage(
@@ -232,16 +259,21 @@ export function startDoorHoldLoop(bot: TelegramBot) {
           }
         }
 
-        // Keep-alive re-unlock (HA auto-lock would otherwise fire at 5 min)
-        await unlockDoors(hold.doors);
+        // State VERIFY (HA cache read, no Z-Wave traffic). Re-unlock only
+        // doors that somehow relocked (manual thumb-turn, HA restart, etc).
+        for (const door of hold.doors) {
+          const state = await getEntityState(door);
+          if (state === "locked") {
+            await unlockDoors([door]);
+          }
+        }
       }
     } catch (err) {
       console.error("[DoorHolds] tick error:", err);
     }
   };
 
-  setInterval(tick, KEEPALIVE_MS);
-  // Also run shortly after boot so a restart mid-hold resumes promptly.
-  setTimeout(tick, 10_000);
-  console.log("[DoorHolds] keep-alive loop started");
+  setInterval(tick, TICK_MS);
+  setTimeout(tick, 10_000); // resume promptly after a restart
+  console.log("[DoorHolds] hold loop started (suspend-automation model)");
 }

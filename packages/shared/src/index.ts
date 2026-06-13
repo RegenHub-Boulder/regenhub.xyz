@@ -21,3 +21,4 @@ export { allocateSlotWithRetry } from "./slotAllocation.js";
 export { defaultEmailFrom, defaultEmailReplyTo } from "./email.js";
 
 export { unlockDoors, lockDoors, resolveDoorEntities, getLockEntities } from "./homeAssistant.js";
+export { getEntityState, setAutomationEnabled, autoLockAutomationEntity } from "./homeAssistant.js";

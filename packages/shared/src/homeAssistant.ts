@@ -214,3 +214,33 @@ export async function lockDoors(entities: string[]): Promise<LockResult[]> {
     error: r.status === "rejected" ? String(r.reason) : undefined,
   }));
 }
+
+/** Read an entity's state from HA's cache — no Z-Wave radio traffic. */
+export async function getEntityState(entityId: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${HA_URL}/states/${entityId}`, {
+      headers: { Authorization: `Bearer ${HA_TOKEN}` },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { state?: string };
+    return data.state ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Turn an HA automation on/off (used to suspend auto-lock during door holds). */
+export async function setAutomationEnabled(entityId: string, enabled: boolean): Promise<boolean> {
+  try {
+    await haPost(`/services/automation/turn_${enabled ? "on" : "off"}`, { entity_id: entityId });
+    return true;
+  } catch (err) {
+    console.error(`[HA] automation turn_${enabled ? "on" : "off"} failed:`, err);
+    return false;
+  }
+}
+
+/** The auto-lock automation entity. Override via AUTO_LOCK_AUTOMATION_ENTITY. */
+export function autoLockAutomationEntity(): string {
+  return process.env.AUTO_LOCK_AUTOMATION_ENTITY ?? "automation.auto_lock_doors_after_5_minutes";
+}
