@@ -69,12 +69,13 @@ interface HoldRow {
   hold_until: string;
   warned_at: string | null;
   created_by_member_id: number | null;
+  notify_chat_id: number | null;
 }
 
 async function activeHolds(): Promise<HoldRow[]> {
   const { data } = await db
     .from("door_holds")
-    .select("id, doors, hold_until, warned_at, created_by_member_id")
+    .select("id, doors, hold_until, warned_at, created_by_member_id, notify_chat_id")
     .is("released_at", null);
   return (data as HoldRow[]) ?? [];
 }
@@ -137,6 +138,9 @@ export async function handleHoldOpen(
     doors: entities,
     hold_until: until.toISOString(),
     created_by_member_id: member.id,
+    // Route warning + relock notifications back to wherever this command was
+    // run — the confirmation says "I'll warn here", so "here" = this chat.
+    notify_chat_id: chatId,
   });
   if (error) {
     console.error("[DoorHolds] insert error:", error);
@@ -214,6 +218,24 @@ export async function handleRelock(bot: TelegramBot, msg: TelegramBot.Message) {
 export function startDoorHoldLoop(bot: TelegramBot) {
   const groupChat = process.env.TELEGRAM_GROUP_CHAT_ID;
 
+  // Send to a hold's originating chat, falling back to the group chat. Logs
+  // loudly if neither target exists, so a missing config is never silent
+  // again (the original bug: warned_at got set but no message went out).
+  const notify = async (chatId: number | null | undefined, text: string) => {
+    const target = chatId ?? (groupChat ? Number(groupChat) : null);
+    if (!target) {
+      console.error(`[DoorHolds] NO NOTIFY TARGET (notify_chat_id + TELEGRAM_GROUP_CHAT_ID both unset) — dropped message: ${text}`);
+      return false;
+    }
+    try {
+      await bot.sendMessage(target, text);
+      return true;
+    } catch (err) {
+      console.error(`[DoorHolds] sendMessage to ${target} failed:`, err);
+      return false;
+    }
+  };
+
   const tick = async () => {
     try {
       const holds = await activeHolds();
@@ -225,9 +247,7 @@ export function startDoorHoldLoop(bot: TelegramBot) {
         if (state === "off") {
           await setAutomationEnabled(autoLockAutomationEntity(), true);
           await lockDoors(resolveDoorEntities("both"));
-          if (groupChat) {
-            await bot.sendMessage(groupChat, "🛡️ Door watchdog (bot): auto-lock was suspended with no active hold — re-armed and locked the doors.").catch(() => {});
-          }
+          await notify(null, "🛡️ Door watchdog (bot): auto-lock was suspended with no active hold — re-armed and locked the doors.");
         }
         return;
       }
@@ -238,24 +258,24 @@ export function startDoorHoldLoop(bot: TelegramBot) {
         if (now >= untilMs) {
           await releaseHold(hold.id, "expired");
           const { ok, statusMsg } = await endHold(hold.doors);
-          if (groupChat) {
-            await bot.sendMessage(
-              groupChat,
-              ok
-                ? `🔒 Hold-open ended — ${doorLabel(hold.doors)} relocked on schedule.`
-                : `🚨 Hold-open ended but relock had problems for ${doorLabel(hold.doors)}: ${statusMsg}. PLEASE CHECK THE DOORS.`,
-            ).catch(() => {});
-          }
+          await notify(
+            hold.notify_chat_id,
+            ok
+              ? `🔒 Hold-open ended — ${doorLabel(hold.doors)} relocked on schedule.`
+              : `🚨 Hold-open ended but relock had problems for ${doorLabel(hold.doors)}: ${statusMsg}. PLEASE CHECK THE DOORS.`,
+          );
           continue;
         }
 
         if (!hold.warned_at && untilMs - now <= WARNING_MS) {
-          await db.from("door_holds").update({ warned_at: new Date().toISOString() }).eq("id", hold.id);
-          if (groupChat) {
-            await bot.sendMessage(
-              groupChat,
-              `⏰ ${doorLabel(hold.doors)} relocks at ${fmtTime(new Date(untilMs))} (~10 min). Extend with /holdopen, or /relock to end now.`,
-            ).catch(() => {});
+          // Only mark "warned" once the message actually delivered — otherwise
+          // a transient failure would suppress the warning permanently.
+          const delivered = await notify(
+            hold.notify_chat_id,
+            `⏰ ${doorLabel(hold.doors)} relocks at ${fmtTime(new Date(untilMs))} (~10 min). Extend with /holdopen, or /relock to end now.`,
+          );
+          if (delivered) {
+            await db.from("door_holds").update({ warned_at: new Date().toISOString() }).eq("id", hold.id);
           }
         }
 
