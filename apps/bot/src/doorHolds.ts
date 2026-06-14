@@ -1,5 +1,5 @@
 import type TelegramBot from "node-telegram-bot-api";
-import { db, findMemberByTelegram } from "./db/supabase.js";
+import { db, findAdminByTelegram } from "./db/supabase.js";
 import {
   unlockDoors,
   lockDoors,
@@ -104,9 +104,11 @@ export async function handleHoldOpen(
   match: RegExpExecArray | null,
 ) {
   const chatId = msg.chat.id;
-  const member = await findMemberByTelegram(msg.from?.username ?? "");
+  // Admin-only: holding a door open is a physical-security action. A regular
+  // member (incl. day-pass) must never be able to prop the building open.
+  const member = await findAdminByTelegram(msg.from?.username ?? "");
   if (!member) {
-    return bot.sendMessage(chatId, "Members only — I don't recognize your Telegram handle. Link it via /email or ask an admin.");
+    return bot.sendMessage(chatId, "Admins only — holding doors open is restricted. Ask an admin to run it.");
   }
 
   const args = (match?.[1] ?? "").trim().split(/\s+/).filter(Boolean);
@@ -183,9 +185,12 @@ export async function handleHoldOpen(
 
 export async function handleRelock(bot: TelegramBot, msg: TelegramBot.Message) {
   const chatId = msg.chat.id;
-  const member = await findMemberByTelegram(msg.from?.username ?? "");
+  // Admin-only too: relock during an active event hold would lock people out
+  // mid-happy-hour, so it shouldn't be a free-for-all. (Locking is the safe
+  // direction, but ending someone else's hold is an admin decision.)
+  const member = await findAdminByTelegram(msg.from?.username ?? "");
   if (!member) {
-    return bot.sendMessage(chatId, "Members only — I don't recognize your Telegram handle.");
+    return bot.sendMessage(chatId, "Admins only — ask an admin to relock.");
   }
 
   const holds = await activeHolds();

@@ -91,8 +91,6 @@ async function handleHelp(msg: TelegramBot.Message) {
   } else {
     text += `/daypass — Get a temporary door code\n`;
   }
-  text += `/holdopen [front|back|both] [2h] — Hold door(s) unlocked for an event\n`;
-  text += `/relock — End any hold + lock all doors\n`;
   text += `\n📋 *Account*\n`;
   text += `/status — Your profile & pass balance\n`;
   text += `/email — View or update your email\n`;
@@ -101,6 +99,8 @@ async function handleHelp(msg: TelegramBot.Message) {
     text += `\n🛡️ *Admin*\n`;
     text += `/quickcode — Create a quick door code\n`;
     text += `/codes — List & revoke active codes\n`;
+    text += `/holdopen [front|back|both] [2h] — Hold door(s) unlocked for an event\n`;
+    text += `/relock — End any hold + lock all doors\n`;
     text += `/changetype — Change a member's type\n`;
     text += `/coop — Toggle co-op member status\n`;
     text += `/admin — Member management\n`;
