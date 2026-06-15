@@ -40,6 +40,20 @@ export async function POST(req: Request) {
   if (auth !== `Bearer ${secret}`) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = (await req.json().catch(() => ({}))) as { force?: boolean };
+
+  // Master kill switch. Auto-send is OFF until NEWSLETTER_AUTOSEND_ENABLED=true
+  // is set in Coolify. This is the code-level guarantee that nothing ships
+  // automatically before we're ready — the preview endpoint
+  // (/api/admin/newsletter-preview) is unaffected, so you can keep iterating.
+  // `force: true` still requires the flag to be on; it only bypasses the
+  // odd-week cadence check, not the kill switch.
+  if (process.env.NEWSLETTER_AUTOSEND_ENABLED !== "true") {
+    return NextResponse.json({
+      skipped: true,
+      reason: "newsletter auto-send is disabled (set NEWSLETTER_AUTOSEND_ENABLED=true in Coolify to enable)",
+    });
+  }
+
   const { week } = isoWeek(new Date());
   if (week % 2 !== 1 && !body.force) {
     return NextResponse.json({ skipped: true, reason: `even ISO week (${week}) — biweekly cadence sends on odd weeks` });
