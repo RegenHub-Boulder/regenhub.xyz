@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/admin";
 import {
   allocateSlotWithRetry,
   setUserCode,
@@ -66,6 +67,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Account not found or disabled" }, { status: 403 });
   }
 
+  // The day_codes table + balance RPCs have no INSERT/EXECUTE policy for
+  // regular members (RLS only grants them SELECT of their own codes), so all
+  // the privileged writes below go through the service-role client. The user
+  // is already authenticated and their member row resolved above, and every
+  // write is scoped explicitly to member.id — so this is safe.
+  const admin = createServiceClient();
+
   const isFullMember = member.member_type !== "day_pass";
 
   // Day pass members: enforce 6 PM Mountain Time expiry and block weekends
@@ -88,7 +96,7 @@ export async function POST(request: Request) {
   }
 
   // Atomic decrement — prevents double-spend race condition
-  const { data: newBalance, error: rpcError } = await supabase.rpc(
+  const { data: newBalance, error: rpcError } = await admin.rpc(
     "decrement_day_pass_balance",
     { p_member_id: member.id, p_amount: 1 }
   );
@@ -109,14 +117,14 @@ export async function POST(request: Request) {
     min: DAY_CODE_SLOT_MIN,
     max: DAY_CODE_SLOT_MAX,
     getUsedSlots: async () => {
-      const { data } = await supabase
+      const { data } = await admin
         .from("day_codes")
         .select("pin_slot")
         .eq("is_active", true);
       return new Set(data?.map((r) => r.pin_slot) ?? []);
     },
     tryInsert: (slot) =>
-      supabase
+      admin
         .from("day_codes")
         .insert({
           member_id: member.id,
@@ -133,7 +141,7 @@ export async function POST(request: Request) {
 
   if (!allocation.ok) {
     // Refund — couldn't allocate a slot
-    await supabase.rpc("increment_day_pass_balance", { p_member_id: member.id, p_amount: 1 });
+    await admin.rpc("increment_day_pass_balance", { p_member_id: member.id, p_amount: 1 });
     const status = allocation.exhausted ? 503 : 500;
     const msg = allocation.exhausted ? "No available door code slots" : "Could not save day code";
     if (!allocation.exhausted) console.error("[DB] Day code insert failed:", allocation.error);
@@ -148,11 +156,11 @@ export async function POST(request: Request) {
     console.error("[Lock] Failed to set day code:", err);
     // Roll back: deactivate the just-inserted day_code so its slot frees up,
     // then refund the balance.
-    await supabase
+    await admin
       .from("day_codes")
       .update({ is_active: false, revoked_at: new Date().toISOString() })
       .eq("id", allocation.data.id);
-    await supabase.rpc("increment_day_pass_balance", { p_member_id: member.id, p_amount: 1 });
+    await admin.rpc("increment_day_pass_balance", { p_member_id: member.id, p_amount: 1 });
     return NextResponse.json({ error: LOCK_FAILURE_MSG }, { status: 502 });
   }
 
