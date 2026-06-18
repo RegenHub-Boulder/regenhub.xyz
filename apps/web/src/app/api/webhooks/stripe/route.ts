@@ -645,8 +645,11 @@ async function upsertSubscription(
         autoAllocatedSlot = allocation.slot;
         try {
           const lockResults = await setUserCode(allocation.slot, code);
-          autoAllocationFailure = formatLockStatus(lockResults).includes("fail")
-            ? `lock push partial: ${formatLockStatus(lockResults)}`
+          // A door that didn't respond OR accepted-but-may-not-have-landed
+          // (low battery / offline) both warrant a heads-up to the admin.
+          const lockStatus = formatLockStatus(lockResults);
+          autoAllocationFailure = /didn't respond|may not/i.test(lockStatus)
+            ? `lock push partial: ${lockStatus}`
             : null;
         } catch (err) {
           console.error("[Webhook] setUserCode failed for new desk member:", err);

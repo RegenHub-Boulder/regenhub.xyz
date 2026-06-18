@@ -23,6 +23,13 @@ export type LockResult = {
   entity: string;
   ok: boolean;
   error?: string;
+  /**
+   * Set when HA accepted the command (ok = true) but the lock's cached health
+   * suggests the change may NOT have actually landed — e.g. low battery or a
+   * flapping node. Lets callers warn the user instead of showing a false green
+   * check. See lockHealthWarning().
+   */
+  warning?: string;
 };
 
 async function haPost(endpoint: string, data: Record<string, unknown>) {
@@ -64,6 +71,34 @@ async function haPostWithRetry(
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * Best-effort detector for SILENT lock-write failures.
+ *
+ * HA's set_lock_usercode / clear_lock_usercode return HTTP 200 the moment the
+ * lock's Z-Wave radio ACKs the command — BEFORE the lock commits the change to
+ * memory. On a low-battery or flapping node the radio can ACK (cheap) while the
+ * EEPROM write (expensive) silently fails, so the change never takes and we'd
+ * otherwise report success. We read the node's status + battery alarm from HA's
+ * cache (NO Z-Wave radio traffic) and return a human warning if either looks
+ * bad, so callers can say "may not have applied — test it" instead of a false
+ * green check.
+ *
+ * Returns undefined when the lock looks healthy, OR when the health sensors
+ * aren't present (we don't second-guess a 200 we can't corroborate). Naming
+ * follows Z-Wave JS defaults: lock.<base> -> sensor.<base>_node_status,
+ * binary_sensor.<base>_replace_battery_now.
+ */
+async function lockHealthWarning(lockEntity: string): Promise<string | undefined> {
+  const base = lockEntity.replace(/^lock\./, "");
+  const [nodeStatus, batteryLow] = await Promise.all([
+    getEntityState(`sensor.${base}_node_status`),
+    getEntityState(`binary_sensor.${base}_replace_battery_now`),
+  ]);
+  if (batteryLow === "on") return "is low on battery — the change may not have applied";
+  if (nodeStatus && nodeStatus !== "alive") return `was ${nodeStatus} on the mesh — the change may not have applied`;
+  return undefined;
+}
+
+/**
  * Set a user code on all locks. For each lock:
  *   1. Send the set command (with retries)
  *   2. Wait 3 seconds for Z-Wave mesh to propagate
@@ -91,11 +126,19 @@ export async function setUserCode(slot: number, code: string): Promise<LockResul
     })
   );
 
-  const lockResults: LockResult[] = results.map((r, i) => ({
-    entity: LOCK_ENTITIES[i],
-    ok: r.status === "fulfilled",
-    error: r.status === "rejected" ? String(r.reason) : undefined,
-  }));
+  const lockResults: LockResult[] = await Promise.all(
+    results.map(async (r, i) => {
+      const entity = LOCK_ENTITIES[i];
+      if (r.status === "rejected") {
+        return { entity, ok: false, error: String(r.reason) };
+      }
+      // HTTP 200 only means HA accepted the command — corroborate against the
+      // node's cached health so a low-battery silent failure surfaces a warning.
+      const warning = await lockHealthWarning(entity);
+      if (warning) console.warn(`[Lock] ${entity} accepted code for slot ${slot} but ${warning}`);
+      return { entity, ok: true, warning };
+    })
+  );
 
   if (lockResults.every((r) => !r.ok)) {
     throw new Error(
@@ -119,11 +162,19 @@ export async function clearUserCode(slot: number): Promise<LockResult[]> {
     })
   );
 
-  const lockResults: LockResult[] = results.map((r, i) => ({
-    entity: LOCK_ENTITIES[i],
-    ok: r.status === "fulfilled",
-    error: r.status === "rejected" ? String(r.reason) : undefined,
-  }));
+  const lockResults: LockResult[] = await Promise.all(
+    results.map(async (r, i) => {
+      const entity = LOCK_ENTITIES[i];
+      if (r.status === "rejected") {
+        return { entity, ok: false, error: String(r.reason) };
+      }
+      // A silently-failed CLEAR is worse than a failed set — the revoked code
+      // would still open the door. Flag suspect node health so it gets verified.
+      const warning = await lockHealthWarning(entity);
+      if (warning) console.warn(`[Lock] ${entity} accepted clear for slot ${slot} but ${warning}`);
+      return { entity, ok: true, warning };
+    })
+  );
 
   if (lockResults.every((r) => !r.ok)) {
     throw new Error(
@@ -139,29 +190,54 @@ function lockName(entity: string): string {
   return entity.replace("lock.", "").replace(/_/g, " ");
 }
 
-/** Human-readable summary of per-lock results. Always returns a string (success or warning). */
+/**
+ * Human-readable summary of per-lock results. Always returns a string.
+ *
+ * Three buckets: hard failures (HA rejected the command), suspect successes
+ * (HA accepted but the node's health says it may not have landed — see
+ * lockHealthWarning), and clean successes. A suspect success is NOT silently
+ * treated as "set" — that's the whole point of this function post-hardening.
+ */
 export function formatLockStatus(results: LockResult[]): string {
-  const ok = results.filter((r) => r.ok);
   const failed = results.filter((r) => !r.ok);
+  const suspect = results.filter((r) => r.ok && r.warning);
+  const clean = results.filter((r) => r.ok && !r.warning);
 
-  if (failed.length === 0) {
-    return `Code set on ${ok.map((r) => lockName(r.entity)).join(" and ")}`;
+  if (failed.length === 0 && suspect.length === 0) {
+    return `Code set on ${clean.map((r) => lockName(r.entity)).join(" and ")}`;
   }
 
-  const failedNames = failed.map((r) => lockName(r.entity)).join(", ");
-  const okNames = ok.map((r) => lockName(r.entity)).join(", ");
-  let msg = `${failedNames} didn't respond — code may not work on ${failed.length === 1 ? "that door" : "those doors"}.`;
-  if (ok.length > 0) msg += ` ${okNames} is set.`;
-  msg += ` If the code doesn't work, contact ${SUPPORT_CONTACT}.`;
-  return msg;
+  const parts: string[] = [];
+  if (failed.length > 0) {
+    const names = failed.map((r) => lockName(r.entity)).join(", ");
+    parts.push(`${names} didn't respond — code may not work on ${failed.length === 1 ? "that door" : "those doors"}.`);
+  }
+  for (const r of suspect) {
+    parts.push(`${lockName(r.entity)} ${r.warning} — please test it.`);
+  }
+  if (clean.length > 0) {
+    parts.push(`${clean.map((r) => lockName(r.entity)).join(", ")} is set.`);
+  }
+  parts.push(`If a code doesn't work, contact ${SUPPORT_CONTACT}.`);
+  return parts.join(" ");
 }
 
 /** @deprecated Use formatLockStatus instead. Kept for backward compat. */
 export function formatLockWarning(results: LockResult[]): string | null {
   const failed = results.filter((r) => !r.ok);
-  if (failed.length === 0) return null;
-  const names = failed.map((r) => lockName(r.entity)).join(", ");
-  return `${names} didn't respond — code may not work on ${failed.length === 1 ? "that door" : "those doors"}. Contact ${SUPPORT_CONTACT} if the code doesn't work.`;
+  const suspect = results.filter((r) => r.ok && r.warning);
+  if (failed.length === 0 && suspect.length === 0) return null;
+
+  const parts: string[] = [];
+  if (failed.length > 0) {
+    const names = failed.map((r) => lockName(r.entity)).join(", ");
+    parts.push(`${names} didn't respond — code may not work on ${failed.length === 1 ? "that door" : "those doors"}.`);
+  }
+  for (const r of suspect) {
+    parts.push(`${lockName(r.entity)} ${r.warning} — please verify.`);
+  }
+  parts.push(`Contact ${SUPPORT_CONTACT} if the code doesn't work.`);
+  return parts.join(" ");
 }
 
 /** Error message for total lock failure (all locks unreachable). */

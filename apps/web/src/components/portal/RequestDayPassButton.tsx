@@ -69,8 +69,14 @@ export function RequestDayPassButton({ isFullMember, remainingUses }: Props) {
     }
   }
 
-  // Lock status has a warning if it contains "didn't respond" or "contact"
-  const hasLockWarning = result?.lock_status?.toLowerCase().includes("didn't respond");
+  // Lock status is a warning if a door didn't respond OR a write was accepted
+  // but may not have actually landed (low battery / offline node — "may not",
+  // "please test it"). Anything but a clean "Code set on ..." gets the amber treatment.
+  const lockStatusLower = result?.lock_status?.toLowerCase() ?? "";
+  const hasLockWarning =
+    lockStatusLower.includes("didn't respond") ||
+    lockStatusLower.includes("may not") ||
+    lockStatusLower.includes("test it");
 
   if (result) {
     return (
