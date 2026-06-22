@@ -48,7 +48,7 @@ export default async function NewsIssuePage({ params }: { params: Promise<{ key:
         <p style={{ fontSize: 13, margin: 0 }}>
           <Link href="/news" style={{ color: "#2d5e3e" }}>← All dispatches</Link>
           {"  ·  "}
-          <a href="https://regenhub.xyz" style={{ color: "#2d5e3e" }}>Grab a free day pass</a>
+          <a href="https://regenhub.xyz/freeday" style={{ color: "#2d5e3e" }}>Grab a free day pass</a>
         </p>
       </article>
     </main>

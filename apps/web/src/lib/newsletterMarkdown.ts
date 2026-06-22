@@ -28,31 +28,73 @@ function inline(s: string): string {
   return out;
 }
 
-/** Convert the newsletter Markdown subset into inline-styled HTML (no wrapper). */
+/**
+ * Convert the newsletter Markdown subset into inline-styled HTML (no wrapper).
+ *
+ * Consecutive non-blank lines are joined into one paragraph / list item (standard
+ * Markdown soft-wrap) — so hard-wrapped source doesn't become a pile of tiny
+ * <p>s. A blank line ends a block. A trailing backslash forces a hard line break
+ * (handy for sign-offs / addresses). Inline spans (bold/italic/links) are applied
+ * AFTER joining, so they may span a soft-wrapped line.
+ */
 export function markdownToEmailHtml(md: string): string {
   const lines = stripFrontmatter(md).split(/\r?\n/);
-  const html: string[] = [];
-  let listOpen = false;
-  const closeList = () => { if (listOpen) { html.push("</ul>"); listOpen = false; } };
+  const out: string[] = [];
+  const BR = "\u0000BR\u0000"; // hard-break sentinel (null bytes) — cannot occur in content, survives HTML-escape, swapped for <br> after inline
+
+  type Seg = { t: string; br: boolean };
+  let para: Seg[] = [];
+  let items: string[] | null = null;
+  let cur: Seg[] | null = null;
+
+  const render = (segs: Seg[]): string => {
+    const joined = segs.map((s, i) => s.t + (i < segs.length - 1 ? (s.br ? BR : " ") : "")).join("");
+    return inline(joined).split(BR).join("<br>");
+  };
+  const flushPara = () => { if (para.length) { out.push(`<p style="margin:12px 0;line-height:1.6;">${render(para)}</p>`); para = []; } };
+  const flushList = () => {
+    if (items) {
+      if (cur) { items.push(render(cur)); cur = null; }
+      out.push(`<ul style="margin:8px 0;padding-left:20px;line-height:1.6;">${items.map((c) => `<li style="margin:4px 0;">${c}</li>`).join("")}</ul>`);
+      items = null;
+    }
+  };
+  const flushAll = () => { flushPara(); flushList(); };
 
   for (const raw of lines) {
-    const line = raw.trimEnd();
-    if (!line.trim()) { closeList(); continue; }
-    if (/^---+$/.test(line.trim())) { closeList(); html.push(`<hr style="border:none;border-top:1px solid #e5e5e5;margin:24px 0;" />`); continue; }
+    let t = raw.trim();
+    if (!t) { flushAll(); continue; }
+
+    let br = false;
+    if (t.endsWith("\\")) { br = true; t = t.replace(/\\+$/, "").trimEnd(); }
+
+    if (/^---+$/.test(t)) { flushAll(); out.push(`<hr style="border:none;border-top:1px solid #e5e5e5;margin:24px 0;" />`); continue; }
+
     let m: RegExpMatchArray | null;
-    if ((m = line.match(/^###\s+(.*)$/))) { closeList(); html.push(`<h3 style="margin:24px 0 8px;font-size:17px;">${inline(m[1])}</h3>`); continue; }
-    if ((m = line.match(/^##\s+(.*)$/)))  { closeList(); html.push(`<h2 style="margin:26px 0 10px;font-size:20px;">${inline(m[1])}</h2>`); continue; }
-    if ((m = line.match(/^#\s+(.*)$/)))   { closeList(); html.push(`<h1 style="margin:0 0 14px;font-size:24px;">${inline(m[1])}</h1>`); continue; }
-    if ((m = line.match(/^[-*]\s+(.*)$/))) {
-      if (!listOpen) { html.push(`<ul style="margin:8px 0;padding-left:20px;line-height:1.6;">`); listOpen = true; }
-      html.push(`<li style="margin:4px 0;">${inline(m[1])}</li>`);
+    if ((m = t.match(/^(#{1,3})\s+(.*)$/))) {
+      flushAll();
+      const level = m[1].length;
+      const style = level === 1 ? "margin:0 0 14px;font-size:24px;"
+        : level === 2 ? "margin:26px 0 10px;font-size:20px;"
+        : "margin:24px 0 8px;font-size:17px;";
+      out.push(`<h${level} style="${style}">${inline(m[2])}</h${level}>`);
       continue;
     }
-    closeList();
-    html.push(`<p style="margin:12px 0;line-height:1.6;">${inline(line)}</p>`);
+
+    if ((m = t.match(/^[-*]\s+(.*)$/))) {
+      flushPara();
+      if (!items) items = [];
+      if (cur) items.push(render(cur));
+      cur = [{ t: m[1], br }];
+      continue;
+    }
+
+    // continuation line: belongs to the open list item, else the open paragraph
+    if (cur) cur.push({ t, br });
+    else { flushList(); para.push({ t, br }); }
   }
-  closeList();
-  return html.join("\n");
+  flushAll();
+  return out.join("\n");
 }
 
 /**
