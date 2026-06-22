@@ -61,6 +61,45 @@ export async function sendEmail(input: SendEmailInput): Promise<boolean> {
   }
 }
 
+export interface SendResult {
+  ok: boolean;
+  /** True when the failure was a Resend rate limit (429) — caller should back off + retry, not give up. */
+  rateLimited: boolean;
+  /** Resend message id on success. */
+  id?: string;
+  error?: string;
+}
+
+/**
+ * Like sendEmail, but returns a structured result so a bulk sender can tell a
+ * rate-limit (retry) apart from a hard failure (give up) and record the Resend
+ * message id. Used by the newsletter send engine.
+ */
+export async function sendEmailDetailed(input: SendEmailInput): Promise<SendResult> {
+  const resend = getResend();
+  if (!resend) return { ok: false, rateLimited: false, error: "email not configured" };
+  try {
+    const { data, error } = await resend.emails.send({
+      from: input.from ?? defaultFrom(),
+      to: input.to,
+      subject: input.subject,
+      html: input.html,
+      text: input.text ?? input.html.replace(/<[^>]+>/g, ""),
+      replyTo: input.replyTo ?? defaultReplyTo(),
+    });
+    if (error) {
+      const blob = `${(error as { name?: string }).name ?? ""} ${(error as { message?: string }).message ?? ""}`;
+      const rateLimited = /rate.?limit|too many|429/i.test(blob);
+      return { ok: false, rateLimited, error: (error as { message?: string }).message ?? "send failed" };
+    }
+    return { ok: true, rateLimited: false, id: data?.id };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const rateLimited = /rate.?limit|too many|429/i.test(msg);
+    return { ok: false, rateLimited, error: msg };
+  }
+}
+
 // ============================================================
 // Templates
 // ============================================================

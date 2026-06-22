@@ -12,6 +12,7 @@ const links: NavLink[] = [
   { href: "/admin/billing", label: "Billing" },
   { href: "/admin/access", label: "Access" },
   { href: "/admin/communications", label: "Comms" },
+  { href: "/admin/newsletter", label: "Newsletter" },
   { href: "/portal", label: "Portal", accent: true },
 ];
 
