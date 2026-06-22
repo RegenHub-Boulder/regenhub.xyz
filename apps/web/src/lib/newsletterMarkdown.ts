@@ -62,19 +62,23 @@ export function markdownToEmailHtml(md: string): string {
 export function renderDraftEmail(
   markdown: string,
   unsubscribeHref: string,
+  archiveHref?: string,
 ): { html: string; text: string } {
   const body = markdownToEmailHtml(markdown);
+  const archiveHtml = archiveHref
+    ? `<a href="${archiveHref}" style="color:#999;">Read on the web</a> · `
+    : "";
   const html = `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1a1a1a;line-height:1.55;">
       <p style="font-size:13px;text-transform:uppercase;letter-spacing:0.08em;color:#2d5e3e;margin-bottom:12px;">RegenHub dispatch</p>
       ${body}
       <hr style="border:none;border-top:1px solid #e5e5e5;margin:24px 0 12px;" />
       <p style="font-size:11px;color:#999;">
-        You're receiving this because you're part of the RegenHub community — maybe
-        you've co-worked with us, joined us on Luma, or signed up at RegenHub.xyz.
+        ${archiveHtml}You're receiving this because you're part of the RegenHub community —
+        maybe you've co-worked with us, joined us on Luma, or signed up at RegenHub.xyz.
         <a href="${unsubscribeHref}" style="color:#999;">Unsubscribe</a> anytime.
       </p>
     </div>`;
-  const text = `${stripFrontmatter(markdown).trim()}\n\n—\nUnsubscribe: ${unsubscribeHref}`;
+  const text = `${stripFrontmatter(markdown).trim()}\n\n—\n${archiveHref ? `Read on the web: ${archiveHref}\n` : ""}Unsubscribe: ${unsubscribeHref}`;
   return { html, text };
 }

@@ -118,8 +118,9 @@ export async function sendBatch(
 
   let sent = 0, failed = 0, rateLimited = 0;
 
+  const archiveHref = `${opts.siteUrl.replace(/\/$/, "")}/news`;
   for (const row of rows ?? []) {
-    const { html, text } = renderDraftEmail(opts.markdown, unsubscribeUrl(row.email, opts.siteUrl));
+    const { html, text } = renderDraftEmail(opts.markdown, unsubscribeUrl(row.email, opts.siteUrl), archiveHref);
     const result = await sendEmailDetailed({ to: row.email, subject: opts.subject, html, text });
 
     if (result.ok) {

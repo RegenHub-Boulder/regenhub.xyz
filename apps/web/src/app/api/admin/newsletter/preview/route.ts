@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   if (!markdown) return NextResponse.json({ error: "markdown required" }, { status: 400 });
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
-  const { html, text } = renderDraftEmail(markdown, unsubscribeUrl(user.email, siteUrl));
+  const { html, text } = renderDraftEmail(markdown, unsubscribeUrl(user.email, siteUrl), `${siteUrl.replace(/\/$/, "")}/news`);
   const ok = await sendEmail({ to: user.email, subject: `[PREVIEW] ${subject}`, html, text });
   return NextResponse.json({ ok, sent_to: user.email });
 }

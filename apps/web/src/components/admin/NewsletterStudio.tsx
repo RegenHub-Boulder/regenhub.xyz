@@ -175,8 +175,15 @@ export function NewsletterStudio({ initialDraft }: { initialDraft: Draft | null 
             </Button>
           </div>
           {showPreview && (
-            <div className="mt-2 rounded-md border border-white/10 bg-white p-4 max-h-[480px] overflow-auto">
-              <div dangerouslySetInnerHTML={{ __html: markdownToEmailHtml(markdown) }} />
+            <div className="mt-2 rounded-md border border-white/10 bg-white p-5 max-h-[520px] overflow-auto">
+              <div
+                style={{
+                  color: "#1a1a1a",
+                  fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                  lineHeight: 1.55,
+                }}
+                dangerouslySetInnerHTML={{ __html: markdownToEmailHtml(markdown) }}
+              />
             </div>
           )}
         </CardContent>
