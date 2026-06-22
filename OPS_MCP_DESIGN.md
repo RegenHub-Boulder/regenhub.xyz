@@ -157,11 +157,20 @@ Grouped by domain; `[R]` read-only, `[W]` mutating (audited). Lock *writes* and
 destructive DB ops are deliberately absent.
 
 **Deploy & infra**
-- `[W] deploy_app(app: "web" | "bot")` → triggers Coolify deploy, returns
-  `deployment_uuid`. Audited; idempotency-keyed on a short window to avoid dup fires.
+- `[W] deploy_app(app: "web" | "bot")` → triggers a Coolify deploy. Coolify's deploy
+  **pulls the latest commit on `main`** and rebuilds — so the contract is "ship what's
+  on main," and the tool should refuse / warn if local `main` is ahead of `origin`
+  (i.e. there are unpushed commits) so we never deploy code that isn't in the repo.
+  Audited; idempotency-keyed on a short window to avoid dup fires.
 - `[R] deployment_status(deployment_uuid)` → queued/in_progress/finished/failed.
 - `[R] list_deployments(app?, limit?)` → recent deployments.
 - `[R] app_status(app)` → container/app running state + health.
+- `[W] apply_migration(file)` → run a pending SQL migration against Postgres. Today
+  this is a manual `ssh steward@regenhub-compute-1 … docker exec supabase-db … psql`
+  (which *only works because the MCP runs on the box* — the LAN firewall blocks it from
+  a laptop). High-power: gate behind a confirmation, audit the file + checksum, and run
+  inside a transaction with `ON_ERROR_STOP=1`. Pairs naturally with deploy: apply the
+  migration, then ship the code that depends on it.
 
 **Lock & HA health (read-only — this is the §2.2 gap, closed)**
 - `[R] lock_health(door: "front" | "back" | "both")` → `node_status`,
