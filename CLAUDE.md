@@ -98,6 +98,10 @@ curl -X GET "http://192.168.1.200:8000/api/v1/deploy?uuid=ew848c4os44sw0wowwk0ks
 # Bot (Coolify-managed since 2026-04 — see DEPLOYMENT.md "Telegram Bot"):
 curl -X GET "http://192.168.1.200:8000/api/v1/deploy?uuid=t84sosw40088kokwco80kksw&force=true" \
   -H "Authorization: Bearer <coolify-api-key>"
+# Ops MCP (apps/mcp — Tailnet/LAN-only, NO public domain; build_pack=dockerfile,
+#   base_directory=/, dockerfile_location=/apps/mcp/Dockerfile):
+curl -X GET "http://192.168.1.200:8000/api/v1/deploy?uuid=vwimjwft2lbxb2vnz8gu00bk&force=true" \
+  -H "Authorization: Bearer <coolify-api-key>"
 ```
 
 ### Check deployment status
