@@ -103,7 +103,7 @@ export interface BatchResult {
 export async function sendBatch(
   admin: Admin,
   issueId: number,
-  opts: { markdown: string; subject: string; siteUrl: string; limit?: number },
+  opts: { markdown: string; subject: string; siteUrl: string; issueKey?: string; limit?: number },
 ): Promise<BatchResult> {
   const limit = opts.limit ?? 20;
 
@@ -118,7 +118,8 @@ export async function sendBatch(
 
   let sent = 0, failed = 0, rateLimited = 0;
 
-  const archiveHref = `${opts.siteUrl.replace(/\/$/, "")}/news`;
+  const base = opts.siteUrl.replace(/\/$/, "");
+  const archiveHref = opts.issueKey ? `${base}/news/${opts.issueKey}` : `${base}/news`;
   for (const row of rows ?? []) {
     const { html, text } = renderDraftEmail(opts.markdown, unsubscribeUrl(row.email, opts.siteUrl), archiveHref);
     const result = await sendEmailDetailed({ to: row.email, subject: opts.subject, html, text });

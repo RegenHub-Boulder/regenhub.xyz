@@ -110,8 +110,12 @@ export function renderDraftEmail(
   const archiveHtml = archiveHref
     ? `<a href="${archiveHref}" style="color:#999;">Read on the web</a> · `
     : "";
+  const browserLink = archiveHref
+    ? `<p style="text-align:right;font-size:11px;color:#999;margin:0 0 10px;"><a href="${archiveHref}" style="color:#999;">View in browser&nbsp;→</a></p>`
+    : "";
   const html = `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1a1a1a;line-height:1.55;">
+      ${browserLink}
       <p style="font-size:13px;text-transform:uppercase;letter-spacing:0.08em;color:#2d5e3e;margin-bottom:12px;">RegenHub dispatch</p>
       ${body}
       <hr style="border:none;border-top:1px solid #e5e5e5;margin:24px 0 12px;" />

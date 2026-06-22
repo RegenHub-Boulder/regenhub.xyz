@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   const admin = createServiceClient();
   const { data: issue } = await admin
     .from("newsletter_issues")
-    .select("id, subject, markdown_body, status")
+    .select("id, issue_key, subject, markdown_body, status")
     .eq("id", issueId)
     .maybeSingle();
   if (!issue) return NextResponse.json({ error: "issue not found" }, { status: 404 });
@@ -36,6 +36,7 @@ export async function POST(request: Request) {
     markdown: issue.markdown_body,
     subject: issue.subject,
     siteUrl,
+    issueKey: issue.issue_key,
     limit: Number(body.limit) || 20,
   });
 

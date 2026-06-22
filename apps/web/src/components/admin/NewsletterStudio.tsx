@@ -68,7 +68,7 @@ export function NewsletterStudio({ initialDraft }: { initialDraft: Draft | null 
   async function preview() {
     setBusy("preview"); setErr(null); setMsg(null);
     try {
-      const r = await api<{ ok: boolean; sent_to: string }>("/api/admin/newsletter/preview", { subject, markdown });
+      const r = await api<{ ok: boolean; sent_to: string }>("/api/admin/newsletter/preview", { subject, markdown, issue_key: issueKey });
       setMsg(r.ok ? `Preview sent to ${r.sent_to}.` : "Preview failed to send (check email config).");
     } catch (e) { setErr(errMessage(e)); }
     finally { setBusy(null); }
