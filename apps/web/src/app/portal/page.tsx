@@ -355,8 +355,8 @@ export default async function PortalPage() {
                     <Calendar className="w-8 h-8 text-gold mb-3" />
                     <h3 className="font-semibold mb-1">Free Day Reserved</h3>
                     <p className="text-sm text-muted">
-                      {freeDayClaim.claimed_date === new Intl.DateTimeFormat("en-CA", { timeZone: "America/Denver" }).format(new Date())
-                        ? "Today! Tap to get your door code"
+                      {!freeDayClaim.claimed_date || freeDayClaim.claimed_date === new Intl.DateTimeFormat("en-CA", { timeZone: "America/Denver" }).format(new Date())
+                        ? "Tap to get your door code — visit any weekday"
                         : `Reserved for ${new Date(freeDayClaim.claimed_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
                     </p>
                   </>

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/admin";
 import {
   setUserCode,
@@ -87,7 +88,12 @@ export async function PATCH(
     }
   }
 
-  const { data, error } = await supabase
+  // Migration 031 revoked UPDATE on members from the authenticated role (anon
+  // SDK lockdown), so admin writes must go through the service-role client.
+  // The route is requireAdmin-gated and fields are whitelisted above, so this
+  // is safe.
+  const admin = createServiceClient();
+  const { data, error } = await admin
     .from("members")
     .update(update)
     .eq("id", Number(id))
@@ -159,7 +165,10 @@ export async function DELETE(
     }
   }
 
-  const { error } = await supabase
+  // Service-role client for the write (members DELETE/UPDATE are revoked from
+  // the authenticated role — migration 031). Route is requireAdmin-gated.
+  const admin = createServiceClient();
+  const { error } = await admin
     .from("members")
     .delete()
     .eq("id", Number(id));
