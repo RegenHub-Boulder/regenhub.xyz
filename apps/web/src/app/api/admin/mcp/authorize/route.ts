@@ -28,10 +28,13 @@ export async function GET(request: Request) {
   const supabase = await createClient();
   const { data: member } = await supabase
     .from("members")
-    .select("id, email, is_admin")
+    .select("id, email, is_ops_admin")
     .eq("supabase_user_id", user.id)
     .single();
-  if (!member?.is_admin) return NextResponse.json({ error: "not an admin" }, { status: 403 });
+  // The MCP's dangerous capabilities are ops-tier only — a strict superset of admin.
+  if (!member?.is_ops_admin) {
+    return NextResponse.json({ error: "Connecting the RegenHub MCP requires ops-admin access." }, { status: 403 });
+  }
 
   const exp = Math.floor(Date.now() / 1000) + 120; // 2-minute window
   const email = member.email ?? "";

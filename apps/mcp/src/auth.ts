@@ -73,7 +73,7 @@ export class SupabaseOAuthProvider implements OAuthServerProvider {
 
   /** Mint an auth code after the bridge vouched for `memberId`. Re-checks is_admin. */
   async createAuthorizationCode(req: AuthorizeRequest, memberId: number): Promise<string> {
-    if (!(await this.isAdmin(memberId))) throw new InvalidGrantError("not a RegenHub admin");
+    if (!(await this.isOpsAdmin(memberId))) throw new InvalidGrantError("not a RegenHub ops-admin");
     const code = randToken();
     const { error } = await this.sb.from("mcp_oauth_codes").insert({
       code_hash: sha256(code),
@@ -111,7 +111,7 @@ export class SupabaseOAuthProvider implements OAuthServerProvider {
   async exchangeRefreshToken(client: OAuthClientInformationFull, refreshToken: string): Promise<OAuthTokens> {
     const { data: row } = await this.sb.from("mcp_oauth_tokens").select("*").eq("token_hash", sha256(refreshToken)).eq("kind", "refresh").maybeSingle();
     if (!row || row.revoked_at || row.client_id !== client.client_id) throw new InvalidGrantError("invalid refresh token");
-    if (!(await this.isAdmin(row.member_id))) throw new InvalidGrantError("not a RegenHub admin");
+    if (!(await this.isOpsAdmin(row.member_id))) throw new InvalidGrantError("not a RegenHub ops-admin");
     // Non-rotating refresh for v1: issue a new access token, keep the refresh.
     const access = randToken();
     const expiresAt = new Date(Date.now() + this.cfg.accessTtlSec * 1000).toISOString();
@@ -128,13 +128,14 @@ export class SupabaseOAuthProvider implements OAuthServerProvider {
       throw new InvalidTokenError("invalid or expired access token");
     }
     const member = await this.getMember(row.member_id);
-    if (!member?.is_admin) throw new InvalidTokenError("token holder is not a RegenHub admin"); // live recheck — instant revoke on demotion
+    if (!member?.is_ops_admin) throw new InvalidTokenError("token holder is not a RegenHub ops-admin"); // live recheck — instant revoke on demotion
     return {
       token,
       clientId: row.client_id,
       scopes: row.scopes ?? [],
       expiresAt: row.expires_at ? Math.floor(new Date(row.expires_at).getTime() / 1000) : undefined,
-      extra: { memberId: row.member_id, email: member.email },
+      // Role flags ride along for the future per-tier tool gating (members/admins/ops).
+      extra: { memberId: row.member_id, email: member.email, isAdmin: member.is_admin, isOpsAdmin: member.is_ops_admin },
     };
   }
 
@@ -161,12 +162,13 @@ export class SupabaseOAuthProvider implements OAuthServerProvider {
     return data;
   }
 
-  private async getMember(memberId: number): Promise<{ is_admin: boolean; email: string } | null> {
-    const { data } = await this.sb.from("members").select("is_admin, email").eq("id", memberId).maybeSingle();
+  private async getMember(memberId: number): Promise<{ is_admin: boolean; is_ops_admin: boolean; email: string } | null> {
+    const { data } = await this.sb.from("members").select("is_admin, is_ops_admin, email").eq("id", memberId).maybeSingle();
     return data ?? null;
   }
 
-  private async isAdmin(memberId: number): Promise<boolean> {
-    return !!(await this.getMember(memberId))?.is_admin;
+  /** The MCP's entry gate (v1): ops tier only. Later this relaxes to any member, with per-tool tier checks. */
+  private async isOpsAdmin(memberId: number): Promise<boolean> {
+    return !!(await this.getMember(memberId))?.is_ops_admin;
   }
 }

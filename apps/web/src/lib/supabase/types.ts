@@ -97,6 +97,7 @@ export interface Database {
           member_type: MemberType;
           is_coop_member: boolean;
           is_admin: boolean;
+          is_ops_admin: boolean;
           disabled: boolean;
           day_passes_balance: number;
           bio: string | null;
@@ -126,6 +127,7 @@ export interface Database {
           member_type: MemberType;
           is_coop_member?: boolean;
           is_admin?: boolean;
+          is_ops_admin?: boolean;
           disabled?: boolean;
           day_passes_balance?: number;
           bio?: string | null;

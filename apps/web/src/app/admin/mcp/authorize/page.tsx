@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
+import { createClient } from "@/lib/supabase/server";
 
-export const metadata = { title: "Authorize Ops MCP — Admin" };
+export const metadata = { title: "Authorize RegenHub MCP — Admin" };
 
 /**
  * Consent screen for the Ops MCP identity bridge. The MCP's OAuth `authorize`
@@ -17,6 +18,25 @@ export default async function McpAuthorizePage({
 }) {
   const user = await requireAdmin();
   if (!user) redirect("/auth/login");
+
+  const supabase = await createClient();
+  const { data: member } = await supabase
+    .from("members")
+    .select("is_ops_admin")
+    .eq("supabase_user_id", user.id)
+    .single();
+
+  if (!member?.is_ops_admin) {
+    return (
+      <div className="max-w-md mx-auto mt-20 text-center space-y-2">
+        <h1 className="text-lg font-bold text-forest">Ops access required</h1>
+        <p className="text-sm text-muted">
+          Connecting the RegenHub MCP needs ops-admin access, which your account doesn&apos;t
+          have. Ask an ops admin if you need it.
+        </p>
+      </div>
+    );
+  }
 
   const { req } = await searchParams;
   if (!req) {
