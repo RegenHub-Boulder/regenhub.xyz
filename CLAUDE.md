@@ -98,10 +98,7 @@ curl -X GET "http://192.168.1.200:8000/api/v1/deploy?uuid=ew848c4os44sw0wowwk0ks
 # Bot (Coolify-managed since 2026-04 — see DEPLOYMENT.md "Telegram Bot"):
 curl -X GET "http://192.168.1.200:8000/api/v1/deploy?uuid=t84sosw40088kokwco80kksw&force=true" \
   -H "Authorization: Bearer <coolify-api-key>"
-# Ops MCP (apps/mcp — Tailnet/LAN-only, NO public domain; build_pack=dockerfile,
-#   base_directory=/, dockerfile_location=/apps/mcp/Dockerfile):
-curl -X GET "http://192.168.1.200:8000/api/v1/deploy?uuid=vwimjwft2lbxb2vnz8gu00bk&force=true" \
-  -H "Authorization: Bearer <coolify-api-key>"
+# The MCP server ships INSIDE the web app (regenhub.xyz/mcp) — redeploy web to ship MCP changes.
 ```
 
 ### Check deployment status
@@ -128,6 +125,26 @@ update members set member_type = 'cold_desk' where telegram_username = '@usernam
 Both web and bot are Coolify-managed and need `HA_URL`, `HA_TOKEN`, and `HA_LOCK_ENTITIES` at runtime.
 Set `HA_LOCK_ENTITIES=lock.front_door_lock,lock.back_door_lock` (comma-separated) to
 target multiple Z-Wave locks. Update env via Coolify UI for the relevant app and redeploy.
+
+## MCP Server
+The RegenHub MCP is served **in-app** by the web app at `https://regenhub.xyz/mcp` (Streamable
+HTTP, native Web Request→Response via the SDK's `WebStandardStreamableHTTPServerTransport`). It
+rides the existing Cloudflare tunnel — no separate app, no LAN/Tailscale, no HMAC bridge. To ship
+MCP changes, just redeploy the web app.
+
+- **Connect:** `claude mcp add --transport http regenhub-ops https://regenhub.xyz/mcp` → the CLI
+  walks the browser OAuth/consent flow at `/oauth/authorize`.
+- **Auth:** standard MCP OAuth 2.1 (Authorization Code + PKCE S256, Dynamic Client Registration,
+  refresh). Discovery at `/.well-known/oauth-authorization-server` and
+  `/.well-known/oauth-protected-resource/mcp`. The consent page reads the Supabase session directly
+  (same origin), so you sign in as your normal RegenHub account.
+- **Gating:** entry requires `members.is_ops_admin = true` (migration 041), re-checked **live** on
+  every token verification — demoting a member instantly kills their tokens. Tokens are sha-256
+  hashed at rest and member-bound (migrations 040/041: `mcp_oauth_clients/codes/tokens`).
+- **Code:** OAuth core in `apps/web/src/lib/mcp/oauth.ts`, metadata in `metadata.ts`, tool surface +
+  transport in `server.ts`; routes under `apps/web/src/app/{mcp,oauth,.well-known}`. Phase 1 ships
+  the `ping` tool; scopes (`read/deploy/locks/migrate`) are wired for the planned per-tier surface
+  (members → day codes, admins → events/members, ops → dangerous tools).
 
 ## Important Notes
 - **NEVER restart Supabase via Coolify.** Coolify regenerates ALL `SERVICE_PASSWORD_*` values on restart — but the DB volume retains the old passwords. This breaks every service. If it happens, see the password fix procedure in DEPLOYMENT.md.
