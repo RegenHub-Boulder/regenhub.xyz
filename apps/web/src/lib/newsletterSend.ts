@@ -92,6 +92,8 @@ export interface BatchResult {
   sent: number;
   failed: number;
   rateLimited: number;
+  /** True when the run stopped because Resend's daily quota was reached. */
+  quotaReached: boolean;
   progress: Progress;
 }
 
@@ -117,6 +119,7 @@ export async function sendBatch(
     .limit(limit);
 
   let sent = 0, failed = 0, rateLimited = 0;
+  let quotaReached = false;
 
   const base = opts.siteUrl.replace(/\/$/, "");
   const archiveHref = opts.issueKey ? `${base}/news/${opts.issueKey}` : `${base}/news`;
@@ -133,6 +136,16 @@ export async function sendBatch(
         resend_id: result.id ?? null,
         last_error: null,
       }).eq("id", row.id);
+    } else if (result.quotaExceeded) {
+      // Daily sending quota reached — won't clear for hours. Leave this recipient
+      // pending (do NOT burn an attempt) and STOP the run: the issue stays
+      // 'sending' and fully resumable once quota resets / plan is bumped.
+      quotaReached = true;
+      await admin.from("newsletter_sends").update({
+        status: "pending",
+        last_error: "daily email quota reached — will resume",
+      }).eq("id", row.id);
+      break;
     } else if (result.rateLimited) {
       // Not the recipient's fault — keep pending, don't burn an attempt, back off.
       rateLimited++;
@@ -153,5 +166,5 @@ export async function sendBatch(
     await sleep(RATE_DELAY_MS);
   }
 
-  return { processed: (rows ?? []).length, sent, failed, rateLimited, progress: await issueProgress(admin, issueId) };
+  return { processed: (rows ?? []).length, sent, failed, rateLimited, quotaReached, progress: await issueProgress(admin, issueId) };
 }

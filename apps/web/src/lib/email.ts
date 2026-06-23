@@ -63,11 +63,22 @@ export async function sendEmail(input: SendEmailInput): Promise<boolean> {
 
 export interface SendResult {
   ok: boolean;
-  /** True when the failure was a Resend rate limit (429) — caller should back off + retry, not give up. */
+  /** Transient per-second rate limit (429 "too many requests") — back off + retry. */
   rateLimited: boolean;
+  /** Daily sending quota reached — won't clear for hours. STOP and resume later;
+   *  do NOT burn the recipient's retry budget. */
+  quotaExceeded: boolean;
   /** Resend message id on success. */
   id?: string;
   error?: string;
+}
+
+/** Classify a Resend error string. Quota is checked first (a daily-quota error can
+ *  also carry a 429, but it must NOT be treated as a transient rate limit). */
+function classifyError(blob: string): { rateLimited: boolean; quotaExceeded: boolean } {
+  const quotaExceeded = /quota|sending limit|daily limit/i.test(blob);
+  const rateLimited = !quotaExceeded && /rate.?limit|too many|429/i.test(blob);
+  return { rateLimited, quotaExceeded };
 }
 
 /**
@@ -77,7 +88,7 @@ export interface SendResult {
  */
 export async function sendEmailDetailed(input: SendEmailInput): Promise<SendResult> {
   const resend = getResend();
-  if (!resend) return { ok: false, rateLimited: false, error: "email not configured" };
+  if (!resend) return { ok: false, rateLimited: false, quotaExceeded: false, error: "email not configured" };
   try {
     const { data, error } = await resend.emails.send({
       from: input.from ?? defaultFrom(),
@@ -88,15 +99,15 @@ export async function sendEmailDetailed(input: SendEmailInput): Promise<SendResu
       replyTo: input.replyTo ?? defaultReplyTo(),
     });
     if (error) {
-      const blob = `${(error as { name?: string }).name ?? ""} ${(error as { message?: string }).message ?? ""}`;
-      const rateLimited = /rate.?limit|too many|429/i.test(blob);
-      return { ok: false, rateLimited, error: (error as { message?: string }).message ?? "send failed" };
+      const message = (error as { message?: string }).message ?? "send failed";
+      const { rateLimited, quotaExceeded } = classifyError(`${(error as { name?: string }).name ?? ""} ${message}`);
+      return { ok: false, rateLimited, quotaExceeded, error: message };
     }
-    return { ok: true, rateLimited: false, id: data?.id };
+    return { ok: true, rateLimited: false, quotaExceeded: false, id: data?.id };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    const rateLimited = /rate.?limit|too many|429/i.test(msg);
-    return { ok: false, rateLimited, error: msg };
+    const { rateLimited, quotaExceeded } = classifyError(msg);
+    return { ok: false, rateLimited, quotaExceeded, error: msg };
   }
 }
 

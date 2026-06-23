@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, Save, Eye, Users, Send, RotateCcw, DownloadCloud, Square } from "lucide-react";
@@ -54,6 +54,14 @@ export function NewsletterStudio({ initialDraft }: { initialDraft: Draft | null 
   const stopRef = useRef(false);
 
   const sent = status === "sent";
+
+  // On open, load the current send progress for an existing issue so a
+  // partially-sent / reopened issue shows its real state (and Resume/Retry work)
+  // without first having to click Prepare.
+  useEffect(() => {
+    if (initialDraft?.id) void refreshStatus(initialDraft.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function saveDraft(): Promise<number | null> {
     setBusy("save"); setErr(null); setMsg(null);
@@ -109,7 +117,9 @@ export function NewsletterStudio({ initialDraft }: { initialDraft: Draft | null 
     if (!id) { id = await saveDraft(); if (!id) return; }
     if (!progress?.total) { setErr("Prepare the audience first."); return; }
     if (!retry) {
-      const ok = window.confirm(`Send "${subject}" to ${progress.total} recipients? This goes to real inboxes.`);
+      // Only the not-yet-sent recipients actually go out (the ledger skips sent ones).
+      const toSend = progress.pending + progress.failed;
+      const ok = window.confirm(`Send "${subject}" to ${toSend} recipient${toSend === 1 ? "" : "s"}? This goes to real inboxes (already-sent are skipped).`);
       if (!ok) return;
     }
     setErr(null); setMsg(null); setSending(true); stopRef.current = false;
@@ -118,12 +128,16 @@ export function NewsletterStudio({ initialDraft }: { initialDraft: Draft | null 
       // Loop one batch at a time until the ledger is drained (or stopped).
       // Each batch self-paces (rate-limit back-off lives server-side).
       while (!stopRef.current) {
-        const r = await api<{ processed: number; progress: Progress }>(
+        const r = await api<{ processed: number; quotaReached?: boolean; progress: Progress }>(
           "/api/admin/newsletter/send",
           { issue_id: id, retry_failed: first && retry },
         );
         first = false;
         setProgress(r.progress);
+        if (r.quotaReached) {
+          setErr(`⏸ Daily email quota reached — ${r.progress.sent}/${r.progress.total} delivered. Already-sent are saved; come back and click Send to resume once the quota resets or your Resend plan is bumped.`);
+          break;
+        }
         if (r.progress.done) { setStatus("sent"); setMsg("All recipients processed. 🎉"); break; }
         if (r.processed === 0) { setMsg("Nothing left to send."); break; }
       }

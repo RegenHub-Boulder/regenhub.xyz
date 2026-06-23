@@ -23,12 +23,22 @@ export async function POST(request: Request) {
     .eq("id", issueId)
     .maybeSingle();
   if (!issue) return NextResponse.json({ error: "issue not found" }, { status: 404 });
-  if (issue.status === "sent") return NextResponse.json({ error: "issue already marked sent" }, { status: 409 });
   if (!issue.markdown_body || !issue.subject) {
     return NextResponse.json({ error: "draft is missing a subject or body" }, { status: 400 });
   }
 
-  if (body.retry_failed) await retryFailed(admin, issueId);
+  // A plain send won't touch a fully-sent issue (guards against accidental
+  // re-send). But an explicit retry_failed MAY reopen a 'sent' issue to re-send
+  // failures (e.g. after a quota bump) — that's the whole point of retry.
+  const isRetry = !!body.retry_failed;
+  if (issue.status === "sent" && !isRetry) {
+    return NextResponse.json(
+      { error: "Issue already fully sent. Use Retry to re-send any failed recipients." },
+      { status: 409 },
+    );
+  }
+
+  if (isRetry) await retryFailed(admin, issueId);
   await admin.from("newsletter_issues").update({ status: "sending" }).eq("id", issueId);
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
