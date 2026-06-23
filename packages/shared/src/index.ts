@@ -22,9 +22,3 @@ export { defaultEmailFrom, defaultEmailReplyTo } from "./email.js";
 
 export { unlockDoors, lockDoors, resolveDoorEntities, getLockEntities } from "./homeAssistant.js";
 export { getEntityState, setAutomationEnabled, autoLockAutomationEntity } from "./homeAssistant.js";
-
-export {
-  signBridgeAssertion,
-  verifyBridgeAssertion,
-  type BridgeAssertion,
-} from "./mcpBridge.js";
