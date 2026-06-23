@@ -47,6 +47,12 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@3.25.76)
+      '@regenhub/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@supabase/supabase-js':
+        specifier: ^2.50.0
+        version: 2.98.0
       express:
         specifier: ^5.2.1
         version: 5.2.1
