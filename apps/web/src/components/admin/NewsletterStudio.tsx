@@ -7,8 +7,8 @@ import { Loader2, Save, Eye, Users, Send, RotateCcw, DownloadCloud, Square } fro
 import { markdownToEmailHtml } from "@/lib/newsletterMarkdown";
 
 interface Draft {
-  id: number;
-  issue_key: string;
+  id: number | null;
+  issue_key: string | null;
   subject: string;
   markdown_body: string | null;
   status: string;
@@ -38,7 +38,15 @@ async function api<T>(path: string, body?: unknown): Promise<T> {
   return data as T;
 }
 
-export function NewsletterStudio({ initialDraft }: { initialDraft: Draft | null }) {
+export function NewsletterStudio({
+  initialDraft,
+  onMutate,
+}: {
+  initialDraft: Draft | null;
+  /** Called after a change that the parent list should reflect (save / prepare /
+   *  send). The new issue id is passed on the first save of a brand-new draft. */
+  onMutate?: (savedId?: number) => void;
+}) {
   const [subject, setSubject] = useState(initialDraft?.subject ?? "");
   const [markdown, setMarkdown] = useState(initialDraft?.markdown_body ?? "");
   const [issueId, setIssueId] = useState<number | null>(initialDraft?.id ?? null);
@@ -68,6 +76,7 @@ export function NewsletterStudio({ initialDraft }: { initialDraft: Draft | null 
     try {
       const d = await api<{ draft: Draft }>("/api/admin/newsletter/draft", { subject, markdown, issue_key: issueKey });
       setIssueId(d.draft.id); setStatus(d.draft.status); setMsg("Draft saved.");
+      onMutate?.(d.draft.id ?? undefined);
       return d.draft.id;
     } catch (e) { setErr(errMessage(e)); return null; }
     finally { setBusy(null); }
@@ -143,7 +152,7 @@ export function NewsletterStudio({ initialDraft }: { initialDraft: Draft | null 
       }
       if (stopRef.current) setMsg("Paused. Click Send to resume — already-sent recipients are skipped.");
     } catch (e) { setErr(errMessage(e)); }
-    finally { setSending(false); }
+    finally { setSending(false); onMutate?.(); }
   }
 
   const pct = progress && progress.total > 0

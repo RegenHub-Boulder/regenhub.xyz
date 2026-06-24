@@ -271,6 +271,7 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
                 { label: "Free Day", href: "/freeday", external: false },
                 { label: "Apply", href: "/apply", external: false },
                 { label: "Stay in Touch", href: "/interest", external: false },
+                { label: "Dispatches", href: "/news", external: false },
                 { label: "Events", href: "https://lu.ma/regenhub", external: true },
                 { label: "Portal", href: "/portal", external: false },
               ].map(({ label, href, external }) => (
