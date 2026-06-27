@@ -53,9 +53,29 @@ export default async function ApplyPage() {
     );
   }
 
+  // Prefill from the applicant's account so they don't retype what we already
+  // know: name/telegram from their member record, and — if they've applied
+  // before — their full prior answers (this form upserts, so it's an edit).
+  const [{ data: member }, { data: application }] = await Promise.all([
+    supabase.from("members").select("name, telegram_username").eq("supabase_user_id", user.id).maybeSingle(),
+    supabase
+      .from("applications")
+      .select("name, telegram, about, why_join, membership_interest")
+      .eq("supabase_user_id", user.id)
+      .maybeSingle(),
+  ]);
+
+  const initial = {
+    name: application?.name ?? member?.name ?? "",
+    telegram: application?.telegram ?? member?.telegram_username ?? "",
+    about: application?.about ?? "",
+    why_join: application?.why_join ?? "",
+    membership_interest: application?.membership_interest ?? "",
+  };
+
   return (
     <>
-      <ApplyForm authenticatedEmail={user.email!} />
+      <ApplyForm authenticatedEmail={user.email!} initial={initial} />
       <div className="px-6 pb-12 -mt-4">
         <p className="text-center text-xs text-muted max-w-md mx-auto">
           Want to try it first?{" "}

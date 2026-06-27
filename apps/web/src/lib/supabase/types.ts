@@ -36,6 +36,7 @@ export interface Database {
           supabase_user_id: string | null;
           email: string;
           name: string;
+          telegram: string | null;
           about: string | null;
           why_join: string | null;
           membership_interest: MembershipInterest;
@@ -61,6 +62,7 @@ export interface Database {
           supabase_user_id?: string | null;
           email: string;
           name: string;
+          telegram?: string | null;
           about?: string | null;
           why_join?: string | null;
           membership_interest?: MembershipInterest;

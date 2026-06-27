@@ -20,20 +20,36 @@ const ACCESS_OPTIONS = [
   { value: "reserved_desk", label: "Full Access — Cold Desk ($500/mo)", desc: "Your own reserved desk + permanent door code + 24/7 access. We'll reach out for a quick chat before activating — Full Access is a deeper commitment." },
 ] as const;
 
+type MembershipInterest = "daypass_5pack" | "daypass_single" | "hot_desk" | "reserved_desk" | "member_basic" | "member_2day" | "member_5day";
+
 type Props = {
   /** The signed-in user's email — locked in the form; the application links to their account. */
   authenticatedEmail: string;
+  /** Prefill from the applicant's account / prior application. */
+  initial?: {
+    name?: string | null;
+    telegram?: string | null;
+    about?: string | null;
+    why_join?: string | null;
+    membership_interest?: string | null;
+  };
 };
 
-export default function ApplyForm({ authenticatedEmail }: Props) {
+// Only seed the tier dropdown from a value the dropdown still offers — legacy
+// interest keys would otherwise leave the <select> in a confusing state.
+const VALID_INTERESTS = new Set<string>(ACCESS_OPTIONS.map((o) => o.value));
+
+export default function ApplyForm({ authenticatedEmail, initial }: Props) {
   const router = useRouter();
   const [form, setForm] = useState({
-    name: "",
+    name: initial?.name ?? "",
     email: authenticatedEmail,
-    telegram: "",
-    about: "",
-    why_join: "",
-    membership_interest: "member_basic" as "daypass_5pack" | "daypass_single" | "hot_desk" | "reserved_desk" | "member_basic" | "member_2day" | "member_5day",
+    telegram: initial?.telegram ?? "",
+    about: initial?.about ?? "",
+    why_join: initial?.why_join ?? "",
+    membership_interest: (initial?.membership_interest && VALID_INTERESTS.has(initial.membership_interest)
+      ? initial.membership_interest
+      : "member_basic") as MembershipInterest,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
