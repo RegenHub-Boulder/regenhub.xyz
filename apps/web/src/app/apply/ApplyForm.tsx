@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, CheckCircle, ArrowLeft } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import regenHubFull from "@/assets/regenhub-full.svg";
 
 const ACCESS_OPTIONS = [
@@ -21,22 +21,21 @@ const ACCESS_OPTIONS = [
 ] as const;
 
 type Props = {
-  /** When set, the user is already authenticated — email is locked, portal API is used */
-  authenticatedEmail?: string;
+  /** The signed-in user's email — locked in the form; the application links to their account. */
+  authenticatedEmail: string;
 };
 
 export default function ApplyForm({ authenticatedEmail }: Props) {
   const router = useRouter();
   const [form, setForm] = useState({
     name: "",
-    email: authenticatedEmail ?? "",
+    email: authenticatedEmail,
     telegram: "",
     about: "",
     why_join: "",
     membership_interest: "member_basic" as "daypass_5pack" | "daypass_single" | "hot_desk" | "reserved_desk" | "member_basic" | "member_2day" | "member_5day",
   });
   const [loading, setLoading] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function set(key: keyof typeof form) {
@@ -51,64 +50,27 @@ export default function ApplyForm({ authenticatedEmail }: Props) {
     setError(null);
 
     try {
-      if (authenticatedEmail) {
-        // Authenticated path — use portal API (linked to their auth session)
-        const res = await fetch("/api/portal/application", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: form.name,
-            telegram: form.telegram,
-            about: form.about,
-            why_join: form.why_join,
-            membership_interest: form.membership_interest,
-          }),
-        });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error ?? "Failed to submit");
-        router.push("/portal");
-      } else {
-        // Unauthenticated path — public API sends magic link
-        const res = await fetch("/api/apply", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error ?? "Failed to submit");
-        setSubmitted(true);
-      }
+      // Always authenticated here — /apply gates on sign-in, so the application
+      // links to the user's account (email + supabase_user_id) immediately.
+      const res = await fetch("/api/portal/application", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name,
+          telegram: form.telegram,
+          about: form.about,
+          why_join: form.why_join,
+          membership_interest: form.membership_interest,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to submit");
+      router.push("/portal");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
     }
-  }
-
-  if (submitted) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-6">
-        <Card className="glass-panel-strong max-w-md w-full">
-          <CardContent className="p-10 text-center">
-            <CheckCircle className="w-12 h-12 text-sage mx-auto mb-4" />
-            <h1 className="text-2xl font-bold text-forest mb-3">Application Submitted!</h1>
-            <p className="text-muted mb-2">
-              We&apos;ve received your application and sent a sign-in link to{" "}
-              <strong className="text-foreground">{form.email}</strong>.
-            </p>
-            <p className="text-sm text-muted mb-8">
-              Click the link in your email to access your portal and track your application status.
-            </p>
-            <Link href="/">
-              <Button variant="ghost" className="btn-glass gap-2">
-                <ArrowLeft className="w-4 h-4" />
-                Back to homepage
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-    );
   }
 
   return (
@@ -145,13 +107,13 @@ export default function ApplyForm({ authenticatedEmail }: Props) {
                     id="email"
                     type="email"
                     value={form.email}
-                    onChange={set("email")}
                     required
                     placeholder="you@example.com"
                     className="glass-input"
-                    readOnly={!!authenticatedEmail}
-                    disabled={!!authenticatedEmail}
+                    readOnly
+                    disabled
                   />
+                  <p className="text-xs text-muted">Linked to your signed-in account.</p>
                 </div>
               </div>
 
@@ -220,15 +182,6 @@ export default function ApplyForm({ authenticatedEmail }: Props) {
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                 {loading ? "Submitting…" : "Submit Application"}
               </Button>
-
-              {!authenticatedEmail && (
-                <p className="text-xs text-center text-muted">
-                  Already a member?{" "}
-                  <Link href="/portal" className="underline hover:text-sage transition-colors">
-                    Sign in to your portal
-                  </Link>
-                </p>
-              )}
             </form>
           </CardContent>
         </Card>

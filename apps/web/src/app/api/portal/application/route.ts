@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { notifyNewApplication } from "@/lib/applicationNotify";
 import type { MembershipInterest } from "@/lib/supabase/types";
 
 export async function GET() {
@@ -62,6 +63,17 @@ export async function POST(req: Request) {
     console.error("[PortalApplication] DB error:", error);
     return NextResponse.json({ error: "Failed to save application" }, { status: 500 });
   }
+
+  // Ping the RegenHub Telegram group so the coordinator sees the application.
+  // Fire-and-forget — don't block or fail the response on a notify error.
+  notifyNewApplication({
+    name: name.trim(),
+    email: user.email!,
+    telegram: telegramHandle,
+    about: about?.trim() || null,
+    why_join: why_join?.trim() || null,
+    membership_interest: membership_interest ?? "member_basic",
+  });
 
   return NextResponse.json({ application: data });
 }
