@@ -142,9 +142,13 @@ MCP changes, just redeploy the web app.
   every token verification — demoting a member instantly kills their tokens. Tokens are sha-256
   hashed at rest and member-bound (migrations 040/041: `mcp_oauth_clients/codes/tokens`).
 - **Code:** OAuth core in `apps/web/src/lib/mcp/oauth.ts`, metadata in `metadata.ts`, tool surface +
-  transport in `server.ts`; routes under `apps/web/src/app/{mcp,oauth,.well-known}`. Phase 1 ships
-  the `ping` tool; scopes (`read/deploy/locks/migrate`) are wired for the planned per-tier surface
-  (members → day codes, admins → events/members, ops → dangerous tools).
+  transport in `server.ts`; routes under `apps/web/src/app/{mcp,oauth,.well-known}`. Scopes
+  (`read/deploy/locks/migrate`) are wired for the planned per-tier surface (members → day codes,
+  admins → events/members, ops → dangerous tools).
+- **Tools:** `ping`; `save_newsletter_draft(issue_key, subject, markdown_body)` (upserts a
+  `newsletter_issues` draft via the server-side service client — the whole point: no secrets on the
+  caller's machine). To add a tool: register it in `server.ts` (zod input shape), redeploy web; the
+  client auto-reconnects and picks up the new tool (bump `SERVER_VERSION` to confirm the rollout).
 
 ## Important Notes
 - **NEVER restart Supabase via Coolify.** Coolify regenerates ALL `SERVICE_PASSWORD_*` values on restart — but the DB volume retains the old passwords. This breaks every service. If it happens, see the password fix procedure in DEPLOYMENT.md.
