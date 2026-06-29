@@ -1,12 +1,15 @@
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import type { McpAuthInfo } from "./oauth";
+import { createServiceClient } from "@/lib/supabase/admin";
+import { siteOrigin } from "./metadata";
 
 const SERVER_NAME = "regenhub";
-const SERVER_VERSION = "0.1.0";
+const SERVER_VERSION = "0.2.0";
 
 /**
  * Build the MCP tool surface. Phase 1 = `ping`. Future tools gate on the caller's
@@ -25,6 +28,53 @@ function buildServer(auth: McpAuthInfo): McpServer {
         text: `pong · ${SERVER_NAME}@${SERVER_VERSION} · ${auth.extra.email || `member ${auth.extra.memberId}`} · ${new Date().toISOString()}`,
       }],
     }),
+  );
+
+  server.tool(
+    "save_newsletter_draft",
+    "Create or update a RegenHub newsletter draft so an admin can review it and send it from /admin/newsletter. " +
+      "Upserts by issue_key and always leaves status='draft' — it NEVER sends to anyone. " +
+      "Use an ISO-week issue_key like '2026-W27'. Pass the body as Markdown with no frontmatter. " +
+      "Returns the draft id and the review + web-preview URLs.",
+    {
+      issue_key: z
+        .string()
+        .regex(/^\d{4}-W\d{2}(-\d+)?$/, "ISO-week key, e.g. 2026-W27")
+        .describe("ISO-week issue key, e.g. 2026-W27"),
+      subject: z.string().min(1).describe("Email subject line (no surrounding quotes)"),
+      markdown_body: z.string().min(1).describe("Newsletter body in Markdown, no frontmatter"),
+    },
+    async ({ issue_key, subject, markdown_body }) => {
+      const sb = createServiceClient();
+      // Never overwrite an already-sent issue.
+      const { data: existing } = await sb
+        .from("newsletter_issues")
+        .select("id, status")
+        .eq("issue_key", issue_key)
+        .maybeSingle();
+      if (existing?.status === "sent") {
+        return {
+          isError: true,
+          content: [{ type: "text" as const, text: `Issue ${issue_key} has already been sent — not overwriting.` }],
+        };
+      }
+      const { data, error } = await sb
+        .from("newsletter_issues")
+        .upsert({ issue_key, subject, markdown_body, status: "draft" }, { onConflict: "issue_key" })
+        .select("id, issue_key, status")
+        .single();
+      if (error) {
+        return { isError: true, content: [{ type: "text" as const, text: `Failed to save draft: ${error.message}` }] };
+      }
+      const o = siteOrigin();
+      return {
+        content: [{
+          type: "text" as const,
+          text: `Saved draft ${data.issue_key} (id ${data.id}, status ${data.status}).\n` +
+            `Review & send: ${o}/admin/newsletter\nWeb preview: ${o}/news/${data.issue_key}`,
+        }],
+      };
+    },
   );
 
   return server;
