@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import Link from "next/link";
-import { Key, Ticket, User, ClipboardList, CheckCircle, Clock, MessageCircle, Zap, Calendar, ArrowRight, AlertCircle, CreditCard } from "lucide-react";
+import { Key, Ticket, User, ClipboardList, CheckCircle, Clock, MessageCircle, Zap, Calendar, ArrowRight, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import HubEssentials from "@/components/portal/HubEssentials";
 import InviteCard from "@/components/portal/InviteCard";
@@ -12,6 +12,7 @@ import { ChangePlanButton } from "@/components/portal/ChangePlanButton";
 import { OnboardingChecklist } from "@/components/portal/OnboardingChecklist";
 import { HubActivityCard } from "@/components/portal/HubActivityCard";
 import { DayPassRedemptionHero } from "@/components/portal/DayPassRedemptionHero";
+import { MembershipStatusCard } from "@/components/portal/MembershipStatusCard";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { planLabel, getPlan } from "@/lib/plans";
 
@@ -225,14 +226,22 @@ export default async function PortalPage() {
       <div className="space-y-6 max-w-md mx-auto mt-16">
         <div className="glass-panel p-8 text-center">
           <ClipboardList className="w-10 h-10 text-sage mx-auto mb-4" />
-          <h2 className="text-xl font-semibold mb-3">Complete Your Application</h2>
+          <h2 className="text-xl font-semibold mb-3">Welcome — let&apos;s get you set up</h2>
           <p className="text-muted text-sm mb-6">
-            You&apos;re signed in as <strong className="text-foreground">{user.email}</strong>.<br />
-            Fill out a short application so we can get you set up.
+            You&apos;re signed in as <strong className="text-foreground">{user.email}</strong>, but you&apos;re
+            not a member yet. Apply to join the cooperative, or try a free day first to feel out the space.
           </p>
-          <Link href="/freeday">
-            <Button className="btn-primary-glass px-6">Get Your Free Day</Button>
-          </Link>
+          <div className="flex gap-2 flex-wrap justify-center">
+            <Link href="/apply">
+              <Button className="btn-primary-glass gap-2 px-6">
+                Apply to join
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </Link>
+            <Link href="/freeday">
+              <Button className="btn-glass px-6">Try a free day</Button>
+            </Link>
+          </div>
         </div>
 
         <div className="glass-panel p-6">
@@ -298,6 +307,14 @@ export default async function PortalPage() {
           </p>
         )}
       </div>
+
+      <MembershipStatusCard
+        memberType={member.member_type}
+        approvedForDaily={!!member.approved_for_daily}
+        applicationStatus={application?.status}
+        applicationInterest={application?.membership_interest}
+        hasActiveSubscription={!!activeSubscription}
+      />
 
       <DayPassRedemptionHero member={member} />
 
@@ -449,64 +466,6 @@ export default async function PortalPage() {
                   />
                 )}
                 <ManageSubscriptionButton />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Existing desk members who pre-date Stripe — now self-serve. */}
-      {(member.member_type === "cold_desk" || member.member_type === "hot_desk") &&
-        !activeSubscription && (
-          <Card className="glass-panel border border-gold/30 bg-gold/[0.03]">
-            <CardContent className="p-6">
-              <div className="flex items-start gap-4">
-                <CreditCard className="w-7 h-7 text-gold shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <h3 className="font-semibold mb-1">Set up automatic billing</h3>
-                  <p className="text-sm text-muted mb-3">
-                    You&apos;re a {typeLabel} member, but we haven&apos;t moved your billing to Stripe yet.
-                    Pick your tier on the membership page to set up automatic monthly billing —
-                    one click and you&apos;re on the new system.
-                  </p>
-                  <Link href="/membership">
-                    <Button className="btn-primary-glass gap-2 text-sm">
-                      Choose a plan
-                      <ArrowRight className="w-4 h-4" />
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-      {/* Upgrade prompt only for day_pass members WITHOUT an active sub
-          (free/intro users — paying social members shouldn't see "apply") */}
-      {!isFullMember && !activeSubscription && (
-        <Card className="glass-panel border border-forest/20">
-          <CardContent className="p-6">
-            <div className="flex items-start gap-4">
-              <Key className="w-7 h-7 text-sage shrink-0 mt-0.5" />
-              <div>
-                <h3 className="font-semibold mb-1">Ready to become a Member?</h3>
-                <p className="text-sm text-muted mb-3">
-                  Members get day passes, member-rate pricing, and a path to co-op ownership.
-                  Full Access tiers ($250 Hot Desk / $500 Cold Desk) add a permanent door code and 24/7 access.
-                </p>
-                <div className="flex gap-2 flex-wrap">
-                  <Link href="/apply">
-                    <Button className="btn-primary-glass gap-2 text-sm">
-                      Apply to join
-                      <ArrowRight className="w-4 h-4" />
-                    </Button>
-                  </Link>
-                  <Link href="/freeday">
-                    <Button className="btn-glass gap-2 text-sm">
-                      Try a free day first
-                    </Button>
-                  </Link>
-                </div>
               </div>
             </div>
           </CardContent>
