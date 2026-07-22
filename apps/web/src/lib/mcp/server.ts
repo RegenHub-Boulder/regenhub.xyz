@@ -7,10 +7,11 @@ import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import type { McpAuthInfo } from "./oauth";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
+import { sendApplicationCheckoutEmail } from "@/lib/applicationCheckout";
 import { siteOrigin } from "./metadata";
 
 const SERVER_NAME = "regenhub";
-const SERVER_VERSION = "0.3.0";
+const SERVER_VERSION = "0.4.0";
 
 /**
  * Build the MCP tool surface. Phase 1 = `ping`. Future tools gate on the caller's
@@ -158,6 +159,32 @@ function buildServer(auth: McpAuthInfo): McpServer {
       );
 
       return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+    },
+  );
+
+  server.tool(
+    "send_checkout_email",
+    "SENDS AN EMAIL to a real applicant: (re)sends the approval email with their Stripe Checkout " +
+      "link for an approved application. If the stored Stripe session has expired, a fresh one is " +
+      "created from the approval's stored plan/rate/discount first. Same logic as the admin panel's " +
+      "'Email link to applicant' button. Use audit_approvals to find application ids. Only sends for " +
+      "applications that are approved and not yet checkout-completed.",
+    {
+      application_id: z.number().int().positive().describe("applications.id (from audit_approvals)"),
+    },
+    async ({ application_id }) => {
+      const result = await sendApplicationCheckoutEmail(application_id, createServiceClient());
+      if (!result.ok) {
+        return { isError: true, content: [{ type: "text" as const, text: `Failed (${result.status}): ${result.error}` }] };
+      }
+      return {
+        content: [{
+          type: "text" as const,
+          text: `Checkout email sent to ${result.email_to}` +
+            (result.regenerated ? " (expired Stripe session regenerated with a fresh link)" : "") +
+            `.`,
+        }],
+      };
     },
   );
 
