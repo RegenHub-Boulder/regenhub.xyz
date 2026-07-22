@@ -14,8 +14,10 @@ import { logAction } from "@/lib/auditLog";
  * Daily cron that finds day-pass members at key lifecycle moments and sends
  * ONE warm nudge. Three nudge types, most-specific-first:
  *
- *   balance_empty        — visited at least once, balance now 0, no sub.
- *                          The moment of maximum motivation → membership pitch.
+ *   balance_empty        — visited at least once (≥2 days ago), balance now 0,
+ *                          no sub. Still-warm membership pitch — the 2-day
+ *                          breather keeps it from landing the morning after
+ *                          someone's first visit, which read as pushy.
  *   first_visit_followup — visited 3-30 days ago, hasn't been back, no sub.
  *                          "Come again?" + soft membership mention.
  *   never_visited        — approved ≥7 days ago, has balance, zero visits.
@@ -36,6 +38,7 @@ const COOLDOWN_DAYS = 14;
 const NEVER_VISITED_AFTER_DAYS = 7;
 const FOLLOWUP_MIN_DAYS = 3;
 const FOLLOWUP_MAX_DAYS = 30;
+const BALANCE_EMPTY_AFTER_DAYS = 2;
 const SEND_DELAY_MS = 300;
 /** Daily send cap. Backlogs (e.g. the first-ever run) drip out over several
  *  days instead of blasting everyone at once — gentler + better deliverability.
@@ -131,7 +134,12 @@ export async function POST(req: Request) {
     const daysSinceVisit = last ? (now - last) / 86_400_000 : null;
 
     let type: NudgeType | null = null;
-    if (visitsN > 0 && m.day_passes_balance === 0) {
+    if (
+      visitsN > 0 &&
+      m.day_passes_balance === 0 &&
+      daysSinceVisit != null &&
+      daysSinceVisit >= BALANCE_EMPTY_AFTER_DAYS
+    ) {
       type = "balance_empty";
     } else if (visitsN > 0 && daysSinceVisit != null && daysSinceVisit >= FOLLOWUP_MIN_DAYS && daysSinceVisit <= FOLLOWUP_MAX_DAYS) {
       type = "first_visit_followup";

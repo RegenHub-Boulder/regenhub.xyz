@@ -420,6 +420,77 @@ export function welcomeNewMemberEmail(args: {
 }
 
 /**
+ * Receipt for a one-off day-pass purchase — confirms the charge and points at
+ * the portal where the pass actually gets redeemed.
+ */
+export function dayPassReceiptEmail(args: {
+  name: string;
+  quantity: number;
+  amountDollars: number;
+  newBalance: number | null;
+  siteUrl: string;
+}) {
+  const firstName = args.name.split(" ")[0];
+  const base = args.siteUrl.replace(/\/$/, "");
+  const passWord = args.quantity === 1 ? "day pass" : `${args.quantity} day passes`;
+  const balanceLine =
+    args.newBalance != null
+      ? ` Your balance is now ${args.newBalance} pass${args.newBalance === 1 ? "" : "es"} — they never expire.`
+      : "";
+  return {
+    subject: "Your RegenHub day pass — receipt",
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+        <p>Hi ${firstName},</p>
+        <p>Thanks — your ${passWord} ($${args.amountDollars.toFixed(0)}) is in your account.${balanceLine}</p>
+        <p>When you&rsquo;re coming in (any weekday, 8&nbsp;AM&ndash;6&nbsp;PM), generate your door code here:</p>
+        <p style="margin: 20px 0;">
+          <a href="${base}/portal/passes" style="background: #2d5e3e; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Get my door code</a>
+        </p>
+        <p>1515 Walnut St, Suite 200 (2nd floor), Boulder. Any questions, just reply.</p>
+        <p>&mdash; RegenHub</p>
+      </div>
+    `,
+    text: `Hi ${firstName},\n\nThanks — your ${passWord} ($${args.amountDollars.toFixed(0)}) is in your account.${balanceLine}\n\nWhen you're coming in (any weekday, 8 AM–6 PM), generate your door code at:\n${base}/portal/passes\n\n1515 Walnut St, Suite 200 (2nd floor), Boulder. Any questions, just reply.\n\n— RegenHub`,
+  };
+}
+
+/**
+ * Sent when a subscription renewal credits monthly day passes. Skipped on the
+ * very first invoice (the welcome email covers activation) — this is the
+ * monthly "your passes landed" heads-up.
+ */
+export function monthlyPassesCreditedEmail(args: {
+  name: string;
+  quantity: number;
+  newBalance: number | null;
+  planLabel: string;
+  siteUrl: string;
+}) {
+  const firstName = args.name.split(" ")[0];
+  const base = args.siteUrl.replace(/\/$/, "");
+  const balanceLine =
+    args.newBalance != null
+      ? ` — your balance is now ${args.newBalance}`
+      : "";
+  return {
+    subject: `Your ${args.quantity} day pass${args.quantity === 1 ? "" : "es"} for the month just landed`,
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+        <p>Hi ${firstName},</p>
+        <p>Your ${args.planLabel} renewal went through and <strong>${args.quantity} day pass${args.quantity === 1 ? "" : "es"}</strong> just landed in your account${balanceLine}. Passes accumulate and never expire.</p>
+        <p style="margin: 20px 0;">
+          <a href="${base}/portal/passes" style="background: #2d5e3e; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Use a pass</a>
+        </p>
+        <p>See you at the hub.</p>
+        <p>&mdash; RegenHub</p>
+      </div>
+    `,
+    text: `Hi ${firstName},\n\nYour ${args.planLabel} renewal went through and ${args.quantity} day pass${args.quantity === 1 ? "" : "es"} just landed in your account${balanceLine}. Passes accumulate and never expire.\n\nUse a pass: ${base}/portal/passes\n\nSee you at the hub.\n\n— RegenHub`,
+  };
+}
+
+/**
  * Sent when a subscription ends (deleted in Stripe). The member keeps their
  * portal + any day-pass balance; desk members lose their permanent PIN. Warm
  * exit — the goal is "come back anytime," not a door slam.

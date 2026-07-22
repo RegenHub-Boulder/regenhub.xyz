@@ -1,6 +1,7 @@
 import type Stripe from "stripe";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { PASS_KINDS } from "@/lib/stripe";
+import { sendEmail, dayPassReceiptEmail } from "@/lib/email";
 import type { PurchaseKind } from "@/lib/supabase/types";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
@@ -71,17 +72,20 @@ export async function fulfillPassPurchase(
   let memberName: string | null = null;
   let isFirstTime = false;
 
+  let memberEmail: string | null = customerEmail;
+
   if (session.client_reference_id) {
     const id = parseInt(session.client_reference_id, 10);
     if (Number.isFinite(id)) {
       const { data: m } = await admin
         .from("members")
-        .select("id, name")
+        .select("id, name, email")
         .eq("id", id)
         .maybeSingle();
       if (m) {
         memberId = m.id;
         memberName = m.name;
+        memberEmail = m.email ?? customerEmail;
       }
     }
   }
@@ -175,6 +179,21 @@ export async function fulfillPassPurchase(
   console.log(
     `[PassFulfillment] +${passesToGrant} passes for ${memberName} (id=${memberId}) → balance=${newBalance}`,
   );
+
+  // Receipt to the buyer — confirms the charge + points at pass redemption.
+  // Fire-and-forget; the purchase already succeeded.
+  if (memberEmail) {
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
+    const tpl = dayPassReceiptEmail({
+      name: memberName ?? "there",
+      quantity: passesToGrant,
+      amountDollars: (session.amount_total ?? def.cents) / 100,
+      newBalance: typeof newBalance === "number" ? newBalance : null,
+      siteUrl,
+    });
+    sendEmail({ to: memberEmail, subject: tpl.subject, html: tpl.html, text: tpl.text })
+      .catch((err) => console.error("[PassFulfillment] Receipt email failed:", err));
+  }
 
   if (isFirstTime) {
     // Send a magic-link so the brand-new member can claim their portal.

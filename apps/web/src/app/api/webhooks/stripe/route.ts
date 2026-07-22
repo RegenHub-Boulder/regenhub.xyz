@@ -8,6 +8,7 @@ import {
   welcomeNewMemberEmail,
   subscriptionEndedEmail,
   paymentReminderEmail,
+  monthlyPassesCreditedEmail,
 } from "@/lib/email";
 import type { StripeSubscriptionStatus } from "@/lib/supabase/types";
 import {
@@ -486,6 +487,29 @@ async function maybeGrantMonthlyPasses(
   console.log(
     `[Stripe] +${plan.monthlyDayPasses} monthly passes for member ${memberId} (plan=${planKey}, invoice=${invoice.id}) → balance=${newBalance}`,
   );
+
+  // Tell the member their passes landed — but skip the subscription's FIRST
+  // invoice: the welcome email already covers activation, and stacking two
+  // emails in the same minute reads as spam.
+  if (invoice.billing_reason !== "subscription_create") {
+    const { data: m } = await admin
+      .from("members")
+      .select("name, email")
+      .eq("id", memberId)
+      .maybeSingle();
+    if (m?.email) {
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
+      const tpl = monthlyPassesCreditedEmail({
+        name: m.name,
+        quantity: plan.monthlyDayPasses,
+        newBalance: typeof newBalance === "number" ? newBalance : null,
+        planLabel: planLabel(planKey),
+        siteUrl,
+      });
+      sendEmail({ to: m.email, subject: tpl.subject, html: tpl.html, text: tpl.text })
+        .catch((err) => console.error("[Stripe] Monthly-credit email failed:", err));
+    }
+  }
   return memberId;
 }
 
