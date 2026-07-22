@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { notifyNewApplication } from "@/lib/applicationNotify";
+import { notifyNewApplication, interestLabel } from "@/lib/applicationNotify";
+import { sendEmail, applicationReceivedEmail } from "@/lib/email";
 import type { MembershipInterest } from "@/lib/supabase/types";
 
 export async function GET() {
@@ -75,6 +76,17 @@ export async function POST(req: Request) {
     why_join: why_join?.trim() || null,
     membership_interest: membership_interest ?? "member_basic",
   });
+
+  // Acknowledge receipt to the applicant — the review can take a day or two,
+  // and until now this window was silent. Fire-and-forget like the notify.
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
+  const ackTpl = applicationReceivedEmail({
+    name: name.trim(),
+    interestLabel: interestLabel(membership_interest ?? "member_basic"),
+    siteUrl,
+  });
+  sendEmail({ to: user.email!, subject: ackTpl.subject, html: ackTpl.html, text: ackTpl.text })
+    .catch((err) => console.error("[PortalApplication] Ack email failed:", err));
 
   return NextResponse.json({ application: data });
 }

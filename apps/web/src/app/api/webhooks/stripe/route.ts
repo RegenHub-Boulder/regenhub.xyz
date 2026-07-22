@@ -3,6 +3,12 @@ import type Stripe from "stripe";
 import { getStripe, getPlan, planLabel } from "@/lib/stripe";
 import { fulfillPassPurchase } from "@/lib/passFulfillment";
 import { createServiceClient } from "@/lib/supabase/admin";
+import {
+  sendEmail,
+  welcomeNewMemberEmail,
+  subscriptionEndedEmail,
+  paymentReminderEmail,
+} from "@/lib/email";
 import type { StripeSubscriptionStatus } from "@/lib/supabase/types";
 import {
   allocateSlotWithRetry,
@@ -251,15 +257,29 @@ async function handleSubscriptionUpdated(admin: ServiceClient, sub: Stripe.Subsc
     if (prev.status !== "past_due" && newStatus === "past_due") {
       const { data: row } = await admin
         .from("subscriptions")
-        .select("member_id, members(name, email)")
+        .select("member_id, plan_key, monthly_cents, members(name, email)")
         .eq("stripe_subscription_id", sub.id)
-        .returns<SubMemberNameEmailRow[]>()
+        .returns<(SubMemberNameEmailRow & { plan_key: string; monthly_cents: number })[]>()
         .maybeSingle();
       const name = row?.members?.name ?? "A member";
       const email = row?.members?.email ?? "";
       await notifyTelegram(
         `⚠️ *Payment failed*\n\n${name} (${email}) — card needs attention. 7-day grace period started.`,
       );
+      // Email the member directly — until now only the group heard about
+      // failed payments; the member found out when their access lapsed.
+      if (email && row) {
+        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
+        const tpl = paymentReminderEmail({
+          name,
+          planLabel: planLabel(row.plan_key),
+          monthlyDollars: row.monthly_cents / 100,
+          siteUrl,
+          daysOverdue: null,
+        });
+        sendEmail({ to: email, subject: tpl.subject, html: tpl.html, text: tpl.text })
+          .catch((err) => console.error("[Webhook] Past-due email failed:", err));
+      }
     }
 
     // Recovered from past_due
@@ -295,12 +315,12 @@ async function handleSubscriptionDeleted(admin: ServiceClient, sub: Stripe.Subsc
   // a desk tier (cold/hot). For day-pass / social tiers there's no slot to free.
   const { data: row } = await admin
     .from("subscriptions")
-    .select("member_id, plan_key, members(name, pin_code_slot, member_type)")
+    .select("member_id, plan_key, members(name, email, pin_code_slot, member_type)")
     .eq("stripe_subscription_id", sub.id)
     .returns<{
       member_id: number;
       plan_key: string;
-      members: { name: string; pin_code_slot: number | null; member_type: string } | null;
+      members: { name: string; email: string | null; pin_code_slot: number | null; member_type: string } | null;
     }[]>()
     .maybeSingle();
 
@@ -334,6 +354,20 @@ async function handleSubscriptionDeleted(admin: ServiceClient, sub: Stripe.Subsc
   await notifyTelegram(
     `👋 ${name}'s ${planLabel(row.plan_key)} subscription ended. Now on day-pass status.${lockRevokeNote}`,
   );
+
+  // Tell the member — their access just changed (desk members lose their
+  // permanent PIN) and silence here reads as a door slam.
+  if (row.members?.email) {
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
+    const tpl = subscriptionEndedEmail({
+      name,
+      planLabel: planLabel(row.plan_key),
+      wasDeskTier,
+      siteUrl,
+    });
+    sendEmail({ to: row.members.email, subject: tpl.subject, html: tpl.html, text: tpl.text })
+      .catch((err) => console.error("[Webhook] Subscription-ended email failed:", err));
+  }
   return row.member_id;
 }
 
@@ -706,6 +740,23 @@ async function upsertSubscription(
       await notifyTelegram(
         `🎉 *New member!*\n\n*${member.name}* is now on ${planLabel(planKey)} ($${monthlyCents / 100}/mo)${passesNote}${source}.${slotNote}${failNote}`,
       );
+
+      // Welcome the member themselves — the group celebrated, but until now
+      // the person who just paid heard nothing directly.
+      if (member.email) {
+        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
+        const isDeskTier =
+          plan.grantsMemberType === "cold_desk" || plan.grantsMemberType === "hot_desk";
+        const tpl = welcomeNewMemberEmail({
+          name: member.name,
+          planLabel: planLabel(planKey),
+          monthlyDollars: monthlyCents / 100,
+          isDeskTier,
+          siteUrl,
+        });
+        sendEmail({ to: member.email, subject: tpl.subject, html: tpl.html, text: tpl.text })
+          .catch((err) => console.error("[Webhook] Welcome email failed:", err));
+      }
     }
   }
 

@@ -8,6 +8,7 @@ import {
   isStripeConfigured,
 } from "@/lib/stripe";
 import { sendEmail, approvalCheckoutEmail } from "@/lib/email";
+import { notifyApplicationApproved } from "@/lib/applicationNotify";
 import type { PlanKey, DiscountDuration } from "@/lib/supabase/types";
 
 interface ApproveBody {
@@ -114,22 +115,45 @@ export async function POST(
     .eq("email", application.email)
     .maybeSingle();
 
+  // Carry the applicant's Telegram handle onto the member row — without this
+  // the handle dies on the application and the bot won't recognize them.
+  // The unique index on members.telegram_username may reject a duplicate;
+  // degrade to no-handle rather than failing the approval (mirrors the
+  // free-day trigger's behavior in migration 036).
+  const telegramHandle = application.telegram?.replace(/^@+/, "").trim() || null;
+
   if (!member) {
-    const { data: created, error: createErr } = await admin
-      .from("members")
-      .insert({
-        name: application.name,
-        email: application.email,
-        member_type: "day_pass",
-        supabase_user_id: application.supabase_user_id,
-      })
-      .select("id, name, email, stripe_customer_id, member_type")
-      .single();
+    const insertMember = (withTelegram: boolean) =>
+      admin
+        .from("members")
+        .insert({
+          name: application.name,
+          email: application.email,
+          member_type: "day_pass",
+          supabase_user_id: application.supabase_user_id,
+          ...(withTelegram && telegramHandle ? { telegram_username: telegramHandle } : {}),
+        })
+        .select("id, name, email, stripe_customer_id, member_type")
+        .single();
+    let { data: created, error: createErr } = await insertMember(true);
+    if (createErr?.code === "23505" && telegramHandle) {
+      ({ data: created, error: createErr } = await insertMember(false));
+    }
     if (createErr || !created) {
       console.error("[ApproveApp] Failed to create member:", createErr);
       return NextResponse.json({ error: "Failed to create member" }, { status: 500 });
     }
     member = created;
+  } else if (telegramHandle) {
+    // Existing member without a handle: backfill from the application.
+    const { error: tgErr } = await admin
+      .from("members")
+      .update({ telegram_username: telegramHandle })
+      .eq("id", member.id)
+      .is("telegram_username", null);
+    if (tgErr && tgErr.code !== "23505") {
+      console.warn("[ApproveApp] Telegram backfill failed:", tgErr);
+    }
   }
 
   const baseUrl =
@@ -218,6 +242,16 @@ export async function POST(
   if (!emailSent) {
     console.warn(`[ApproveApp] Checkout email to ${application.email} did not send — admin should share the link manually.`);
   }
+
+  // Tell the group — the bot's standard-rate path edits its message; this
+  // gives the admin-panel path the same visibility. Fire-and-forget.
+  notifyApplicationApproved({
+    name: application.name,
+    planLabel: plan?.label ?? body.plan_key,
+    monthlyDollars: body.monthly_cents / 100,
+    emailSent,
+    email: application.email,
+  });
 
   return NextResponse.json({
     checkout_url: checkoutUrl,

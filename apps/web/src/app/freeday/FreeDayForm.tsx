@@ -617,19 +617,23 @@ export default function FreeDayForm({
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="telegram">Telegram username</Label>
-                    <input
-                      id="telegram"
-                      type="text"
-                      value={telegram}
-                      onChange={(e) => setTelegram(e.target.value)}
-                      placeholder="@yourhandle — optional; our community lives on Telegram"
-                      className="w-full rounded-md px-3 py-2 text-sm glass-input"
-                    />
-                  </div>
                 </>
               )}
+
+              {/* Telegram handle — shown on BOTH paths (invited included): it
+                  propagates onto the member row at approval so the bot
+                  recognizes them, and our community lives on Telegram. */}
+              <div className="space-y-2">
+                <Label htmlFor="telegram">Telegram username</Label>
+                <input
+                  id="telegram"
+                  type="text"
+                  value={telegram}
+                  onChange={(e) => setTelegram(e.target.value)}
+                  placeholder="@yourhandle — optional; our community lives on Telegram"
+                  className="w-full rounded-md px-3 py-2 text-sm glass-input"
+                />
+              </div>
 
               {error && <p className="text-sm text-red-400">{error}</p>}
 

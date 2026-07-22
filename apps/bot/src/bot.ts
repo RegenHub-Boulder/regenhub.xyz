@@ -474,7 +474,7 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
     const appId = parseInt(data.replace("app_approve_", ""));
     const { data: application } = await db
       .from("applications")
-      .select("id, name, email, status, membership_interest, supabase_user_id")
+      .select("id, name, email, status, membership_interest, supabase_user_id, telegram")
       .eq("id", appId)
       .single();
     if (!application) return bot.sendMessage(chatId, "Application not found.");
@@ -494,29 +494,51 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
       approverMemberId = approverMember?.id ?? null;
     }
 
+    // Carry the applicant's Telegram handle onto the member row so the bot
+    // recognizes them (/mycode etc.). The unique index on telegram_username
+    // may reject a duplicate — degrade to no-handle rather than failing the
+    // approval (mirrors migration 036's trigger behavior).
+    const applicantHandle =
+      application.telegram?.replace(/^@+/, "").trim() || null;
+
     // Find or create the member row for this applicant (same as the web
     // approve route) so the approval flags have somewhere to live.
     let { data: member } = await db
       .from("members")
-      .select("id")
+      .select("id, telegram_username")
       .eq("email", application.email)
       .maybeSingle();
     if (!member) {
-      const { data: created, error: createErr } = await db
-        .from("members")
-        .insert({
-          name: application.name,
-          email: application.email,
-          member_type: "day_pass",
-          supabase_user_id: application.supabase_user_id ?? null,
-        })
-        .select("id")
-        .single();
+      const insertMember = (withTelegram: boolean) =>
+        db
+          .from("members")
+          .insert({
+            name: application.name,
+            email: application.email,
+            member_type: "day_pass",
+            supabase_user_id: application.supabase_user_id ?? null,
+            ...(withTelegram && applicantHandle ? { telegram_username: applicantHandle } : {}),
+          })
+          .select("id, telegram_username")
+          .single();
+      let { data: created, error: createErr } = await insertMember(true);
+      if (createErr?.code === "23505" && applicantHandle) {
+        ({ data: created, error: createErr } = await insertMember(false));
+      }
       if (createErr || !created) {
         console.error("[AppApprove] Failed to create member:", createErr);
         return bot.sendMessage(chatId, "Failed to create member row — approve via the admin panel.");
       }
       member = created;
+    } else if (applicantHandle && !member.telegram_username) {
+      // Existing member without a handle: backfill from the application.
+      const { error: tgErr } = await db
+        .from("members")
+        .update({ telegram_username: applicantHandle })
+        .eq("id", member.id);
+      if (tgErr && tgErr.code !== "23505") {
+        console.warn("[AppApprove] Telegram backfill failed:", tgErr.message);
+      }
     }
 
     // Desk-tier applicants get Full Access approval too, so /membership

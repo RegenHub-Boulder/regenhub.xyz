@@ -8,6 +8,7 @@ async function notifyTelegramInvited(claim: {
   email: string;
   inviter_name: string;
   know_at_hub?: string;
+  telegram?: string;
 }) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_GROUP_CHAT_ID;
@@ -20,6 +21,7 @@ async function notifyTelegramInvited(claim: {
     `Invited by: *${claim.inviter_name}*`,
     `Visits any weekday`,
   ];
+  if (claim.telegram) lines.push(`Telegram: @${claim.telegram.replace(/_/g, "\\_")}`);
   if (claim.know_at_hub) lines.push(`Knows: ${claim.know_at_hub}`);
 
   try {
@@ -223,6 +225,7 @@ export async function POST(req: Request) {
       email: normalizedEmail,
       inviter_name: inviter.name,
       know_at_hub: know_at_hub?.trim() || undefined,
+      telegram: telegramHandle ?? undefined,
     });
   } else {
     notifyTelegramApplication({

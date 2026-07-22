@@ -18,6 +18,49 @@ const interestLabels: Record<string, string> = {
   community: "Community",
 };
 
+/** Human label for a membership_interest key (falls back to the raw key). */
+export function interestLabel(key: string): string {
+  return interestLabels[key] ?? key;
+}
+
+/**
+ * Post an "application approved" note to the group. The bot's standard-rate
+ * approve edits its own message; this covers the web admin panel path (custom
+ * rate / discounts) so the group has symmetric visibility on both paths.
+ * Fire-and-forget.
+ */
+export async function notifyApplicationApproved(args: {
+  name: string;
+  planLabel: string;
+  monthlyDollars: number;
+  emailSent: boolean;
+  email: string;
+}): Promise<void> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_GROUP_CHAT_ID;
+  if (!token || !chatId) return;
+
+  const emailNote = args.emailSent
+    ? `checkout link emailed to ${args.email}`
+    : `⚠️ checkout email didn't send — share the link from /admin/applications`;
+  const text = `✅ *Application approved* (admin panel)\n\n*${args.name}* — ${args.planLabel} at $${args.monthlyDollars}/mo · ${emailNote}`;
+
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: "Markdown",
+        disable_web_page_preview: true,
+      }),
+    });
+  } catch (err) {
+    console.error("[Application] Telegram approve notify error:", err);
+  }
+}
+
 export interface ApplicationNotice {
   /** applications.id — enables the inline Approve button; omit to send link-only. */
   id?: number;

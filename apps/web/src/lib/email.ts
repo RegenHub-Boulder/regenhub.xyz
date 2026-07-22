@@ -347,6 +347,113 @@ export function membershipApprovedEmail(args: { name: string; siteUrl: string })
 }
 
 /**
+ * Sent the moment someone submits a membership application, so the funnel
+ * isn't silent between "submitted" and "approved" (which can be hours-to-days
+ * since we review by hand).
+ */
+export function applicationReceivedEmail(args: {
+  name: string;
+  interestLabel: string;
+  siteUrl: string;
+}) {
+  const firstName = args.name.split(" ")[0];
+  const base = args.siteUrl.replace(/\/$/, "");
+  return {
+    subject: "We got your RegenHub application",
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+        <p>Hi ${firstName},</p>
+        <p>Thanks for applying to join RegenHub${args.interestLabel ? ` (${args.interestLabel})` : ""} — we&rsquo;ve got it.</p>
+        <p>We review applications by hand so we can welcome each member personally. You&rsquo;ll hear from us soon — usually within a day or two.</p>
+        <p>In the meantime you can check your status any time in your <a href="${base}/portal" style="color: #2d5e3e;">member portal</a>, and you&rsquo;re welcome at our public events.</p>
+        <p>Any questions, just reply to this email.</p>
+        <p>&mdash; RegenHub</p>
+      </div>
+    `,
+    text: `Hi ${firstName},\n\nThanks for applying to join RegenHub${args.interestLabel ? ` (${args.interestLabel})` : ""} — we've got it.\n\nWe review applications by hand so we can welcome each member personally. You'll hear from us soon — usually within a day or two.\n\nIn the meantime you can check your status any time at ${base}/portal, and you're welcome at our public events.\n\nAny questions, just reply to this email.\n\n— RegenHub`,
+  };
+}
+
+/**
+ * Sent when a subscription becomes active for the first time — the "you're in"
+ * moment. Historically the Telegram group celebrated while the new member got
+ * nothing; this closes that gap. Desk tiers get pointed at their permanent
+ * door code, everyone else at day passes.
+ */
+export function welcomeNewMemberEmail(args: {
+  name: string;
+  planLabel: string;
+  monthlyDollars: number;
+  isDeskTier: boolean;
+  siteUrl: string;
+}) {
+  const firstName = args.name.split(" ")[0];
+  const base = args.siteUrl.replace(/\/$/, "");
+  const accessLine = args.isDeskTier
+    ? `Your permanent door code is ready in your portal — it works 24/7 on both 2nd-floor doors (front and back).`
+    : `Your monthly day passes land in your account automatically — generate a door code from your portal whenever you come in (weekdays 8 AM – 6 PM). Passes accumulate and never expire.`;
+  const accessLink = args.isDeskTier ? `${base}/portal/my-code` : `${base}/portal/passes`;
+  const accessCta = args.isDeskTier ? "See my door code" : "My day passes";
+  return {
+    subject: `Welcome to RegenHub — you're a member 🎉`,
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+        <p>Hi ${firstName},</p>
+        <p>Welcome aboard — your <strong>${args.planLabel}</strong> membership ($${args.monthlyDollars}/mo) is active. We&rsquo;re glad you&rsquo;re here.</p>
+        <p>${accessLine}</p>
+        <p style="margin: 20px 0;">
+          <a href="${accessLink}" style="background: #2d5e3e; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">${accessCta}</a>
+        </p>
+        <p>A few things worth knowing:</p>
+        <ul style="line-height: 1.7; padding-left: 20px;">
+          <li><strong>The space:</strong> 1515 Walnut St, Suite 200 (2nd floor), Boulder. The street door is unlocked 8 AM &ndash; 6 PM weekdays.</li>
+          <li><strong>Day passes for guests:</strong> $25 at the member rate, from your portal.</li>
+          <li><strong>Community:</strong> most coordination happens in our Telegram group — add your handle in <a href="${base}/portal/profile" style="color: #2d5e3e;">your profile</a> and say hi.</li>
+          <li><strong>Billing:</strong> manage your card or plan any time from the portal.</li>
+        </ul>
+        <p>Reply to this email any time — it goes straight to us. See you at the hub.</p>
+        <p>&mdash; RegenHub</p>
+      </div>
+    `,
+    text: `Hi ${firstName},\n\nWelcome aboard — your ${args.planLabel} membership ($${args.monthlyDollars}/mo) is active. We're glad you're here.\n\n${accessLine}\n\n${accessCta}: ${accessLink}\n\nA few things worth knowing:\n- The space: 1515 Walnut St, Suite 200 (2nd floor), Boulder. The street door is unlocked 8 AM – 6 PM weekdays.\n- Day passes for guests: $25 at the member rate, from your portal.\n- Community: most coordination happens in our Telegram group — add your handle at ${base}/portal/profile and say hi.\n- Billing: manage your card or plan any time from the portal.\n\nReply to this email any time — it goes straight to us. See you at the hub.\n\n— RegenHub`,
+  };
+}
+
+/**
+ * Sent when a subscription ends (deleted in Stripe). The member keeps their
+ * portal + any day-pass balance; desk members lose their permanent PIN. Warm
+ * exit — the goal is "come back anytime," not a door slam.
+ */
+export function subscriptionEndedEmail(args: {
+  name: string;
+  planLabel: string;
+  wasDeskTier: boolean;
+  siteUrl: string;
+}) {
+  const firstName = args.name.split(" ")[0];
+  const base = args.siteUrl.replace(/\/$/, "");
+  const deskLine = args.wasDeskTier
+    ? ` Your permanent door code has been retired, but any day passes in your account are still yours — they never expire.`
+    : ` Any day passes in your account are still yours — they never expire.`;
+  return {
+    subject: "Your RegenHub membership has ended",
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+        <p>Hi ${firstName},</p>
+        <p>Your ${args.planLabel} membership has ended, and no further charges will happen.${deskLine}</p>
+        <p>Your portal account stays active — you can use remaining passes, grab day passes at any time, or restart a membership whenever it fits:</p>
+        <p style="margin: 20px 0;">
+          <a href="${base}/portal" style="background: #2d5e3e; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">My portal</a>
+        </p>
+        <p>If this wasn&rsquo;t what you intended — or there&rsquo;s anything we could have done better — just reply. We&rsquo;d genuinely like to know, and we&rsquo;d love to see you around the hub either way.</p>
+        <p>&mdash; RegenHub</p>
+      </div>
+    `,
+    text: `Hi ${firstName},\n\nYour ${args.planLabel} membership has ended, and no further charges will happen.${deskLine}\n\nYour portal account stays active — you can use remaining passes, grab day passes at any time, or restart a membership whenever it fits: ${base}/portal\n\nIf this wasn't what you intended — or there's anything we could have done better — just reply. We'd genuinely like to know, and we'd love to see you around the hub either way.\n\n— RegenHub`,
+  };
+}
+
+/**
  * Sent automatically when an admin approves an application with a specific
  * plan + rate — carries the Stripe Checkout link so the applicant can
  * complete signup without anyone having to paste the URL into a DM.
