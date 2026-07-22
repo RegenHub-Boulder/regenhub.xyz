@@ -67,7 +67,9 @@ export default function HubEssentials({
             <p>
               1515 Walnut St, Suite 200, Boulder, CO 80302
               <br />
-              2nd floor — up the stairs from the lobby.
+              2nd floor — up the stairs from the lobby. The street-level door is
+              unlocked 8 AM – 6 PM on weekdays; your door code opens the
+              2nd-floor doors (front and back).
             </p>
           </Section>
 
@@ -89,6 +91,9 @@ export default function HubEssentials({
           </Section>
 
           <Section icon={Key} title="Using the Keypad">
+            <p className="mb-1">
+              Your code works on both 2nd-floor doors — front and back.
+            </p>
             <ol className="list-decimal list-inside space-y-0.5">
               <li>Enter your PIN code on the keypad</li>
               <li>
@@ -101,8 +106,9 @@ export default function HubEssentials({
 
           <Section icon={Wifi} title="WiFi">
             <p>
-              Ask a member or admin for the current WiFi credentials when you
-              arrive.
+              Network: <strong className="text-foreground">regenhub.xyz-guest</strong>
+              <br />
+              Password: <strong className="text-foreground">itsallcoordination</strong>
             </p>
           </Section>
 
@@ -110,8 +116,10 @@ export default function HubEssentials({
             <ul className="list-disc list-inside space-y-0.5">
               <li>Standing desks and ergonomic seating</li>
               <li>High-speed fiber internet</li>
-              <li>Kitchen with coffee, tea, and filtered water</li>
-              <li>Meeting room (reserve via the Telegram group)</li>
+              <li>Kitchen with coffee, tea, filtered water, and sparkling water on tap</li>
+              <li>Meeting rooms (reserve via the Telegram group)</li>
+              <li>3 sound-proof phone booths</li>
+              <li>Wellness room — vibro-acoustic bed, drums &amp; instruments</li>
             </ul>
           </Section>
 

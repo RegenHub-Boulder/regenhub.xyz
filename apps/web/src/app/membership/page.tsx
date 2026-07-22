@@ -17,14 +17,14 @@ export const metadata: Metadata = {
 const SOCIAL_PERKS = [
   "Day passes at the member rate ($25 instead of $30)",
   "Monthly day passes accumulate — they never expire",
-  "Member-only events (at least one per month)",
+  "Member-only events",
   "Connection to the regenerative cooperative community",
 ];
 
 // Perks shown on every desk tier card
 const DESK_PERKS = [
   "Permanent door code, 24/7 access",
-  "Member-only events (at least one per month)",
+  "Member-only events",
   "Guest day passes at the member rate ($25)",
   "Path to co-op ownership",
 ];

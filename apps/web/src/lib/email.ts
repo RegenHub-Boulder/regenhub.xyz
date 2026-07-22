@@ -133,16 +133,16 @@ export function freeDayApprovedEmail(args: { name: string; siteUrl: string }) {
         <p style="margin: 20px 0;">
           <a href="${base}/portal/passes" style="background: #2d5e3e; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Get my door code</a>
         </p>
-        <p>You&rsquo;ll sign in with your email (no password — we&rsquo;ll send you a one-time link), tap <strong>Generate code</strong>, and get a 6-digit PIN valid until 6&nbsp;PM that day. Use it at the front-door keypad.</p>
+        <p>You&rsquo;ll sign in with your email (no password — we&rsquo;ll send you a one-time link), tap <strong>Generate code</strong>, and get a 6-digit PIN valid until 6&nbsp;PM that day. It works on both 2nd-floor door keypads — front and back.</p>
         <h3 style="margin-top: 28px;">When you arrive</h3>
         <p style="margin: 6px 0;"><strong>Address:</strong> 1515 Walnut St, Suite 200, Boulder, CO</p>
         <p style="margin: 6px 0;"><strong>Hours:</strong> Monday&ndash;Friday, 8&nbsp;AM&ndash;6&nbsp;PM</p>
-        <p style="margin: 6px 0;">Type your code followed by the <strong>#</strong> key at the keypad, then pull the handle when the green LED appears. Suite 200 is on the second floor; we&rsquo;ll be around — please say hi.</p>
+        <p style="margin: 6px 0;">The street-level door is unlocked during open hours — head up to the 2nd floor. Type your code followed by the <strong>#</strong> key at the keypad, wait for the green LED and click, then pull the handle within 5 seconds. We&rsquo;ll be around — please say hi.</p>
         <p>Any questions, just reply to this email — replies go straight to us.</p>
         <p>See you soon,<br>RegenHub</p>
       </div>
     `,
-    text: `Hi ${firstName},\n\nYou're cleared to visit RegenHub — a day pass is waiting in your account.\n\nWhen you're ready to come in any weekday between 8 AM and 6 PM, sign in at:\n${base}/portal/passes\n\nWe'll email you a one-time sign-in link (no password). Tap "Generate code" and you'll get a 6-digit PIN valid until 6 PM that day. Use it at the front-door keypad.\n\nWhen you arrive:\nAddress: 1515 Walnut St, Suite 200, Boulder, CO\nHours: Monday–Friday, 8 AM–6 PM\nType your code followed by # at the keypad, then pull the handle when the green LED appears. Suite 200 is on the second floor — please say hi when you find us.\n\nAny questions, just reply to this email — replies go straight to us.\n\nSee you soon,\nRegenHub`,
+    text: `Hi ${firstName},\n\nYou're cleared to visit RegenHub — a day pass is waiting in your account.\n\nWhen you're ready to come in any weekday between 8 AM and 6 PM, sign in at:\n${base}/portal/passes\n\nWe'll email you a one-time sign-in link (no password). Tap "Generate code" and you'll get a 6-digit PIN valid until 6 PM that day. It works on both 2nd-floor door keypads — front and back.\n\nWhen you arrive:\nAddress: 1515 Walnut St, Suite 200, Boulder, CO\nHours: Monday–Friday, 8 AM–6 PM\nThe street-level door is unlocked during open hours — head up to the 2nd floor. Type your code followed by # at the keypad, wait for the green LED and click, then pull the handle within 5 seconds. We'll be around — please say hi.\n\nAny questions, just reply to this email — replies go straight to us.\n\nSee you soon,\nRegenHub`,
   };
 }
 

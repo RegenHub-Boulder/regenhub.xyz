@@ -117,7 +117,7 @@ export default async function MyCodePage() {
       <div className="glass-panel p-6 space-y-3">
         <h3 className="font-semibold">How to use the keypad</h3>
         <ol className="text-sm text-muted space-y-2 list-decimal list-inside">
-          <li>Approach the keypad by the front door</li>
+          <li>Approach either 2nd-floor keypad — front or back door</li>
           <li>Enter your PIN followed by the # key</li>
           <li>Wait for the green LED and click sound</li>
           <li>Pull the door handle within 5 seconds</li>

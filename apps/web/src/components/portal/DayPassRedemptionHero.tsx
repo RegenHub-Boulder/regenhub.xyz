@@ -16,9 +16,10 @@ interface Props {
 }
 
 const KEYPAD_STEPS = [
-  "Type your 6-digit code at the front-door keypad",
+  "Type your 6-digit code at either 2nd-floor keypad (front or back door)",
   "Press # to confirm",
-  "Pull the handle when the green LED appears",
+  "Wait for the green LED and click sound",
+  "Pull the door handle within 5 seconds",
 ];
 
 function formatRemaining(expiresIso: string, nowMs: number): string {

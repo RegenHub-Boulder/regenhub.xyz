@@ -266,7 +266,7 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
             <p className="text-lg font-medium mb-2">Building economic democracy and regenerative livelihoods</p>
             <div className="text-sm text-muted space-y-1 mb-6">
               <p>&copy; 2026 RegenHub Limited Cooperative Association</p>
-              <p>A Colorado Public Benefit Corporation</p>
+              <p>A Colorado public benefit limited cooperative association</p>
             </div>
             <div className="flex justify-center gap-4 flex-wrap">
               {[
