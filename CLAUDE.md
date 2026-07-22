@@ -110,6 +110,22 @@ curl "http://192.168.1.200:8000/api/v1/deployments/<dep-uuid>" \
 ### Run a DB migration
 Connect via postgres Docker container on compute-1 (see DEPLOYMENT.md).
 
+### Membership application flow (approve + notify)
+`/apply` (sign-in required) → `/api/portal/application` upserts the application, emails the
+applicant an acknowledgment, and pings the Telegram group with two buttons:
+- **✅ Approve (standard rate)** — bot callback `app_approve_<id>`: flips `approved_for_daily`
+  (+`approved_for_full` for desk interest), copies `applications.telegram` →
+  `members.telegram_username` (degrades gracefully on handle conflict), emails the applicant
+  to self-serve at `/membership`.
+- **Custom pricing →** — links to `/admin/applications`; approving there generates a Stripe
+  checkout session AND auto-emails the link (`approvalCheckoutEmail`), pings the group, and the
+  UI has an "Email link to applicant" resend button (`send-checkout-email` route).
+
+Member-facing lifecycle emails (all in `apps/web/src/lib/email.ts`, sent from the Stripe
+webhook): welcome on first activation, payment-reminder on past_due transition, warm exit on
+subscription end. The free-day email templates are **duplicated** in `apps/bot/src/email.ts` —
+edit both or they drift.
+
 ### Add a new member via bot
 Use `/admin → Add member` as an admin in the Telegram bot.
 
