@@ -135,18 +135,18 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
               {
                 icon: Ticket,
                 tier: "Day Pass",
-                price: "$25/day",
+                price: "$30/day",
                 color: "var(--gold)",
                 desc: "Come back whenever you want",
-                items: ["Door code access (8 AM \u2013 6 PM)", "5-pack available ($100)", "Monday \u2013 Friday, no contract"],
+                items: ["Door code access (8 AM \u2013 6 PM)", "$25/day for members", "Monday \u2013 Friday, no contract"],
               },
               {
                 icon: Key,
                 tier: "Desk Membership",
-                price: "$250/mo",
+                price: "from $250/mo",
                 color: "var(--forest-light)",
-                desc: "Your own desk and 24/7 access",
-                items: ["Permanent door code", "Hot desk or cold desk options", "Co-op ownership pathway"],
+                desc: "Full access with a permanent door code",
+                items: ["Hot desk $250/mo \u00b7 cold desk $500/mo", "24/7 access", "Co-op ownership pathway"],
               },
             ].map(({ icon: Icon, tier, price, color, desc, items }) => (
               <Card key={tier} className="glass-panel hover-lift" style={{ borderLeft: `4px solid ${color}` }}>
@@ -162,13 +162,17 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
               </Card>
             ))}
           </div>
-          <div className="text-center">
+          <div className="text-center space-y-3">
             <Link href="/freeday">
               <Button className="btn-primary-glass px-8 py-3 text-lg font-semibold hover-glow gap-2">
                 Get Your Free Day
                 <ArrowRight className="w-5 h-5" />
               </Button>
             </Link>
+            <p className="text-sm text-muted">
+              Contributing memberships start at $30/mo —{" "}
+              <Link href="/membership" className="text-sage hover:underline">see all tiers →</Link>
+            </p>
           </div>
         </div>
       </section>
