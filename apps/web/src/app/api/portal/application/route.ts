@@ -67,6 +67,7 @@ export async function POST(req: Request) {
   // Ping the RegenHub Telegram group so the coordinator sees the application.
   // Fire-and-forget — don't block or fail the response on a notify error.
   notifyNewApplication({
+    id: data.id,
     name: name.trim(),
     email: user.email!,
     telegram: telegramHandle,

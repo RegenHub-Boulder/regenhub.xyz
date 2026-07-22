@@ -67,7 +67,7 @@ export default function HubEssentials({
             <p>
               1515 Walnut St, Suite 200, Boulder, CO 80302
               <br />
-              2nd floor — take the elevator or stairs from the lobby.
+              2nd floor — up the stairs from the lobby.
             </p>
           </Section>
 

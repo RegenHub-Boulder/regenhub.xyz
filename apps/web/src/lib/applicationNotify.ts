@@ -19,6 +19,8 @@ const interestLabels: Record<string, string> = {
 };
 
 export interface ApplicationNotice {
+  /** applications.id — enables the inline Approve button; omit to send link-only. */
+  id?: number;
   name: string;
   email: string;
   telegram?: string | null;
@@ -27,7 +29,13 @@ export interface ApplicationNotice {
   membership_interest: string;
 }
 
-/** Post a "New Application" notification to the RegenHub Telegram group. Fire-and-forget. */
+/**
+ * Post a "New Application" notification to the RegenHub Telegram group.
+ * Fire-and-forget. Mirrors the free-day notification's approve-from-chat UX:
+ * the ✅ button (handled by the bot, `app_approve_<id>`) approves at the
+ * standard rate for their requested tier and emails them the next step;
+ * custom pricing/discounts still go through the admin panel.
+ */
 export async function notifyNewApplication(app: ApplicationNotice): Promise<void> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_GROUP_CHAT_ID;
@@ -39,10 +47,21 @@ export async function notifyNewApplication(app: ApplicationNotice): Promise<void
     `*${app.name}*  ·  ${app.email}`,
     `Interest: ${interestLabels[app.membership_interest] ?? app.membership_interest}`,
   ];
-  if (app.telegram) lines.push(`Telegram: @${app.telegram}`);
+  if (app.telegram) lines.push(`Telegram: @${app.telegram.replace(/_/g, "\\_")}`);
   if (app.about) lines.push(``, `_Working on:_ ${app.about}`);
   if (app.why_join) lines.push(``, `_Why join:_ ${app.why_join}`);
-  lines.push(``, `[Review →](https://regenhub.xyz/admin/applications)`);
+
+  const reply_markup = app.id
+    ? {
+        inline_keyboard: [
+          [
+            { text: "✅ Approve (standard rate)", callback_data: `app_approve_${app.id}` },
+            { text: "Custom pricing →", url: "https://regenhub.xyz/admin/applications" },
+          ],
+        ],
+      }
+    : undefined;
+  if (!app.id) lines.push(``, `[Review →](https://regenhub.xyz/admin/applications)`);
 
   try {
     await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -53,6 +72,7 @@ export async function notifyNewApplication(app: ApplicationNotice): Promise<void
         text: lines.join("\n"),
         parse_mode: "Markdown",
         disable_web_page_preview: true,
+        ...(reply_markup ? { reply_markup } : {}),
       }),
     });
   } catch (err) {

@@ -346,6 +346,54 @@ export function membershipApprovedEmail(args: { name: string; siteUrl: string })
   };
 }
 
+/**
+ * Sent automatically when an admin approves an application with a specific
+ * plan + rate — carries the Stripe Checkout link so the applicant can
+ * complete signup without anyone having to paste the URL into a DM.
+ */
+export function approvalCheckoutEmail(args: {
+  name: string;
+  planLabel: string;
+  monthlyCents: number;
+  discountCents?: number | null;
+  discountDuration?: "forever" | "repeating" | null;
+  discountMonths?: number | null;
+  checkoutUrl: string;
+  siteUrl: string;
+}) {
+  const firstName = args.name.split(" ")[0];
+  const base = args.siteUrl.replace(/\/$/, "");
+  const rate = `$${(args.monthlyCents / 100).toFixed(0)}/mo`;
+
+  let discountLine = "";
+  if (args.discountCents && args.discountCents > 0) {
+    const off = `$${(args.discountCents / 100).toFixed(0)} off`;
+    discountLine =
+      args.discountDuration === "repeating" && args.discountMonths
+        ? `${off} for your first ${args.discountMonths} month${args.discountMonths === 1 ? "" : "s"}`
+        : `${off} every month`;
+  }
+
+  return {
+    subject: `You're approved — complete your RegenHub membership (${args.planLabel})`,
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+        <p>Hi ${firstName},</p>
+        <p>Great news — your RegenHub application is approved. We&rsquo;ve set you up as:</p>
+        <p style="margin: 12px 0; font-size: 17px;"><strong>${args.planLabel}</strong> &mdash; ${rate}${discountLine ? ` <span style="color: #b45309;">(${discountLine})</span>` : ""}</p>
+        <p>Complete your signup here — it takes about a minute:</p>
+        <p style="margin: 20px 0;">
+          <a href="${args.checkoutUrl}" style="background: #2d5e3e; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Complete my membership</a>
+        </p>
+        <p>Once that&rsquo;s done, everything lands in your member portal at <a href="${base}/portal" style="color: #2d5e3e;">${base.replace(/^https?:\/\//, "")}/portal</a> — day passes, door codes, and billing.</p>
+        <p>Any questions — or if you&rsquo;d like a different plan — just reply to this email.</p>
+        <p>Welcome aboard,<br>RegenHub</p>
+      </div>
+    `,
+    text: `Hi ${firstName},\n\nGreat news — your RegenHub application is approved. We've set you up as:\n\n${args.planLabel} — ${rate}${discountLine ? ` (${discountLine})` : ""}\n\nComplete your signup here (takes about a minute):\n${args.checkoutUrl}\n\nOnce that's done, everything lands in your member portal at ${base}/portal — day passes, door codes, and billing.\n\nAny questions — or if you'd like a different plan — just reply to this email.\n\nWelcome aboard,\nRegenHub`,
+  };
+}
+
 // ============================================================
 // Lifecycle nudges (Bet 1) — warm, short, one idea per email
 // ============================================================

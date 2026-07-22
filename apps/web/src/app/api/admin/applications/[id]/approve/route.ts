@@ -7,6 +7,7 @@ import {
   getStripe,
   isStripeConfigured,
 } from "@/lib/stripe";
+import { sendEmail, approvalCheckoutEmail } from "@/lib/email";
 import type { PlanKey, DiscountDuration } from "@/lib/supabase/types";
 
 interface ApproveBody {
@@ -193,5 +194,35 @@ export async function POST(
     return NextResponse.json({ error: "Failed to update application" }, { status: 500 });
   }
 
-  return NextResponse.json({ checkout_url: checkoutUrl, session_id: sessionId });
+  // Email the applicant their checkout link. Historically this was left to the
+  // admin to copy-paste manually — which quietly meant most applicants never
+  // received anything. Best-effort: a failed send doesn't undo the approval,
+  // but the response tells the admin UI so it can prompt a manual send.
+  const plan = getPlan(body.plan_key);
+  const tpl = approvalCheckoutEmail({
+    name: application.name,
+    planLabel: plan?.label ?? body.plan_key,
+    monthlyCents: body.monthly_cents,
+    discountCents: discountCents > 0 ? discountCents : null,
+    discountDuration,
+    discountMonths,
+    checkoutUrl,
+    siteUrl: baseUrl,
+  });
+  const emailSent = await sendEmail({
+    to: application.email,
+    subject: tpl.subject,
+    html: tpl.html,
+    text: tpl.text,
+  });
+  if (!emailSent) {
+    console.warn(`[ApproveApp] Checkout email to ${application.email} did not send — admin should share the link manually.`);
+  }
+
+  return NextResponse.json({
+    checkout_url: checkoutUrl,
+    session_id: sessionId,
+    email_sent: emailSent,
+    email_to: application.email,
+  });
 }

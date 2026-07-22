@@ -1,6 +1,6 @@
 import TelegramBot from "node-telegram-bot-api";
 import { db, findMemberByTelegram, findAdminByTelegram, type MemberRow } from "./db/supabase.js";
-import { sendEmail, freeDayApprovedEmail, freeDayPlusMembershipApprovedEmail } from "./email.js";
+import { sendEmail, freeDayApprovedEmail, freeDayPlusMembershipApprovedEmail, membershipApprovedEmail } from "./email.js";
 import {
   allocateSlotWithRetry,
   setUserCode,
@@ -457,6 +457,123 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
     const tag = withMembership ? "*Approved + Membership*" : "*Approved (free day only)*";
     return bot.editMessageText(
       `✅ ${tag} by ${approver} · email sent to ${claim.email}\n\n${originalText}`,
+      {
+        chat_id: chatId,
+        message_id: query.message!.message_id,
+        parse_mode: "Markdown",
+      }
+    );
+  }
+
+  // ── Membership application approval (any group member can approve) ──
+  // Standard-rate approve for the tier they requested: flips the member's
+  // approval flags and emails them to self-serve at /membership. Custom
+  // pricing/discounts go through the admin panel ("Custom pricing →" button),
+  // which also generates + emails a Stripe checkout link.
+  if (data.startsWith("app_approve_")) {
+    const appId = parseInt(data.replace("app_approve_", ""));
+    const { data: application } = await db
+      .from("applications")
+      .select("id, name, email, status, membership_interest, supabase_user_id")
+      .eq("id", appId)
+      .single();
+    if (!application) return bot.sendMessage(chatId, "Application not found.");
+    if (application.status !== "pending") {
+      return bot.sendMessage(chatId, `Already ${application.status}.`);
+    }
+    const approver = username ? `@${username}` : query.from.first_name;
+
+    // Resolve approver's member.id for the audit trail (nullable if unknown).
+    let approverMemberId: number | null = null;
+    if (username) {
+      const { data: approverMember } = await db
+        .from("members")
+        .select("id")
+        .eq("telegram_username", username)
+        .maybeSingle();
+      approverMemberId = approverMember?.id ?? null;
+    }
+
+    // Find or create the member row for this applicant (same as the web
+    // approve route) so the approval flags have somewhere to live.
+    let { data: member } = await db
+      .from("members")
+      .select("id")
+      .eq("email", application.email)
+      .maybeSingle();
+    if (!member) {
+      const { data: created, error: createErr } = await db
+        .from("members")
+        .insert({
+          name: application.name,
+          email: application.email,
+          member_type: "day_pass",
+          supabase_user_id: application.supabase_user_id ?? null,
+        })
+        .select("id")
+        .single();
+      if (createErr || !created) {
+        console.error("[AppApprove] Failed to create member:", createErr);
+        return bot.sendMessage(chatId, "Failed to create member row — approve via the admin panel.");
+      }
+      member = created;
+    }
+
+    // Desk-tier applicants get Full Access approval too, so /membership
+    // doesn't gate them behind "one more step" right after we approved them.
+    const wantsDesk =
+      application.membership_interest === "hot_desk" ||
+      application.membership_interest === "reserved_desk";
+    const now = new Date().toISOString();
+    const { error: flagErr } = await db
+      .from("members")
+      .update({
+        approved_for_daily: true,
+        approved_for_daily_at: now,
+        approved_for_daily_by: approverMemberId,
+        ...(wantsDesk
+          ? {
+              approved_for_full: true,
+              approved_for_full_at: now,
+              approved_for_full_by: approverMemberId,
+            }
+          : {}),
+      })
+      .eq("id", member.id);
+    if (flagErr) {
+      console.error("[AppApprove] Failed to set approval flags:", flagErr);
+      return bot.sendMessage(chatId, "Failed to set approval flags — approve via the admin panel.");
+    }
+
+    await db
+      .from("applications")
+      .update({
+        status: "approved",
+        approved_by: approverMemberId,
+        rejected_by: null,
+        rejected_at: null,
+      })
+      .eq("id", application.id);
+
+    // Email the applicant their next step (self-serve subscribe).
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
+    const tpl = membershipApprovedEmail({ name: application.name, siteUrl });
+    sendEmail({
+      to: application.email,
+      subject: tpl.subject,
+      html: tpl.html,
+      text: tpl.text,
+    })
+      .then((ok) => {
+        if (ok) console.log(`[AppApprove] Approval email sent to ${application.email}`);
+        else bot.sendMessage(chatId, `⚠️ Approved, but the email to ${application.email} didn't send — reach out to them directly.`);
+      })
+      .catch((err) => console.error("[AppApprove] Email send failed:", err));
+
+    const originalText = query.message?.text ?? "";
+    const tag = wantsDesk ? "*Approved (incl. Full Access)*" : "*Approved*";
+    return bot.editMessageText(
+      `✅ ${tag} by ${approver} · email sent to ${application.email}\n\n${originalText}`,
       {
         chat_id: chatId,
         message_id: query.message!.message_id,

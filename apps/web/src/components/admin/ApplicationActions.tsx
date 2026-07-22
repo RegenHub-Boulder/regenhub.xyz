@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Check, X, MessageSquare, Copy, ExternalLink, Loader2, Tag } from "lucide-react";
+import { Check, X, MessageSquare, Copy, ExternalLink, Loader2, Tag, Mail } from "lucide-react";
 import type { Application, ApplicationStatus } from "@/lib/supabase/types";
 
 import { getAllPlansSorted } from "@/lib/plans";
@@ -53,6 +53,9 @@ export function ApplicationActions({
   const [promoDuration, setPromoDuration] = useState<DurationChoice>("repeating");
   const [promoMonths, setPromoMonths] = useState("3");
   const [copied, setCopied] = useState(false);
+  // "sent to x@y.z" | "failed" | null — feedback for the approval/resend email
+  const [emailNotice, setEmailNotice] = useState<string | null>(null);
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   function selectPlan(key: string) {
     setPlanKey(key);
@@ -119,10 +122,35 @@ export function ApplicationActions({
         setError(data?.error ?? "Failed to approve");
         return;
       }
+      const data = await res.json().catch(() => null);
+      if (data?.email_sent) {
+        setEmailNotice(`Checkout link emailed to ${data.email_to}`);
+      } else if (data?.email_sent === false) {
+        setEmailNotice("⚠️ Email didn't send — copy the link and share it manually.");
+      }
       setShowApprove(false);
       router.refresh();
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function resendCheckoutEmail() {
+    setSendingEmail(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/applications/${application.id}/send-checkout-email`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok) {
+        setEmailNotice(`Checkout link emailed to ${data?.email_to ?? application.email}`);
+      } else {
+        setEmailNotice(null);
+        setError(data?.error ?? "Email send failed");
+      }
+    } finally {
+      setSendingEmail(false);
     }
   }
 
@@ -363,7 +391,16 @@ export function ApplicationActions({
             )}
           </div>
           {!checkoutCompleted && (
-            <div className="flex gap-1.5">
+            <div className="flex gap-1.5 flex-wrap">
+              <Button
+                size="sm"
+                disabled={sendingEmail}
+                onClick={resendCheckoutEmail}
+                className="btn-glass text-xs h-7 gap-1"
+              >
+                {sendingEmail ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mail className="w-3 h-3" />}
+                Email link to applicant
+              </Button>
               <Button
                 size="sm"
                 onClick={copyLink}
@@ -377,6 +414,9 @@ export function ApplicationActions({
                 </Button>
               </a>
             </div>
+          )}
+          {emailNotice && (
+            <p className="text-xs text-sage">{emailNotice}</p>
           )}
         </div>
       )}

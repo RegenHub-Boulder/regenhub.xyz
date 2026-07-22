@@ -75,6 +75,38 @@ export function freeDayApprovedEmail(args: { name: string; siteUrl: string }) {
   };
 }
 
+/** Mirrors membershipApprovedEmail in apps/web/src/lib/email.ts — sent when a
+ *  membership application is approved from the Telegram group at standard rates.
+ *  Points at /membership where the (already-flagged-approved) applicant
+ *  self-serves their subscription. */
+export function membershipApprovedEmail(args: { name: string; siteUrl: string }) {
+  const firstName = args.name.split(" ")[0];
+  const base = args.siteUrl.replace(/\/$/, "");
+  return {
+    subject: "You're cleared to subscribe to RegenHub membership",
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+        <p>Hi ${firstName},</p>
+        <p>You&rsquo;re approved to subscribe to a RegenHub membership whenever you&rsquo;re ready. Five tiers:</p>
+        <ul style="line-height: 1.7; padding-left: 20px;">
+          <li><strong>Member + 1 day/mo</strong> &mdash; $30/mo, 1 coworking day per month, member rate on extras</li>
+          <li><strong>Member + 2 days/mo</strong> &mdash; $50/mo</li>
+          <li><strong>Member + 5 days/mo</strong> &mdash; $100/mo</li>
+          <li><strong>Hot Desk</strong> &mdash; $250/mo, permanent door code + 24/7 access to any open desk</li>
+          <li><strong>Cold Desk</strong> &mdash; $500/mo, your own reserved desk + permanent door code + 24/7 access</li>
+        </ul>
+        <p>Day passes accumulate &mdash; they never expire. Plus members get day passes at $25 instead of $30, and access to members-only events. Full Access tiers (Hot/Cold Desk) auto-allocate your PIN on signup.</p>
+        <p style="margin: 16px 0;">
+          <a href="${base}/membership" style="background: #2d5e3e; color: white; padding: 10px 18px; border-radius: 8px; text-decoration: none; display: inline-block;">See membership tiers</a>
+        </p>
+        <p>Any questions, just reply.</p>
+        <p>&mdash; RegenHub</p>
+      </div>
+    `,
+    text: `Hi ${firstName},\n\nYou're approved to subscribe to a RegenHub membership whenever you're ready. Five tiers:\n\n- Member + 1 day/mo — $30/mo, 1 coworking day per month, member rate on extras\n- Member + 2 days/mo — $50/mo\n- Member + 5 days/mo — $100/mo\n- Hot Desk — $250/mo, permanent door code + 24/7 access to any open desk\n- Cold Desk — $500/mo, your own reserved desk + permanent door code + 24/7 access\n\nDay passes accumulate — they never expire. Plus members get day passes at $25 instead of $30, and access to members-only events. Full Access tiers (Hot/Cold Desk) auto-allocate your PIN on signup.\n\nSee tiers: ${base}/membership\n\nAny questions, just reply.\n\n— RegenHub`,
+  };
+}
+
 export function freeDayPlusMembershipApprovedEmail(args: { name: string; siteUrl: string }) {
   const firstName = args.name.split(" ")[0];
   const base = args.siteUrl.replace(/\/$/, "");
