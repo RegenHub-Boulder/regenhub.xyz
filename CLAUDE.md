@@ -42,6 +42,10 @@ The `.dockerignore` has an exception (`!**/.env.production`) so the file is avai
 | `SUPABASE_URL` | Bot (runtime) | |
 | `SUPABASE_SERVICE_ROLE_KEY` | Bot (runtime) | Bypasses RLS |
 | `TELEGRAM_BOT_TOKEN` | Bot (runtime) | |
+| `REGENOS_BASE_URL` | Web (runtime) | regenOS AppView base URL, no trailing slash. Unset = events fall back to the Luma embed and one-login stays off. |
+| `REGENOS_COLLECTIVE_DID` | Web (runtime) | The RegenHub collective's `did:plc:…`. Required alongside the base URL for the events swap. |
+| `REGENOS_WEB_URL` | Web (runtime) | Public regenOS web origin, used to build `/events/<did>/<rkey>` + `calendar.ics` links. Unset = events render unlinked. |
+| `REGENOS_LOGIN_ENABLED` | Web (runtime) | **Default off.** `true`/`1`/`yes` turns on the regenOS login lane + the `/xrpc` proxy. |
 
 ## Project Structure
 ```
@@ -141,6 +145,51 @@ update members set member_type = 'cold_desk' where telegram_username = '@usernam
 Both web and bot are Coolify-managed and need `HA_URL`, `HA_TOKEN`, and `HA_LOCK_ENTITIES` at runtime.
 Set `HA_LOCK_ENTITIES=lock.front_door_lock,lock.back_door_lock` (comma-separated) to
 target multiple Z-Wave locks. Update env via Coolify UI for the relevant app and redeploy.
+
+## regenOS integration (events + one-login)
+
+[regenOS](https://github.com/irlfund/regenOS) is the atproto commons backend. RegenHub uses it for
+two independently-switchable things. Both degrade to today's behaviour when unconfigured.
+
+**Events (on whenever `REGENOS_BASE_URL` + `REGENOS_COLLECTIVE_DID` are set).** The landing page's
+"Upcoming Events" section renders the collective's public calendar instead of the Luma iframe.
+
+- `lib/regenos/events.ts` — `GET /xrpc/social.scenius.getEvents?scene=<did>&limit=200`, **anonymous**
+  (the AppView handler takes no viewer input, so member and non-member callers get byte-identical
+  responses and permissioned events are structurally absent). Returns `[]` on any failure, never throws.
+  The AppView orders by *indexing* time, not start time — we filter + sort on `startsAt` here.
+- `lib/events.ts` — the seam `lib/luma.ts:10-11` promised. One `UpcomingEvent` shape, two sources,
+  chosen by config: regenOS first, Luma second.
+- `components/landing/UpcomingEvents.tsx` — async server component. **Zero events for any reason
+  (quiet calendar, AppView down, timeout) falls back to the Luma embed.** The site never breaks
+  because regenOS is down.
+- Deliberately NOT changed: the newsletter still reads Luma directly (`lib/newsletter.ts:142`). Its
+  copy is Luma-branded end to end; switching it is a product decision, not a plumbing one.
+
+**One-login (`REGENOS_LOGIN_ENABLED`, default OFF).** regenOS becomes the front door; Supabase stays
+the session + RLS substrate.
+
+- `app/xrpc/[...nsid]/route.ts` — same-origin proxy to the AppView (ported from regenOS's own
+  liminal-web). Needed because the AppView's `__Host-rs_session` cookie forbids a `Domain` attribute
+  and can only land on the origin that emitted it. **Allowlisted to the login NSIDs only**; 404s when
+  the flag is off.
+- `POST /api/auth/regenos/session` — the handoff. Reads the regenOS session cookie → `getSession`
+  (DID) + `getMyContactPref` (the **verified** login-anchor email) → matches `members` by email →
+  writes `members.did` → mints a Supabase session via `generateLink` + `verifyOtp` (the admin API,
+  no second email). **No member match is not an error**: that's a *participant* — a real session with
+  public features only, sent to `/membership`.
+- The verified email is trustworthy because regenOS seeds it server-side from `email_identities` and
+  `saveContactPref` refuses any email that isn't the account's login anchor. We require
+  `verified === true` and ignore every other channel.
+- `members.did` (migration `042`) is **server-written only** and deliberately absent from the profile
+  self-edit whitelist (`api/portal/profile/route.ts:63-65`).
+- The Supabase one-time-link form stays on `/auth/login` as the fallback lane for the whole
+  transition — a regenOS outage must never lock a member out of their own door.
+
+**Known gap (upstream, Phase 0):** the AppView's `verify_base_url` / `app_base_url` are global and
+single-valued, so in production a magic link started from regenhub.xyz would email a
+`scenius.social` URL and set the cookie *there*. Locally you point them at regenhub. Fixing it for
+real is the multi-app-origin PR against regenOS.
 
 ## MCP Server
 The RegenHub MCP is served **in-app** by the web app at `https://regenhub.xyz/mcp` (Streamable
