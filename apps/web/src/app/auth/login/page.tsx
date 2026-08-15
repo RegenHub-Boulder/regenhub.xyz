@@ -38,20 +38,25 @@ export default async function LoginPage({ searchParams }: PageProps) {
             </p>
           </div>
 
-          {regenosEnabled && (
+          {regenosEnabled ? (
             <>
               <RegenosLoginPanel next={safeNext} />
-              {/* The classic lane stays available for the whole transition —
-                  a regenOS outage must never lock a member out of their door. */}
-              <div className="flex items-center gap-3 my-6">
-                <div className="h-px flex-1 bg-white/15" />
-                <span className="text-xs text-muted uppercase tracking-wider">or</span>
-                <div className="h-px flex-1 bg-white/15" />
-              </div>
+              {/* regenOS is THE login. The classic lane stays reachable for the
+                  whole transition — a regenOS outage must never lock a member
+                  out of their door — but it no longer shares the stage. It
+                  auto-opens when a failed-link banner needs showing. */}
+              <details className="mt-6" open={!!banner}>
+                <summary className="text-xs text-muted text-center cursor-pointer list-none hover:text-forest transition-colors">
+                  Having trouble signing in?
+                </summary>
+                <div className="mt-4">
+                  <LoginForm initialBanner={banner} next={safeNext} />
+                </div>
+              </details>
             </>
+          ) : (
+            <LoginForm initialBanner={banner} next={safeNext} />
           )}
-
-          <LoginForm initialBanner={banner} next={safeNext} />
         </div>
       </div>
     </div>
