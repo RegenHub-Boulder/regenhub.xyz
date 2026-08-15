@@ -41,6 +41,8 @@ type AdminMockOpts = {
   updateError?: { code?: string; message: string } | null;
   /** Make the first generateLink fail, so the route takes the provisioning path. */
   generateLinkFailsUntilCreate?: boolean;
+  /** What GoTrue says it minted — `signup` when it auto-created the user. */
+  verificationType?: "magiclink" | "signup";
 };
 
 /**
@@ -85,7 +87,15 @@ function makeAdminMock(opts: AdminMockOpts = {}) {
     if (opts.generateLinkFailsUntilCreate && !created) {
       return { data: null, error: { message: "User not found" } };
     }
-    return { data: { properties: { hashed_token: HASHED_TOKEN } }, error: null };
+    return {
+      data: {
+        properties: {
+          hashed_token: HASHED_TOKEN,
+          verification_type: opts.verificationType ?? "magiclink",
+        },
+      },
+      error: null,
+    };
   });
   const createUser = vi.fn(async () => {
     created = true;
@@ -242,6 +252,29 @@ describe("POST /api/auth/regenos/session", () => {
     expect(admin.__createUser).toHaveBeenCalledWith({ email: EMAIL, email_confirm: true });
     expect(admin.__generateLink).toHaveBeenCalledTimes(2);
     expect(server.__verifyOtp).toHaveBeenCalled();
+  });
+
+  it("redeems with the verification_type GoTrue minted, not a hardcoded magiclink", async () => {
+    // Current GoTrue doesn't 404 generate_link for a missing user — it
+    // auto-creates one and mints a `signup` token. Redeeming that as
+    // "magiclink" fails, which used to break every new member's first
+    // sign-in. The route must pass through what GoTrue actually minted.
+    const admin = makeAdminMock({
+      member: { id: 42, email: EMAIL, did: null, disabled: false },
+      verificationType: "signup",
+    });
+    const server = makeServerMock();
+    vi.mocked(createServiceClient).mockReturnValue(admin as never);
+    vi.mocked(createClient).mockResolvedValue(server as never);
+
+    const res = await POST(req());
+
+    expect(res.status).toBe(200);
+    expect(admin.__createUser).not.toHaveBeenCalled();
+    expect(server.__verifyOtp).toHaveBeenCalledWith({
+      type: "signup",
+      token_hash: HASHED_TOKEN,
+    });
   });
 
   it("500s when the session mint fails", async () => {
