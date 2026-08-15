@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { Suspense } from "react";
 import { Building2, HandHeart, Lightbulb, Sprout, MapPin, Calendar, Mail, Zap, Ticket, Key, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -7,6 +8,7 @@ import { MemberDirectory } from "@/components/landing/MemberDirectory";
 import { ForestMascot } from "@/components/landing/ForestMascot";
 import HeroInterestForm from "@/components/landing/HeroInterestForm";
 import CommunityGallery from "@/components/landing/CommunityGallery";
+import UpcomingEvents from "@/components/landing/UpcomingEvents";
 
 export type SignedInMember = { name: string } | null;
 import forestBackground from "@/assets/forest-background.jpg";
@@ -196,16 +198,10 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
               <h2 className="text-3xl md:text-4xl font-bold mb-4 text-forest">Upcoming Events</h2>
               <p className="text-xl text-muted max-w-2xl mx-auto">Join us for community building, learning, and collaboration</p>
             </div>
-            <div className="glass-panel-subtle rounded-lg overflow-hidden">
-              <div className="relative w-full" style={{ paddingBottom: "75%" }}>
-                <iframe
-                  src="https://lu.ma/embed/calendar/cal-ZCWMKx1NMCXGd7v/events?lt=dark"
-                  className="absolute top-0 left-0 w-full h-full"
-                  frameBorder="0"
-                  allowFullScreen
-                />
-              </div>
-            </div>
+            {/* regenOS collective calendar when configured, Luma embed otherwise. */}
+            <Suspense fallback={<div className="h-24" />}>
+              <UpcomingEvents />
+            </Suspense>
           </div>
         </div>
       </section>
