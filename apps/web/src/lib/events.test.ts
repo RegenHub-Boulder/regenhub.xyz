@@ -27,7 +27,7 @@ function eventRow(rkey: string, name: string, startsAt: string, extra: Record<st
 
 /** Stub global fetch with one canned regenOS getEvents response. */
 function stubGetEvents(events: unknown[], init: { ok?: boolean; status?: number } = {}) {
-  const fetchMock = vi.fn(async () => ({
+  const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => ({
     ok: init.ok ?? true,
     status: init.status ?? 200,
     json: async () => ({ scene: SCENE, events }),

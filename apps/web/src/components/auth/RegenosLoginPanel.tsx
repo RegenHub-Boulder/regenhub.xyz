@@ -25,7 +25,9 @@ import { Label } from "@/components/ui/label";
  * membership, link the DID, mint the RegenHub session.
  */
 
-type Stage = "idle" | "sending" | "checkEmail" | "noAccount" | "finishing";
+/** Which view is on screen. `busy` is tracked separately so an in-flight
+ *  request never yanks the view out from under the person. */
+type Stage = "idle" | "checkEmail" | "noAccount";
 
 interface BeginSignupResponse {
   stage?: string;
@@ -43,6 +45,7 @@ export function RegenosLoginPanel({ next = "/portal" }: { next?: string }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [stage, setStage] = useState<Stage>("idle");
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** A regenOS session already on this browser — e.g. they just clicked the link. */
   const [existingHandle, setExistingHandle] = useState<string | null | undefined>(undefined);
@@ -68,27 +71,27 @@ export function RegenosLoginPanel({ next = "/portal" }: { next?: string }) {
   }, []);
 
   async function finish() {
-    setStage("finishing");
+    setBusy(true);
     setError(null);
     try {
       const res = await fetch("/api/auth/regenos/session", { method: "POST" });
       const data = (await res.json()) as SessionResponse;
       if (!res.ok || !data.ok) {
         setError(data.error ?? "Couldn't finish signing you in.");
-        setStage("idle");
         return;
       }
       router.push(data.member ? next : (data.redirect ?? "/membership"));
       router.refresh();
     } catch {
       setError("Couldn't reach RegenHub. Try again in a moment.");
-      setStage("idle");
+    } finally {
+      setBusy(false);
     }
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setStage("sending");
+    setBusy(true);
     setError(null);
 
     let data: BeginSignupResponse;
@@ -100,17 +103,18 @@ export function RegenosLoginPanel({ next = "/portal" }: { next?: string }) {
       });
       if (!res.ok) {
         setError("regenOS didn't accept that email. Try the classic sign-in link below.");
-        setStage("idle");
         return;
       }
       data = (await res.json()) as BeginSignupResponse;
     } catch {
       setError("Can't reach regenOS right now. Use the classic sign-in link below.");
-      setStage("idle");
       return;
+    } finally {
+      setBusy(false);
     }
 
     if (data.stage === "login") {
+      // regenOS trusted the session immediately — no inbox round-trip.
       await finish();
     } else if (data.stage === "checkEmail") {
       setStage("checkEmail");
@@ -128,12 +132,8 @@ export function RegenosLoginPanel({ next = "/portal" }: { next?: string }) {
           You&apos;re signed in to regenOS as <strong>{existingHandle}</strong>.
         </p>
         {error && <p className="text-red-400 text-sm">{error}</p>}
-        <Button
-          onClick={finish}
-          disabled={stage === "finishing"}
-          className="btn-primary-glass w-full"
-        >
-          {stage === "finishing" ? "Signing you in…" : "Continue to RegenHub"}
+        <Button onClick={finish} disabled={busy} className="btn-primary-glass w-full">
+          {busy ? "Signing you in…" : "Continue to RegenHub"}
         </Button>
       </Panel>
     );
@@ -149,12 +149,8 @@ export function RegenosLoginPanel({ next = "/portal" }: { next?: string }) {
           </p>
         </div>
         {error && <p className="text-red-400 text-sm">{error}</p>}
-        <Button
-          onClick={finish}
-          disabled={stage !== "checkEmail" && stage !== "finishing"}
-          className="btn-glass w-full"
-        >
-          I&apos;ve clicked the link
+        <Button onClick={finish} disabled={busy} className="btn-glass w-full">
+          {busy ? "Signing you in…" : "I've clicked the link"}
         </Button>
       </Panel>
     );
@@ -193,12 +189,8 @@ export function RegenosLoginPanel({ next = "/portal" }: { next?: string }) {
           </p>
         </div>
         {error && <p className="text-red-400 text-sm">{error}</p>}
-        <Button
-          type="submit"
-          disabled={stage === "sending" || stage === "finishing"}
-          className="btn-primary-glass w-full"
-        >
-          {stage === "sending" ? "Checking…" : "Continue with regenOS"}
+        <Button type="submit" disabled={busy} className="btn-primary-glass w-full">
+          {busy ? "Checking…" : "Continue with regenOS"}
         </Button>
       </form>
     </Panel>
