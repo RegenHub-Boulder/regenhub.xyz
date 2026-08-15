@@ -125,11 +125,17 @@ export async function POST(request: Request) {
   }
 
   // ── 4. mint the Supabase session ───────────────────────────────────────────
+  // When no auth.users row exists yet, current GoTrue does NOT error here — it
+  // auto-creates an unconfirmed user and mints a `signup`-type token (older
+  // GoTrue 404s instead, which the branch below handles). Either way trigger
+  // 004 links the new auth user to the member row by email on insert, so
+  // supabase_user_id lands for free. The redeem must use the
+  // `verification_type` GoTrue says it minted: redeeming a signup token as
+  // "magiclink" fails with "Email link is invalid or has expired", which used
+  // to break exactly the first sign-in of every newly provisioned member.
   let link = await admin.auth.admin.generateLink({ type: "magiclink", email });
 
   if (link.error) {
-    // No auth.users row yet — provision one. Trigger 004 links it to the
-    // member row by email on insert, so supabase_user_id lands for free.
     const { error: createError } = await admin.auth.admin.createUser({
       email,
       email_confirm: true,
@@ -142,14 +148,15 @@ export async function POST(request: Request) {
   }
 
   const tokenHash = link.data?.properties?.hashed_token;
-  if (link.error || !tokenHash) {
+  const verificationType = link.data?.properties?.verification_type;
+  if (link.error || !tokenHash || !verificationType) {
     console.error("[regenOS] generateLink failed:", link.error);
     return NextResponse.json({ error: "Couldn't create your sign-in." }, { status: 500 });
   }
 
   const supabase = await createClient();
   const { error: verifyError } = await supabase.auth.verifyOtp({
-    type: "magiclink",
+    type: verificationType as "magiclink" | "signup",
     token_hash: tokenHash,
   });
   if (verifyError) {
