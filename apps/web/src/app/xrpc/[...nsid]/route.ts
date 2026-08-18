@@ -32,6 +32,13 @@ export const runtime = "nodejs";
  * nothing else.
  * - beginSignup / setSignupProfile / createCustodialAccount — the signup wizard
  * - verifySignup / verifyEmail — the magic-link redemptions
+ * - beginOAuth / oauthCallback — the real atproto OAuth login lane
+ *   (`lib/regenos/oauth.ts`, `components/auth/OAuthSignInButton.tsx` +
+ *   `OAuthCallback.tsx`): begin resolves the PDS authorize URL, callback
+ *   exchanges the PDS's code/state/iss for the same `__Host-rs_session`
+ *   cookie the magic-link lane lands. Same trust posture as the rest of this
+ *   list — the AppView does the real verification, this proxy only carries
+ *   the cookie onto regenhub.xyz's origin.
  * - getSession / getMyContactPref — whoami, read by the browser for UI state
  * - createEvent / updateEvent / deleteEvent — /portal/events, the stewards'
  *   in-portal calendar. These are the only WRITES on the list; each one is
@@ -44,6 +51,8 @@ const ALLOWED_NSIDS = new Set([
   "social.scenius.setSignupProfile",
   "social.scenius.createCustodialAccount",
   "social.scenius.verifyEmail",
+  "social.scenius.beginOAuth",
+  "social.scenius.oauthCallback",
   "social.scenius.getSession",
   "social.scenius.getMyContactPref",
   "social.scenius.logout",

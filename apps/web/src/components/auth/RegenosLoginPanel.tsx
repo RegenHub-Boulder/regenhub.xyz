@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { OAuthSignInButton } from "@/components/auth/OAuthSignInButton";
 
 /**
  * The regenOS sign-in lane (Phase 2, behind REGENOS_LOGIN_ENABLED).
@@ -13,16 +14,25 @@ import { Label } from "@/components/ui/label";
  * one-time-link door stays as the fallback lane for the whole transition, so a
  * regenOS outage can never lock members out of their own door.
  *
- * The flow, all through this app's own same-origin /xrpc proxy so the AppView's
- * `__Host-rs_session` cookie lands on regenhub.xyz:
+ * Two regenOS doors into the SAME finish, both through this app's own
+ * same-origin /xrpc proxy so the AppView's `__Host-rs_session` cookie lands
+ * on regenhub.xyz:
  *
- *   beginSignup { email }
- *     → stage "login"        (regenOS trusted the session immediately)  → finish
- *     → stage "checkEmail"   (magic link sent)                          → wait, then finish
- *     → stage "chooseHandle" (no regenOS account for this email)        → point at the classic lane
+ *   1. Email bridge (below) — beginSignup { email }
+ *        → stage "login"        (regenOS trusted the session immediately)  → finish
+ *        → stage "checkEmail"   (magic link sent)                          → wait, then finish
+ *        → stage "chooseHandle" (no regenOS account for this email)        → point at the classic lane
+ *   2. Real atproto OAuth (<OAuthSignInButton>, `lib/regenos/oauth.ts`) — an
+ *      atproto handle → beginOAuth → PDS consent → `/oauth/callback` lands
+ *      the same session cookie → finish. This is the mechanism Aaron asked
+ *      for (regenOS acting like Google OAuth); the email bridge stays as a
+ *      second door, not a stepping-stone to be deleted.
  *
  * "Finish" is POST /api/auth/regenos/session: match the verified email to a
- * membership, link the DID, mint the RegenHub session.
+ * membership, link the DID, mint the RegenHub session. Both doors call it —
+ * <OAuthCallback> (`components/auth/OAuthCallback.tsx`) calls it itself once
+ * its own cookie has landed, so this component's `finish()` only ever
+ * services the email-bridge doors above.
  */
 
 /** Which view is on screen. `busy` is tracked separately so an in-flight
@@ -193,6 +203,7 @@ export function RegenosLoginPanel({ next = "/portal" }: { next?: string }) {
           {busy ? "Checking…" : "Continue with regenOS"}
         </Button>
       </form>
+      <OAuthSignInButton />
     </Panel>
   );
 }

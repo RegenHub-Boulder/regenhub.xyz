@@ -179,13 +179,31 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   copy is Luma-branded end to end; switching it is a product decision, not a plumbing one.
 
 **One-login (`REGENOS_LOGIN_ENABLED`, default OFF).** regenOS becomes the front door; Supabase stays
-the session + RLS substrate.
+the session + RLS substrate. Two doors, same finish:
+
+- **Real atproto OAuth** (`lib/regenos/oauth.ts`) — the actual mechanism ("regenOS acting like Google
+  OAuth"), matching how regenOS's own frontends (scenius-web, liminal-web) log in. All PAR/PKCE/DPoP/
+  token-exchange machinery lives in the AppView (`atrium-oauth`); this app is thin:
+  `/oauth-client-metadata.json` (the atproto client-ID metadata doc — its own URL IS the `client_id`,
+  confidential `private_key_jwt` once `REGENOS_OAUTH_JWKS_URI` is set, public `none` otherwise),
+  `<OAuthSignInButton>` (an identifier form → POST `beginOAuth` via `/xrpc` → 302 to the PDS consent
+  screen), and `/oauth/callback` (`<OAuthCallback>` → GET `oauthCallback` via `/xrpc`,
+  `credentials:'include'` + `redirect:'manual'`, mirroring regenOS's own `callback.ts`) which lands
+  `__Host-rs_session` on this origin then calls the SAME `POST /api/auth/regenos/session` handoff
+  below. Needs a matching `OAUTH_CLIENTS` entry on regenOS's side (Lucian's repo/deploy, not this
+  one) — `{clientId, redirectUri}` = this app's served metadata doc URL + `/oauth/callback`.
+- **Email bridge** (`RegenosLoginPanel.tsx`'s magic-link form) — proves identity by email possession
+  instead of real OAuth; kept as a second door, not superseded. Its
+  `beginSignup`/`checkEmail`/`chooseHandle` stages are unchanged by the OAuth addition.
+
+Both doors land the AppView's session cookie on this origin then call the one shared handoff:
 
 - `app/xrpc/[...nsid]/route.ts` — same-origin proxy to the AppView (ported from regenOS's own
   liminal-web). Needed because the AppView's `__Host-rs_session` cookie forbids a `Domain` attribute
-  and can only land on the origin that emitted it. **Allowlisted to the login NSIDs plus the three
-  event writes** (`createEvent`/`updateEvent`/`deleteEvent`) — nothing else; 404s when the flag is off.
-- `POST /api/auth/regenos/session` — the handoff. Reads the regenOS session cookie → `getSession`
+  and can only land on the origin that emitted it. **Allowlisted to the login NSIDs (incl.
+  `beginOAuth`/`oauthCallback`) plus the three event writes** (`createEvent`/`updateEvent`/
+  `deleteEvent`) — nothing else; 404s when the flag is off.
+- `POST /api/auth/regenos/session` — the handoff, shared by both doors. Reads the regenOS session cookie → `getSession`
   (DID) + `getMyContactPref` (the **verified** login-anchor email) → matches `members` by email →
   writes `members.did` → mints a Supabase session via `generateLink` + `verifyOtp` (the admin API,
   no second email). **No member match is not an error**: that's a *participant* — a real session with

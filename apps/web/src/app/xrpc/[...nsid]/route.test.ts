@@ -59,6 +59,38 @@ describe("xrpc proxy allowlist", () => {
     expect(upstream).toHaveBeenCalledOnce();
   });
 
+  it("forwards beginOAuth (POST)", async () => {
+    const res = await POST(req("social.scenius.beginOAuth"), ctx("social.scenius.beginOAuth"));
+    expect(res.status).toBe(200);
+    expect(upstream).toHaveBeenCalledOnce();
+    expect(upstream.mock.calls[0][0]).toBe("https://appview.test/xrpc/social.scenius.beginOAuth");
+  });
+
+  it("forwards oauthCallback (GET) and relays its Set-Cookie", async () => {
+    upstream.mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "set-cookie": "__Host-rs_session=opaque; Path=/; Secure; HttpOnly",
+        },
+      }),
+    );
+    const res = await GET(
+      req("social.scenius.oauthCallback", "GET"),
+      ctx("social.scenius.oauthCallback"),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("set-cookie")).toMatch(/^__Host-rs_session=opaque/);
+  });
+
+  it("404s beginOAuth/oauthCallback when the login flag is off", async () => {
+    vi.mocked(isRegenosLoginEnabled).mockReturnValue(false);
+    const res = await POST(req("social.scenius.beginOAuth"), ctx("social.scenius.beginOAuth"));
+    expect(res.status).toBe(404);
+    expect(upstream).not.toHaveBeenCalled();
+  });
+
   it.each([
     // Neighbours of the allowed writes — near-misses are the ones that matter.
     "social.scenius.setMembership",
