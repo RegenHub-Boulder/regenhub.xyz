@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { MobileNav, type NavLink } from "@/components/nav/MobileNav";
+import { isRegenosLoginEnabled } from "@/lib/regenos/config";
 
 export const metadata = { title: "Member Portal — RegenHub" };
 
@@ -17,11 +18,17 @@ export default async function PortalLayout({ children }: { children: React.React
     .eq("supabase_user_id", user.id)
     .single();
 
+  // Steward-ness is a regenOS read, and doing it here would put an AppView
+  // round-trip on every portal page. The link is flag-gated; the page itself
+  // explains honestly when the person isn't a steward.
+  const eventsEnabled = isRegenosLoginEnabled();
+
   const links: NavLink[] = [
     { href: "/portal", label: "Dashboard" },
     { href: "/portal/my-code", label: "My Code" },
     { href: "/portal/passes", label: "Live Codes" },
     { href: "/portal/profile", label: "Profile" },
+    ...(eventsEnabled ? [{ href: "/portal/events", label: "Events" }] : []),
     ...(member?.is_admin ? [{ href: "/admin", label: "Admin", accent: true }] : []),
   ];
 
@@ -46,6 +53,9 @@ export default async function PortalLayout({ children }: { children: React.React
               <Link href="/portal/my-code" className="text-muted hover:text-foreground transition-colors">My Code</Link>
               <Link href="/portal/passes" className="text-muted hover:text-foreground transition-colors">Live Codes</Link>
               <Link href="/portal/profile" className="text-muted hover:text-foreground transition-colors">Profile</Link>
+              {eventsEnabled && (
+                <Link href="/portal/events" className="text-muted hover:text-foreground transition-colors">Events</Link>
+              )}
               {member?.is_admin && (
                 <Link href="/admin" className="text-gold hover:text-gold/80 transition-colors">Admin</Link>
               )}

@@ -130,6 +130,106 @@ export async function fetchUpcomingRegenosEvents(daysAhead = 21): Promise<Regeno
   }
 }
 
+/** One of the collective's events as the in-portal manager sees it: whole, editable, past or future. */
+export interface ManagedRegenosEvent {
+  uri: string;
+  /** The event's repo DID — always the collective, since the collective is the authority. */
+  did: string;
+  /** The base record key `updateEvent`/`deleteEvent` address the event by. */
+  rkey: string;
+  /** Which store the row came from — the AppView's authoritative public/private signal. */
+  visibility: "public" | "private";
+  /** The raw `community.lexicon.calendar.event` body, for prefilling the edit form. */
+  value: CalendarEventValue & { locations?: { $type?: string; name?: string; street?: string; postalCode?: string }[] };
+  name: string;
+  /** ISO start, or null for an event with no time set. */
+  startAt: string | null;
+  url: string | null;
+}
+
+function toManaged(uri: string, value: unknown, visibility: "public" | "private"): ManagedRegenosEvent | null {
+  const parts = splitAtUri(uri);
+  const v = (value ?? {}) as ManagedRegenosEvent["value"];
+  if (!parts || !v.name) return null;
+  return {
+    uri,
+    did: parts.did,
+    rkey: parts.rkey,
+    visibility,
+    value: v,
+    name: v.name,
+    startAt: v.startsAt ?? null,
+    url: eventUrl(uri),
+  };
+}
+
+/**
+ * EVERY event the collective owns — past and future, public and private —
+ * soonest-first. The management view, not the landing page's shop window.
+ *
+ * Two reads, because no single AppView method answers this:
+ *   * `getEvents?scene=<did>` is the scene's own calendar but is deliberately
+ *     viewer-independent, so it can only ever return PUBLIC events
+ *     (crates/regenos-appview/src/xrpc/scene.rs `get_events`).
+ *   * `getVisibleEvents` is the viewer-scoped cross-scene feed — it carries the
+ *     private events this caller may read, so we call it with the steward's
+ *     cookie and keep the rows whose repo DID is the collective. (Filtering on
+ *     the URI's DID, not the joined `sceneDid`, because the collective IS the
+ *     authority of the events it hosts, and that join can lag the firehose.)
+ *
+ * Returns [] on any failure — a steward seeing an empty list is recoverable; a
+ * 500 on the portal page is not.
+ */
+export async function fetchCollectiveEventsForManagement(
+  cookieHeader: string,
+): Promise<ManagedRegenosEvent[]> {
+  const base = regenosBaseUrl();
+  const scene = regenosCollectiveDid();
+  if (!base || !scene) return [];
+
+  const get = async (path: string): Promise<{ events?: { uri?: string; value?: unknown; source?: string }[] } | null> => {
+    try {
+      const res = await fetch(`${base}/xrpc/${path}`, {
+        headers: { accept: "application/json", cookie: cookieHeader },
+        signal: AbortSignal.timeout(REGENOS_TIMEOUT_MS),
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        console.warn(`[regenOS] ${path} returned ${res.status}`);
+        return null;
+      }
+      return await res.json();
+    } catch (err) {
+      console.warn(`[regenOS] ${path} failed:`, err);
+      return null;
+    }
+  };
+
+  const [own, visible] = await Promise.all([
+    get(`social.scenius.getEvents?scene=${encodeURIComponent(scene)}&limit=${FETCH_LIMIT}`),
+    get(`social.scenius.getVisibleEvents?limit=${FETCH_LIMIT}`),
+  ]);
+
+  const byUri = new Map<string, ManagedRegenosEvent>();
+  for (const row of own?.events ?? []) {
+    const e = row.uri ? toManaged(row.uri, row.value, "public") : null;
+    if (e) byUri.set(e.uri, e);
+  }
+  for (const row of visible?.events ?? []) {
+    if (!row.uri || byUri.has(row.uri)) continue;
+    const e = toManaged(row.uri, row.value, row.source === "private" ? "private" : "public");
+    if (e && e.did === scene) byUri.set(e.uri, e);
+  }
+
+  // Undated events sort last; everything else soonest-first (the AppView orders
+  // by INDEXING time, which is not what a calendar wants).
+  return [...byUri.values()].sort((a, b) => {
+    if (!a.startAt) return b.startAt ? 1 : 0;
+    if (!b.startAt) return -1;
+    return a.startAt.localeCompare(b.startAt);
+  });
+}
+
 /**
  * The collective's subscribable calendar feed on the regenOS web app
  * (`/scenes/<did>/calendar.ics`), or null when unconfigured. The Luma-

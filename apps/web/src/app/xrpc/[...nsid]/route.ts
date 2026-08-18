@@ -16,9 +16,10 @@
  * enabling regenOS events does not silently open an auth surface.
  *
  * NOT A GENERAL-PURPOSE OPEN PROXY: only the handful of NSIDs the login flow
- * needs are forwarded. Everything else 404s. (The upstream copies forward the
- * whole namespace because they *are* the regenOS frontend; we are a third
- * domain borrowing one flow, so the smallest hole is the right hole.)
+ * and the in-portal events manager need are forwarded. Everything else 404s.
+ * (The upstream copies forward the whole namespace because they *are* the
+ * regenOS frontend; we are a third domain borrowing two flows, so the smallest
+ * hole is the right hole.)
  */
 import { type NextRequest, NextResponse } from "next/server";
 import { isRegenosLoginEnabled, regenosBaseUrl, REGENOS_TIMEOUT_MS } from "@/lib/regenos/config";
@@ -27,10 +28,15 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * The login flow's method surface, and nothing else.
+ * The login flow's method surface, plus the event-stewardship writes, and
+ * nothing else.
  * - beginSignup / setSignupProfile / createCustodialAccount — the signup wizard
  * - verifySignup / verifyEmail — the magic-link redemptions
  * - getSession / getMyContactPref — whoami, read by the browser for UI state
+ * - createEvent / updateEvent / deleteEvent — /portal/events, the stewards'
+ *   in-portal calendar. These are the only WRITES on the list; each one is
+ *   gated server-side by the AppView on Builder+ of the event's authority
+ *   (`require_owner_or_builder`), so the proxy widens reach, never authority.
  */
 const ALLOWED_NSIDS = new Set([
   "social.scenius.beginSignup",
@@ -41,6 +47,9 @@ const ALLOWED_NSIDS = new Set([
   "social.scenius.getSession",
   "social.scenius.getMyContactPref",
   "social.scenius.logout",
+  "social.scenius.createEvent",
+  "social.scenius.updateEvent",
+  "social.scenius.deleteEvent",
 ]);
 
 // Request headers we must NOT blindly forward (hop-by-hop / host-rewriting).

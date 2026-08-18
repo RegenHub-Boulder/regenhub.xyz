@@ -171,8 +171,8 @@ the session + RLS substrate.
 
 - `app/xrpc/[...nsid]/route.ts` — same-origin proxy to the AppView (ported from regenOS's own
   liminal-web). Needed because the AppView's `__Host-rs_session` cookie forbids a `Domain` attribute
-  and can only land on the origin that emitted it. **Allowlisted to the login NSIDs only**; 404s when
-  the flag is off.
+  and can only land on the origin that emitted it. **Allowlisted to the login NSIDs plus the three
+  event writes** (`createEvent`/`updateEvent`/`deleteEvent`) — nothing else; 404s when the flag is off.
 - `POST /api/auth/regenos/session` — the handoff. Reads the regenOS session cookie → `getSession`
   (DID) + `getMyContactPref` (the **verified** login-anchor email) → matches `members` by email →
   writes `members.did` → mints a Supabase session via `generateLink` + `verifyOtp` (the admin API,
@@ -183,6 +183,17 @@ the session + RLS substrate.
   `verified === true` and ignore every other channel.
 - `members.did` (migration `042`) is **server-written only** and deliberately absent from the profile
   self-edit whitelist (`api/portal/profile/route.ts:63-65`).
+- `/portal/events` — **Manage Events**, the stewards' in-portal calendar (no link-out to scenius).
+  Server component: Supabase session, then `fetchRegenosIdentity` + `fetchRegenosSceneStanding`
+  (`getSceneMembers`, whose `steward` flag is computed for the *caller* through the trust resolver;
+  we OR it with a direct Builder+ roster row to mirror the AppView's own `owner_or_builder` write
+  gate). Not a steward ⇒ an honest explainer, never the form. Mutations are same-origin `/xrpc`
+  POSTs from `components/portal/ManageEvents.tsx`; the wire shapes live in `lib/regenos/eventForm.ts`.
+  **Events are written with `publicFace: "exact"`** — the default `rough` face gates street/place-name
+  into the `event.detail` record we can't read back, so an edit would silently erase the address.
+  `updateEvent` re-runs the whole create fan-out, so an edit resends every field it wants to keep.
+  After each write the client pings `POST /api/portal/events/revalidate` (`revalidatePath('/')`) so
+  the landing page's 5-minute events cache doesn't hide the change.
 - The Supabase one-time-link form stays on `/auth/login` as the fallback lane for the whole
   transition — a regenOS outage must never lock a member out of their own door.
 

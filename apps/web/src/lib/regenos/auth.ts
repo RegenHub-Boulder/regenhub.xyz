@@ -98,3 +98,53 @@ export async function fetchRegenosIdentity(cookieHeader: string): Promise<Regeno
     email: verifiedEmail?.address?.trim().toLowerCase() ?? null,
   };
 }
+
+/** The scene roles that may write events, mirroring the AppView's `owner_or_builder` gate. */
+const EVENT_WRITE_ROLES = new Set(["builder", "facilitator", "steward"]);
+
+export interface RegenosSceneStanding {
+  /** The caller's DIRECT role in the scene (`member`/`builder`/`facilitator`/`steward`), or null. */
+  role: string | null;
+  /** The AppView's own steward verdict for the caller — transitive, so it can be true with no direct role. */
+  steward: boolean;
+  /** Whether the AppView would accept an event write from this caller. */
+  canManageEvents: boolean;
+}
+
+/**
+ * The caller's standing in the collective, read from the AppView with their cookie.
+ *
+ * ── Why `getSceneMembers` ────────────────────────────────────────────────────
+ * It is the only viewer-aware read that answers "what is MY role here". `getScene`
+ * is a pure `(scene) → descriptor` function with no viewer input at all, and there
+ * is no `getMyMemberships`. `getSceneMembers` returns the roster (`{did, role}` per
+ * member, direct roles only) PLUS a top-level `steward` boolean the AppView computes
+ * for the CALLER through the trust resolver — so a transitive steward is reflected
+ * even though the roster only carries direct claims
+ * (crates/regenos-appview/src/xrpc/scene.rs `GetSceneMembersOutput`).
+ *
+ * We mirror the AppView's actual write gate for events — `owner_or_builder`, i.e.
+ * the authority itself OR Builder+ (role ≥ 20) of it (`trust/mod.rs:73`) — by
+ * OR-ing that `steward` flag with our own roster row being builder+. This is a UI
+ * courtesy ONLY: every mutation is re-decided server-side by the AppView, which
+ * 403s a non-steward regardless of what we render.
+ */
+export async function fetchRegenosSceneStanding(
+  cookieHeader: string,
+  sceneDid: string,
+  viewerDid: string,
+): Promise<RegenosSceneStanding> {
+  const out = await xrpcGet<{ members?: { did?: string; role?: string }[]; steward?: boolean }>(
+    `social.scenius.getSceneMembers?scene=${encodeURIComponent(sceneDid)}`,
+    cookieHeader,
+  );
+  const role = out?.members?.find((m) => m.did === viewerDid)?.role ?? null;
+  const steward = out?.steward === true;
+  return {
+    role,
+    steward,
+    // The authority hosting as itself also passes the AppView's gate — irrelevant for
+    // a person viewer, but it costs nothing to be exact about the rule we're mirroring.
+    canManageEvents: steward || viewerDid === sceneDid || (!!role && EVENT_WRITE_ROLES.has(role)),
+  };
+}
