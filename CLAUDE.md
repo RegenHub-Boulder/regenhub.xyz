@@ -44,7 +44,7 @@ The `.dockerignore` has an exception (`!**/.env.production`) so the file is avai
 | `TELEGRAM_BOT_TOKEN` | Bot (runtime) | |
 | `REGENOS_BASE_URL` | Web (runtime) | regenOS AppView base URL, no trailing slash. Unset = events fall back to the Luma embed and one-login stays off. |
 | `REGENOS_COLLECTIVE_DID` | Web (runtime) | The RegenHub collective's `did:plc:…`. Required alongside the base URL for the events swap. |
-| `REGENOS_WEB_URL` | Web (runtime) | Public regenOS web origin, used to build `/events/<did>/<rkey>` + `calendar.ics` links. Unset = events render unlinked. |
+| `REGENOS_WEB_URL` | Web (runtime) | Public regenOS web origin. **Only** used for the subscribable `calendar.ics` feed URL — event *pages* are in-site (`/events/<did>/<rkey>`) and never depend on this. Unset = no "Subscribe to the calendar" line. |
 | `REGENOS_LOGIN_ENABLED` | Web (runtime) | **Default off.** `true`/`1`/`yes` turns on the regenOS login lane + the `/xrpc` proxy. |
 
 ## Project Structure
@@ -163,6 +163,18 @@ two independently-switchable things. Both degrade to today's behaviour when unco
 - `components/landing/UpcomingEvents.tsx` — async server component. **Zero events for any reason
   (quiet calendar, AppView down, timeout) falls back to the Luma embed.** The site never breaks
   because regenOS is down.
+- **`/events` + `/events/<did>/<rkey>` — the whole event experience is in-site.** Per Aaron, an
+  event link never leaves regenhub.xyz: no lu.ma, no scenius.social. `/events` is the public
+  calendar at a 120-day horizon (same Luma fallback contract as the landing section); the detail
+  page reads ONE event via anonymous `GET /xrpc/social.scenius.getEvent?uri=at://<did>/community.lexicon.calendar.event/<rkey>`
+  and `notFound()`s on anything that isn't a public event (unknown rkey, private event, AppView
+  down) — one honest 404, never a leak that a private event exists. No public RSVP; the CTA sends
+  people to `/auth/login` + `/portal`. Card/date rendering is shared with the landing section in
+  `components/events/EventList.tsx`; a site-relative URL renders as a `next/link`, an absolute one
+  (the Luma fallback) keeps the new-tab treatment.
+- `lib/regenos/events.ts` `eventUrl()` returns the **site-relative** `/events/<did>/<rkey>` and is
+  env-independent. `regenosCalendarIcsUrl()` still points at REGENOS_WEB_URL on purpose — an ICS
+  feed is a calendar-app subscription URL, not a page a person navigates to.
 - Deliberately NOT changed: the newsletter still reads Luma directly (`lib/newsletter.ts:142`). Its
   copy is Luma-branded end to end; switching it is a product decision, not a plumbing one.
 

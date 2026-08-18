@@ -1,7 +1,9 @@
-import { CalendarDays, ArrowUpRight } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { fetchUpcomingEvents } from "@/lib/events";
 import { isRegenosEventsConfigured } from "@/lib/regenos/config";
 import { regenosCalendarIcsUrl } from "@/lib/regenos/events";
+import { CalendarSubscribeNote, EventList, LumaEmbed } from "@/components/events/EventList";
 
 /**
  * The landing page's "Upcoming Events" body.
@@ -17,40 +19,14 @@ import { regenosCalendarIcsUrl } from "@/lib/regenos/events";
  * contract, lib/regenos/events.ts), and it doesn't need to — either way the
  * page falls back to what has always been there. **The site never breaks
  * because regenOS is down.**
+ *
+ * The cards themselves live in components/events/EventList.tsx, shared with the
+ * full /events page so the two can't drift. A regenOS event links IN-SITE
+ * (`/events/<did>/<rkey>`) — no link-out, ever.
  */
 
-const LUMA_EMBED_SRC = "https://lu.ma/embed/calendar/cal-ZCWMKx1NMCXGd7v/events?lt=dark";
-
-/** Days of calendar to show on the landing page. */
+/** Days of calendar to show on the landing page; /events shows a longer horizon. */
 const HORIZON_DAYS = 60;
-
-function LumaEmbed() {
-  return (
-    <div className="glass-panel-subtle rounded-lg overflow-hidden">
-      <div className="relative w-full" style={{ paddingBottom: "75%" }}>
-        <iframe
-          src={LUMA_EMBED_SRC}
-          className="absolute top-0 left-0 w-full h-full"
-          frameBorder="0"
-          allowFullScreen
-        />
-      </div>
-    </div>
-  );
-}
-
-function formatWhen(startAt: string): string {
-  const d = new Date(startAt);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString("en-US", {
-    timeZone: "America/Denver",
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 
 export default async function UpcomingEvents() {
   if (!isRegenosEventsConfigured()) return <LumaEmbed />;
@@ -62,54 +38,19 @@ export default async function UpcomingEvents() {
 
   return (
     <div className="space-y-4">
-      <ul className="space-y-3">
-        {events.map((event) => {
-          const when = formatWhen(event.startAt);
-          const body = (
-            <div className="glass-panel-subtle rounded-lg p-5 flex items-start gap-4 hover-lift">
-              <CalendarDays className="w-5 h-5 text-sage shrink-0 mt-1" />
-              <div className="min-w-0">
-                {when && (
-                  <p className="text-sm text-muted mb-1">{when}</p>
-                )}
-                <p className="font-semibold text-lg leading-snug flex items-center gap-1.5">
-                  {event.name}
-                  {event.url && <ArrowUpRight className="w-4 h-4 text-sage shrink-0" />}
-                </p>
-                {event.description && (
-                  <p className="text-sm text-muted mt-1 line-clamp-2">{event.description}</p>
-                )}
-              </div>
-            </div>
-          );
+      <EventList events={events} />
 
-          return (
-            <li key={event.id}>
-              {event.url ? (
-                <a
-                  href={event.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block transition-opacity hover:opacity-90"
-                >
-                  {body}
-                </a>
-              ) : (
-                body
-              )}
-            </li>
-          );
-        })}
-      </ul>
+      <p className="text-center">
+        <Link
+          href="/events"
+          className="inline-flex items-center gap-1.5 text-sm text-sage hover:underline"
+        >
+          See the full calendar
+          <ArrowRight className="w-4 h-4" />
+        </Link>
+      </p>
 
-      {icsUrl && (
-        <p className="text-center text-sm text-muted">
-          <a href={icsUrl} className="underline hover:text-sage transition-colors">
-            Subscribe to the calendar
-          </a>{" "}
-          to keep it in sync.
-        </p>
-      )}
+      {icsUrl && <CalendarSubscribeNote icsUrl={icsUrl} />}
     </div>
   );
 }

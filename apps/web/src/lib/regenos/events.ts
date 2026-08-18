@@ -31,6 +31,9 @@ import {
 /** The AppView clamps `limit` to 200; ask for the whole calendar and window it locally. */
 const FETCH_LIMIT = 200;
 
+/** The borrowed event collection every RegenHub event lives in. */
+const EVENT_COLLECTION = "community.lexicon.calendar.event";
+
 export interface RegenosEvent {
   /** Stable identity — the `community.lexicon.calendar.event` AT-URI. */
   uri: string;
@@ -40,8 +43,19 @@ export interface RegenosEvent {
   /** ISO end time, when the event has one. */
   endAt?: string;
   description?: string;
-  /** Public event page on the regenOS web app, or null when REGENOS_WEB_URL is unset. */
+  /** In-site event page (`/events/<did>/<rkey>`), or null for an unparseable URI. */
   url: string | null;
+}
+
+/** The slice of `community.lexicon.location.address` an event card/page shows. */
+interface AddressValue {
+  $type?: string;
+  name?: string;
+  street?: string;
+  locality?: string;
+  region?: string;
+  postalCode?: string;
+  country?: string;
 }
 
 /** The bits of `community.lexicon.calendar.event` we render. Tolerant — extra fields are ignored. */
@@ -50,6 +64,7 @@ interface CalendarEventValue {
   description?: string;
   startsAt?: string;
   endsAt?: string;
+  locations?: AddressValue[];
 }
 
 interface GetEventsRow {
@@ -65,16 +80,20 @@ function splitAtUri(uri: string): { did: string; rkey: string } | null {
 }
 
 /**
- * Public event page URL on the regenOS web app — the same route scenius-web's
- * ICS feed links to (`/events/<did>/<rkey>`). Null when REGENOS_WEB_URL is
- * unset: we'd rather render an unlinked event than a broken link.
+ * The event's page **on regenhub.xyz** — `/events/<did>/<rkey>`, served by
+ * `app/events/[did]/[rkey]/page.tsx`.
+ *
+ * This used to point at REGENOS_WEB_URL (scenius.social). Per Aaron: regenhub.xyz
+ * is the whole experience, so an event link must never leave the site. The route
+ * shape is deliberately the same one scenius-web uses, so an old link and a new
+ * one are the same path under a different origin.
+ *
+ * Env-independent — the only reason for null is an AT-URI we can't split.
  */
 function eventUrl(atUri: string): string | null {
-  const webBase = process.env.REGENOS_WEB_URL?.trim().replace(/\/+$/, "");
-  if (!webBase) return null;
   const parts = splitAtUri(atUri);
   if (!parts) return null;
-  return `${webBase}/events/${encodeURIComponent(parts.did)}/${parts.rkey}`;
+  return `/events/${encodeURIComponent(parts.did)}/${parts.rkey}`;
 }
 
 /**
@@ -127,6 +146,124 @@ export async function fetchUpcomingRegenosEvents(daysAhead = 21): Promise<Regeno
   } catch (err) {
     console.warn("[regenOS] getEvents failed — skipping events:", err);
     return [];
+  }
+}
+
+/** A public street address on an event, as the detail page shows it. */
+export interface RegenosEventLocation {
+  /** The venue's name, e.g. "RegenHub". */
+  name?: string;
+  street?: string;
+  locality?: string;
+  region?: string;
+  postalCode?: string;
+}
+
+/** One public event, whole — what `/events/<did>/<rkey>` renders. */
+export interface RegenosEventDetail {
+  uri: string;
+  did: string;
+  rkey: string;
+  name: string;
+  /** ISO start, or null for an event with no time set. */
+  startAt: string | null;
+  endAt: string | null;
+  /** The full description — the detail page doesn't clamp it. */
+  description: string | null;
+  /** The public address, when the event carries one (only an `exact` public face does). */
+  location: RegenosEventLocation | null;
+  /** The host's display name off the event's own repo DID, when the AppView has it indexed. */
+  hostName: string | null;
+}
+
+/** Pull the `community.lexicon.location.address` face out of an event's `locations` array. */
+function publicAddress(value: CalendarEventValue): RegenosEventLocation | null {
+  const address = (value.locations ?? []).find(
+    (l) => l?.$type === "community.lexicon.location.address",
+  );
+  if (!address) return null;
+  const location: RegenosEventLocation = {
+    name: address.name,
+    street: address.street,
+    locality: address.locality,
+    region: address.region,
+    postalCode: address.postalCode,
+  };
+  // A `rough` public face publishes an H3 cell and no address fields at all; an
+  // all-empty address is nothing to show, so say so rather than render a blank.
+  return Object.values(location).some((v) => v && v.trim()) ? location : null;
+}
+
+/**
+ * One public event by `did`/`rkey`, for the in-site detail page.
+ *
+ * Wire contract (regenOS `main`, crates/regenos-appview/src/xrpc/event.rs `get_event`):
+ *   GET {base}/xrpc/social.scenius.getEvent?uri=at://<did>/community.lexicon.calendar.event/<rkey>
+ *     → { uri, cid, value, visibility: "public" | "private", hostName? }
+ *
+ * We call it **anonymously**, exactly like `getEvents`. The handler is the
+ * visibility-routed getRecord adapter: a PUBLIC summary reads for anyone
+ * including an anonymous caller; a PRIVATE one 401s an anonymous caller and
+ * never leaks that it exists. So an anonymous 4xx and "no such event" are the
+ * same answer to us — `null` — which is precisely what a public page should say.
+ *
+ * We ALSO refuse a non-`public` visibility defensively: this page has no viewer,
+ * so anything the AppView classified as private has no business on it.
+ *
+ * Returns null on any failure and never throws — same contract as everything
+ * else in this module.
+ */
+export async function fetchPublicRegenosEvent(
+  did: string,
+  rkey: string,
+): Promise<RegenosEventDetail | null> {
+  const base = regenosBaseUrl();
+  if (!base || !isRegenosEventsConfigured()) return null;
+  if (!did.startsWith("did:") || !rkey) return null;
+
+  const atUri = `at://${did}/${EVENT_COLLECTION}/${rkey}`;
+  const url = new URL(`${base}/xrpc/social.scenius.getEvent`);
+  url.searchParams.set("uri", atUri);
+
+  try {
+    const res = await fetch(url, {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(REGENOS_TIMEOUT_MS),
+      // Viewer-independent (we send no credentials), so a short shared cache is honest.
+      next: { revalidate: 300 },
+    });
+    if (!res.ok) {
+      // 404 unknown, 401 anonymous-on-private — both mean "not a public event".
+      if (res.status !== 404 && res.status !== 401) {
+        console.warn(`[regenOS] getEvent returned ${res.status} — treating as not found`);
+      }
+      return null;
+    }
+
+    const data = (await res.json()) as {
+      uri?: string;
+      value?: CalendarEventValue;
+      visibility?: string;
+      hostName?: string;
+    };
+    const v = data.value;
+    if (!v?.name) return null;
+    if (data.visibility && data.visibility !== "public") return null;
+
+    return {
+      uri: data.uri ?? atUri,
+      did,
+      rkey,
+      name: v.name,
+      startAt: v.startsAt ?? null,
+      endAt: v.endsAt ?? null,
+      description: v.description ?? null,
+      location: publicAddress(v),
+      hostName: data.hostName ?? null,
+    };
+  } catch (err) {
+    console.warn("[regenOS] getEvent failed — treating as not found:", err);
+    return null;
   }
 }
 

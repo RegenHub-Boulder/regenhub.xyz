@@ -64,11 +64,11 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
                   Try a Free Day
                 </Button>
               </Link>
-              <a href="https://lu.ma/regenhub" target="_blank" rel="noopener noreferrer">
+              <Link href="/events">
                 <Button className="btn-glass px-8 py-3 text-lg">
                   View Events
                 </Button>
-              </a>
+              </Link>
             </div>
             {signedInMember ? (
               <p className="mt-6 text-sm text-muted">
@@ -242,9 +242,9 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
                 <Link href="/freeday">
                   <Button className="btn-primary-glass px-6">Try a Free Day</Button>
                 </Link>
-                <a href="https://lu.ma/regenhub" target="_blank" rel="noopener noreferrer">
+                <Link href="/events">
                   <Button className="btn-glass px-6">View All Events</Button>
-                </a>
+                </Link>
               </div>
             </CardContent>
           </Card>
@@ -272,7 +272,7 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
                 { label: "Apply", href: "/apply", external: false },
                 { label: "Stay in Touch", href: "/interest", external: false },
                 { label: "Dispatches", href: "/news", external: false },
-                { label: "Events", href: "https://lu.ma/regenhub", external: true },
+                { label: "Events", href: "/events", external: false },
                 { label: "Portal", href: "/portal", external: false },
               ].map(({ label, href, external }) => (
                 <Button key={label} variant="ghost" size="sm" className="btn-glass" asChild>

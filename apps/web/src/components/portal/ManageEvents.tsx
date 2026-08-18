@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { CalendarPlus, Loader2, Lock, Globe, Pencil, Trash2, X, ExternalLink } from "lucide-react";
+import { CalendarPlus, Loader2, Lock, Globe, Pencil, Trash2, X, ArrowRight } from "lucide-react";
 import {
   EMPTY_EVENT_FORM,
   buildCreateEventInput,
@@ -361,15 +362,15 @@ function EventList({
                   )}
                 </div>
                 <p className="text-sm text-muted mt-0.5">{formatWhen(event.startAt)}</p>
-                {event.url && (
-                  <a
+                {/* In-site now (`/events/<did>/<rkey>`), so a plain internal link — and only for a
+                    PUBLIC event, since the public page 404s anything the AppView keeps private. */}
+                {event.url && event.visibility === "public" && (
+                  <Link
                     href={event.url}
-                    target="_blank"
-                    rel="noreferrer"
                     className="text-xs text-sage hover:text-sage/80 inline-flex items-center gap-1 mt-1"
                   >
-                    Public page <ExternalLink className="w-3 h-3" />
-                  </a>
+                    View event page <ArrowRight className="w-3 h-3" />
+                  </Link>
                 )}
               </div>
               <div className="flex gap-2 shrink-0">
