@@ -1,4 +1,6 @@
 import { LoginForm } from "@/components/auth/LoginForm";
+import { RegenosLoginPanel } from "@/components/auth/RegenosLoginPanel";
+import { isRegenosLoginEnabled } from "@/lib/regenos/config";
 
 export const metadata = { title: "Sign In — RegenHub" };
 
@@ -19,6 +21,10 @@ export default async function LoginPage({ searchParams }: PageProps) {
   // Only honor next params that look like internal paths to avoid open redirects.
   const safeNext = params.next && /^\/[a-zA-Z0-9_\-/?=&]*$/.test(params.next) ? params.next : undefined;
 
+  // Phase 2 one-login, default OFF. When off this page is byte-identical to
+  // what it has always been: the Supabase one-time-link form and nothing else.
+  const regenosEnabled = isRegenosLoginEnabled();
+
   return (
     <div className="min-h-screen flex items-center justify-center px-6">
       <div className="w-full max-w-md">
@@ -26,10 +32,31 @@ export default async function LoginPage({ searchParams }: PageProps) {
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-forest mb-2">Member Portal</h1>
             <p className="text-muted text-sm">
-              Enter your email — we&apos;ll send a one-time sign-in link. Check your inbox (and spam folder, just in case).
+              {regenosEnabled
+                ? "Sign in with your membership email. Check your inbox (and spam folder, just in case)."
+                : "Enter your email — we'll send a one-time sign-in link. Check your inbox (and spam folder, just in case)."}
             </p>
           </div>
-          <LoginForm initialBanner={banner} next={safeNext} />
+
+          {regenosEnabled ? (
+            <>
+              <RegenosLoginPanel next={safeNext} />
+              {/* regenOS is THE login. The classic lane stays reachable for the
+                  whole transition — a regenOS outage must never lock a member
+                  out of their door — but it no longer shares the stage. It
+                  auto-opens when a failed-link banner needs showing. */}
+              <details className="mt-6" open={!!banner}>
+                <summary className="text-xs text-muted text-center cursor-pointer list-none hover:text-forest transition-colors">
+                  Having trouble signing in?
+                </summary>
+                <div className="mt-4">
+                  <LoginForm initialBanner={banner} next={safeNext} />
+                </div>
+              </details>
+            </>
+          ) : (
+            <LoginForm initialBanner={banner} next={safeNext} />
+          )}
         </div>
       </div>
     </div>

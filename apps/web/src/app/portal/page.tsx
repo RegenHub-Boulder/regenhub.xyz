@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import Link from "next/link";
-import { Key, Ticket, User, ClipboardList, CheckCircle, Clock, MessageCircle, Zap, Calendar, ArrowRight, AlertCircle } from "lucide-react";
+import { Key, Ticket, User, ClipboardList, CheckCircle, Clock, MessageCircle, Zap, Calendar, CalendarDays, ArrowRight, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import HubEssentials from "@/components/portal/HubEssentials";
 import InviteCard from "@/components/portal/InviteCard";
@@ -15,6 +15,7 @@ import { DayPassRedemptionHero } from "@/components/portal/DayPassRedemptionHero
 import { MembershipStatusCard } from "@/components/portal/MembershipStatusCard";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { planLabel, getPlan } from "@/lib/plans";
+import { isRegenosLoginEnabled } from "@/lib/regenos/config";
 
 export default async function PortalPage() {
   const supabase = await createClient();
@@ -410,6 +411,19 @@ export default async function PortalPage() {
             </CardContent>
           </Card>
         </Link>
+
+        {/* Flag-gated only — steward-ness is a regenOS read the page itself does. */}
+        {isRegenosLoginEnabled() && (
+          <Link href="/portal/events">
+            <Card className="glass-panel hover-lift cursor-pointer">
+              <CardContent className="p-6">
+                <CalendarDays className="w-8 h-8 text-sage mb-3" />
+                <h3 className="font-semibold mb-1">Manage Events</h3>
+                <p className="text-sm text-muted">Create and edit the collective&apos;s calendar</p>
+              </CardContent>
+            </Card>
+          </Link>
+        )}
 
         {member.is_coop_member && <InviteCard />}
       </div>

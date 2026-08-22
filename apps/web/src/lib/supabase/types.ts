@@ -93,6 +93,7 @@ export interface Database {
           email: string | null;
           telegram_username: string | null;
           ethereum_address: string | null;
+          did: string | null;
           nfc_key_address: string | null;
           pin_code: string | null;
           pin_code_slot: number | null;
@@ -123,6 +124,7 @@ export interface Database {
           email?: string | null;
           telegram_username?: string | null;
           ethereum_address?: string | null;
+          did?: string | null;
           nfc_key_address?: string | null;
           pin_code?: string | null;
           pin_code_slot?: number | null;

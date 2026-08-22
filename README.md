@@ -46,6 +46,7 @@ The Stripe, Telegram, and Home Assistant blocks in `.env.example` are optional f
 - Without Stripe vars set, the webhook route returns 400 — fine if you're not exercising checkout flow.
 - Without `TELEGRAM_*`, the freeday activate route still works, just doesn't post to the group.
 - Without `HA_*`, every lock-programming route fails with a 502. Stub them out to a fake URL/token if you want to bypass without setting up HA.
+- Without `REGENOS_*`, the landing page shows the Luma events embed exactly as it always has and the regenOS login lane stays hidden. See "Running against a local regenOS" below.
 
 `apps/web/.env.production` is committed — it holds the public build-time values for the deployed Coolify build. Don't put dev values there.
 
@@ -66,6 +67,39 @@ pnpm --filter bot build
 ```
 
 The bot uses Telegram long-polling — only one process can poll a given bot token at a time. Use a separate dev bot (create one with @BotFather) so you don't fight the production poller.
+
+### Running against a local regenOS
+
+[regenOS](https://github.com/irlfund/regenOS) backs the public events calendar and (behind a flag)
+the login lane. Both are off unless you configure them — see the `regenOS` block in
+`apps/web/.env.example` and the "regenOS integration" section of `CLAUDE.md`.
+
+In the regenOS checkout:
+
+```bash
+docker compose up -d db                      # Postgres on :5432
+brew install onnxruntime                     # REQUIRED on macOS or the AppView hangs at boot
+
+DATABASE_URL='postgres://postgres:postgres@localhost:5432/regenos' \
+REGENOS_OPERATOR_K256_HEX="$(openssl rand -hex 32)" \
+REGENOS_DEK_B64="$(openssl rand -base64 32)" \
+BIND_ADDR=127.0.0.1:8080 AUTH_MODE=beta HANDLE_DOMAIN=test ALLOWED_ORIGIN= \
+PDS_MODE=inmemory ORT_DYLIB_PATH=/opt/homebrew/lib/libonnxruntime.dylib \
+cargo run --bin regenos-appview              # migrations run on boot
+
+node scripts/seed-dev.mjs                    # a collective + events, via the beta signup door
+```
+
+Then point this app at it:
+
+```bash
+REGENOS_BASE_URL=http://localhost:8080
+REGENOS_COLLECTIVE_DID=did:plc:...           # printed by seed-dev.mjs
+REGENOS_LOGIN_ENABLED=true                   # optional — the login lane
+```
+
+`AUTH_MODE=beta` mints a session on `beginSignup` with no email round-trip, which is what makes the
+login lane testable locally. Production regenOS runs `AUTH_MODE=email`.
 
 ## Deployment
 

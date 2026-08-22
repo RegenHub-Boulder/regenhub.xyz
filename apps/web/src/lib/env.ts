@@ -29,6 +29,11 @@ const OPTIONAL_BUT_WARN = [
   "TELEGRAM_GROUP_CHAT_ID",
   // Cron auth — past-due sweep returns 503 without it
   "CRON_SECRET",
+  // regenOS AppView — without it the landing page falls back to the Luma
+  // embed and the one-login lane stays off no matter what the flag says.
+  "REGENOS_BASE_URL",
+  // The RegenHub collective's DID — without it there is no calendar to read.
+  "REGENOS_COLLECTIVE_DID",
 ] as const;
 
 let validated = false;

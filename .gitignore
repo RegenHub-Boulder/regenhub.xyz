@@ -30,3 +30,5 @@ Thumbs.db
 
 # Archive (old Vite app)
 _archive/
+supabase/.branches/
+supabase/.temp/
