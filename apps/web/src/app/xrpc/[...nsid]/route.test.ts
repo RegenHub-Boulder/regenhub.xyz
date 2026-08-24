@@ -59,6 +59,20 @@ describe("xrpc proxy allowlist", () => {
     expect(upstream).toHaveBeenCalledOnce();
   });
 
+  it("forwards checkHandle (GET) — the /login wizard's availability probe", async () => {
+    const res = await GET(req("social.scenius.checkHandle", "GET"), ctx("social.scenius.checkHandle"));
+    expect(res.status).toBe(200);
+    expect(upstream).toHaveBeenCalledOnce();
+    expect(upstream.mock.calls[0][0]).toBe("https://appview.test/xrpc/social.scenius.checkHandle");
+  });
+
+  it("404s checkHandle when the login flag is off", async () => {
+    vi.mocked(isRegenosLoginEnabled).mockReturnValue(false);
+    const res = await GET(req("social.scenius.checkHandle", "GET"), ctx("social.scenius.checkHandle"));
+    expect(res.status).toBe(404);
+    expect(upstream).not.toHaveBeenCalled();
+  });
+
   it("forwards beginOAuth (POST)", async () => {
     const res = await POST(req("social.scenius.beginOAuth"), ctx("social.scenius.beginOAuth"));
     expect(res.status).toBe(200);
