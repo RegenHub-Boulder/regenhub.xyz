@@ -195,6 +195,18 @@ the session + RLS substrate. Two doors, same finish:
 - **Email bridge** (`RegenosLoginPanel.tsx`'s magic-link form) — proves identity by email possession
   instead of real OAuth; kept as a second door, not superseded. Its
   `beginSignup`/`checkEmail`/`chooseHandle` stages are unchanged by the OAuth addition.
+- **`/login?token=…`** (`app/login/page.tsx` + `components/auth/MagicLinkWizard.tsx`) — the landing
+  page for the link regenOS EMAILS, and the second half of that same wizard. Prod regenOS runs email
+  mode, so an address it doesn't know comes back `checkEmail` (not the beta-mode `chooseHandle`
+  `RegenosLoginPanel` was written against) and mails `<app_base_url>/login?token=…`; with regenhub.xyz
+  as that base the link lands here. The wizard runs `verifySignup` (redeems the token, bound to the
+  `__Host-rs_pending` cookie `beginSignup` set on this origin — so a link opened on a *different*
+  device can't resume) → handle step (18 chars, `[a-z0-9-]`, **never pre-filled from the email**,
+  debounced `checkHandle` probe that never blocks on its own failures) → `setSignupProfile` →
+  `createCustodialAccount` (this is what lands `__Host-rs_session`) → the same
+  `POST /api/auth/regenos/session` handoff. Wire contract + validation live in
+  `lib/regenos/signupWizard.ts` (pure + unit-tested; vitest here is node-env with no jsdom). Flag off
+  or no `token` ⇒ redirect to `/auth/login`.
 
 Both doors land the AppView's session cookie on this origin then call the one shared handoff:
 

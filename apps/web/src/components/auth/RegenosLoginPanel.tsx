@@ -129,8 +129,13 @@ export function RegenosLoginPanel({ next = "/portal" }: { next?: string }) {
     } else if (data.stage === "checkEmail") {
       setStage("checkEmail");
     } else {
-      // "chooseHandle" — regenOS has no account for this email yet. Creating one
-      // is a signup wizard, not a login surface; the classic lane is the answer.
+      // "chooseHandle" — regenOS has no account for this email yet AND trusted
+      // the address without an inbox round-trip. That's BETA mode; PROD runs
+      // email mode, where a new address comes back "checkEmail" above and the
+      // emailed link lands on `/login?token=…` (`app/login/page.tsx`), which
+      // finishes the signup wizard in-app. So this branch is the beta-only
+      // tail: creating an account inline is a wizard, not a login surface, and
+      // the classic lane is the answer.
       setStage("noAccount");
     }
   }

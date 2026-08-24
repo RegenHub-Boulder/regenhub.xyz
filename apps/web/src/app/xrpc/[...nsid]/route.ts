@@ -39,6 +39,8 @@ export const runtime = "nodejs";
  *   cookie the magic-link lane lands. Same trust posture as the rest of this
  *   list — the AppView does the real verification, this proxy only carries
  *   the cookie onto regenhub.xyz's origin.
+ * - checkHandle — the /login wizard's live availability probe; a read-only,
+ *   pre-auth, PUBLIC AppView method (it answers anonymous callers by design)
  * - getSession / getMyContactPref — whoami, read by the browser for UI state
  * - createEvent / updateEvent / deleteEvent — /portal/events, the stewards'
  *   in-portal calendar. These are the only WRITES on the list; each one is
@@ -51,6 +53,7 @@ const ALLOWED_NSIDS = new Set([
   "social.scenius.setSignupProfile",
   "social.scenius.createCustodialAccount",
   "social.scenius.verifyEmail",
+  "social.scenius.checkHandle",
   "social.scenius.beginOAuth",
   "social.scenius.oauthCallback",
   "social.scenius.getSession",
