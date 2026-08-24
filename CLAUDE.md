@@ -41,6 +41,8 @@ The `.dockerignore` has an exception (`!**/.env.production`) so the file is avai
 | `HA_LOCK_ENTITIES` | Web + Bot (runtime) | Comma-separated Z-Wave entity IDs, e.g. `lock.front_door_lock,lock.back_door_lock` |
 | `SUPABASE_URL` | Bot (runtime) | |
 | `SUPABASE_SERVICE_ROLE_KEY` | Bot (runtime) | Bypasses RLS |
+| `SUPABASE_DB_URL` | Web (runtime) | Full `postgres://` connection string (supabase_admin role, host-exposed Postgres port on compute-1). **Only** used by the MCP's `list_migrations`/`run_migration`. Unset = those two tools report "not configured" and everything else is unaffected. |
+| `MIGRATIONS_DIR` | Web (runtime) | Optional override for where `supabase/migrations/` lives. The Dockerfile copies it into the image and `lib/migrations.ts` finds it from either possible cwd — you shouldn't need this. |
 | `TELEGRAM_BOT_TOKEN` | Bot (runtime) | |
 | `REGENOS_BASE_URL` | Web (runtime) | regenOS AppView base URL, no trailing slash. Unset = events fall back to the Luma embed and one-login stays off. |
 | `REGENOS_COLLECTIVE_DID` | Web (runtime) | The RegenHub collective's `did:plc:…`. Required alongside the base URL for the events swap. |
@@ -112,7 +114,13 @@ curl "http://192.168.1.200:8000/api/v1/deployments/<dep-uuid>" \
 ```
 
 ### Run a DB migration
-Connect via postgres Docker container on compute-1 (see DEPLOYMENT.md).
+**Primary path is the MCP** — no SSH, no psql. Merge the new `NNN_name.sql`, redeploy web
+(the file has to be *in the image*), then from an MCP client:
+`list_migrations()` to see what's pending → `run_migration("NNN_name.sql")` for the
+lowest-numbered pending one. Each apply is one transaction and writes a `schema_migrations`
+row (migration 043), so there's finally a record of what ran, when, and who ran it.
+Fallback (MCP down, or the migration itself broke): psql against the container on compute-1 —
+see DEPLOYMENT.md "Run migrations".
 
 ### Membership application flow (approve + notify)
 `/apply` (sign-in required) → `/api/portal/application` upserts the application, emails the
@@ -262,11 +270,25 @@ MCP changes, just redeploy the web app.
 - **Code:** OAuth core in `apps/web/src/lib/mcp/oauth.ts`, metadata in `metadata.ts`, tool surface +
   transport in `server.ts`; routes under `apps/web/src/app/{mcp,oauth,.well-known}`. Scopes
   (`read/deploy/locks/migrate`) are wired for the planned per-tier surface (members → day codes,
-  admins → events/members, ops → dangerous tools).
+  admins → events/members, ops → dangerous tools). MCP clients aren't required to *request* a
+  scope and ours don't, so `createAuthorizationCode` expands an empty request to the full set,
+  and `hasScope()` (metadata.ts) treats an empty scope list as a full grant — entry is already
+  `is_ops_admin`-only, so an unscoped token is an ops token, and tokens minted before scopes were
+  enforced keep working.
 - **Tools:** `ping`; `save_newsletter_draft(issue_key, subject, markdown_body)` (upserts a
   `newsletter_issues` draft via the server-side service client — the whole point: no secrets on the
-  caller's machine). To add a tool: register it in `server.ts` (zod input shape), redeploy web; the
-  client auto-reconnects and picks up the new tool (bump `SERVER_VERSION` to confirm the rollout).
+  caller's machine); `audit_approvals` / `send_checkout_email`; `list_migrations` and
+  `run_migration(filename)` (scope `migrate`, see below). To add a tool: register it in `server.ts`
+  (zod input shape), redeploy web; the client auto-reconnects and picks up the new tool (bump
+  `SERVER_VERSION` to confirm the rollout).
+- **Migrations over MCP** (`lib/migrations.ts` + `lib/mcp/migrationTools.ts`): `list_migrations` is
+  read-only (applied rows, pending files, checksum drift, whether `SUPABASE_DB_URL` is set);
+  `run_migration("NNN_name.sql")` applies exactly the named file in one transaction and writes the
+  `schema_migrations` ledger row. Deliberate constraints: the filename is explicit (no "run all"),
+  only the **lowest-numbered pending** file may run, applied migrations never re-run, and if the
+  ledger table doesn't exist yet the only permitted file is `043_schema_migrations.sql` — the
+  bootstrap. Drift (a file edited after it was applied) is reported loudly and never auto-fixed.
+  The SQL ships in the Docker image, so **deploy first, then run the migration.**
 
 ## Important Notes
 - **NEVER restart Supabase via Coolify.** Coolify regenerates ALL `SERVICE_PASSWORD_*` values on restart — but the DB volume retains the old passwords. This breaks every service. If it happens, see the password fix procedure in DEPLOYMENT.md.

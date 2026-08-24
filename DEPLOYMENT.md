@@ -62,7 +62,43 @@ ssh steward@regenhub-compute-1.lan \
 ```
 
 ### Run migrations
-Migrations live in `supabase/migrations/`. To apply:
+
+Migrations live in `supabase/migrations/` as `NNN_name.sql`. **The primary path is now the
+MCP** (`https://regenhub.xyz/mcp`) — no SSH, no LAN, no psql. Migration `043_schema_migrations.sql`
+added a `schema_migrations` ledger, so what has and hasn't been applied is a fact you can read
+instead of a thing you remember. (Before it, there was no record at all — which is how 042 got
+merged, deployed, and never applied.)
+
+**Normal flow**
+
+1. Merge the migration and **redeploy the web app**. The SQL ships inside the image
+   (`apps/web/Dockerfile` copies `supabase/migrations/`), so a file that isn't deployed can't be run.
+2. `list_migrations()` — shows applied rows (filename / when / who), pending files, and any
+   checksum drift.
+3. `run_migration("044_whatever.sql")` — applies exactly that file, in one transaction, and writes
+   the ledger row with your email as `applied_by`.
+
+The rules it enforces, deliberately: the filename is explicit (there is no "run all"); only the
+**lowest-numbered pending** migration may run; an applied migration never re-runs; and a file
+edited after it was applied is reported as drift and never silently reconciled.
+
+**One-time setup (do this once, in this order)**
+
+1. In Coolify → web app → Environment Variables, set `SUPABASE_DB_URL` to a full connection
+   string for the host-exposed Postgres port on compute-1, using the `supabase_admin` role
+   (it needs DDL rights that `postgres` via PgBouncer may not have):
+   `postgres://supabase_admin:<password>@192.168.1.200:<exposed-port>/postgres`.
+   Get the password with the "Get credentials from running container" snippet below.
+2. Redeploy web. Until then `list_migrations` will honestly report *"migrations are not configured
+   on this deployment"* — it never crashes and never blocks the rest of the MCP.
+3. `run_migration("043_schema_migrations.sql")` — the bootstrap. Before the ledger table exists
+   this is the *only* file `run_migration` will accept. It creates `schema_migrations` and seeds
+   001–043 as already-applied (checksum `NULL` = baseline, applied before there was a ledger),
+   including itself.
+4. `list_migrations()` again to confirm: 43 applied, 0 pending.
+
+**Fallback (MCP is down, or a migration failed mid-way)**
+
 ```bash
 # From compute-2 (has LAN access)
 PGPASSWORD=<db-password> psql \
@@ -72,6 +108,12 @@ PGPASSWORD=<db-password> psql \
 ```
 
 Or via the Supabase Studio UI at `https://supabase-studio-w8gw0wc80o80c0c8g88kk8og.regenhub.build`.
+
+If you apply one by hand, **record it** so the ledger stays true:
+```sql
+insert into schema_migrations (filename, checksum, applied_by)
+values ('044_whatever.sql', null, 'manual');
+```
 
 ### Get credentials from running container
 ```bash
@@ -184,6 +226,7 @@ If a migration was pending when the outage hit, apply it directly with `psql` (S
 sudo docker exec supabase-db-w8gw0wc80o80c0c8g88kk8og \
   psql -U supabase_admin -d postgres -f - < supabase/migrations/0XX_whatever.sql
 ```
+Then record it in the ledger (see "Run migrations") so `list_migrations` doesn't report it as pending.
 
 ### Recovery: Kong consumer keys stale (`Invalid authentication credentials`)
 

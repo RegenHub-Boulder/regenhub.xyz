@@ -3,6 +3,24 @@
 
 export const MCP_SCOPES = ["read", "deploy", "locks", "migrate"] as const;
 
+export type McpScope = (typeof MCP_SCOPES)[number];
+
+/**
+ * Does this token carry `scope`?
+ *
+ * An EMPTY scope list means "everything". MCP clients aren't required to send a
+ * `scope` parameter and the ones we use don't — `/oauth/authorize` passes
+ * through whatever arrived, so every token issued before scopes were enforced
+ * has `scopes: []`. Entry to the MCP is already gated on `is_ops_admin`
+ * (re-checked live), so an unscoped token is a full ops grant, not a
+ * privilege-free one. `createAuthorizationCode` now expands an empty request to
+ * the full set so new tokens say so explicitly; this keeps the old ones working.
+ */
+export function hasScope(scopes: string[] | undefined, scope: McpScope): boolean {
+  if (!scopes || scopes.length === 0) return true;
+  return scopes.includes(scope);
+}
+
 export function siteOrigin(): string {
   return (process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz").replace(/\/$/, "");
 }
