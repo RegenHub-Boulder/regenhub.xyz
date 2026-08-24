@@ -31,6 +31,9 @@ import { REGENOS_TIMEOUT_MS, regenosBaseUrl } from "./config";
 /** The regenOS session cookie the AppView sets. `__Host-` ⇒ host-scoped, no Domain. */
 export const REGENOS_SESSION_COOKIE = "__Host-rs_session";
 
+/** The signup wizard's in-progress cookie (`beginSignup` → `verifySignup`), same `__Host-` scoping. */
+export const REGENOS_PENDING_COOKIE = "__Host-rs_pending";
+
 export interface RegenosIdentity {
   did: string;
   handle: string | null;
@@ -97,6 +100,36 @@ export async function fetchRegenosIdentity(cookieHeader: string): Promise<Regeno
     handle: session.handle ?? null,
     email: verifiedEmail?.address?.trim().toLowerCase() ?? null,
   };
+}
+
+/**
+ * Best-effort server-side logout — tells the AppView to revoke the session
+ * behind a `__Host-rs_session` cookie, so RegenHub sign-out (app/auth/signout/route.ts)
+ * ends the regenOS side too, not just the local cookie. Without this, the
+ * AppView still considers the session live even after we've stopped sending
+ * the cookie back — a low-severity gap (whoever holds the browser is gone
+ * either way), but "sign out" should mean it everywhere.
+ *
+ * Same posture as `xrpcGet`: a timeout, a non-2xx, or a network error is
+ * swallowed and warned, never thrown. Sign-out must never fail because
+ * regenOS is slow or down.
+ */
+export async function revokeRegenosSession(cookieHeader: string): Promise<void> {
+  const base = regenosBaseUrl();
+  if (!base) return;
+  try {
+    const res = await fetch(`${base}/xrpc/social.scenius.logout`, {
+      method: "POST",
+      headers: { cookie: cookieHeader },
+      signal: AbortSignal.timeout(REGENOS_TIMEOUT_MS),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      console.warn(`[regenOS] logout returned ${res.status}`);
+    }
+  } catch (err) {
+    console.warn("[regenOS] logout failed:", err);
+  }
 }
 
 /** The scene roles that may write events, mirroring the AppView's `owner_or_builder` gate. */
