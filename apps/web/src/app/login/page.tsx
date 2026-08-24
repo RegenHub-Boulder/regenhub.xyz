@@ -50,8 +50,10 @@ export default async function MagicLinkLoginPage({ searchParams }: PageProps) {
         <div className="glass-panel-strong p-8">
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-forest mb-2">Almost there</h1>
+            {/* Neutral on purpose: the wizard below hasn't redeemed the token yet,
+                so this header can't claim the email is confirmed. */}
             <p className="text-muted text-sm">
-              Your email is confirmed. Pick a name and we&apos;ll finish setting up your account.
+              One more step — pick a name and we&apos;ll finish setting up your account.
             </p>
           </div>
           <MagicLinkWizard token={token} />
