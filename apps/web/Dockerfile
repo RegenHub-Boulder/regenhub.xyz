@@ -46,6 +46,13 @@ COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static     ./apps/web/.next/static
 COPY --from=builder /app/apps/web/public           ./apps/web/public
 
+# The SQL migrations ship with the app so the MCP's run_migration tool can apply
+# them (lib/migrations.ts). Lands at /app/apps/web/supabase/migrations — the
+# standalone server.js chdir()s into the double-nested /app/apps/web/apps/web,
+# so resolveMigrationsDir() tries both cwd/supabase/migrations and
+# cwd/../../supabase/migrations and finds it either way. MIGRATIONS_DIR overrides.
+COPY supabase/migrations ./supabase/migrations
+
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000

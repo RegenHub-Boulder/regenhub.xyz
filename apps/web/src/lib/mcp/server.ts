@@ -9,9 +9,15 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
 import { sendApplicationCheckoutEmail } from "@/lib/applicationCheckout";
 import { siteOrigin } from "./metadata";
+import {
+  listMigrationsHandler,
+  runMigrationHandler,
+  LIST_MIGRATIONS_DESCRIPTION,
+  RUN_MIGRATION_DESCRIPTION,
+} from "./migrationTools";
 
 const SERVER_NAME = "regenhub";
-const SERVER_VERSION = "0.4.0";
+const SERVER_VERSION = "0.5.0";
 
 /**
  * Build the MCP tool surface. Phase 1 = `ping`. Future tools gate on the caller's
@@ -186,6 +192,21 @@ function buildServer(auth: McpAuthInfo): McpServer {
         }],
       };
     },
+  );
+
+  // ── database migrations (scope: migrate) ──────────────────
+  server.tool("list_migrations", LIST_MIGRATIONS_DESCRIPTION, async () => listMigrationsHandler(auth));
+
+  server.tool(
+    "run_migration",
+    RUN_MIGRATION_DESCRIPTION,
+    {
+      filename: z
+        .string()
+        .regex(/^\d{3}_[a-z0-9_]+\.sql$/, "exact migration filename, e.g. 044_add_thing.sql")
+        .describe("Exact migration filename from supabase/migrations/, e.g. '044_add_thing.sql'"),
+    },
+    async ({ filename }) => runMigrationHandler(auth, filename),
   );
 
   return server;

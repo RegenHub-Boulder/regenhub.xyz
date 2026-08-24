@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { MCP_SCOPES } from "./metadata";
 
 /**
  * OAuth 2.1 server logic for the RegenHub MCP, served in-app at regenhub.xyz.
@@ -78,9 +79,14 @@ export async function createAuthorizationCode(p: {
   const m = await getMember(p.memberId);
   if (!m?.is_ops_admin) throw new OAuthError("access_denied", "not a RegenHub ops-admin", 403);
   const code = randToken();
+  // MCP clients aren't required to ask for scopes, and ours don't — an empty
+  // request would otherwise mint a token that no scope-gated tool accepts.
+  // Entry is already is_ops_admin-only, so consent here IS the full ops grant;
+  // record it explicitly rather than leaving the list blank.
+  const scopes = p.scopes.length > 0 ? p.scopes : [...MCP_SCOPES];
   const { error } = await sb().from("mcp_oauth_codes").insert({
     code_hash: sha256(code), client_id: p.clientId, member_id: p.memberId,
-    code_challenge: p.codeChallenge, redirect_uri: p.redirectUri, scopes: p.scopes,
+    code_challenge: p.codeChallenge, redirect_uri: p.redirectUri, scopes,
     resource: p.resource ?? null, expires_at: new Date(Date.now() + CODE_TTL_SEC * 1000).toISOString(),
   });
   if (error) throw new OAuthError("server_error", "could not persist authorization code", 500);
