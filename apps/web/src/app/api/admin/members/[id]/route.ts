@@ -62,6 +62,12 @@ export async function PATCH(
     if (key in body) update[key] = body[key];
   }
 
+  // Canonical Telegram handle: bare, no "@" (migration 044); display adds it back.
+  if ("telegram_username" in update) {
+    update.telegram_username =
+      String(update.telegram_username ?? "").trim().replace(/^@+/, "") || null;
+  }
+
   // Auto-assign slot + code when upgrading from day_pass to a permanent type
   const newType = update.member_type as string | undefined;
   const isUpgrade =
