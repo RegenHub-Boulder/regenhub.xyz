@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { telegramIlikePatterns } from "./telegram.js";
 
 if (!process.env.SUPABASE_URL) throw new Error("SUPABASE_URL is required");
 if (!process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY is required");
@@ -26,8 +27,14 @@ export type MemberRow = {
 };
 
 export async function findMemberByTelegram(username: string): Promise<MemberRow | null> {
-  const handle = username.startsWith("@") ? username : `@${username}`;
-  const { data } = await db.from("members").select("*").ilike("telegram_username", handle).single();
+  const p = telegramIlikePatterns(username);
+  if (!p) return null;
+  const { data } = await db
+    .from("members")
+    .select("*")
+    .or(`telegram_username.ilike.${p.bare},telegram_username.ilike.${p.withAt}`)
+    .limit(1)
+    .maybeSingle();
   return data ?? null;
 }
 
