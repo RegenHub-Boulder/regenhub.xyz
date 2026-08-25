@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getStripe, getPlan, planLabel } from "@/lib/stripe";
+import { resolveSubscriptionNet } from "@/lib/stripeRetrieveNet";
 import { fulfillPassPurchase } from "@/lib/passFulfillment";
 import { createServiceClient } from "@/lib/supabase/admin";
 import {
@@ -596,31 +597,43 @@ async function upsertSubscription(
     );
   }
 
-  // Pull discount snapshot from the originating application (source of truth
-  // for what admin approved). Stripe v20 returns sub.discounts as bare IDs;
-  // we'd have to retrieve each one. The application has the same info.
+  // Stripe is the source of truth for what's actually charging (checkout
+  // promo codes live on sub.discounts; webhook payloads usually send IDs
+  // so we retrieve+expand). Application snapshot is the fallback for the
+  // note/duration columns when Stripe has no currently-active coupon.
+  const net = await resolveSubscriptionNet(sub, monthlyCents);
+
   let discountSnapshot: {
     cents: number | null;
     duration: "forever" | "repeating" | null;
     months: number | null;
     note: string | null;
   } = { cents: null, duration: null, months: null, note: null };
-  const appIdStr = sub.metadata?.application_id;
-  if (appIdStr) {
-    const appId = parseInt(appIdStr, 10);
-    if (Number.isFinite(appId)) {
-      const { data: app } = await admin
-        .from("applications")
-        .select("discount_cents, discount_duration, discount_months, discount_note")
-        .eq("id", appId)
-        .maybeSingle();
-      if (app) {
-        discountSnapshot = {
-          cents: app.discount_cents,
-          duration: app.discount_duration,
-          months: app.discount_months,
-          note: app.discount_note,
-        };
+  if (net.offCents != null && net.offCents > 0) {
+    discountSnapshot = {
+      cents: net.offCents,
+      duration: net.duration === "once" ? null : net.duration,
+      months: net.durationMonths,
+      note: net.note,
+    };
+  } else {
+    const appIdStr = sub.metadata?.application_id;
+    if (appIdStr) {
+      const appId = parseInt(appIdStr, 10);
+      if (Number.isFinite(appId)) {
+        const { data: app } = await admin
+          .from("applications")
+          .select("discount_cents, discount_duration, discount_months, discount_note")
+          .eq("id", appId)
+          .maybeSingle();
+        if (app) {
+          discountSnapshot = {
+            cents: app.discount_cents,
+            duration: app.discount_duration,
+            months: app.discount_months,
+            note: app.discount_note,
+          };
+        }
       }
     }
   }
@@ -637,6 +650,7 @@ async function upsertSubscription(
     stripe_price_id: priceId,
     plan_key: planKey,
     monthly_cents: monthlyCents,
+    net_cents: net.netCents,
     status,
     current_period_end: currentPeriodEnd,
     cancel_at_period_end: sub.cancel_at_period_end,

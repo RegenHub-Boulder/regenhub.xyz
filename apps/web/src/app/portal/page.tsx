@@ -85,6 +85,7 @@ export default async function PortalPage() {
     | {
         plan_key: string;
         monthly_cents: number;
+        net_cents: number | null;
         status: string;
         cancel_at_period_end: boolean;
         current_period_end: string | null;
@@ -95,7 +96,7 @@ export default async function PortalPage() {
   if (member) {
     const { data } = await supabase
       .from("subscriptions")
-      .select("plan_key, monthly_cents, status, cancel_at_period_end, current_period_end, past_due_since, discount_cents")
+      .select("plan_key, monthly_cents, net_cents, status, cancel_at_period_end, current_period_end, past_due_since, discount_cents")
       .eq("member_id", member.id)
       .in("status", ["active", "trialing", "past_due"])
       .order("created_at", { ascending: false })
@@ -438,7 +439,7 @@ export default async function PortalPage() {
                   Membership
                   {activeSubscription.plan_key && (
                     <span className="text-muted font-normal ml-2 text-sm">
-                      · {planLabel(activeSubscription.plan_key)} · ${activeSubscription.monthly_cents / 100}/mo
+                      · {planLabel(activeSubscription.plan_key)} · ${((typeof activeSubscription.net_cents === "number" ? activeSubscription.net_cents : activeSubscription.monthly_cents) / 100)}/mo
                     </span>
                   )}
                 </h3>

@@ -7,6 +7,7 @@ import type { Application, Member } from "@/lib/supabase/types";
 export type AdminUserSubscription = {
   plan_key: string;
   monthly_cents: number;
+  net_cents: number | null;
   status: string;
   cancel_at_period_end: boolean;
 };
@@ -55,7 +56,7 @@ export async function GET() {
     serviceClient.from("applications").select("*").order("created_at", { ascending: false }),
     supabase
       .from("subscriptions")
-      .select("member_id, plan_key, monthly_cents, status, cancel_at_period_end")
+      .select("member_id, plan_key, monthly_cents, net_cents, status, cancel_at_period_end")
       .in("status", ["active", "trialing", "past_due"]),
   ]);
 
@@ -77,6 +78,7 @@ export async function GET() {
     subByMemberId.set(s.member_id, {
       plan_key: s.plan_key,
       monthly_cents: s.monthly_cents,
+      net_cents: s.net_cents,
       status: s.status,
       cancel_at_period_end: s.cancel_at_period_end,
     });

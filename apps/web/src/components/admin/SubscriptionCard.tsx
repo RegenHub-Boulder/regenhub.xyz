@@ -197,7 +197,15 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
               <span className="text-muted">·</span>
               <span>{planLabel(activeSubscription.plan_key)}</span>
               <span className="text-muted">·</span>
-              <span className="text-foreground">${activeSubscription.monthly_cents / 100}/mo</span>
+              <span className="text-foreground">
+                ${((typeof activeSubscription.net_cents === "number" ? activeSubscription.net_cents : activeSubscription.monthly_cents) / 100)}/mo
+              </span>
+              {typeof activeSubscription.net_cents === "number" &&
+                activeSubscription.net_cents !== activeSubscription.monthly_cents && (
+                  <span className="text-xs text-muted line-through">
+                    ${activeSubscription.monthly_cents / 100}
+                  </span>
+                )}
               {activeSubscription.cancel_at_period_end && (
                 <Badge className="text-xs bg-amber-500/20 text-amber-400 border-amber-500/30">
                   cancels {fmtDate(activeSubscription.current_period_end)}

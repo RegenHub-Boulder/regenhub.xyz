@@ -160,7 +160,7 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
                 ? "bg-red-500/20 text-red-400 border-red-500/30"
                 : "bg-sage/20 text-sage border-sage/30"
             }`}>
-              ${activeSubscription.monthly_cents / 100}/mo {planLabel(activeSubscription.plan_key)}
+              ${(typeof activeSubscription.net_cents === "number" ? activeSubscription.net_cents : activeSubscription.monthly_cents) / 100}/mo {planLabel(activeSubscription.plan_key)}
               {activeSubscription.status === "past_due" && " · past due"}
               {activeSubscription.cancel_at_period_end && " · canceling"}
             </Badge>
