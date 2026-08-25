@@ -33,7 +33,8 @@ export async function POST(request: Request) {
     is_coop_member: is_coop_member ?? false,
     is_admin: is_admin ?? false,
     day_passes_balance: Math.max(0, parseInt(initial_day_passes) || 0),
-    telegram_username: telegram_username || null,
+    // Canonical form is bare (no "@") — see migration 044; display adds it back.
+    telegram_username: String(telegram_username ?? "").trim().replace(/^@+/, "") || null,
     pin_code: assignedPin,
     supabase_user_id: supabase_user_id || null,
     disabled: false,
