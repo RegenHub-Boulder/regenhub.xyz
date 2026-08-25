@@ -9,10 +9,11 @@ import Link from "next/link";
 import { Search, X } from "lucide-react";
 import type { AdminUsersResponse, AdminUser, AdminUserSubscription } from "@/app/api/admin/users/route";
 import type { Member } from "@/lib/supabase/types";
+import { effectiveMonthlyCents } from "@/lib/stripeNet";
 
 function subBadge(sub: AdminUserSubscription | null) {
   if (!sub) return null;
-  const dollars = `$${(sub.monthly_cents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}/mo`;
+  const dollars = `$${(effectiveMonthlyCents(sub) / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}/mo`;
   if (sub.status === "past_due") {
     return (
       <Badge className="text-sm bg-red-500/20 text-red-400 border-red-500/30" title="Payment failed">

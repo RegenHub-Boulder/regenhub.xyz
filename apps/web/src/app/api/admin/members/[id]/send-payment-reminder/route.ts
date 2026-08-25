@@ -44,7 +44,7 @@ export async function POST(
   // Confirm there's a past_due sub to remind about
   const { data: sub } = await admin
     .from("subscriptions")
-    .select("plan_key, monthly_cents, past_due_since")
+    .select("plan_key, monthly_cents, net_cents, past_due_since")
     .eq("member_id", memberId)
     .eq("status", "past_due")
     .order("created_at", { ascending: false })
@@ -66,7 +66,7 @@ export async function POST(
   const tpl = paymentReminderEmail({
     name: member.name,
     planLabel: planLabel(sub.plan_key),
-    monthlyDollars: sub.monthly_cents / 100,
+    monthlyDollars: (typeof sub.net_cents === "number" ? sub.net_cents : sub.monthly_cents) / 100,
     siteUrl,
     daysOverdue,
   });

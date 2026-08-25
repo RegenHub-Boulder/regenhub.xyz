@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Users, Key, Zap, UserPlus, AlertTriangle, ClipboardList, Calendar, DollarSign, Inbox } from "lucide-react";
 import { FunnelCard } from "@/components/admin/FunnelCard";
+import { effectiveMonthlyCents } from "@/lib/stripeNet";
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -62,7 +63,7 @@ export default async function AdminPage() {
     admin.from("free_day_claims").select("*", { count: "exact", head: true }).eq("status", "pending"),
     admin.from("free_day_claims").select("*", { count: "exact", head: true }).eq("status", "reserved"),
     // Subscriptions — only the billable rows (active/trialing/past_due)
-    supabase.from("subscriptions").select("monthly_cents, status").in("status", ["active", "trialing", "past_due"]),
+    supabase.from("subscriptions").select("monthly_cents, net_cents, status").in("status", ["active", "trialing", "past_due"]),
     // Funnel stages — all-time totals
     supabase.from("interests").select("*", { count: "exact", head: true }),
     admin.from("free_day_claims").select("*", { count: "exact", head: true }),
@@ -85,7 +86,7 @@ export default async function AdminPage() {
   const payingCount = subs.length;
   const mrrCents = subs
     .filter((s) => s.status !== "past_due")
-    .reduce((sum, s) => sum + s.monthly_cents, 0);
+    .reduce((sum, s) => sum + effectiveMonthlyCents(s), 0);
   const pastDueCount = subs.filter((s) => s.status === "past_due").length;
 
   const typeBreakdown = [

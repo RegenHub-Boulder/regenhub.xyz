@@ -236,6 +236,7 @@ export interface Database {
           stripe_price_id: string;
           plan_key: PlanKey;
           monthly_cents: number;
+          net_cents: number | null;
           status: StripeSubscriptionStatus;
           current_period_end: string | null;
           cancel_at_period_end: boolean;
@@ -256,6 +257,7 @@ export interface Database {
           stripe_price_id: string;
           plan_key: PlanKey;
           monthly_cents: number;
+          net_cents?: number | null;
           status: StripeSubscriptionStatus;
           current_period_end?: string | null;
           cancel_at_period_end?: boolean;

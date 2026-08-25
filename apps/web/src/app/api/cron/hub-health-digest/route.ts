@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { sendEmail, hubHealthDigestEmail, type HubDigestStats } from "@/lib/email";
 import { logAction } from "@/lib/auditLog";
+import { effectiveMonthlyCents } from "@/lib/stripeNet";
 
 /**
  * POST /api/cron/hub-health-digest
@@ -69,7 +70,7 @@ export async function POST(req: Request) {
     { data: noteRow },
     { data: recipients },
   ] = await Promise.all([
-    admin.from("subscriptions").select("monthly_cents, status").in("status", ["active", "trialing"]),
+    admin.from("subscriptions").select("monthly_cents, net_cents, status").in("status", ["active", "trialing"]),
     admin.from("members").select("*", { count: "exact", head: true }).eq("disabled", false).eq("member_type", "cold_desk"),
     admin.from("members").select("*", { count: "exact", head: true }).eq("disabled", false).eq("member_type", "hot_desk"),
     admin.from("members").select("*", { count: "exact", head: true }).eq("disabled", false).eq("member_type", "hub_friend"),
@@ -84,7 +85,7 @@ export async function POST(req: Request) {
 
   const stats: HubDigestStats = {
     monthLabel,
-    mrrCents: (billingSubs ?? []).reduce((s, r) => s + r.monthly_cents, 0),
+    mrrCents: (billingSubs ?? []).reduce((s, r) => s + effectiveMonthlyCents(r), 0),
     payingMembers: (billingSubs ?? []).length,
     tierCounts: [
       { label: "Cold Desk", count: coldDesk ?? 0 },

@@ -17,6 +17,9 @@ import type { Subscription, Purchase, PassGrant, WebhookEvent } from "@/lib/supa
 import { SendPaymentReminderButton } from "@/components/admin/SendPaymentReminderButton";
 import { CollapsibleSection } from "@/components/admin/CollapsibleSection";
 import { CouponsSection } from "@/components/admin/CouponsSection";
+import { RateLabel } from "@/components/admin/RateLabel";
+import { RefreshNetsButton } from "@/components/admin/RefreshNetsButton";
+import { effectiveMonthlyCents } from "@/lib/stripeNet";
 
 export const metadata = { title: "Billing — Admin" };
 
@@ -113,14 +116,14 @@ export default async function BillingPage() {
   const pastDueSubs = billingSubs.filter((s) => s.status === "past_due");
   const cancelingSubs = billingSubs.filter((s) => s.cancel_at_period_end);
 
-  const mrrCents = activeSubs.reduce((sum, s) => sum + s.monthly_cents, 0);
-  const cancelingCents = cancelingSubs.reduce((sum, s) => sum + s.monthly_cents, 0);
+  const mrrCents = activeSubs.reduce((sum, s) => sum + effectiveMonthlyCents(s), 0);
+  const cancelingCents = cancelingSubs.reduce((sum, s) => sum + effectiveMonthlyCents(s), 0);
   const mrrByPlan = activeSubs.reduce<Record<string, { count: number; cents: number }>>(
     (acc, s) => {
       const k = s.plan_key;
       if (!acc[k]) acc[k] = { count: 0, cents: 0 };
       acc[k].count += 1;
-      acc[k].cents += s.monthly_cents;
+      acc[k].cents += effectiveMonthlyCents(s);
       return acc;
     },
     {},
@@ -142,6 +145,12 @@ export default async function BillingPage() {
       <div>
         <h1 className="text-3xl font-bold text-forest">Billing</h1>
         <p className="text-muted mt-1">Who&apos;s paying, what they&apos;re paying, and what needs attention</p>
+        <p className="text-xs text-muted mt-1">
+          Rates are net of promo codes. List price is struck through when they differ.
+        </p>
+        <div className="mt-3">
+          <RefreshNetsButton />
+        </div>
       </div>
 
       {/* KPI cards */}
@@ -238,7 +247,8 @@ export default async function BillingPage() {
                       <div className="text-right text-xs">
                         <p className="text-red-400">{days != null ? `${days}d past due` : "past due"}</p>
                         <p className="text-muted">
-                          {planLabels[s.plan_key] ?? s.plan_key} · {fmtMoney(s.monthly_cents)}/mo
+                          {planLabels[s.plan_key] ?? s.plan_key} ·{" "}
+                          <RateLabel monthly_cents={s.monthly_cents} net_cents={s.net_cents} className="font-normal" />
                         </p>
                       </div>
                     </Link>
@@ -273,7 +283,8 @@ export default async function BillingPage() {
                   <div className="text-right text-xs">
                     <p className="text-amber-400">Ends {fmtDate(s.current_period_end)}</p>
                     <p className="text-muted">
-                      {planLabels[s.plan_key] ?? s.plan_key} · {fmtMoney(s.monthly_cents)}/mo
+                      {planLabels[s.plan_key] ?? s.plan_key} ·{" "}
+                      <RateLabel monthly_cents={s.monthly_cents} net_cents={s.net_cents} className="font-normal" />
                     </p>
                   </div>
                 </Link>
@@ -311,7 +322,7 @@ export default async function BillingPage() {
                   </thead>
                   <tbody>
                     {billingSubs
-                      .sort((a, b) => b.monthly_cents - a.monthly_cents)
+                      .sort((a, b) => effectiveMonthlyCents(b) - effectiveMonthlyCents(a))
                       .map((s) => (
                         <tr key={s.id} className="border-b border-white/5 hover:bg-white/5">
                           <td className="py-2 pr-4">
@@ -325,7 +336,9 @@ export default async function BillingPage() {
                             )}
                           </td>
                           <td className="py-2 pr-4">{planLabels[s.plan_key] ?? s.plan_key}</td>
-                          <td className="py-2 pr-4 font-medium">{fmtMoney(s.monthly_cents)}/mo</td>
+                          <td className="py-2 pr-4">
+                            <RateLabel monthly_cents={s.monthly_cents} net_cents={s.net_cents} />
+                          </td>
                           <td className="py-2 pr-4">
                             <Badge className={`text-xs ${statusStyle[s.status] ?? "border-white/20"}`}>
                               {s.status}
@@ -349,7 +362,7 @@ export default async function BillingPage() {
               {/* Mobile cards */}
               <div className="space-y-3 sm:hidden">
                 {billingSubs
-                  .sort((a, b) => b.monthly_cents - a.monthly_cents)
+                  .sort((a, b) => effectiveMonthlyCents(b) - effectiveMonthlyCents(a))
                   .map((s) => (
                     <Link
                       key={s.id}
@@ -358,7 +371,7 @@ export default async function BillingPage() {
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="font-medium text-sm">{s.members?.name ?? "(unknown)"}</p>
-                        <p className="font-semibold text-sm">{fmtMoney(s.monthly_cents)}/mo</p>
+                        <RateLabel monthly_cents={s.monthly_cents} net_cents={s.net_cents} className="text-sm" />
                       </div>
                       <div className="flex items-center gap-2 text-xs text-muted">
                         <Badge className={`text-xs ${statusStyle[s.status] ?? "border-white/20"}`}>{s.status}</Badge>
