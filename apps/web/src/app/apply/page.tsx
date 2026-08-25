@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { LoginForm } from "@/components/auth/LoginForm";
 import ApplyForm from "./ApplyForm";
 import regenHubFull from "@/assets/regenhub-full.svg";
+import { isSyntheticEmail } from "@/lib/regenos/syntheticEmail";
 
 export const metadata: Metadata = {
   title: "Apply for Membership — RegenHub",
@@ -75,7 +76,10 @@ export default async function ApplyPage() {
 
   return (
     <>
-      <ApplyForm authenticatedEmail={user.email!} initial={initial} />
+      <ApplyForm
+        authenticatedEmail={user.email && !isSyntheticEmail(user.email) ? user.email : ""}
+        initial={initial}
+      />
       <div className="px-6 pb-12 -mt-4">
         <p className="text-center text-xs text-muted max-w-md mx-auto">
           Want to try it first?{" "}

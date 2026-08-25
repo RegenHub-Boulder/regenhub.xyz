@@ -144,12 +144,14 @@ describe("finishSession", () => {
   });
 
   it("surfaces the handoff's own error, and never redirects on ok:false", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(json({ ok: false, error: "No verified email on that account." }, 400));
+    const fetchImpl = vi.fn().mockResolvedValue(
+      json({ ok: false, error: "This membership is already linked to a different regenOS identity." }, 409),
+    );
 
     await expect(finishSession(fetchImpl)).resolves.toEqual({
       ok: false,
       reason: "rejected",
-      message: "No verified email on that account.",
+      message: "This membership is already linked to a different regenOS identity.",
     });
   });
 });

@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { isRegenosLoginEnabled } from "@/lib/regenos/config";
-import { fetchRegenosIdentity } from "@/lib/regenos/auth";
+import { fetchRegenosIdentity, type RegenosIdentity } from "@/lib/regenos/auth";
+import { syntheticEmailForDid } from "@/lib/regenos/syntheticEmail";
+import { writeDid } from "@/lib/regenos/writeDid";
 
 /**
  * POST /api/auth/regenos/session — the one-login handoff.
@@ -10,11 +12,10 @@ import { fetchRegenosIdentity } from "@/lib/regenos/auth";
  * The caller already holds a live regenOS session cookie on this origin (set
  * by the /xrpc proxy). This route turns that into a RegenHub session:
  *
- *   1. ask regenOS who the caller is (DID + the VERIFIED login-anchor email —
- *      see lib/regenos/auth.ts for why that email is trustworthy);
- *   2. match that email to a `members` row — the SAME email join the four
- *      existing stitching mechanisms already use (triggers 004/013/020 and the
- *      portal's runtime repair, CLAUDE.md "Identity linkage");
+ *   1. ask regenOS who the caller is (DID + optional VERIFIED login-anchor
+ *      email — see lib/regenos/auth.ts for why that email is trustworthy);
+ *   2. match a `members` row by that verified email, or (if none) by
+ *      `members.did`. Unverified email and handle never claim a row;
  *   3. write `members.did` — server-side only. This is deliberately NOT the
  *      profile whitelist (api/portal/profile/route.ts:63-65 says not to add
  *      columns unless they're safe for self-edit; a custodial DID isn't);
@@ -27,6 +28,14 @@ import { fetchRegenosIdentity } from "@/lib/regenos/auth";
  * row, and send them to /membership. That is Aaron's participants tier, and
  * handling it explicitly is the point.
  *
+ * NO VERIFIED EMAIL IS ALSO NOT AN ERROR. A BYOD / passkey regenOS account
+ * has no login-anchor email. Possession proof is the session cookie. If
+ * `members.did` already points at them, they get a member session (minted
+ * against the member's RegenHub email). Otherwise they get a participant
+ * session minted against a synthetic `@did.regenhub.invalid` address. Linking
+ * a DID onto an existing member is POST /api/auth/regenos/link — both
+ * sessions at once, from the portal card.
+ *
  * ── On minting the Supabase session ──────────────────────────────────────────
  * The repo's precedent for server-side identity provisioning is
  * `admin.auth.signInWithOtp({ shouldCreateUser: true })` (api/freeday/route.ts:248,
@@ -36,10 +45,13 @@ import { fetchRegenosIdentity } from "@/lib/regenos/auth";
  * `generateLink` (admin API, sends nothing, returns the hashed token) redeemed
  * immediately by `verifyOtp`, which writes the `sb-regenhub` cookies through
  * the server client's cookie adapter. Provisioning via `createUser` with
- * `email_confirm: true` is honest here: regenOS just proved the address.
+ * `email_confirm: true` is honest here: regenOS just proved possession.
  *
  * Flag off ⇒ 404. The Supabase OTP door is untouched either way.
  */
+
+type MemberHit = { id: number; email: string | null; did: string | null; disabled: boolean };
+
 export async function POST(request: Request) {
   if (!isRegenosLoginEnabled()) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -54,39 +66,17 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!identity.email) {
-    // A BYOD / passkey regenOS account has no email anchor at all. There is
-    // nothing to match on and nothing to prove, so we refuse rather than guess.
-    return NextResponse.json(
-      {
-        error:
-          "That regenOS account has no verified email, so we can't match it to a RegenHub membership.",
-      },
-      { status: 403 },
-    );
-  }
-
-  const email = identity.email;
   const admin = createServiceClient();
 
-  // ── 2. match the membership by verified email ──────────────────────────────
-  const { data: member, error: memberError } = await admin
-    .from("members")
-    .select("id, email, did, disabled")
-    .eq("email", email)
-    .maybeSingle();
-
-  if (memberError) {
-    console.error("[regenOS] member lookup failed:", memberError);
-    return NextResponse.json({ error: "Couldn't look up your membership." }, { status: 500 });
-  }
+  const found = await findMember(admin, identity);
+  if (!found.ok) return found.response;
+  const member = found.member;
 
   // ── 3. write members.did ───────────────────────────────────────────────────
   if (member) {
     if (member.did && member.did !== identity.did) {
-      // One member row, two regenOS identities. regenOS's own email→DID map is
-      // a bijection, so this only happens if the member's email was changed
-      // after a previous link. A human has to decide which one is real.
+      // One member row, two regenOS identities. A human has to decide which
+      // one is real — email match and a prior DID-link disagree.
       console.warn(
         `[regenOS] member ${member.id} already linked to ${member.did}, refusing to relink to ${identity.did}`,
       );
@@ -100,51 +90,36 @@ export async function POST(request: Request) {
     }
 
     if (!member.did) {
-      const { error: linkError } = await admin
-        .from("members")
-        .update({ did: identity.did })
-        .eq("id", member.id);
-
-      if (linkError) {
-        // 23505 = the unique index caught another member already holding this
-        // DID. Same friendly-409 posture as the telegram handle
-        // (api/portal/profile/route.ts:78-86).
-        if ((linkError as { code?: string }).code === "23505") {
-          return NextResponse.json(
-            {
-              error:
-                "That regenOS identity is already linked to another member. Email us and we'll sort it out.",
-            },
-            { status: 409 },
-          );
-        }
-        console.error("[regenOS] did link failed:", linkError);
-        return NextResponse.json({ error: "Couldn't link your regenOS identity." }, { status: 500 });
-      }
+      const linked = await writeDid(admin, member.id, identity.did);
+      if (!linked.ok) return linked.response;
     }
   }
 
   // ── 4. mint the Supabase session ───────────────────────────────────────────
+  // Member email wins (that's the RegenHub account). Verified regenOS email
+  // next. Synthetic DID address last — participants with no email at all.
+  const mintEmail = member?.email ?? identity.email ?? syntheticEmailForDid(identity.did);
+
   // When no auth.users row exists yet, current GoTrue does NOT error here — it
   // auto-creates an unconfirmed user and mints a `signup`-type token (older
   // GoTrue 404s instead, which the branch below handles). Either way trigger
   // 004 links the new auth user to the member row by email on insert, so
-  // supabase_user_id lands for free. The redeem must use the
-  // `verification_type` GoTrue says it minted: redeeming a signup token as
+  // supabase_user_id lands for free when the emails match. The redeem must use
+  // the `verification_type` GoTrue says it minted: redeeming a signup token as
   // "magiclink" fails with "Email link is invalid or has expired", which used
   // to break exactly the first sign-in of every newly provisioned member.
-  let link = await admin.auth.admin.generateLink({ type: "magiclink", email });
+  let link = await admin.auth.admin.generateLink({ type: "magiclink", email: mintEmail });
 
   if (link.error) {
     const { error: createError } = await admin.auth.admin.createUser({
-      email,
+      email: mintEmail,
       email_confirm: true,
     });
     if (createError) {
       console.error("[regenOS] auth user provisioning failed:", createError);
       return NextResponse.json({ error: "Couldn't create your sign-in." }, { status: 500 });
     }
-    link = await admin.auth.admin.generateLink({ type: "magiclink", email });
+    link = await admin.auth.admin.generateLink({ type: "magiclink", email: mintEmail });
   }
 
   const tokenHash = link.data?.properties?.hashed_token;
@@ -171,4 +146,39 @@ export async function POST(request: Request) {
     did: identity.did,
     redirect: member ? "/portal" : "/membership",
   });
+}
+
+async function findMember(
+  admin: ReturnType<typeof createServiceClient>,
+  identity: RegenosIdentity,
+): Promise<{ ok: true; member: MemberHit | null } | { ok: false; response: NextResponse }> {
+  if (identity.email) {
+    const { data, error } = await admin
+      .from("members")
+      .select("id, email, did, disabled")
+      .eq("email", identity.email)
+      .maybeSingle();
+    if (error) {
+      console.error("[regenOS] member lookup failed:", error);
+      return {
+        ok: false,
+        response: NextResponse.json({ error: "Couldn't look up your membership." }, { status: 500 }),
+      };
+    }
+    if (data) return { ok: true, member: data as MemberHit };
+  }
+
+  const { data, error } = await admin
+    .from("members")
+    .select("id, email, did, disabled")
+    .eq("did", identity.did)
+    .maybeSingle();
+  if (error) {
+    console.error("[regenOS] member did lookup failed:", error);
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "Couldn't look up your membership." }, { status: 500 }),
+    };
+  }
+  return { ok: true, member: (data as MemberHit | null) ?? null };
 }

@@ -224,10 +224,14 @@ Both doors land the AppView's session cookie on this origin then call the one sh
   `beginOAuth`/`oauthCallback`) plus the three event writes** (`createEvent`/`updateEvent`/
   `deleteEvent`) — nothing else; 404s when the flag is off.
 - `POST /api/auth/regenos/session` — the handoff, shared by both doors. Reads the regenOS session cookie → `getSession`
-  (DID) + `getMyContactPref` (the **verified** login-anchor email) → matches `members` by email →
-  writes `members.did` → mints a Supabase session via `generateLink` + `verifyOtp` (the admin API,
-  no second email). **No member match is not an error**: that's a *participant* — a real session with
-  public features only, sent to `/membership`.
+  (DID) + `getMyContactPref` (the **verified** login-anchor email, if any) → matches `members` by that
+  email, or by `members.did` if there is no email → writes `members.did` → mints a Supabase session via
+  `generateLink` + `verifyOtp` (the admin API, no second email). **No member match is not an error**:
+  that's a *participant* — a real session with public features only, sent to `/membership`.
+  **No verified email is also not an error**: BYOD/passkey accounts mint a participant session against
+  a synthetic `@did.regenhub.invalid` address, or a member session if `members.did` already matches.
+  Unverified email and handle never claim a member row. Linking a DID onto an existing member (already
+  signed in on RegenHub) is `POST /api/auth/regenos/link`, surfaced as a card on `/portal`.
 - The verified email is trustworthy because regenOS seeds it server-side from `email_identities` and
   `saveContactPref` refuses any email that isn't the account's login anchor. We require
   `verified === true` and ignore every other channel.

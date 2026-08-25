@@ -16,6 +16,8 @@ import { MembershipStatusCard } from "@/components/portal/MembershipStatusCard";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { planLabel, getPlan } from "@/lib/plans";
 import { isRegenosLoginEnabled } from "@/lib/regenos/config";
+import { isSyntheticEmail } from "@/lib/regenos/syntheticEmail";
+import { LinkRegenOSCard } from "@/components/portal/LinkRegenOSCard";
 
 export default async function PortalPage() {
   const supabase = await createClient();
@@ -32,7 +34,7 @@ export default async function PortalPage() {
   // Auto-link: if no member found by supabase_user_id, try matching by verified email.
   // This handles the case where a member was created via Telegram bot (no supabase_user_id)
   // and then signs in on the web with the same email.
-  if (!member && user.email) {
+  if (!member && user.email && !isSyntheticEmail(user.email)) {
     const admin = createServiceClient();
     const { data: matched } = await admin
       .from("members")
@@ -230,7 +232,9 @@ export default async function PortalPage() {
           <ClipboardList className="w-10 h-10 text-sage mx-auto mb-4" />
           <h2 className="text-xl font-semibold mb-3">Welcome — let&apos;s get you set up</h2>
           <p className="text-muted text-sm mb-6">
-            You&apos;re signed in as <strong className="text-foreground">{user.email}</strong>, but you&apos;re
+            You&apos;re signed in{user.email && !isSyntheticEmail(user.email) ? (
+              <> as <strong className="text-foreground">{user.email}</strong></>
+            ) : null}, but you&apos;re
             not a member yet. Apply to join the cooperative, or try a free day first to feel out the space.
           </p>
           <div className="flex gap-2 flex-wrap justify-center">
@@ -246,6 +250,7 @@ export default async function PortalPage() {
           </div>
         </div>
 
+        {user.email && !isSyntheticEmail(user.email) && (
         <div className="glass-panel p-6">
           <div className="flex items-start gap-3">
             <MessageCircle className="w-5 h-5 text-sage mt-0.5 shrink-0" />
@@ -259,6 +264,7 @@ export default async function PortalPage() {
             </div>
           </div>
         </div>
+        )}
       </div>
     );
   }
@@ -317,6 +323,8 @@ export default async function PortalPage() {
         applicationInterest={application?.membership_interest}
         hasActiveSubscription={!!activeSubscription}
       />
+
+      {isRegenosLoginEnabled() && !member.did && <LinkRegenOSCard />}
 
       <DayPassRedemptionHero member={member} />
 
