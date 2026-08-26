@@ -46,18 +46,26 @@ export async function POST(
 
   await admin.from("members").update({ disabled: true }).eq("id", memberId);
 
-  // Cancel any active Stripe subscriptions immediately. They keep paying
-  // otherwise, which is bad. Failures here don't roll back the revoke —
-  // member is still disabled; admin gets a warning to clean up in Stripe.
+  // Cancel active subscriptions immediately. Stripe rows are canceled at the
+  // provider; direct on-chain rows are local billing agreements and need no
+  // treasury-side action.
   const canceledSubs: string[] = [];
   const cancelErrors: { stripe_subscription_id: string; error: string }[] = [];
   if (isStripeConfigured()) {
     const { data: liveSubs } = await admin
       .from("subscriptions")
-      .select("id, stripe_subscription_id")
+      .select("id, stripe_subscription_id, payment_rail")
       .eq("member_id", memberId)
       .in("status", ["active", "trialing", "past_due", "incomplete"]);
     for (const sub of liveSubs ?? []) {
+      if (sub.payment_rail === "onchain") {
+        await admin
+          .from("subscriptions")
+          .update({ status: "canceled", canceled_at: new Date().toISOString() })
+          .eq("id", sub.id);
+        continue;
+      }
+      if (!sub.stripe_subscription_id) continue;
       try {
         await getStripe().subscriptions.cancel(sub.stripe_subscription_id);
         // Local mirror updates via the customer.subscription.deleted webhook,

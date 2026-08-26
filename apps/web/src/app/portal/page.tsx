@@ -18,6 +18,8 @@ import { planLabel, getPlan } from "@/lib/plans";
 import { isRegenosLoginEnabled } from "@/lib/regenos/config";
 import { isSyntheticEmail } from "@/lib/regenos/syntheticEmail";
 import { LinkRegenOSCard } from "@/components/portal/LinkRegenOSCard";
+import { OnchainBillingCard } from "@/components/portal/OnchainBillingCard";
+import { isOnchainBillingConfigured, NATIVE_USDC_ADDRESS, TREASURY_ADDRESS } from "@/lib/onchain/config";
 
 export default async function PortalPage() {
   const supabase = await createClient();
@@ -86,6 +88,9 @@ export default async function PortalPage() {
   let activeSubscription:
     | {
         plan_key: string;
+        id: number;
+        payment_rail: "stripe" | "onchain";
+        wallet_id: number | null;
         monthly_cents: number;
         net_cents: number | null;
         status: string;
@@ -98,13 +103,34 @@ export default async function PortalPage() {
   if (member) {
     const { data } = await supabase
       .from("subscriptions")
-      .select("plan_key, monthly_cents, net_cents, status, cancel_at_period_end, current_period_end, past_due_since, discount_cents")
+      .select("id, payment_rail, wallet_id, plan_key, monthly_cents, net_cents, status, cancel_at_period_end, current_period_end, past_due_since, discount_cents")
       .eq("member_id", member.id)
       .in("status", ["active", "trialing", "past_due"])
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     activeSubscription = data;
+  }
+
+  let onchainWallet: { address: string; verification_method: string } | null = null;
+  let onchainInvoice: {
+    id: number; amount_cents: number; amount_usdc_micros: number; due_at: string;
+    status: string; submitted_tx_hash: string | null;
+  } | null = null;
+  if (activeSubscription?.payment_rail === "onchain") {
+    const admin = createServiceClient();
+    const [walletResult, invoiceResult] = await Promise.all([
+      activeSubscription.wallet_id
+        ? admin.from("member_wallets").select("address, verification_method").eq("id", activeSubscription.wallet_id).is("revoked_at", null).maybeSingle()
+        : Promise.resolve({ data: null }),
+      admin.from("onchain_invoices")
+        .select("id, amount_cents, amount_usdc_micros, due_at, status, submitted_tx_hash")
+        .eq("subscription_id", activeSubscription.id)
+        .in("status", ["open", "submitted", "detected", "exception"])
+        .order("due_at", { ascending: true }).limit(1).maybeSingle(),
+    ]);
+    onchainWallet = walletResult.data;
+    onchainInvoice = invoiceResult.data;
   }
 
   // Hub activity counts for the "what's happening today" card. When the HA
@@ -201,7 +227,7 @@ export default async function PortalPage() {
   const onDesk =
     currentPlanDef?.grantsMemberType === "cold_desk" ||
     currentPlanDef?.grantsMemberType === "hot_desk";
-  const canChangePlan = !!activeSubscription && (currentPlanDef?.selfServe ?? false) && !onDesk;
+  const canChangePlan = !!activeSubscription && activeSubscription.payment_rail === "stripe" && (currentPlanDef?.selfServe ?? false) && !onDesk;
 
   if (!member) {
     if (application) {
@@ -297,12 +323,14 @@ export default async function PortalPage() {
         <div className="glass-panel p-4 border border-red-500/40 bg-red-500/5 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
           <div className="flex-1">
-            <p className="text-sm font-medium text-red-400">Your payment failed</p>
+            <p className="text-sm font-medium text-red-400">Your payment is past due</p>
             <p className="text-xs text-muted mt-0.5">
-              Update your card to keep your access. We&apos;ll automatically retry — and door access continues for 7 days while you sort it out.
+              {activeSubscription.payment_rail === "onchain"
+                ? "Complete the USDC renewal below. Door access continues for seven days while you sort it out."
+                : "Update your card to keep your access. We’ll automatically retry — and door access continues for seven days while you sort it out."}
             </p>
           </div>
-          <ManageSubscriptionButton />
+          {activeSubscription.payment_rail === "stripe" && <ManageSubscriptionButton />}
         </div>
       )}
 
@@ -465,7 +493,7 @@ export default async function PortalPage() {
                 {activeSubscription.status === "past_due" && (
                   <p className="text-sm text-red-400 flex items-center gap-1.5">
                     <AlertCircle className="w-4 h-4" />
-                    Payment failed — update your card to keep access
+                    {activeSubscription.payment_rail === "onchain" ? "USDC renewal past due" : "Payment failed — update your card to keep access"}
                   </p>
                 )}
                 {!activeSubscription.cancel_at_period_end && activeSubscription.status !== "past_due" && (
@@ -488,9 +516,28 @@ export default async function PortalPage() {
                     hasDiscount={(activeSubscription.discount_cents ?? 0) > 0}
                   />
                 )}
-                <ManageSubscriptionButton />
+                {activeSubscription.payment_rail === "stripe" && <ManageSubscriptionButton />}
               </div>
             </div>
+            {activeSubscription.payment_rail === "onchain" && (
+              <div className="mt-4">
+                <OnchainBillingCard
+                  walletAddress={onchainWallet?.address ?? null}
+                  walletVerifiedBySignature={onchainWallet?.verification_method === "signature"}
+                  invoice={onchainInvoice ? {
+                    id: onchainInvoice.id,
+                    amountCents: onchainInvoice.amount_cents,
+                    amountMicros: onchainInvoice.amount_usdc_micros,
+                    dueAt: onchainInvoice.due_at,
+                    status: onchainInvoice.status,
+                    txHash: onchainInvoice.submitted_tx_hash,
+                  } : null}
+                  tokenAddress={NATIVE_USDC_ADDRESS}
+                  treasuryAddress={TREASURY_ADDRESS}
+                  configured={isOnchainBillingConfigured()}
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
