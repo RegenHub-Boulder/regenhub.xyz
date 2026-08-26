@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { clearUserCode, formatLockStatus } from "@regenhub/shared";
-
-const GRACE_DAYS = 7;
+import {
+  BILLING_GRACE_DAYS,
+  downgradeMembershipAccess,
+} from "@/lib/membershipLifecycle";
 
 async function notifyTelegram(text: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -46,7 +47,9 @@ export async function POST(req: Request) {
   }
 
   const admin = createServiceClient();
-  const cutoff = new Date(Date.now() - GRACE_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const cutoff = new Date(
+    Date.now() - BILLING_GRACE_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
 
   type StaleRow = {
     id: number;
@@ -90,27 +93,18 @@ export async function POST(req: Request) {
       const wasFullMember =
         row.members?.member_type === "cold_desk" || row.members?.member_type === "hot_desk";
       const slot = row.members?.pin_code_slot ?? null;
-      const memberUpdate: { member_type: "day_pass"; pin_code_slot?: null; pin_code?: null } = {
-        member_type: "day_pass",
-      };
       let lockRevokeNote = "";
-      if (wasFullMember && slot) {
-        memberUpdate.pin_code_slot = null;
-        memberUpdate.pin_code = null;
-        try {
-          const lockResults = await clearUserCode(slot);
-          lockRevokeNote = `\n\n🔒 Cleared PIN slot ${slot}: ${formatLockStatus(lockResults)}`;
-        } catch (err) {
-          console.error(`[PastDueCron] Lock revoke failed for slot ${slot}:`, err);
-          lockRevokeNote = `\n\n⚠️ *Action needed:* Lock revoke failed for slot ${slot}. Run Lock Sync from /admin/access.`;
-        }
+      const downgrade = await downgradeMembershipAccess(admin, {
+        memberId: row.member_id,
+        currentPinSlot: slot,
+        revokePermanentPin: wasFullMember,
+      });
+      if (downgrade.memberUpdateError) throw downgrade.memberUpdateError;
+      if (downgrade.revokedSlot && downgrade.lockRevokeFailed) {
+        lockRevokeNote = `\n\n⚠️ *Action needed:* Lock revoke failed for slot ${downgrade.revokedSlot}. Run Lock Sync from /admin/access.`;
+      } else if (downgrade.revokedSlot && downgrade.lockStatus) {
+        lockRevokeNote = `\n\n🔒 Cleared PIN slot ${downgrade.revokedSlot}: ${downgrade.lockStatus}`;
       }
-
-      const { error: memErr } = await admin
-        .from("members")
-        .update(memberUpdate)
-        .eq("id", row.member_id);
-      if (memErr) throw memErr;
 
       const name = row.members?.name ?? "A member";
       await notifyTelegram(
