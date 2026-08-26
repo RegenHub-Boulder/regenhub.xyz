@@ -105,7 +105,10 @@ export default async function PortalPage() {
       .from("subscriptions")
       .select("id, payment_rail, wallet_id, plan_key, monthly_cents, net_cents, status, cancel_at_period_end, current_period_end, past_due_since, discount_cents")
       .eq("member_id", member.id)
-      .in("status", ["active", "trialing", "past_due"])
+      // `incomplete` is the first-payment state for a self-serve on-chain
+      // membership. It must render the invoice/payment card even though no
+      // access is granted until the transfer is credited.
+      .in("status", ["active", "trialing", "past_due", "incomplete"])
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -496,7 +499,13 @@ export default async function PortalPage() {
                     {activeSubscription.payment_rail === "onchain" ? "USDC renewal past due" : "Payment failed — update your card to keep access"}
                   </p>
                 )}
-                {!activeSubscription.cancel_at_period_end && activeSubscription.status !== "past_due" && (
+                {activeSubscription.status === "incomplete" && (
+                  <p className="text-sm text-amber-400 flex items-center gap-1.5">
+                    <AlertCircle className="w-4 h-4" />
+                    Awaiting your first USDC payment — access starts after confirmation
+                  </p>
+                )}
+                {!activeSubscription.cancel_at_period_end && !["past_due", "incomplete"].includes(activeSubscription.status) && (
                   <p className="text-sm text-muted">
                     Renews{" "}
                     {activeSubscription.current_period_end

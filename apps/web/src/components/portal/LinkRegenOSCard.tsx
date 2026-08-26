@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link2, Loader2, CheckCircle } from "lucide-react";
@@ -12,34 +13,14 @@ import { Link2, Loader2, CheckCircle } from "lucide-react";
  * point them at /auth/login to pick up a regenOS session, then they come back.
  */
 export function LinkRegenOSCard() {
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [handle, setHandle] = useState<string | null | undefined>(undefined);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [linked, setLinked] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/xrpc/social.scenius.getSession", { cache: "no-store" });
-        if (!res.ok) {
-          if (!cancelled) setHandle(null);
-          return;
-        }
-        const data = (await res.json()) as { did?: string; handle?: string };
-        if (cancelled) return;
-        setHandle(data.did ? (data.handle ?? data.did) : null);
-      } catch {
-        if (!cancelled) setHandle(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  async function link() {
+  const link = useCallback(async () => {
     setBusy(true);
     setErr(null);
     setMsg(null);
@@ -57,12 +38,39 @@ export function LinkRegenOSCard() {
       }
       setLinked(true);
       setMsg(json.already ? "Already linked." : "Linked this regenOS identity to your membership.");
+      router.refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
-  }
+  }, [router]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/xrpc/social.scenius.getSession", { cache: "no-store" });
+        if (!res.ok) {
+          if (!cancelled) setHandle(null);
+          return;
+        }
+        const data = (await res.json()) as { did?: string; handle?: string };
+        if (cancelled) return;
+        setHandle(data.did ? (data.handle ?? data.did) : null);
+        // Both sessions are live in this browser and the portal has already
+        // resolved the member. That is the same possession proof as the
+        // manual button, so finish the link without asking for a redundant
+        // second click. The button remains as a retry if this request fails.
+        if (data.did) await link();
+      } catch {
+        if (!cancelled) setHandle(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [link]);
 
   if (linked) {
     return (
