@@ -7,6 +7,7 @@ const base: MemberAxes = {
   is_admin: false,
   is_ops_admin: false,
   member_type: "hub_friend",
+  hasLiveSubscription: false,
 };
 
 describe("planMembership", () => {
@@ -29,7 +30,7 @@ describe("planMembership", () => {
     ).toMatchObject({ role: "steward" });
   });
 
-  it("admits paid desk and hub friends as member; revokes day-pass", () => {
+  it("admits paid desk and hub friends as member without a subscription row", () => {
     expect(planMembership({ ...base, member_type: "cold_desk" })).toMatchObject({
       action: "set",
       role: "member",
@@ -39,9 +40,15 @@ describe("planMembership", () => {
       role: "member",
     });
     expect(planMembership(base)).toMatchObject({ action: "set", role: "member" });
+  });
+
+  it("admits day-pass only when a live recurring subscription is on the row", () => {
     expect(planMembership({ ...base, member_type: "day_pass" })).toEqual({
       action: "revoke",
       did: "did:plc:alice",
     });
+    expect(
+      planMembership({ ...base, member_type: "day_pass", hasLiveSubscription: true }),
+    ).toMatchObject({ action: "set", role: "member" });
   });
 });

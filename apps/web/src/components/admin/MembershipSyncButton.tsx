@@ -12,7 +12,7 @@ export function MembershipSyncButton() {
   async function run() {
     if (
       !window.confirm(
-        "Admit paid desk and hub friends with a DID as scene members, admins/ops as steward? Day-pass is not a scene member. Disabled members are revoked.",
+        "Admit paid desk, hub friends, and contributing-member subscriptions ($30/$50/$100) with a DID as scene members? One-off day-pass buyers are not. Admins/ops as steward. Disabled members are revoked.",
       )
     ) {
       return;

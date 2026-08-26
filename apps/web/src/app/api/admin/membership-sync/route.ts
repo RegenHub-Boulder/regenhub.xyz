@@ -14,9 +14,9 @@ import { planMembership } from "@/lib/regenos/membershipRole";
  * must be a RegenHub admin AND a regenOS steward of the collective — the
  * AppView writes the claim AS the scene, using the steward's session.
  *
- * Scene member = cold_desk / hot_desk / hub_friend with a DID. Day-pass is
- * revoked (404 already-absent is success). Disabled is revoked. Admins/ops
- * are steward. Builder/facilitator are not inferred.
+ * Scene member = cold_desk / hot_desk / hub_friend, or day_pass with a live
+ * recurring subscription. One-off day-pass checkouts (no sub) are revoked.
+ * 404 already-absent is success. Disabled is revoked. Admins/ops are steward.
  */
 export async function POST() {
   if (!isRegenosLoginEnabled() || !regenosBaseUrl() || !regenosCollectiveDid()) {
@@ -45,6 +45,15 @@ export async function POST() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  const { data: subs, error: subErr } = await admin
+    .from("subscriptions")
+    .select("member_id")
+    .in("status", ["active", "trialing", "past_due"]);
+  if (subErr) {
+    return NextResponse.json({ error: subErr.message }, { status: 500 });
+  }
+  const liveSub = new Set((subs ?? []).map((s) => s.member_id));
+
   const base = regenosBaseUrl()!;
   const results: Array<{
     id: number;
@@ -56,7 +65,10 @@ export async function POST() {
   }> = [];
 
   for (const row of rows ?? []) {
-    const plan = planMembership(row);
+    const plan = planMembership({
+      ...row,
+      hasLiveSubscription: liveSub.has(row.id),
+    });
     if (plan.action === "skip") {
       results.push({ id: row.id, name: row.name, action: "skip", ok: true, error: plan.reason });
       continue;

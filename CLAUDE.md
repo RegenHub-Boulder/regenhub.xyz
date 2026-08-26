@@ -242,9 +242,9 @@ Both doors land the AppView's session cookie on this origin then call the one sh
 - `/portal/events` — **Manage Events**, the stewards' in-portal calendar (no link-out to scenius).
   **Import from Luma** pastes public luma.com / lu.ma URLs/HTML, parses JSON-LD (no Pro API), then
   `createEvent`s the selected rows. `/admin/members` **Sync claims to regenOS** admits paid desk
-  and hub friends (`cold_desk` / `hot_desk` / `hub_friend`) with a DID as scene `member`,
-  admins/ops as `steward`. Day-pass is revoked (404 already-absent is success). Builder grants
-  stay explicit on regenOS — those roles can write events.
+  and hub friends, plus `day_pass` rows with a live subscription (`active`/`trialing`/`past_due`
+  — the $30/$50/$100 ladder). One-off day-pass checkouts (no sub) are revoked. Admins/ops as
+  `steward`. Builder grants stay explicit on regenOS — those roles can write events.
   Server component: Supabase session, then `fetchRegenosIdentity` + `fetchRegenosSceneStanding`
   (`getSceneMembers`, whose `steward` flag is computed for the *caller* through the trust resolver;
   we OR it with a direct Builder+ roster row to mirror the AppView's own `owner_or_builder` write
