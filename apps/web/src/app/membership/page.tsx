@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SubscribeButton } from "@/components/membership/SubscribeButton";
 import { Check, Sparkles, ArrowRight } from "lucide-react";
+import { isSyntheticEmail } from "@/lib/regenos/syntheticEmail";
 
 export const metadata: Metadata = {
   title: "Membership — RegenHub",
@@ -47,14 +48,16 @@ export default async function MembershipPage({ searchParams }: PageProps) {
   let hasActiveSub = false;
   let approvedForDaily: boolean | null = null; // null = unauthed; UI shows generic CTA
   let approvedForFull = false;
+  let subscriptionEmail = user?.email && !isSyntheticEmail(user.email) ? user.email : undefined;
   if (user) {
     const { data: existingMember } = await supabase
       .from("members")
-      .select("id, approved_for_daily, approved_for_full")
+      .select("id, email, approved_for_daily, approved_for_full")
       .eq("supabase_user_id", user.id)
       .maybeSingle();
     approvedForDaily = existingMember?.approved_for_daily ?? false;
     approvedForFull = existingMember?.approved_for_full ?? false;
+    subscriptionEmail = existingMember?.email ?? subscriptionEmail;
     if (existingMember?.id) {
       const { data: existingSub } = await supabase
         .from("subscriptions")
@@ -211,7 +214,7 @@ export default async function MembershipPage({ searchParams }: PageProps) {
                         <SubscribeButton
                           planKey={key}
                           isAuthenticated={!!user}
-                          authedEmail={user?.email}
+                          authedEmail={subscriptionEmail}
                           cta={isFeatured ? "Subscribe — most popular" : "Subscribe"}
                           className={isFeatured ? "btn-primary-glass w-full" : "btn-glass w-full"}
                         />
@@ -272,7 +275,7 @@ export default async function MembershipPage({ searchParams }: PageProps) {
                         <SubscribeButton
                           planKey={key}
                           isAuthenticated={!!user}
-                          authedEmail={user?.email}
+                          authedEmail={subscriptionEmail}
                           cta={`Subscribe — ${def.label}`}
                           className="btn-primary-glass w-full"
                         />

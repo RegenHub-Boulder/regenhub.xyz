@@ -9,6 +9,7 @@ import {
   isStripeConfigured,
 } from "@/lib/stripe";
 import type { PlanKey } from "@/lib/supabase/types";
+import { isSyntheticEmail } from "@/lib/regenos/syntheticEmail";
 
 interface SubscribeBody {
   plan_key: PlanKey;
@@ -56,14 +57,46 @@ export async function POST(req: Request) {
     );
   }
 
-  // Determine the member to attach this subscription to
+  // Determine the member to attach this subscription to. A regenOS
+  // participant may have a synthetic auth email, so authenticated callers
+  // MUST resolve through the member↔auth-user link first. Looking up
+  // `user.email` here leaks the internal `@did.regenhub.invalid` address into
+  // checkout and misses the real member row created from their application.
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+  const admin = createServiceClient();
 
-  let memberEmail: string;
+  type SubscriptionMember = {
+    id: number;
+    name: string;
+    email: string;
+    stripe_customer_id: string | null;
+    member_type: string;
+    supabase_user_id: string | null;
+    approved_for_daily: boolean;
+    approved_for_full: boolean;
+  };
+
+  let member: SubscriptionMember | null = null;
+  let memberEmail: string | null = null;
   let memberName: string | null = null;
-  if (user?.email) {
-    memberEmail = user.email;
+  if (user) {
+    const { data: linkedMember, error: linkedMemberError } = await admin
+      .from("members")
+      .select("id, name, email, stripe_customer_id, member_type, supabase_user_id, approved_for_daily, approved_for_full")
+      .eq("supabase_user_id", user.id)
+      .maybeSingle();
+    if (linkedMemberError) {
+      console.error("[Subscribe] Linked member lookup failed:", linkedMemberError);
+      return NextResponse.json({ error: "Couldn't look up your membership." }, { status: 500 });
+    }
+    member = linkedMember as SubscriptionMember | null;
+
+    // Backward compatibility for pre-link accounts. Never use a synthetic
+    // address as a membership identity.
+    if (!member && user.email && !isSyntheticEmail(user.email)) {
+      memberEmail = user.email.trim().toLowerCase();
+    }
   } else if (body.email?.trim()) {
     memberEmail = body.email.trim().toLowerCase();
     memberName = body.name?.trim() ?? null;
@@ -71,21 +104,26 @@ export async function POST(req: Request) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(memberEmail)) {
       return NextResponse.json({ error: "Invalid email" }, { status: 400 });
     }
-  } else {
+  } else if (!user) {
     return NextResponse.json({ error: "Email required" }, { status: 400 });
   }
-
-  const admin = createServiceClient();
 
   // Find the member row. We DON'T auto-create here anymore — self-serve
   // subscription now requires explicit admin approval, which means a
   // member record must already exist (created via the free-day flow OR
   // by admin manually). If no record, return a friendly "please apply" msg.
-  const { data: member } = await admin
-    .from("members")
-    .select("id, name, email, stripe_customer_id, member_type, supabase_user_id, approved_for_daily, approved_for_full")
-    .eq("email", memberEmail)
-    .maybeSingle();
+  if (!member && memberEmail) {
+    const { data: emailMember, error: emailMemberError } = await admin
+      .from("members")
+      .select("id, name, email, stripe_customer_id, member_type, supabase_user_id, approved_for_daily, approved_for_full")
+      .eq("email", memberEmail)
+      .maybeSingle();
+    if (emailMemberError) {
+      console.error("[Subscribe] Email member lookup failed:", emailMemberError);
+      return NextResponse.json({ error: "Couldn't look up your membership." }, { status: 500 });
+    }
+    member = emailMember as SubscriptionMember | null;
+  }
 
   if (!member) {
     return NextResponse.json(
