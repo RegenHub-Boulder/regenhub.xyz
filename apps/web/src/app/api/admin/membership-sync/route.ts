@@ -14,8 +14,9 @@ import { planMembership } from "@/lib/regenos/membershipRole";
  * must be a RegenHub admin AND a regenOS steward of the collective — the
  * AppView writes the claim AS the scene, using the steward's session.
  *
- * Rows with no DID are skipped. Disabled members are revoked. Desk/co-op
- * do not grant builder/facilitator — those are calendar-write roles.
+ * Scene member = cold_desk / hot_desk / hub_friend with a DID. Day-pass is
+ * revoked (404 already-absent is success). Disabled is revoked. Admins/ops
+ * are steward. Builder/facilitator are not inferred.
  */
 export async function POST() {
   if (!isRegenosLoginEnabled() || !regenosBaseUrl() || !regenosCollectiveDid()) {
@@ -39,7 +40,7 @@ export async function POST() {
   const admin = createServiceClient();
   const { data: rows, error } = await admin
     .from("members")
-    .select("id, name, did, disabled, is_admin, is_ops_admin");
+    .select("id, name, did, disabled, is_admin, is_ops_admin, member_type");
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -77,6 +78,17 @@ export async function POST() {
       });
       if (!res.ok) {
         const json = (await res.json().catch(() => null)) as { message?: string; error?: string } | null;
+        // revokeMembership 404s when there was nothing to delete — already not a scene member.
+        if (plan.action === "revoke" && res.status === 404) {
+          results.push({
+            id: row.id,
+            name: row.name,
+            action: "revoke",
+            ok: true,
+            error: "already absent",
+          });
+          continue;
+        }
         results.push({
           id: row.id,
           name: row.name,

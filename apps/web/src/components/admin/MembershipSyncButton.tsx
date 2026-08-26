@@ -12,7 +12,7 @@ export function MembershipSyncButton() {
   async function run() {
     if (
       !window.confirm(
-        "Admit every member with a DID as member, admins/ops as steward? Desk and co-op do not grant calendar write. Disabled members are revoked.",
+        "Admit paid desk and hub friends with a DID as scene members, admins/ops as steward? Day-pass is not a scene member. Disabled members are revoked.",
       )
     ) {
       return;
