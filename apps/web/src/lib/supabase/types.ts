@@ -15,6 +15,15 @@ export type AccessMethod = "nfc" | "pin" | "daycode";
 export type PlanKey = string;
 export type DiscountDuration = "forever" | "repeating";
 export type PurchaseKind = "day_pass" | "five_pack";
+export type PaymentRail = "stripe" | "onchain";
+export type OnchainInvoiceStatus =
+  | "open"
+  | "submitted"
+  | "detected"
+  | "paid"
+  | "expired"
+  | "void"
+  | "exception";
 
 // Mirrors Stripe.Subscription.Status verbatim
 export type StripeSubscriptionStatus =
@@ -231,9 +240,11 @@ export interface Database {
         Row: {
           id: number;
           member_id: number;
-          stripe_subscription_id: string;
-          stripe_customer_id: string;
-          stripe_price_id: string;
+          payment_rail: PaymentRail;
+          wallet_id: number | null;
+          stripe_subscription_id: string | null;
+          stripe_customer_id: string | null;
+          stripe_price_id: string | null;
           plan_key: PlanKey;
           monthly_cents: number;
           net_cents: number | null;
@@ -252,9 +263,11 @@ export interface Database {
         };
         Insert: {
           member_id: number;
-          stripe_subscription_id: string;
-          stripe_customer_id: string;
-          stripe_price_id: string;
+          payment_rail?: PaymentRail;
+          wallet_id?: number | null;
+          stripe_subscription_id?: string | null;
+          stripe_customer_id?: string | null;
+          stripe_price_id?: string | null;
           plan_key: PlanKey;
           monthly_cents: number;
           net_cents?: number | null;
@@ -270,6 +283,146 @@ export interface Database {
           discount_note?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["subscriptions"]["Insert"]>;
+        Relationships: [];
+      };
+      member_wallets: {
+        Row: {
+          id: number;
+          member_id: number;
+          chain_family: "evm";
+          address: string;
+          address_normalized: string;
+          verification_method: "signature" | "admin_prior_payment";
+          verified_at: string;
+          verified_by: number | null;
+          revoked_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          member_id: number;
+          chain_family?: "evm";
+          address: string;
+          verification_method: "signature" | "admin_prior_payment";
+          verified_at?: string;
+          verified_by?: number | null;
+          revoked_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["member_wallets"]["Insert"]>;
+        Relationships: [];
+      };
+      wallet_verification_challenges: {
+        Row: {
+          id: number;
+          member_id: number;
+          address_normalized: string;
+          nonce_hash: string;
+          message: string;
+          expires_at: string;
+          consumed_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          member_id: number;
+          address_normalized: string;
+          nonce_hash: string;
+          message: string;
+          expires_at: string;
+          consumed_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["wallet_verification_challenges"]["Insert"]>;
+        Relationships: [];
+      };
+      onchain_invoices: {
+        Row: {
+          id: number;
+          subscription_id: number;
+          member_id: number;
+          period_start: string;
+          period_end: string;
+          due_at: string;
+          base_amount_cents: number;
+          discount_bps: number;
+          amount_cents: number;
+          amount_usdc_micros: number;
+          chain_id: number;
+          token_contract: string;
+          treasury_address: string;
+          status: OnchainInvoiceStatus;
+          submitted_tx_hash: string | null;
+          submitted_at: string | null;
+          detected_at: string | null;
+          paid_at: string | null;
+          exception_reason: string | null;
+          reminder_sent_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          subscription_id: number;
+          member_id: number;
+          period_start: string;
+          period_end: string;
+          due_at: string;
+          base_amount_cents: number;
+          discount_bps?: number;
+          amount_cents: number;
+          amount_usdc_micros: number;
+          chain_id?: number;
+          token_contract?: string;
+          treasury_address?: string;
+          status?: OnchainInvoiceStatus;
+          submitted_tx_hash?: string | null;
+          submitted_at?: string | null;
+          detected_at?: string | null;
+          paid_at?: string | null;
+          exception_reason?: string | null;
+          reminder_sent_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["onchain_invoices"]["Insert"]>;
+        Relationships: [];
+      };
+      onchain_payments: {
+        Row: {
+          id: number;
+          invoice_id: number;
+          member_id: number;
+          chain_id: number;
+          tx_hash: string;
+          log_index: number;
+          block_number: number;
+          block_hash: string;
+          from_address: string;
+          to_address: string;
+          token_contract: string;
+          amount_micros: number;
+          chain_status: "safe" | "finalized" | "reorged";
+          match_status: "credited" | "exception" | "rejected";
+          exception_reason: string | null;
+          observed_at: string;
+          credited_at: string | null;
+          effects_completed_at: string | null;
+          raw_log: unknown;
+        };
+        Insert: {
+          invoice_id: number;
+          member_id: number;
+          chain_id: number;
+          tx_hash: string;
+          log_index: number;
+          block_number: number;
+          block_hash: string;
+          from_address: string;
+          to_address: string;
+          token_contract: string;
+          amount_micros: number;
+          chain_status: "safe" | "finalized" | "reorged";
+          match_status: "credited" | "exception" | "rejected";
+          exception_reason?: string | null;
+          credited_at?: string | null;
+          effects_completed_at?: string | null;
+          raw_log?: unknown;
+        };
+        Update: Partial<Database["public"]["Tables"]["onchain_payments"]["Insert"]>;
         Relationships: [];
       };
       purchases: {
@@ -301,7 +454,8 @@ export interface Database {
           id: number;
           member_id: number;
           subscription_id: number | null;
-          stripe_invoice_id: string;
+          stripe_invoice_id: string | null;
+          billing_event_key: string;
           plan_key: PlanKey;
           passes_granted: number;
           created_at: string;
@@ -309,7 +463,8 @@ export interface Database {
         Insert: {
           member_id: number;
           subscription_id?: number | null;
-          stripe_invoice_id: string;
+          stripe_invoice_id?: string | null;
+          billing_event_key: string;
           plan_key: PlanKey;
           passes_granted: number;
         };
@@ -416,6 +571,38 @@ export interface Database {
         Args: { p_member_id: number; p_amount: number };
         Returns: number;
       };
+      bind_member_wallet: {
+        Args: {
+          p_member_id: number;
+          p_address: string;
+          p_verification_method: "signature" | "admin_prior_payment";
+          p_verified_by?: number | null;
+        };
+        Returns: number;
+      };
+      credit_onchain_invoice: {
+        Args: {
+          p_invoice_id: number;
+          p_tx_hash: string;
+          p_log_index: number;
+          p_block_number: number;
+          p_block_hash: string;
+          p_from_address: string;
+          p_to_address: string;
+          p_token_contract: string;
+          p_amount_micros: number;
+          p_chain_status: string;
+          p_raw_log?: unknown;
+        };
+        Returns: Array<{
+          payment_id: number;
+          member_id: number;
+          subscription_id: number;
+          plan_key: string;
+          period_end: string;
+          was_new: boolean;
+        }>;
+      };
     };
     CompositeTypes: { [_ in never]: never };
     Enums: {
@@ -433,6 +620,9 @@ export type DayCode = Database["public"]["Tables"]["day_codes"]["Row"];
 export type AccessLog = Database["public"]["Tables"]["access_logs"]["Row"];
 export type Interest = Database["public"]["Tables"]["interests"]["Row"];
 export type Subscription = Database["public"]["Tables"]["subscriptions"]["Row"];
+export type MemberWallet = Database["public"]["Tables"]["member_wallets"]["Row"];
+export type OnchainInvoice = Database["public"]["Tables"]["onchain_invoices"]["Row"];
+export type OnchainPayment = Database["public"]["Tables"]["onchain_payments"]["Row"];
 export type Purchase = Database["public"]["Tables"]["purchases"]["Row"];
 export type PassGrant = Database["public"]["Tables"]["pass_grants"]["Row"];
 export type WebhookEvent = Database["public"]["Tables"]["webhook_events"]["Row"];

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CreditCard, Ban, Loader2, Link2, Copy, ExternalLink, Gift } from "lucide-react";
+import { CreditCard, Ban, Loader2, Link2, Copy, ExternalLink, Gift, Wallet } from "lucide-react";
 import type { Subscription, Purchase } from "@/lib/supabase/types";
 import { getAllPlansSorted, planLabel } from "@/lib/plans";
 
@@ -57,6 +57,11 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
   const [note, setNote] = useState("");
   const [generated, setGenerated] = useState<{ url: string; suggested_email: string } | null>(null);
   const [copiedField, setCopiedField] = useState<"url" | "email" | null>(null);
+  const [showOnchain, setShowOnchain] = useState(false);
+  const [walletAddress, setWalletAddress] = useState("");
+  const [paidThrough, setPaidThrough] = useState(() => {
+    const date = new Date(); date.setMonth(date.getMonth() + 1); return date.toISOString().slice(0, 10);
+  });
 
   // Credit modal state — applies a customer-balance credit on the member's Stripe
   // customer (e.g. for Xero/Stripe migration overlap or goodwill).
@@ -141,6 +146,20 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
     }
   }
 
+  async function createOnchainSubscription() {
+    setBusy(true); setError(null);
+    try {
+      const monthlyCents = Math.round((parseFloat(monthlyDollars || "0") || 0) * 100);
+      const res = await fetch(`/api/admin/members/${memberId}/onchain-subscription`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan_key: planKey, monthly_cents: monthlyCents, wallet_address: walletAddress.trim(), paid_through: `${paidThrough}T12:00:00.000Z` }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) { setError(data?.error ?? "Failed to create crypto membership"); return; }
+      setShowOnchain(false); router.refresh();
+    } finally { setBusy(false); }
+  }
+
   async function revoke() {
     setBusy(true);
     setError(null);
@@ -171,13 +190,13 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
             <h3 className="font-semibold">Billing</h3>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <Button
+            {activeSubscription?.payment_rail !== "onchain" && <Button
               size="sm"
               onClick={() => { setShowCredit(!showCredit); setCreditApplied(null); }}
               className="bg-gold/20 hover:bg-gold/40 text-gold border border-gold/30 text-xs gap-1 h-7"
             >
               <Gift className="w-3 h-3" /> Apply credit
-            </Button>
+            </Button>}
             <Button
               size="sm"
               onClick={() => setShowRevoke(!showRevoke)}
@@ -193,6 +212,9 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
             <div className="flex items-center gap-2 flex-wrap">
               <Badge className={`text-xs ${statusStyle[activeSubscription.status] ?? "border-white/20"}`}>
                 {activeSubscription.status}
+              </Badge>
+              <Badge className="text-xs bg-white/5 border-white/15 text-muted">
+                {activeSubscription.payment_rail === "onchain" ? "OP · USDC" : "Stripe"}
               </Badge>
               <span className="text-muted">·</span>
               <span>{planLabel(activeSubscription.plan_key)}</span>
@@ -233,14 +255,33 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
         ) : (
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <p className="text-sm text-muted">No active subscription.</p>
-            <Button
-              size="sm"
-              onClick={() => { setShowGenerate(!showGenerate); setGenerated(null); }}
-              className="btn-glass text-xs h-7 gap-1.5"
-            >
-              <Link2 className="w-3.5 h-3.5" />
-              Generate Stripe link
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={() => { setShowOnchain(!showOnchain); setShowGenerate(false); selectPlan(planKey); }} className="btn-glass text-xs h-7 gap-1.5">
+                <Wallet className="w-3.5 h-3.5" /> Set up crypto
+              </Button>
+              <Button size="sm" onClick={() => { setShowGenerate(!showGenerate); setShowOnchain(false); setGenerated(null); }} className="btn-glass text-xs h-7 gap-1.5">
+                <Link2 className="w-3.5 h-3.5" /> Generate Stripe link
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {showOnchain && !activeSubscription && (
+          <div className="glass-panel p-3 border border-sage/20 space-y-3 text-sm">
+            <p className="text-xs text-muted">Backfill an existing crypto member. This creates their real subscription row and links the wallet they have already used. They will sign a portal challenge before their next automatic checkout flow.</p>
+            <div>
+              <p className="text-xs text-muted mb-1.5 font-medium">Plan</p>
+              <div className="flex gap-1.5 flex-wrap">{PLAN_OPTIONS.map((p) => (
+                <button key={p.key} type="button" onClick={() => selectPlan(p.key)} className={`px-2 py-1 rounded text-xs border ${planKey === p.key ? "bg-sage/20 border-sage/50 text-sage" : "bg-white/5 border-white/10 text-muted"}`}>{p.label} · ${p.defaultDollars}</button>
+              ))}</div>
+            </div>
+            <div className="grid sm:grid-cols-3 gap-3">
+              <label className="text-xs text-muted">Monthly list rate ($)<input type="number" min="1" value={monthlyDollars} onChange={(e) => setMonthlyDollars(e.target.value)} className="mt-1 w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-sm text-foreground" /></label>
+              <label className="text-xs text-muted">Paid through<input type="date" value={paidThrough} onChange={(e) => setPaidThrough(e.target.value)} className="mt-1 w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-sm text-foreground" /></label>
+              <label className="text-xs text-muted sm:col-span-3">Existing wallet<input value={walletAddress} onChange={(e) => setWalletAddress(e.target.value)} placeholder="0x…" className="mt-1 w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-sm text-foreground font-mono" /></label>
+            </div>
+            <p className="text-xs text-sage">Member crypto rate: ${((Math.round((parseFloat(monthlyDollars || "0") || 0) * 100) * 0.971) / 100).toFixed(2)} USDC/mo</p>
+            <div className="flex gap-2"><Button size="sm" disabled={busy} onClick={createOnchainSubscription} className="bg-sage/20 hover:bg-sage/40 text-sage border border-sage/30 text-xs gap-1 h-7">{busy && <Loader2 className="w-3 h-3 animate-spin" />} Create crypto membership</Button><Button size="sm" variant="ghost" onClick={() => setShowOnchain(false)} className="text-xs">Cancel</Button></div>
           </div>
         )}
 
@@ -464,7 +505,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
               Revoke <span className="font-semibold">{memberName}</span>&apos;s access?
               This sets <code>disabled = true</code> on the member record
               {activeSubscription && (
-                <span> and immediately cancels their <span className="font-semibold">{planLabel(activeSubscription.plan_key)}</span> subscription in Stripe</span>
+                <span> and immediately cancels their <span className="font-semibold">{planLabel(activeSubscription.plan_key)}</span> {activeSubscription.payment_rail === "onchain" ? "crypto membership" : "subscription in Stripe"}</span>
               )}
               .
             </p>

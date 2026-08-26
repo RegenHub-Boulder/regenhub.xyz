@@ -9,13 +9,13 @@ import {
   welcomeNewMemberEmail,
   subscriptionEndedEmail,
   paymentReminderEmail,
-  monthlyPassesCreditedEmail,
 } from "@/lib/email";
 import type { StripeSubscriptionStatus } from "@/lib/supabase/types";
 import {
   activateMembershipAccess,
   downgradeMembershipAccess,
 } from "@/lib/membershipLifecycle";
+import { grantSubscriptionPasses } from "@/lib/subscriptionPasses";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -388,7 +388,7 @@ async function handleInvoicePaymentSucceeded(
 
 /**
  * Credit monthly day passes if the subscription's plan defines `monthlyDayPasses`.
- * Idempotency: relies on UNIQUE(stripe_invoice_id) — if the INSERT into pass_grants
+ * Idempotency: relies on UNIQUE(billing_event_key) — if the INSERT into pass_grants
  * conflicts, the balance is NOT incremented.
  */
 async function maybeGrantMonthlyPasses(
@@ -410,11 +410,6 @@ async function maybeGrantMonthlyPasses(
     (invoice.parent?.subscription_details?.metadata?.plan_key as string | undefined);
   if (!planKey) {
     console.warn(`[Stripe] No plan_key found for invoice ${invoice.id} (sub ${subId})`);
-    return localSub?.member_id ?? null;
-  }
-
-  const plan = getPlan(planKey);
-  if (!plan || !plan.monthlyDayPasses || plan.monthlyDayPasses <= 0) {
     return localSub?.member_id ?? null;
   }
 
@@ -441,64 +436,14 @@ async function maybeGrantMonthlyPasses(
     return memberId;
   }
 
-  // Idempotent insert — UNIQUE on stripe_invoice_id prevents double-grant on redelivery
-  const { data: inserted, error: insertErr } = await admin
-    .from("pass_grants")
-    .insert({
-      member_id: memberId,
-      subscription_id: localSub?.id ?? null,
-      stripe_invoice_id: invoice.id,
-      plan_key: planKey,
-      passes_granted: plan.monthlyDayPasses,
-    })
-    .select("id")
-    .maybeSingle();
-
-  // PG unique violation code is 23505 — that's the "already granted" case
-  if (insertErr) {
-    if (insertErr.code === "23505") return memberId; // already granted
-    console.error("[Stripe] pass_grants insert failed:", insertErr);
-    return memberId;
-  }
-  if (!inserted) return memberId;
-
-  const { data: newBalance, error: rpcError } = await admin.rpc(
-    "increment_day_pass_balance",
-    { p_member_id: memberId, p_amount: plan.monthlyDayPasses },
-  );
-  if (rpcError) {
-    console.error("[Stripe] Failed to grant monthly passes:", rpcError);
-    // Rollback the grant row so a retry can succeed
-    await admin.from("pass_grants").delete().eq("id", inserted.id);
-    return memberId;
-  }
-
-  console.log(
-    `[Stripe] +${plan.monthlyDayPasses} monthly passes for member ${memberId} (plan=${planKey}, invoice=${invoice.id}) → balance=${newBalance}`,
-  );
-
-  // Tell the member their passes landed — but skip the subscription's FIRST
-  // invoice: the welcome email already covers activation, and stacking two
-  // emails in the same minute reads as spam.
-  if (invoice.billing_reason !== "subscription_create") {
-    const { data: m } = await admin
-      .from("members")
-      .select("name, email")
-      .eq("id", memberId)
-      .maybeSingle();
-    if (m?.email) {
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
-      const tpl = monthlyPassesCreditedEmail({
-        name: m.name,
-        quantity: plan.monthlyDayPasses,
-        newBalance: typeof newBalance === "number" ? newBalance : null,
-        planLabel: planLabel(planKey),
-        siteUrl,
-      });
-      sendEmail({ to: m.email, subject: tpl.subject, html: tpl.html, text: tpl.text })
-        .catch((err) => console.error("[Stripe] Monthly-credit email failed:", err));
-    }
-  }
+  await grantSubscriptionPasses(admin, {
+    memberId,
+    subscriptionId: localSub?.id ?? null,
+    planKey,
+    billingEventKey: `stripe:${invoice.id}`,
+    stripeInvoiceId: invoice.id,
+    notifyMember: invoice.billing_reason !== "subscription_create",
+  });
   return memberId;
 }
 

@@ -22,6 +22,8 @@ const OPTIONAL_BUT_WARN = [
   // Stripe — payments are core. Missing = paid flows return 503.
   "STRIPE_SECRET_KEY",
   "STRIPE_WEBHOOK_SECRET",
+  // Direct OP-native-USDC membership verification
+  "OP_RPC_URL",
   // Public-facing — affects redirect URLs after auth/checkout
   "NEXT_PUBLIC_SITE_URL",
   // Telegram — admin notifications go silent if missing
