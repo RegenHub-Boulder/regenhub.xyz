@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { notifyNewApplication, interestLabel } from "@/lib/applicationNotify";
 import { sendEmail, applicationReceivedEmail } from "@/lib/email";
 import type { MembershipInterest } from "@/lib/supabase/types";
+import { isSyntheticEmail } from "@/lib/regenos/syntheticEmail";
 
 export async function GET() {
   const supabase = await createClient();
@@ -26,16 +27,28 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
 
-  const { name, telegram, about, why_join, membership_interest } = body as {
+  const { name, telegram, about, why_join, membership_interest, email: bodyEmail } = body as {
     name?: string;
     telegram?: string;
     about?: string;
     why_join?: string;
     membership_interest?: MembershipInterest;
+    email?: string;
   };
 
   if (!name?.trim()) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
+  }
+
+  let email = user.email ?? "";
+  if (isSyntheticEmail(email)) {
+    email = (bodyEmail ?? "").trim().toLowerCase();
+    if (!email || !email.includes("@") || isSyntheticEmail(email)) {
+      return NextResponse.json({ error: "A real email is required to apply." }, { status: 400 });
+    }
+  }
+  if (!email) {
+    return NextResponse.json({ error: "Email is required" }, { status: 400 });
   }
 
   const telegramHandle = telegram?.trim().replace(/^@+/, "") || null;
@@ -46,7 +59,7 @@ export async function POST(req: Request) {
     .upsert(
       {
         supabase_user_id: user.id,
-        email: user.email!,
+        email,
         name: name.trim(),
         telegram: telegramHandle,
         about: about?.trim() || null,
@@ -70,7 +83,7 @@ export async function POST(req: Request) {
   notifyNewApplication({
     id: data.id,
     name: name.trim(),
-    email: user.email!,
+    email,
     telegram: telegramHandle,
     about: about?.trim() || null,
     why_join: why_join?.trim() || null,
@@ -85,7 +98,7 @@ export async function POST(req: Request) {
     interestLabel: interestLabel(membership_interest ?? "member_basic"),
     siteUrl,
   });
-  sendEmail({ to: user.email!, subject: ackTpl.subject, html: ackTpl.html, text: ackTpl.text })
+  sendEmail({ to: email, subject: ackTpl.subject, html: ackTpl.html, text: ackTpl.text })
     .catch((err) => console.error("[PortalApplication] Ack email failed:", err));
 
   return NextResponse.json({ application: data });

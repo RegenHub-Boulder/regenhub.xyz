@@ -23,7 +23,7 @@ const ACCESS_OPTIONS = [
 type MembershipInterest = "daypass_5pack" | "daypass_single" | "hot_desk" | "reserved_desk" | "member_basic" | "member_2day" | "member_5day";
 
 type Props = {
-  /** The signed-in user's email — locked in the form; the application links to their account. */
+  /** The signed-in user's email — locked when real; empty for BYOD/synthetic so they type one. */
   authenticatedEmail: string;
   /** Prefill from the applicant's account / prior application. */
   initial?: {
@@ -41,6 +41,7 @@ const VALID_INTERESTS = new Set<string>(ACCESS_OPTIONS.map((o) => o.value));
 
 export default function ApplyForm({ authenticatedEmail, initial }: Props) {
   const router = useRouter();
+  const emailLocked = Boolean(authenticatedEmail);
   const [form, setForm] = useState({
     name: initial?.name ?? "",
     email: authenticatedEmail,
@@ -73,6 +74,7 @@ export default function ApplyForm({ authenticatedEmail, initial }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: form.name,
+          ...(emailLocked ? {} : { email: form.email }),
           telegram: form.telegram,
           about: form.about,
           why_join: form.why_join,
@@ -123,13 +125,18 @@ export default function ApplyForm({ authenticatedEmail, initial }: Props) {
                     id="email"
                     type="email"
                     value={form.email}
+                    onChange={emailLocked ? undefined : set("email")}
                     required
                     placeholder="you@example.com"
                     className="glass-input"
-                    readOnly
-                    disabled
+                    readOnly={emailLocked}
+                    disabled={emailLocked}
                   />
-                  <p className="text-xs text-muted">Linked to your signed-in account.</p>
+                  <p className="text-xs text-muted">
+                    {emailLocked
+                      ? "Linked to your signed-in account."
+                      : "Your regenOS account has no email — this is how we'll reach you."}
+                  </p>
                 </div>
               </div>
 

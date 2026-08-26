@@ -22,6 +22,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { isRegenosLoginEnabled } from "@/lib/regenos/config";
 import { fetchRegenosIdentity } from "@/lib/regenos/auth";
+import { syntheticEmailForDid } from "@/lib/regenos/syntheticEmail";
 
 const DID = "did:plc:regenhubmember";
 const EMAIL = "member@example.com";
@@ -146,15 +147,42 @@ describe("POST /api/auth/regenos/session", () => {
     expect(json.error).toMatch(/No regenOS session/);
   });
 
-  it("403s when the regenOS account has no verified email", async () => {
+  it("mints a participant session when the regenOS account has no verified email", async () => {
     vi.mocked(fetchRegenosIdentity).mockResolvedValue({ did: DID, handle: null, email: null });
-    vi.mocked(createServiceClient).mockReturnValue(makeAdminMock() as never);
+    const admin = makeAdminMock({ member: null });
+    const server = makeServerMock();
+    vi.mocked(createServiceClient).mockReturnValue(admin as never);
+    vi.mocked(createClient).mockResolvedValue(server as never);
 
     const res = await POST(req());
     const json = await res.json();
 
-    expect(res.status).toBe(403);
-    expect(json.error).toMatch(/no verified email/);
+    expect(res.status).toBe(200);
+    expect(json).toMatchObject({ ok: true, member: false, did: DID, redirect: "/membership" });
+    expect(admin.__updates).toEqual([]);
+    expect(admin.__generateLink).toHaveBeenCalledWith({
+      type: "magiclink",
+      email: syntheticEmailForDid(DID),
+    });
+    expect(server.__verifyOtp).toHaveBeenCalled();
+  });
+
+  it("mints a member session by DID when there is no email but members.did already matches", async () => {
+    vi.mocked(fetchRegenosIdentity).mockResolvedValue({ did: DID, handle: "byod.test", email: null });
+    const admin = makeAdminMock({
+      member: { id: 42, email: EMAIL, did: DID, disabled: false },
+    });
+    const server = makeServerMock();
+    vi.mocked(createServiceClient).mockReturnValue(admin as never);
+    vi.mocked(createClient).mockResolvedValue(server as never);
+
+    const res = await POST(req());
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json).toMatchObject({ ok: true, member: true, did: DID, redirect: "/portal" });
+    expect(admin.__updates).toEqual([]);
+    expect(admin.__generateLink).toHaveBeenCalledWith({ type: "magiclink", email: EMAIL });
   });
 
   it("links the DID and mints a Supabase session for a matched member", async () => {

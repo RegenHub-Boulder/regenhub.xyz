@@ -205,9 +205,10 @@ interface SessionResponse {
 
 /**
  * `POST /api/auth/regenos/session` — the SAME handoff both existing regenOS doors run
- * (`RegenosLoginPanel.finish()`, `OAuthCallback`): match the verified email to a membership, link
- * the DID, mint the Supabase session. No member match is not an error — that's a participant, and
- * the route says where to send them.
+ * (`RegenosLoginPanel.finish()`, `OAuthCallback`): match verified email (or existing
+ * `members.did`) to a membership, link the DID, mint the Supabase session. No member
+ * match is not an error — that's a participant, and the route says where to send them.
+ * No verified email is also not an error (BYOD / passkey → participant, or member via DID).
  */
 export async function finishSession(
   fetchImpl: typeof fetch = fetch,
