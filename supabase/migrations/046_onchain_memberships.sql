@@ -88,7 +88,7 @@ create table onchain_invoices (
   period_end           timestamptz not null,
   due_at               timestamptz not null,
   base_amount_cents    integer not null check (base_amount_cents > 0),
-  discount_bps         integer not null default 290 check (discount_bps between 0 and 10000),
+  discount_bps         integer not null default 0 check (discount_bps between 0 and 10000),
   amount_cents         integer not null check (amount_cents > 0),
   amount_usdc_micros   bigint not null check (amount_usdc_micros > 0),
   chain_id             bigint not null default 10 check (chain_id = 10),

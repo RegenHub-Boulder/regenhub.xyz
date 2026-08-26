@@ -280,7 +280,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
               <label className="text-xs text-muted">Paid through<input type="date" value={paidThrough} onChange={(e) => setPaidThrough(e.target.value)} className="mt-1 w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-sm text-foreground" /></label>
               <label className="text-xs text-muted sm:col-span-3">Existing wallet<input value={walletAddress} onChange={(e) => setWalletAddress(e.target.value)} placeholder="0x…" className="mt-1 w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-sm text-foreground font-mono" /></label>
             </div>
-            <p className="text-xs text-sage">Member crypto rate: ${((Math.round((parseFloat(monthlyDollars || "0") || 0) * 100) * 0.971) / 100).toFixed(2)} USDC/mo</p>
+            <p className="text-xs text-sage">Member crypto rate: ${(Math.round((parseFloat(monthlyDollars || "0") || 0) * 100) / 100).toFixed(2)} USDC/mo</p>
             <div className="flex gap-2"><Button size="sm" disabled={busy} onClick={createOnchainSubscription} className="bg-sage/20 hover:bg-sage/40 text-sage border border-sage/30 text-xs gap-1 h-7">{busy && <Loader2 className="w-3 h-3 animate-spin" />} Create crypto membership</Button><Button size="sm" variant="ghost" onClick={() => setShowOnchain(false)} className="text-xs">Cancel</Button></div>
           </div>
         )}

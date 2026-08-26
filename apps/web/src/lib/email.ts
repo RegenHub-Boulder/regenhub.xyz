@@ -506,13 +506,13 @@ export function onchainRenewalReminderEmail(args: {
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
         <p>Hi ${firstName},</p>
         <p>Your <strong>${args.planLabel}</strong> membership renews on <strong>${args.dueDate}</strong>.</p>
-        <p>Your crypto rate is <strong>${args.amountUsdc} USDC</strong> after the 2.9% discount. Open the portal, connect your verified wallet, and RegenHub will prepare the exact native-USDC transfer on OP Mainnet for you to approve.</p>
+        <p>Your membership rate is <strong>${args.amountUsdc} USDC</strong>. Open the portal, connect your verified wallet, and RegenHub will prepare the exact native-USDC transfer on OP Mainnet for you to approve.</p>
         <p style="margin: 20px 0;"><a href="${base}/portal" style="background: #2d5e3e; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Review and pay</a></p>
         <p>You stay in good standing through the due date, with the same seven-day grace period afterward if you need it.</p>
         <p>&mdash; RegenHub</p>
       </div>
     `,
-    text: `Hi ${firstName},\n\nYour ${args.planLabel} membership renews on ${args.dueDate}.\n\nYour crypto rate is ${args.amountUsdc} USDC after the 2.9% discount. Open the portal, connect your verified wallet, and RegenHub will prepare the exact native-USDC transfer on OP Mainnet for you to approve:\n${base}/portal\n\nYou stay in good standing through the due date, with the same seven-day grace period afterward if you need it.\n\n— RegenHub`,
+    text: `Hi ${firstName},\n\nYour ${args.planLabel} membership renews on ${args.dueDate}.\n\nYour membership rate is ${args.amountUsdc} USDC. Open the portal, connect your verified wallet, and RegenHub will prepare the exact native-USDC transfer on OP Mainnet for you to approve:\n${base}/portal\n\nYou stay in good standing through the due date, with the same seven-day grace period afterward if you need it.\n\n— RegenHub`,
   };
 }
 

@@ -111,7 +111,7 @@ export function OnchainBillingCard(props: Props) {
         <Wallet className="w-4 h-4 text-sage" />
         <p className="font-medium text-sm">Pay direct to the RegenHub treasury</p>
       </div>
-      <p className="text-xs text-muted">Native USDC on OP Mainnet · 2.9% crypto discount · your wallet always approves the transaction.</p>
+      <p className="text-xs text-muted">Native USDC on OP Mainnet · same membership rate · your wallet always approves the transaction.</p>
       {!props.walletVerifiedBySignature ? (
         <Button disabled={busy} onClick={connectAndVerify} className="btn-glass text-xs gap-2">
           {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Connect & verify wallet
