@@ -13,14 +13,9 @@ import {
 } from "@/lib/email";
 import type { StripeSubscriptionStatus } from "@/lib/supabase/types";
 import {
-  allocateSlotWithRetry,
-  setUserCode,
-  clearUserCode,
-  formatLockStatus,
-  generateRandomCode,
-  MEMBER_SLOT_MIN,
-  MEMBER_SLOT_MAX,
-} from "@regenhub/shared";
+  activateMembershipAccess,
+  downgradeMembershipAccess,
+} from "@/lib/membershipLifecycle";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -335,24 +330,17 @@ async function handleSubscriptionDeleted(admin: ServiceClient, sub: Stripe.Subsc
     cancelledPlan?.grantsMemberType === "hot_desk";
   const slot = row.members?.pin_code_slot ?? null;
 
-  // Flip member back to day_pass (they keep portal/day-pass access)
-  const memberUpdate: { member_type: "day_pass"; pin_code_slot?: null; pin_code?: null } = {
-    member_type: "day_pass",
-  };
   let lockRevokeNote = "";
-  if (wasDeskTier && slot) {
-    memberUpdate.pin_code_slot = null;
-    memberUpdate.pin_code = null;
-    try {
-      const lockResults = await clearUserCode(slot);
-      lockRevokeNote = `\n\n🔒 Cleared PIN slot ${slot} on lock: ${formatLockStatus(lockResults)}`;
-    } catch (err) {
-      console.error("[Webhook] Failed to revoke lock code on cancel:", err);
-      lockRevokeNote = `\n\n⚠️ *Action needed:* Lock revoke failed for slot ${slot}. Run Lock Sync from /admin/access.`;
-    }
+  const downgrade = await downgradeMembershipAccess(admin, {
+    memberId: row.member_id,
+    currentPinSlot: slot,
+    revokePermanentPin: wasDeskTier,
+  });
+  if (downgrade.revokedSlot && downgrade.lockRevokeFailed) {
+    lockRevokeNote = `\n\n⚠️ *Action needed:* Lock revoke failed for slot ${downgrade.revokedSlot}. Run Lock Sync from /admin/access.`;
+  } else if (downgrade.revokedSlot && downgrade.lockStatus) {
+    lockRevokeNote = `\n\n🔒 Cleared PIN slot ${downgrade.revokedSlot} on lock: ${downgrade.lockStatus}`;
   }
-
-  await admin.from("members").update(memberUpdate).eq("id", row.member_id);
   await notifyTelegram(
     `👋 ${name}'s ${planLabel(row.plan_key)} subscription ended. Now on day-pass status.${lockRevokeNote}`,
   );
@@ -667,73 +655,19 @@ async function upsertSubscription(
   let autoAllocatedSlot: number | null = null;
   let autoAllocationFailure: string | null = null;
   if (isActiveStatus(status)) {
-    // Only update member_type if the plan grants physical access
-    if (plan.grantsMemberType) {
-      await admin
-        .from("members")
-        .update({ member_type: plan.grantsMemberType, disabled: false })
-        .eq("id", member.id);
-    } else {
-      // Digital-only plan — just clear disabled flag
-      await admin.from("members").update({ disabled: false }).eq("id", member.id);
-    }
+    const activation = await activateMembershipAccess(admin, {
+      memberId: member.id,
+      currentPinSlot: member.pin_code_slot,
+      grantsMemberType: plan.grantsMemberType,
+    });
+    autoAllocatedSlot = activation.autoAllocatedSlot;
+    autoAllocationFailure = activation.autoAllocationFailure;
 
     // Clear any stale past_due_since on grant
     await admin
       .from("subscriptions")
       .update({ past_due_since: null, access_disabled_at: null })
       .eq("stripe_subscription_id", sub.id);
-
-    // Desk-tier self-serve: auto-allocate a permanent PIN slot + push to lock.
-    // Without this, a $250/$500 subscriber pays then sees "No slot assigned"
-    // on /portal/my-code. Skip if a slot is already assigned (admin pre-allocated
-    // or sub flapped). Skip non-desk plans (hub_friend is comp, social tiers
-    // don't get permanent slots).
-    const needsSlot =
-      (plan.grantsMemberType === "cold_desk" || plan.grantsMemberType === "hot_desk") &&
-      !member.pin_code_slot;
-    if (needsSlot) {
-      const code = generateRandomCode();
-      const allocation = await allocateSlotWithRetry<{ id: number; pin_code_slot: number }>({
-        min: MEMBER_SLOT_MIN,
-        max: MEMBER_SLOT_MAX,
-        getUsedSlots: async () => {
-          const { data } = await admin
-            .from("members")
-            .select("pin_code_slot")
-            .not("pin_code_slot", "is", null);
-          return new Set((data ?? []).map((r) => r.pin_code_slot as number));
-        },
-        tryInsert: (slot) =>
-          admin
-            .from("members")
-            .update({ pin_code_slot: slot, pin_code: code })
-            .eq("id", member.id)
-            .select("id, pin_code_slot")
-            .single(),
-      });
-
-      if (allocation.ok) {
-        autoAllocatedSlot = allocation.slot;
-        try {
-          const lockResults = await setUserCode(allocation.slot, code);
-          // A door that didn't respond OR accepted-but-may-not-have-landed
-          // (low battery / offline) both warrant a heads-up to the admin.
-          const lockStatus = formatLockStatus(lockResults);
-          autoAllocationFailure = /didn't respond|may not/i.test(lockStatus)
-            ? `lock push partial: ${lockStatus}`
-            : null;
-        } catch (err) {
-          console.error("[Webhook] setUserCode failed for new desk member:", err);
-          autoAllocationFailure = "lock push failed — needs Lock Sync";
-        }
-      } else {
-        console.error("[Webhook] Slot allocation failed for new desk member:", allocation.error);
-        autoAllocationFailure = allocation.exhausted
-          ? "no slots available (1-100 exhausted)"
-          : `allocation error: ${allocation.error}`;
-      }
-    }
 
     // First-time activation side effects (new subscription, not a status flap)
     if (isNew) {
