@@ -107,11 +107,13 @@ describe("xrpc proxy allowlist", () => {
 
   it.each([
     // Neighbours of the allowed writes — near-misses are the ones that matter.
-    "social.scenius.setMembership",
     "social.scenius.adoptEvent",
     "social.scenius.rsvp",
     "social.scenius.inviteToEvent",
     "social.scenius.createScene",
+    // Membership sync is the admin API, not this proxy.
+    "social.scenius.setMembership",
+    "social.scenius.revokeMembership",
   ])("404s the unlisted %s without touching the AppView", async (nsid) => {
     const res = await POST(req(nsid), ctx(nsid));
     expect(res.status).toBe(404);
