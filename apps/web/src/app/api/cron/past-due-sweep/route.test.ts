@@ -49,4 +49,19 @@ describe("POST /api/cron/past-due-sweep", () => {
     expect(json.swept).toBe(0);
     expect(json.flipped).toBe(0);
   });
+
+  it("only sweeps subscriptions whose lifecycle status is actually past_due", async () => {
+    process.env.CRON_SECRET = "secret-1";
+    const query: Record<string, ReturnType<typeof vi.fn>> = {};
+    for (const method of ["select", "eq", "lt", "is", "not"]) {
+      query[method] = vi.fn(() => query);
+    }
+    query.returns = vi.fn(async () => ({ data: [], error: null }));
+    vi.mocked(createServiceClient).mockReturnValue({ from: vi.fn(() => query) } as never);
+
+    const res = await POST(makeRequest("Bearer secret-1"));
+
+    expect(res.status).toBe(200);
+    expect(query.eq).toHaveBeenCalledWith("status", "past_due");
+  });
 });

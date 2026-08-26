@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { addCalendarMonth, discountedCents, invoiceValues } from "./invoice";
+import { describe, expect, it, vi } from "vitest";
+import { addCalendarMonth, discountedCents, invoiceValues, markDueOnchainSubscriptionsPastDue } from "./invoice";
 
 describe("on-chain invoice math", () => {
   it("uses the agreed membership rate while the crypto discount is zero", () => {
@@ -31,5 +31,38 @@ describe("on-chain invoice math", () => {
       token_contract: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
       treasury_address: "0xA594263e0449A28eAEf5BA6420E81cC1996b7782",
     });
+  });
+
+  it("allows a first invoice to have a setup window without changing its billing period", () => {
+    expect(invoiceValues({
+      subscriptionId: 7,
+      memberId: 9,
+      periodStart: "2026-09-01T00:00:00.000Z",
+      dueAt: "2026-09-08T00:00:00.000Z",
+      baseAmountCents: 25_000,
+    })).toMatchObject({
+      period_start: "2026-09-01T00:00:00.000Z",
+      period_end: "2026-10-01T00:00:00.000Z",
+      due_at: "2026-09-08T00:00:00.000Z",
+    });
+  });
+
+  it("never promotes an unpaid incomplete signup into past_due membership", async () => {
+    const invoices: Record<string, ReturnType<typeof vi.fn>> = {};
+    for (const method of ["select", "in", "lte"]) invoices[method] = vi.fn(() => invoices);
+    invoices.then = vi.fn((resolve) => Promise.resolve(resolve({
+      data: [{ id: 4, subscription_id: 7 }],
+      error: null,
+    })));
+
+    const subscriptions: Record<string, ReturnType<typeof vi.fn>> = {};
+    for (const method of ["update", "eq", "in", "is"]) subscriptions[method] = vi.fn(() => subscriptions);
+    subscriptions.then = vi.fn((resolve) => Promise.resolve(resolve({ data: null, error: null })));
+
+    await markDueOnchainSubscriptionsPastDue({
+      from: vi.fn((table: string) => table === "onchain_invoices" ? invoices : subscriptions),
+    } as never, new Date("2026-09-10T00:00:00.000Z"));
+
+    expect(subscriptions.in).toHaveBeenCalledWith("status", ["active", "trialing", "past_due"]);
   });
 });

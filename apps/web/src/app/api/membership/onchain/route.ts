@@ -72,20 +72,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Connect and verify a wallet first." }, { status: 409 });
   }
 
-  // Honor the admin-approved rate when this is the plan from the application;
-  // otherwise use the catalog rate, matching the existing self-serve Stripe path.
-  const { data: application } = await admin
-    .from("applications")
-    .select("status, approved_plan_key, approved_monthly_cents")
-    .eq("supabase_user_id", session.user.id)
-    .maybeSingle();
-  const approvedCents = application?.status === "approved" &&
-    application.approved_plan_key === body.plan_key &&
-    Number.isInteger(application.approved_monthly_cents) &&
-    application.approved_monthly_cents > 0
-    ? application.approved_monthly_cents
-    : null;
-  const monthlyCents = approvedCents ?? plan.defaultMonthlyCents;
+  // Self-serve prices must come from server-owned catalog data. Application
+  // rows contain admin workflow fields and must never be a billing authority.
+  const monthlyCents = plan.defaultMonthlyCents;
   const periodStart = new Date().toISOString();
 
   const { data: subscription, error: subscriptionError } = await admin
@@ -107,9 +96,10 @@ export async function POST(request: Request) {
     .select("*")
     .single();
   if (subscriptionError || !subscription) {
+    console.error("[OnchainSignup] Subscription insert failed:", subscriptionError);
     return NextResponse.json(
-      { error: subscriptionError?.message ?? "Could not start crypto membership" },
-      { status: subscriptionError?.code === "23505" ? 409 : 400 },
+      { error: subscriptionError?.code === "23505" ? "Your crypto membership is already set up." : "Could not start crypto membership" },
+      { status: subscriptionError?.code === "23505" ? 409 : 500 },
     );
   }
 
@@ -118,6 +108,7 @@ export async function POST(request: Request) {
     memberId: member.id,
     periodStart,
     baseAmountCents: monthlyCents,
+    dueAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
   });
   const { data: invoice, error: invoiceError } = await admin
     .from("onchain_invoices")

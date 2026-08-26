@@ -58,11 +58,6 @@ export function LinkRegenOSCard() {
         const data = (await res.json()) as { did?: string; handle?: string };
         if (cancelled) return;
         setHandle(data.did ? (data.handle ?? data.did) : null);
-        // Both sessions are live in this browser and the portal has already
-        // resolved the member. That is the same possession proof as the
-        // manual button, so finish the link without asking for a redundant
-        // second click. The button remains as a retry if this request fails.
-        if (data.did) await link();
       } catch {
         if (!cancelled) setHandle(null);
       }
@@ -70,7 +65,7 @@ export function LinkRegenOSCard() {
     return () => {
       cancelled = true;
     };
-  }, [link]);
+  }, []);
 
   if (linked) {
     return (

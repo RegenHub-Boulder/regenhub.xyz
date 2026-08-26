@@ -54,17 +54,13 @@ describe("POST /api/membership/onchain", () => {
         onInsert: (value) => { subscriptionInsert = value as Record<string, unknown>; },
       }),
       member_wallets: builder({ selectData: { id: 12, address: "0x0000000000000000000000000000000000000001" } }),
-      applications: builder({
-        selectData: { status: "approved", approved_plan_key: "hot_desk", approved_monthly_cents: 25_000 },
-      }),
       onchain_invoices: builder({
         insertData: { id: 101, amount_cents: 25_000, amount_usdc_micros: 250_000_000, due_at: "now", status: "open" },
         onInsert: (value) => { invoiceInsert = value as Record<string, unknown>; },
       }),
     };
-    vi.mocked(createServiceClient).mockReturnValue({
-      from: vi.fn((table: keyof typeof tables) => tables[table]),
-    } as never);
+    const from = vi.fn((table: keyof typeof tables) => tables[table]);
+    vi.mocked(createServiceClient).mockReturnValue({ from } as never);
 
     const response = await POST(new Request("http://localhost/api/membership/onchain", {
       method: "POST",
@@ -90,6 +86,8 @@ describe("POST /api/membership/onchain", () => {
       chain_id: 10,
       status: "open",
     });
+    expect(new Date(String(invoiceInsert?.due_at)).getTime()).toBeGreaterThan(Date.now() + 6 * 24 * 60 * 60 * 1000);
+    expect(from).not.toHaveBeenCalledWith("applications");
   });
 
   it("does not create a crypto membership beside an existing card membership", async () => {
