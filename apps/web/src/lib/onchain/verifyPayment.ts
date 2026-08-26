@@ -10,9 +10,10 @@ import { activateMembershipAccess } from "@/lib/membershipLifecycle";
 import { getPlan } from "@/lib/plans";
 import { grantSubscriptionPasses } from "@/lib/subscriptionPasses";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { getOpPublicClient } from "./config";
+import { assertOpPublicClient, getOpPublicClient } from "./config";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
+const EFFECTS_CLAIM_LEASE_MS = 5 * 60 * 1000;
 
 const TRANSFER_EVENT = parseAbiItem(
   "event Transfer(address indexed from, address indexed to, uint256 value)",
@@ -69,6 +70,15 @@ function decodeTransfers(logs: Log[]): DecodedTransfer[] {
   return transfers;
 }
 
+export function canClaimPaymentEffects(
+  payment: { effects_claimed_at: string | null; effects_completed_at: string | null },
+  now = new Date(),
+) {
+  if (payment.effects_completed_at) return false;
+  if (!payment.effects_claimed_at) return true;
+  return new Date(payment.effects_claimed_at).getTime() <= now.getTime() - EFFECTS_CLAIM_LEASE_MS;
+}
+
 async function completePaymentEffects(
   admin: ServiceClient,
   args: {
@@ -79,40 +89,68 @@ async function completePaymentEffects(
     planKey: string;
   },
 ) {
-  const { data: payment } = await admin
+  const { data: payment, error: paymentError } = await admin
     .from("onchain_payments")
-    .select("effects_completed_at")
+    .select("effects_claimed_at, effects_completed_at")
     .eq("id", args.paymentId)
     .maybeSingle();
-  if (payment?.effects_completed_at) return;
+  if (paymentError) throw paymentError;
+  if (!payment || !canClaimPaymentEffects(payment)) return;
 
-  const [{ data: member }, plan] = await Promise.all([
-    admin
-      .from("members")
-      .select("id, pin_code_slot")
-      .eq("id", args.memberId)
-      .single(),
-    Promise.resolve(getPlan(args.planKey)),
-  ]);
-  if (!member || !plan) throw new Error("credited payment has no member or plan");
-
-  await activateMembershipAccess(admin, {
-    memberId: member.id,
-    currentPinSlot: member.pin_code_slot,
-    grantsMemberType: plan.grantsMemberType,
-  });
-  await grantSubscriptionPasses(admin, {
-    memberId: member.id,
-    subscriptionId: args.subscriptionId,
-    planKey: args.planKey,
-    billingEventKey: `onchain:${args.invoiceId}`,
-    notifyMember: true,
-  });
-  await admin
+  const claimAt = new Date().toISOString();
+  let claim = admin
     .from("onchain_payments")
-    .update({ effects_completed_at: new Date().toISOString() })
+    .update({ effects_claimed_at: claimAt })
     .eq("id", args.paymentId)
     .is("effects_completed_at", null);
+  claim = payment?.effects_claimed_at
+    ? claim.eq("effects_claimed_at", payment.effects_claimed_at)
+    : claim.is("effects_claimed_at", null);
+  const { data: claimed, error: claimError } = await claim
+    .select("id")
+    .maybeSingle();
+  if (claimError) throw claimError;
+  if (!claimed) return;
+
+  try {
+    const [{ data: member }, plan] = await Promise.all([
+      admin
+        .from("members")
+        .select("id, pin_code_slot")
+        .eq("id", args.memberId)
+        .single(),
+      Promise.resolve(getPlan(args.planKey)),
+    ]);
+    if (!member || !plan) throw new Error("credited payment has no member or plan");
+
+    await activateMembershipAccess(admin, {
+      memberId: member.id,
+      currentPinSlot: member.pin_code_slot,
+      grantsMemberType: plan.grantsMemberType,
+    });
+    await grantSubscriptionPasses(admin, {
+      memberId: member.id,
+      subscriptionId: args.subscriptionId,
+      planKey: args.planKey,
+      billingEventKey: `onchain:${args.invoiceId}`,
+      notifyMember: true,
+    });
+    const { error: completeError } = await admin
+      .from("onchain_payments")
+      .update({ effects_claimed_at: null, effects_completed_at: new Date().toISOString() })
+      .eq("id", args.paymentId)
+      .eq("effects_claimed_at", claimAt)
+      .is("effects_completed_at", null);
+    if (completeError) throw completeError;
+  } catch (error) {
+    await admin
+      .from("onchain_payments")
+      .update({ effects_claimed_at: null })
+      .eq("id", args.paymentId)
+      .eq("effects_claimed_at", claimAt)
+      .is("effects_completed_at", null);
+    throw error;
+  }
 }
 
 export type ProcessInvoiceResult =
@@ -149,6 +187,7 @@ export async function processOnchainInvoice(
 
   const txHash = invoice.submitted_tx_hash as Hash;
   const client = getOpPublicClient();
+  await assertOpPublicClient(client);
   let receipt;
   try {
     receipt = await client.getTransactionReceipt({ hash: txHash });
@@ -163,7 +202,12 @@ export async function processOnchainInvoice(
     const reason = "transaction reverted";
     await admin
       .from("onchain_invoices")
-      .update({ status: "exception", exception_reason: reason })
+      .update({
+        status: "exception",
+        exception_reason: reason,
+        submitted_tx_hash: null,
+        submitted_at: null,
+      })
       .eq("id", invoice.id);
     return { status: "exception", txHash, reason };
   }
@@ -180,7 +224,13 @@ export async function processOnchainInvoice(
     const reason = error instanceof Error ? error.message : "payment did not match invoice";
     await admin
       .from("onchain_invoices")
-      .update({ status: "exception", exception_reason: reason, detected_at: new Date().toISOString() })
+      .update({
+        status: "exception",
+        exception_reason: reason,
+        submitted_tx_hash: null,
+        submitted_at: null,
+        detected_at: new Date().toISOString(),
+      })
       .eq("id", invoice.id);
     return { status: "exception", txHash, reason };
   }
@@ -262,6 +312,7 @@ export async function retryPendingOnchainEffects(admin: ServiceClient) {
 /** Mark previously safe credits finalized once OP's finalized head passes them. */
 export async function advanceFinalizedOnchainPayments(admin: ServiceClient) {
   const client = getOpPublicClient();
+  await assertOpPublicClient(client);
   const finalized = await client.getBlock({ blockTag: "finalized" });
   const { data, error } = await admin
     .from("onchain_payments")
@@ -275,6 +326,7 @@ export async function advanceFinalizedOnchainPayments(admin: ServiceClient) {
     const canonical = await client.getBlock({ blockNumber: BigInt(payment.block_number) });
     if (canonical.hash.toLowerCase() !== payment.block_hash.toLowerCase()) {
       await admin.from("onchain_payments").update({ chain_status: "reorged", exception_reason: "credited block is no longer canonical" }).eq("id", payment.id);
+      console.error(`[OnchainBilling] Credited payment ${payment.id} was reorged before finalization`);
       continue;
     }
     await admin.from("onchain_payments").update({ chain_status: "finalized" }).eq("id", payment.id);

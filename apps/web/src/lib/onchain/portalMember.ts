@@ -6,8 +6,8 @@ export async function requirePortalMember() {
   if (!user) return null;
   const { data: member } = await supabase
     .from("members")
-    .select("id, name, email")
+    .select("id, name, email, disabled")
     .eq("supabase_user_id", user.id)
     .single();
-  return member ? { user, member } : null;
+  return member && !member.disabled ? { user, member } : null;
 }

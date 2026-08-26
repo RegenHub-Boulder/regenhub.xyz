@@ -400,6 +400,7 @@ export interface Database {
           exception_reason: string | null;
           observed_at: string;
           credited_at: string | null;
+          effects_claimed_at: string | null;
           effects_completed_at: string | null;
           raw_log: unknown;
         };
@@ -419,6 +420,7 @@ export interface Database {
           match_status: "credited" | "exception" | "rejected";
           exception_reason?: string | null;
           credited_at?: string | null;
+          effects_claimed_at?: string | null;
           effects_completed_at?: string | null;
           raw_log?: unknown;
         };

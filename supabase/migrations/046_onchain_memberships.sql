@@ -96,7 +96,10 @@ create table onchain_invoices (
   treasury_address     text not null default '0xA594263e0449A28eAEf5BA6420E81cC1996b7782',
   status               text not null default 'open'
     check (status in ('open', 'submitted', 'detected', 'paid', 'expired', 'void', 'exception')),
-  submitted_tx_hash    text unique check (submitted_tx_hash is null or submitted_tx_hash ~ '^0x[0-9a-fA-F]{64}$'),
+  submitted_tx_hash    text unique check (
+    submitted_tx_hash is null
+    or (submitted_tx_hash ~ '^0x[0-9a-f]{64}$' and submitted_tx_hash = lower(submitted_tx_hash))
+  ),
   submitted_at         timestamptz,
   detected_at          timestamptz,
   paid_at              timestamptz,
@@ -121,7 +124,7 @@ create table onchain_payments (
   invoice_id           bigint not null references onchain_invoices(id) on delete restrict,
   member_id            integer not null references members(id) on delete restrict,
   chain_id             bigint not null check (chain_id = 10),
-  tx_hash               text not null check (tx_hash ~ '^0x[0-9a-fA-F]{64}$'),
+  tx_hash               text not null check (tx_hash ~ '^0x[0-9a-f]{64}$' and tx_hash = lower(tx_hash)),
   log_index             integer not null,
   block_number          bigint not null,
   block_hash            text not null,
@@ -134,6 +137,7 @@ create table onchain_payments (
   exception_reason      text,
   observed_at           timestamptz not null default now(),
   credited_at           timestamptz,
+  effects_claimed_at    timestamptz,
   effects_completed_at  timestamptz,
   raw_log               jsonb,
   unique (chain_id, tx_hash, log_index)

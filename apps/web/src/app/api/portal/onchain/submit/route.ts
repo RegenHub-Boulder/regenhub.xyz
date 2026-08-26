@@ -18,6 +18,7 @@ export async function POST(request: Request) {
   if (!body?.invoice_id || !body.tx_hash || !isHash(body.tx_hash)) {
     return NextResponse.json({ error: "Valid invoice and transaction hash required" }, { status: 400 });
   }
+  const txHash = body.tx_hash.toLowerCase();
 
   const admin = createServiceClient();
   const { data: invoice } = await admin
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
   if (!invoice || !["open", "submitted", "detected", "exception"].includes(invoice.status)) {
     return NextResponse.json({ error: "Open invoice not found" }, { status: 404 });
   }
-  if (invoice.status !== "exception" && invoice.submitted_tx_hash && invoice.submitted_tx_hash.toLowerCase() !== body.tx_hash.toLowerCase()) {
+  if (invoice.status !== "exception" && invoice.submitted_tx_hash && invoice.submitted_tx_hash !== txHash) {
     return NextResponse.json({ error: "Invoice already has a different transaction" }, { status: 409 });
   }
 
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
     .from("onchain_invoices")
     .update({
       status: "submitted",
-      submitted_tx_hash: body.tx_hash,
+      submitted_tx_hash: txHash,
       submitted_at: new Date().toISOString(),
       exception_reason: null,
     })
@@ -50,7 +51,7 @@ export async function POST(request: Request) {
     console.error("[OnchainSubmit] verification failed:", error);
     return NextResponse.json({
       status: "submitted",
-      txHash: body.tx_hash,
+      txHash,
       warning: "Transaction saved; confirmation will retry automatically",
     }, { status: 202 });
   }
