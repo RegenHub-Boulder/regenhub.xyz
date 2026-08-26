@@ -14,7 +14,8 @@ import { planMembership } from "@/lib/regenos/membershipRole";
  * must be a RegenHub admin AND a regenOS steward of the collective — the
  * AppView writes the claim AS the scene, using the steward's session.
  *
- * Rows with no DID are skipped. Disabled members are revoked.
+ * Rows with no DID are skipped. Disabled members are revoked. Desk/co-op
+ * do not grant builder/facilitator — those are calendar-write roles.
  */
 export async function POST() {
   if (!isRegenosLoginEnabled() || !regenosBaseUrl() || !regenosCollectiveDid()) {
@@ -38,7 +39,7 @@ export async function POST() {
   const admin = createServiceClient();
   const { data: rows, error } = await admin
     .from("members")
-    .select("id, name, did, disabled, is_admin, is_ops_admin, is_coop_member, member_type");
+    .select("id, name, did, disabled, is_admin, is_ops_admin");
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

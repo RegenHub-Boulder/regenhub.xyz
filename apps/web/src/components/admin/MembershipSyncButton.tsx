@@ -12,7 +12,7 @@ export function MembershipSyncButton() {
   async function run() {
     if (
       !window.confirm(
-        "Push RegenHub roles onto the regenOS collective for every member with a DID? Disabled members are revoked.",
+        "Admit every member with a DID as member, admins/ops as steward? Desk and co-op do not grant calendar write. Disabled members are revoked.",
       )
     ) {
       return;

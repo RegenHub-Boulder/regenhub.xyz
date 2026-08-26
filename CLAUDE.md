@@ -241,8 +241,9 @@ Both doors land the AppView's session cookie on this origin then call the one sh
   self-edit whitelist (`api/portal/profile/route.ts:63-65`).
 - `/portal/events` — **Manage Events**, the stewards' in-portal calendar (no link-out to scenius).
   **Import from Luma** pastes public luma.com / lu.ma URLs/HTML, parses JSON-LD (no Pro API), then
-  `createEvent`s the selected rows. `/admin/members` **Sync claims to regenOS** maps member axes
-  onto `social.scenius.setMembership` (`member|builder|facilitator|steward`) for rows with a DID.
+  `createEvent`s the selected rows. `/admin/members` **Sync claims to regenOS** admits DID-holders
+  as `member` and admins/ops as `steward`. Desk/co-op do **not** map to builder/facilitator
+  (those roles can write events). Builder grants stay explicit on regenOS.
   Server component: Supabase session, then `fetchRegenosIdentity` + `fetchRegenosSceneStanding`
   (`getSceneMembers`, whose `steward` flag is computed for the *caller* through the trust resolver;
   we OR it with a direct Builder+ roster row to mirror the AppView's own `owner_or_builder` write

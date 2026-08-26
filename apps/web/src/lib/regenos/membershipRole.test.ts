@@ -6,8 +6,6 @@ const base: MemberAxes = {
   disabled: false,
   is_admin: false,
   is_ops_admin: false,
-  is_coop_member: false,
-  member_type: "hub_friend",
 };
 
 describe("planMembership", () => {
@@ -23,18 +21,9 @@ describe("planMembership", () => {
     });
   });
 
-  it("maps admin / ops-admin to steward, co-op to facilitator, desk to builder", () => {
+  it("maps admin / ops-admin to steward; everyone else with a DID is member", () => {
     expect(planMembership({ ...base, is_admin: true })).toMatchObject({ role: "steward" });
     expect(planMembership({ ...base, is_ops_admin: true })).toMatchObject({ role: "steward" });
-    expect(planMembership({ ...base, is_coop_member: true })).toMatchObject({ role: "facilitator" });
-    expect(planMembership({ ...base, member_type: "hot_desk" })).toMatchObject({ role: "builder" });
-    expect(planMembership({ ...base, member_type: "cold_desk" })).toMatchObject({ role: "builder" });
-    expect(planMembership({ ...base, member_type: "day_pass" })).toMatchObject({ role: "member" });
-  });
-
-  it("admin wins over desk type", () => {
-    expect(planMembership({ ...base, is_admin: true, member_type: "hot_desk" })).toMatchObject({
-      role: "steward",
-    });
+    expect(planMembership(base)).toMatchObject({ action: "set", role: "member" });
   });
 });
