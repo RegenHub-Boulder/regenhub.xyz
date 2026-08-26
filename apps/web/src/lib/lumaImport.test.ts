@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { isoToLocalInput } from "@/lib/regenos/eventForm";
 import {
   extractLumaUrls,
   fetchLumaHtml,
@@ -159,8 +160,11 @@ describe("lumaEventToFormValues", () => {
     expect(form.placeName).toBe("RegenHub");
     expect(form.street).toBe("1515 Walnut St");
     expect(form.visibility).toBe("public");
-    expect(form.startsAt).toMatch(/^2026-08-14T/);
-    expect(form.endsAt).toMatch(/^2026-08-14T/);
+    // isoToLocalInput uses the runner's local zone — don't assert a calendar
+    // date from a -06:00 offset (CI is UTC; this box is Denver).
+    expect(form.startsAt).toBe(isoToLocalInput("2026-08-14T15:00:00.000-06:00"));
+    expect(form.endsAt).toBe(isoToLocalInput("2026-08-14T20:30:00.000-06:00"));
+    expect(form.startsAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
   });
 });
 
