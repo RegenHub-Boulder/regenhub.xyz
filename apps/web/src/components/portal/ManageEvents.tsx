@@ -19,6 +19,7 @@ import {
   type EventFormValues,
   type EventVisibility,
 } from "@/lib/regenos/eventForm";
+import { ImportLumaCard } from "@/components/portal/ImportLumaCard";
 
 export interface ManageableEvent {
   uri: string;
@@ -157,10 +158,15 @@ export function ManageEvents({
       )}
 
       {editing === null ? (
-        <Button onClick={openCreate} className="btn-primary-glass gap-2 px-6">
-          <CalendarPlus className="w-4 h-4" />
-          New event
-        </Button>
+        <>
+          <div className="flex flex-wrap gap-3">
+            <Button onClick={openCreate} className="btn-primary-glass gap-2 px-6">
+              <CalendarPlus className="w-4 h-4" />
+              New event
+            </Button>
+          </div>
+          <ImportLumaCard authority={authority} onImported={refresh} />
+        </>
       ) : (
         <Card className="glass-panel">
           <CardContent className="p-6">

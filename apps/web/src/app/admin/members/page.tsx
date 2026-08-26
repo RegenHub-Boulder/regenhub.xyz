@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import { Search, X } from "lucide-react";
+import { MembershipSyncButton } from "@/components/admin/MembershipSyncButton";
 import type { AdminUsersResponse, AdminUser, AdminUserSubscription } from "@/app/api/admin/users/route";
 import type { Member } from "@/lib/supabase/types";
 import { effectiveMonthlyCents } from "@/lib/stripeNet";
@@ -339,9 +340,12 @@ export default function UsersPage() {
             </p>
           )}
         </div>
-        <Link href="/admin/members/new">
-          <Button className="btn-primary-glass">Add Member</Button>
-        </Link>
+        <div className="flex items-center gap-3 flex-wrap">
+          <MembershipSyncButton />
+          <Link href="/admin/members/new">
+            <Button className="btn-primary-glass">Add Member</Button>
+          </Link>
+        </div>
       </div>
 
       {/* Search + filters */}

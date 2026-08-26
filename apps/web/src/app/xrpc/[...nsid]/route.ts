@@ -43,9 +43,11 @@ export const runtime = "nodejs";
  *   pre-auth, PUBLIC AppView method (it answers anonymous callers by design)
  * - getSession / getMyContactPref — whoami, read by the browser for UI state
  * - createEvent / updateEvent / deleteEvent — /portal/events, the stewards'
- *   in-portal calendar. These are the only WRITES on the list; each one is
- *   gated server-side by the AppView on Builder+ of the event's authority
+ *   in-portal calendar. Each write is gated server-side by the AppView
  *   (`require_owner_or_builder`), so the proxy widens reach, never authority.
+ * Membership-claim sync does NOT go through this proxy: the admin route talks
+ * to the AppView server-to-server with the steward cookie, and also requires
+ * RegenHub `requireAdmin`.
  */
 const ALLOWED_NSIDS = new Set([
   "social.scenius.beginSignup",

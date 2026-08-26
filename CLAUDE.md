@@ -222,7 +222,9 @@ Both doors land the AppView's session cookie on this origin then call the one sh
   liminal-web). Needed because the AppView's `__Host-rs_session` cookie forbids a `Domain` attribute
   and can only land on the origin that emitted it. **Allowlisted to the login NSIDs (incl.
   `beginOAuth`/`oauthCallback`) plus the three event writes** (`createEvent`/`updateEvent`/
-  `deleteEvent`) — nothing else; 404s when the flag is off.
+  `deleteEvent`) — nothing else; 404s when the flag is off. Membership-claim sync
+  (`setMembership`/`revokeMembership`) is the admin API talking to the AppView
+  server-to-server, not this proxy.
 - `POST /api/auth/regenos/session` — the handoff, shared by both doors. Reads the regenOS session cookie → `getSession`
   (DID) + `getMyContactPref` (the **verified** login-anchor email, if any) → matches `members` by that
   email, or by `members.did` if there is no email → writes `members.did` → mints a Supabase session via
@@ -238,6 +240,9 @@ Both doors land the AppView's session cookie on this origin then call the one sh
 - `members.did` (migration `042`) is **server-written only** and deliberately absent from the profile
   self-edit whitelist (`api/portal/profile/route.ts:63-65`).
 - `/portal/events` — **Manage Events**, the stewards' in-portal calendar (no link-out to scenius).
+  **Import from Luma** pastes public luma.com / lu.ma URLs/HTML, parses JSON-LD (no Pro API), then
+  `createEvent`s the selected rows. `/admin/members` **Sync claims to regenOS** maps member axes
+  onto `social.scenius.setMembership` (`member|builder|facilitator|steward`) for rows with a DID.
   Server component: Supabase session, then `fetchRegenosIdentity` + `fetchRegenosSceneStanding`
   (`getSceneMembers`, whose `steward` flag is computed for the *caller* through the trust resolver;
   we OR it with a direct Builder+ roster row to mirror the AppView's own `owner_or_builder` write
