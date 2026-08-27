@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ConnectButton, useConnectModal } from "@rainbow-me/rainbowkit";
-import { erc20Abi, getAddress, type Address, type Hash } from "viem";
+import { getAddress, type Address, type Hash, type Hex } from "viem";
 import {
   useAccount,
   useSignMessage,
+  useSignTypedData,
   useSwitchChain,
-  useWriteContract,
 } from "wagmi";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Loader2, Wallet } from "lucide-react";
@@ -31,12 +31,33 @@ type Props = {
 
 type WalletAction = "verify" | "pay";
 
+type RelayAuthorization = {
+  domain: {
+    name: string;
+    version: string;
+    chainId: number;
+    verifyingContract: Address;
+  };
+  types: {
+    TransferWithAuthorization: readonly { name: string; type: string }[];
+  };
+  primaryType: "TransferWithAuthorization";
+  message: {
+    from: Address;
+    to: Address;
+    value: string;
+    validAfter: string;
+    validBefore: string;
+    nonce: Hex;
+  };
+};
+
 function OnchainBillingCardInner(props: Props) {
   const { address, connector, isConnected } = useAccount();
   const { openConnectModal, connectModalOpen } = useConnectModal();
   const { signMessageAsync } = useSignMessage();
+  const { signTypedDataAsync } = useSignTypedData();
   const { switchChainAsync } = useSwitchChain();
-  const { writeContractAsync } = useWriteContract();
   const [busy, setBusy] = useState(false);
   const [pendingAction, setPendingAction] = useState<WalletAction | null>(null);
   const [connectModalSeen, setConnectModalSeen] = useState(false);
@@ -72,21 +93,59 @@ function OnchainBillingCardInner(props: Props) {
   const pay = useCallback(async () => {
     if (!props.invoice || !props.walletAddress || !address) return;
     let transferHash: Hash | null = null;
-    setBusy(true); setError(null); setMessage("Review the exact USDC transfer in your wallet…");
+    setBusy(true); setError(null); setMessage("Authorize the exact USDC payment — RegenHub covers the OP gas…");
     try {
       const checksummed = getAddress(address);
       if (checksummed.toLowerCase() !== props.walletAddress.toLowerCase()) {
         throw new Error(`Connect the verified wallet ${props.walletAddress.slice(0, 8)}…${props.walletAddress.slice(-4)}`);
       }
       await switchChainAsync({ chainId: 10 });
-      const txHash = await writeContractAsync({
-        account: checksummed,
-        address: props.tokenAddress,
-        abi: erc20Abi,
-        functionName: "transfer",
-        args: [props.treasuryAddress, BigInt(props.invoice.amountMicros)],
-        chainId: 10,
+      const prepareRes = await fetch("/api/portal/onchain/relay/prepare", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoice_id: props.invoice.id }),
       });
+      const prepared = await prepareRes.json() as {
+        status?: "prepared" | "queued" | "submitted";
+        authorization?: RelayAuthorization;
+        txHash?: Hash;
+        error?: string;
+      };
+      if (!prepareRes.ok) throw new Error(prepared.error ?? "Could not prepare gasless payment");
+
+      let signature: Hex | undefined;
+      if (prepared.authorization) {
+        const authorization = prepared.authorization;
+        signature = await signTypedDataAsync({
+          account: checksummed,
+          domain: authorization.domain,
+          types: authorization.types,
+          primaryType: authorization.primaryType,
+          message: {
+            ...authorization.message,
+            value: BigInt(authorization.message.value),
+            validAfter: BigInt(authorization.message.validAfter),
+            validBefore: BigInt(authorization.message.validBefore),
+          },
+        });
+      }
+
+      let txHash = prepared.txHash ?? null;
+      for (let attempt = 0; !txHash && attempt < 12; attempt += 1) {
+        const relayRes = await fetch("/api/portal/onchain/relay", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ invoice_id: props.invoice.id, signature }),
+        });
+        const relayed = await relayRes.json() as { txHash?: Hash; error?: string };
+        if (!relayRes.ok && relayRes.status !== 202) {
+          throw new Error(relayed.error ?? "Could not submit gasless payment");
+        }
+        txHash = relayed.txHash ?? null;
+        signature = undefined;
+        if (!txHash && attempt < 11) await new Promise((resolve) => setTimeout(resolve, 3_000));
+      }
+      if (!txHash) {
+        throw new Error("Payment authorization is queued; RegenHub will keep retrying it. Do not authorize again.");
+      }
       transferHash = txHash;
       setSubmittedTxHash(txHash);
       setMessage("Transaction submitted. RegenHub is checking OP confirmation…");
@@ -111,7 +170,7 @@ function OnchainBillingCardInner(props: Props) {
         : cause instanceof Error ? cause.message : "Payment could not be submitted");
       setMessage(null);
     } finally { setBusy(false); }
-  }, [address, props.invoice, props.tokenAddress, props.treasuryAddress, props.walletAddress, switchChainAsync, writeContractAsync]);
+  }, [address, props.invoice, props.walletAddress, signTypedDataAsync, switchChainAsync]);
 
   useEffect(() => {
     if (!pendingAction || !isConnected || !address) return;
@@ -150,7 +209,7 @@ function OnchainBillingCardInner(props: Props) {
         <Wallet className="w-4 h-4 text-sage" />
         <p className="font-medium text-sm">Pay direct to the RegenHub treasury</p>
       </div>
-      <p className="text-xs text-muted">Native USDC on OP Mainnet · same membership rate · your wallet always approves the transaction.</p>
+      <p className="text-xs text-muted">Native USDC on OP Mainnet · same membership rate · RegenHub sponsors the gas and your wallet authorizes the exact payment.</p>
 
       {isConnected && address && (
         <ConnectButton.Custom>

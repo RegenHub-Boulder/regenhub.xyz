@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ConnectButton, useConnectModal } from "@rainbow-me/rainbowkit";
-import { erc20Abi, type Address, type Hash } from "viem";
+import { type Address, type Hash, type Hex } from "viem";
 import {
   useAccount,
   useSignMessage,
+  useSignTypedData,
   useSwitchChain,
-  useWriteContract,
 } from "wagmi";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Loader2, Wallet } from "lucide-react";
@@ -32,6 +32,27 @@ type Setup = {
 
 type Phase = "idle" | "connecting" | "verifying" | "preparing" | "sending" | "confirming" | "complete";
 
+type RelayAuthorization = {
+  domain: {
+    name: string;
+    version: string;
+    chainId: number;
+    verifyingContract: Address;
+  };
+  types: {
+    TransferWithAuthorization: readonly { name: string; type: string }[];
+  };
+  primaryType: "TransferWithAuthorization";
+  message: {
+    from: Address;
+    to: Address;
+    value: string;
+    validAfter: string;
+    validBefore: string;
+    nonce: Hex;
+  };
+};
+
 const PENDING_PAYMENT_KEY = "regenhub:onchain:pending-payment";
 
 type Props = {
@@ -43,7 +64,7 @@ const PHASE_LABELS: Record<Exclude<Phase, "idle" | "complete">, string> = {
   connecting: "Connecting wallet…",
   verifying: "Verifying wallet ownership…",
   preparing: "Preparing your membership invoice…",
-  sending: "Opening wallet approval…",
+  sending: "Authorizing gasless USDC payment…",
   confirming: "Confirming on OP Mainnet…",
 };
 
@@ -51,8 +72,8 @@ function CryptoSubscribeButtonInner({ planKey, className }: Props) {
   const { address, connector, isConnected } = useAccount();
   const { openConnectModal, connectModalOpen } = useConnectModal();
   const { signMessageAsync } = useSignMessage();
+  const { signTypedDataAsync } = useSignTypedData();
   const { switchChainAsync } = useSwitchChain();
-  const { writeContractAsync } = useWriteContract();
   const [phase, setPhase] = useState<Phase>("idle");
   const [connectIntent, setConnectIntent] = useState(false);
   const [connectModalSeen, setConnectModalSeen] = useState(false);
@@ -97,16 +118,59 @@ function CryptoSubscribeButtonInner({ planKey, className }: Props) {
     if (!address) throw new Error("Connect your wallet to continue.");
     setPhase("sending");
     await switchChainAsync({ chainId: nextSetup.payment.chain_id });
-    const hash = await writeContractAsync({
-      account: address,
-      address: nextSetup.payment.token_address,
-      abi: erc20Abi,
-      functionName: "transfer",
-      args: [nextSetup.payment.treasury_address, BigInt(nextSetup.invoice.amount_usdc_micros)],
-      chainId: nextSetup.payment.chain_id,
+    const prepareRes = await fetch("/api/portal/onchain/relay/prepare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invoice_id: nextSetup.invoice.id }),
     });
-    await confirmSubmittedPayment(nextSetup.invoice.id, hash);
-  }, [address, confirmSubmittedPayment, switchChainAsync, writeContractAsync]);
+    const prepared = await prepareRes.json() as {
+      status?: "prepared" | "queued" | "submitted";
+      authorization?: RelayAuthorization;
+      txHash?: Hash;
+      error?: string;
+    };
+    if (!prepareRes.ok) throw new Error(prepared.error ?? "Could not prepare gasless payment");
+    if (prepared.txHash) {
+      await confirmSubmittedPayment(nextSetup.invoice.id, prepared.txHash);
+      return;
+    }
+
+    let signature: Hex | undefined;
+    if (prepared.authorization) {
+      const authorization = prepared.authorization;
+      signature = await signTypedDataAsync({
+        account: address,
+        domain: authorization.domain,
+        types: authorization.types,
+        primaryType: authorization.primaryType,
+        message: {
+          ...authorization.message,
+          value: BigInt(authorization.message.value),
+          validAfter: BigInt(authorization.message.validAfter),
+          validBefore: BigInt(authorization.message.validBefore),
+        },
+      });
+    }
+
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      const relayRes = await fetch("/api/portal/onchain/relay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoice_id: nextSetup.invoice.id, signature }),
+      });
+      const relayed = await relayRes.json() as { status?: string; txHash?: Hash; error?: string };
+      if (!relayRes.ok && relayRes.status !== 202) {
+        throw new Error(relayed.error ?? "Could not submit gasless payment");
+      }
+      if (relayed.txHash) {
+        await confirmSubmittedPayment(nextSetup.invoice.id, relayed.txHash);
+        return;
+      }
+      signature = undefined;
+      if (attempt < 11) await new Promise((resolve) => setTimeout(resolve, 3_000));
+    }
+    throw new Error("Payment authorization is queued; RegenHub will keep retrying it. Do not authorize again.");
+  }, [address, confirmSubmittedPayment, signTypedDataAsync, switchChainAsync]);
 
   const verifyAndPay = useCallback(async () => {
     if (!address) return;

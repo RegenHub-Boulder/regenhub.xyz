@@ -427,6 +427,67 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["onchain_payments"]["Insert"]>;
         Relationships: [];
       };
+      onchain_relay_jobs: {
+        Row: {
+          invoice_id: number;
+          member_id: number;
+          wallet_id: number;
+          from_address: string;
+          token_contract: string;
+          treasury_address: string;
+          amount_usdc_micros: number;
+          authorization_nonce: string;
+          valid_after: number;
+          valid_before: number;
+          signature: string | null;
+          status: "prepared" | "signed" | "submitting" | "submitted" | "expired";
+          authorization_from_block: number;
+          submitted_tx_hash: string | null;
+          attempts: number;
+          last_error: string | null;
+          signed_at: string | null;
+          submitted_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          invoice_id: number;
+          member_id: number;
+          wallet_id: number;
+          from_address: string;
+          token_contract: string;
+          treasury_address: string;
+          amount_usdc_micros: number;
+          authorization_nonce: string;
+          valid_after: number;
+          valid_before: number;
+          signature?: string | null;
+          status?: "prepared" | "signed" | "submitting" | "submitted" | "expired";
+          authorization_from_block: number;
+          submitted_tx_hash?: string | null;
+          attempts?: number;
+          last_error?: string | null;
+          signed_at?: string | null;
+          submitted_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["onchain_relay_jobs"]["Insert"]>;
+        Relationships: [];
+      };
+      onchain_relay_worker: {
+        Row: {
+          singleton: boolean;
+          lease_token: string | null;
+          lease_claimed_at: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          singleton?: boolean;
+          lease_token?: string | null;
+          lease_claimed_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["onchain_relay_worker"]["Insert"]>;
+        Relationships: [];
+      };
       purchases: {
         Row: {
           id: number;
