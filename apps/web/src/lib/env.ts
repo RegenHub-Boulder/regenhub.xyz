@@ -26,6 +26,8 @@ const OPTIONAL_BUT_WARN = [
   "OP_RPC_URL",
   // Public-facing — affects redirect URLs after auth/checkout
   "NEXT_PUBLIC_SITE_URL",
+  // Enables WalletConnect QR/mobile wallets in the RainbowKit checkout.
+  "NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID",
   // Telegram — admin notifications go silent if missing
   "TELEGRAM_BOT_TOKEN",
   "TELEGRAM_GROUP_CHAT_ID",

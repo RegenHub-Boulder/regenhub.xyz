@@ -2,11 +2,35 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { requirePortalMember } from "@/lib/onchain/portalMember";
 import { discountedCents, invoiceValues } from "@/lib/onchain/invoice";
+import {
+  NATIVE_USDC_ADDRESS,
+  ONCHAIN_CHAIN_ID,
+  TREASURY_ADDRESS,
+} from "@/lib/onchain/config";
 import { getPlan } from "@/lib/plans";
 import type { PlanKey } from "@/lib/supabase/types";
 import { AuditAction, logAction } from "@/lib/auditLog";
 
 type Body = { plan_key?: PlanKey };
+
+function setupResponse(subscriptionId: number, invoice: {
+  id: number;
+  amount_cents: number;
+  amount_usdc_micros: number;
+  due_at: string;
+  status: string;
+  submitted_tx_hash?: string | null;
+}) {
+  return {
+    subscription_id: subscriptionId,
+    invoice,
+    payment: {
+      chain_id: ONCHAIN_CHAIN_ID,
+      token_address: NATIVE_USDC_ADDRESS,
+      treasury_address: TREASURY_ADDRESS,
+    },
+  };
+}
 
 /**
  * Start a first-time direct-USDC membership after the member has signature-
@@ -43,7 +67,7 @@ export async function POST(request: Request) {
 
   const { data: existing, error: existingError } = await admin
     .from("subscriptions")
-    .select("id, payment_rail")
+    .select("id, payment_rail, plan_key, status")
     .eq("member_id", member.id)
     .in("status", ["active", "trialing", "past_due", "incomplete"])
     .limit(1)
@@ -51,9 +75,16 @@ export async function POST(request: Request) {
   if (existingError) {
     return NextResponse.json({ error: "Couldn't check your membership." }, { status: 500 });
   }
-  if (existing) {
+  if (existing && (existing.payment_rail !== "onchain" || existing.status !== "incomplete")) {
     return NextResponse.json(
-      { error: existing.payment_rail === "onchain" ? "Your crypto membership is already set up. Open the portal to continue." : "You already have a live membership." },
+      { error: existing?.payment_rail === "onchain" ? "Your crypto membership is already set up. Open the portal to continue." : "You already have a live membership." },
+      { status: 409 },
+    );
+  }
+
+  if (existing && existing.plan_key !== body.plan_key) {
+    return NextResponse.json(
+      { error: "Your existing crypto setup uses a different membership plan. Open the portal to continue." },
       { status: 409 },
     );
   }
@@ -70,6 +101,21 @@ export async function POST(request: Request) {
   }
   if (!wallet) {
     return NextResponse.json({ error: "Connect and verify a wallet first." }, { status: 409 });
+  }
+
+  // A rejected wallet prompt or closed browser must not strand the member.
+  // Resume the same unpaid setup rather than creating another invoice.
+  if (existing) {
+    const { data: invoice, error: invoiceError } = await admin
+      .from("onchain_invoices")
+      .select("id, amount_cents, amount_usdc_micros, due_at, status, submitted_tx_hash")
+      .eq("subscription_id", existing.id)
+      .in("status", ["open", "submitted", "detected"])
+      .maybeSingle();
+    if (invoiceError || !invoice) {
+      return NextResponse.json({ error: "Could not resume your first crypto invoice. Open the portal to continue." }, { status: 409 });
+    }
+    return NextResponse.json(setupResponse(existing.id, invoice));
   }
 
   // Self-serve prices must come from server-owned catalog data. Application
@@ -113,7 +159,7 @@ export async function POST(request: Request) {
   const { data: invoice, error: invoiceError } = await admin
     .from("onchain_invoices")
     .insert(initialInvoice)
-    .select("id, amount_cents, amount_usdc_micros, due_at, status")
+    .select("id, amount_cents, amount_usdc_micros, due_at, status, submitted_tx_hash")
     .single();
   if (invoiceError || !invoice) {
     // No money or access has moved yet. Remove the incomplete shell so the
@@ -130,5 +176,5 @@ export async function POST(request: Request) {
     payload: { member_id: member.id, plan_key: body.plan_key, monthly_cents: monthlyCents, wallet: wallet.address, source: "self_serve" },
   }, admin);
 
-  return NextResponse.json({ subscription_id: subscription.id, invoice });
+  return NextResponse.json(setupResponse(subscription.id, invoice));
 }
