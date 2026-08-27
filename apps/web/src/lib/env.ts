@@ -24,6 +24,8 @@ const OPTIONAL_BUT_WARN = [
   "STRIPE_WEBHOOK_SECRET",
   // Direct OP-native-USDC membership verification
   "OP_RPC_URL",
+  // Dedicated gas-only wallet for EIP-3009 USDC relay submissions.
+  "OP_RELAYER_PRIVATE_KEY",
   // Public-facing — affects redirect URLs after auth/checkout
   "NEXT_PUBLIC_SITE_URL",
   // Enables WalletConnect QR/mobile wallets in the RainbowKit checkout.

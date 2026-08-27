@@ -177,13 +177,27 @@ export async function processOnchainInvoice(
     .eq("payment_rail", "onchain")
     .single();
   if (!subscription?.wallet_id) throw new Error("invoice subscription has no verified wallet");
-  const { data: wallet } = await admin
-    .from("member_wallets")
-    .select("address")
-    .eq("id", subscription.wallet_id)
-    .is("revoked_at", null)
-    .single();
-  if (!wallet) throw new Error("verified wallet not found");
+  const { data: relayJob, error: relayJobError } = await admin
+    .from("onchain_relay_jobs")
+    .select("member_id, from_address")
+    .eq("invoice_id", invoice.id)
+    .eq("submitted_tx_hash", invoice.submitted_tx_hash)
+    .maybeSingle();
+  if (relayJobError) throw relayJobError;
+  let expectedSender = relayJob?.from_address ?? null;
+  if (relayJob && relayJob.member_id !== subscription.member_id) {
+    throw new Error("relay authorization belongs to another member");
+  }
+  if (!expectedSender) {
+    const { data: wallet } = await admin
+      .from("member_wallets")
+      .select("address")
+      .eq("id", subscription.wallet_id)
+      .is("revoked_at", null)
+      .single();
+    if (!wallet) throw new Error("verified wallet not found");
+    expectedSender = wallet.address;
+  }
 
   const txHash = invoice.submitted_tx_hash as Hash;
   const client = getOpPublicClient();
@@ -209,6 +223,16 @@ export async function processOnchainInvoice(
         submitted_at: null,
       })
       .eq("id", invoice.id);
+    await admin
+      .from("onchain_relay_jobs")
+      .update({
+        status: "signed",
+        submitted_tx_hash: null,
+        submitted_at: null,
+        last_error: reason,
+      })
+      .eq("invoice_id", invoice.id)
+      .eq("submitted_tx_hash", txHash);
     return { status: "exception", txHash, reason };
   }
 
@@ -216,7 +240,7 @@ export async function processOnchainInvoice(
   try {
     transfer = selectExpectedTransfer(decodeTransfers(receipt.logs), {
       token: invoice.token_contract,
-      from: wallet.address,
+      from: expectedSender,
       to: invoice.treasury_address,
       amount: BigInt(invoice.amount_usdc_micros),
     });
@@ -232,6 +256,11 @@ export async function processOnchainInvoice(
         detected_at: new Date().toISOString(),
       })
       .eq("id", invoice.id);
+    await admin
+      .from("onchain_relay_jobs")
+      .update({ status: "expired", last_error: reason })
+      .eq("invoice_id", invoice.id)
+      .eq("submitted_tx_hash", txHash);
     return { status: "exception", txHash, reason };
   }
 

@@ -1,4 +1,4 @@
-import { createPublicClient, http } from "viem";
+import { createPublicClient, http, type Hex } from "viem";
 import { optimism } from "viem/chains";
 
 export const ONCHAIN_CHAIN_ID = 10;
@@ -47,4 +47,16 @@ export async function assertOpPublicClient(
 
 export function isOnchainBillingConfigured(): boolean {
   return Boolean(process.env.OP_RPC_URL);
+}
+
+export function getOpRelayerPrivateKey(): Hex {
+  const value = process.env.OP_RELAYER_PRIVATE_KEY;
+  if (!value || !/^0x[0-9a-fA-F]{64}$/.test(value)) {
+    throw new Error("OP_RELAYER_PRIVATE_KEY is not configured");
+  }
+  return value as Hex;
+}
+
+export function isGaslessRelayConfigured(): boolean {
+  return Boolean(process.env.OP_RPC_URL && /^0x[0-9a-fA-F]{64}$/.test(process.env.OP_RELAYER_PRIVATE_KEY ?? ""));
 }

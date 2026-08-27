@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { generateUpcomingOnchainInvoices, markDueOnchainSubscriptionsPastDue } from "@/lib/onchain/invoice";
 import { advanceFinalizedOnchainPayments, processOnchainInvoice, retryPendingOnchainEffects } from "@/lib/onchain/verifyPayment";
+import { isGaslessRelayConfigured } from "@/lib/onchain/config";
+import { processGaslessRelayQueue } from "@/lib/onchain/gaslessRelay";
 import { onchainRenewalReminderEmail, sendEmail } from "@/lib/email";
 import { planLabel } from "@/lib/plans";
 
@@ -12,6 +14,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const admin = createServiceClient();
+  const gaslessRelays = [];
+  if (isGaslessRelayConfigured()) {
+    for (let index = 0; index < 10; index += 1) {
+      try {
+        const relay = await processGaslessRelayQueue(admin);
+        if (relay.status === "empty" || relay.status === "busy") break;
+        gaslessRelays.push(relay);
+      } catch (cause) {
+        gaslessRelays.push({
+          status: "retry_error",
+          error: cause instanceof Error ? cause.message : "unknown",
+        });
+        break;
+      }
+    }
+  }
   const created = await generateUpcomingOnchainInvoices(admin);
   const { data: unsentReminders, error: reminderQueryError } = await admin
     .from("onchain_invoices")
@@ -50,5 +68,5 @@ export async function POST(req: Request) {
   }
   await retryPendingOnchainEffects(admin);
   const finalized = await advanceFinalizedOnchainPayments(admin);
-  return NextResponse.json({ invoicesCreated: created.length, remindersSent, pastDue, confirmations, finalized });
+  return NextResponse.json({ gaslessRelays, invoicesCreated: created.length, remindersSent, pastDue, confirmations, finalized });
 }
