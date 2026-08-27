@@ -12,7 +12,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Loader2, Wallet } from "lucide-react";
 import { RegenHubWalletProvider } from "@/components/web3/RegenHubWalletProvider";
+import { GaslessPaymentReview } from "@/components/web3/GaslessPaymentReview";
 import { pollOnchainPayment } from "@/lib/onchain/clientConfirmation";
+import {
+  assertExpectedAuthorization,
+  relayAuthorizationRequest,
+  type RelayAuthorization,
+  withWalletTimeout,
+} from "@/lib/onchain/walletAuthorization";
 
 type Props = {
   walletAddress: string | null;
@@ -32,29 +39,8 @@ type Props = {
 
 type WalletAction = "verify" | "pay";
 
-type RelayAuthorization = {
-  domain: {
-    name: string;
-    version: string;
-    chainId: number;
-    verifyingContract: Address;
-  };
-  types: {
-    TransferWithAuthorization: readonly { name: string; type: string }[];
-  };
-  primaryType: "TransferWithAuthorization";
-  message: {
-    from: Address;
-    to: Address;
-    value: string;
-    validAfter: string;
-    validBefore: string;
-    nonce: Hex;
-  };
-};
-
 function OnchainBillingCardInner(props: Props) {
-  const { address, connector, isConnected } = useAccount();
+  const { address, chainId, connector, isConnected } = useAccount();
   const { openConnectModal, connectModalOpen } = useConnectModal();
   const { signMessageAsync } = useSignMessage();
   const { signTypedDataAsync } = useSignTypedData();
@@ -62,6 +48,7 @@ function OnchainBillingCardInner(props: Props) {
   const [busy, setBusy] = useState(false);
   const [pendingAction, setPendingAction] = useState<WalletAction | null>(null);
   const [connectModalSeen, setConnectModalSeen] = useState(false);
+  const [authorization, setAuthorization] = useState<RelayAuthorization | null>(null);
   const [submittedTxHash, setSubmittedTxHash] = useState<Hash | null>(null);
   const [paymentDetected, setPaymentDetected] = useState(props.invoice?.status === "detected");
   const [message, setMessage] = useState<string | null>(null);
@@ -77,7 +64,10 @@ function OnchainBillingCardInner(props: Props) {
       });
       const challenge = await challengeRes.json();
       if (!challengeRes.ok) throw new Error(challenge.error ?? "Could not create wallet challenge");
-      const signature = await signMessageAsync({ account: checksummed, message: challenge.message });
+      const signature = await withWalletTimeout(
+        signMessageAsync({ account: checksummed, message: challenge.message }),
+        "MetaMask did not respond to the ownership check. Open MetaMask and cancel any request still waiting there before trying again.",
+      );
       const verifyRes = await fetch("/api/portal/onchain/wallet/verify", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ challenge_id: challenge.id, address: checksummed, signature }),
@@ -92,16 +82,61 @@ function OnchainBillingCardInner(props: Props) {
     } finally { setBusy(false); }
   }, [address, signMessageAsync]);
 
-  const pay = useCallback(async () => {
+  const confirmPayment = useCallback(async (txHash: Hash) => {
+    if (!props.invoice) return;
+    setSubmittedTxHash(txHash);
+    setAuthorization(null);
+    setMessage("Transaction submitted. RegenHub is checking OP confirmation…");
+    if (await pollOnchainPayment({
+      invoiceId: props.invoice.id,
+      txHash,
+      onStatus: (status) => {
+        if (status === "detected") {
+          setPaymentDetected(true);
+          setMessage("Payment received. RegenHub is completing OP verification…");
+        }
+      },
+    })) {
+      setMessage("Payment confirmed — membership is active.");
+      setTimeout(() => window.location.reload(), 1_500);
+      return;
+    }
+    setMessage("Payment is still being verified. Do not pay again; reopen this page to resume checking.");
+  }, [props.invoice]);
+
+  const submitPayment = useCallback(async (signature?: Hex) => {
+    if (!props.invoice) return;
+    setMessage("Submitting the authorized payment — RegenHub covers the OP gas…");
+    const relayRes = await fetch("/api/portal/onchain/relay", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invoice_id: props.invoice.id, signature }),
+    });
+    const relayed = await relayRes.json() as { txHash?: Hash; error?: string; warning?: string };
+    if (!relayRes.ok && relayRes.status !== 202) {
+      throw new Error(relayed.error ?? "Could not submit gasless payment");
+    }
+    if (!relayed.txHash) {
+      throw new Error(relayed.warning ?? "Payment authorization is queued; RegenHub will keep retrying it. Do not authorize again.");
+    }
+    await confirmPayment(relayed.txHash);
+  }, [confirmPayment, props.invoice]);
+
+  const preparePayment = useCallback(async () => {
     if (!props.invoice || !props.walletAddress || !address) return;
-    let transferHash: Hash | null = null;
-    setBusy(true); setError(null); setMessage("Authorize the exact USDC payment — RegenHub covers the OP gas…");
+    setBusy(true); setError(null); setAuthorization(null);
     try {
       const checksummed = getAddress(address);
       if (checksummed.toLowerCase() !== props.walletAddress.toLowerCase()) {
         throw new Error(`Connect the verified wallet ${props.walletAddress.slice(0, 8)}…${props.walletAddress.slice(-4)}`);
       }
-      await switchChainAsync({ chainId: 10 });
+      if (chainId !== 10) {
+        setMessage("Open MetaMask and switch to OP Mainnet…");
+        await withWalletTimeout(
+          switchChainAsync({ chainId: 10 }),
+          "MetaMask did not switch networks. Open MetaMask, switch to OP Mainnet, then return and try again.",
+        );
+      }
+      setMessage("Checking the exact amount and your OP USDC balance…");
       const prepareRes = await fetch("/api/portal/onchain/relay/prepare", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ invoice_id: props.invoice.id }),
@@ -113,64 +148,56 @@ function OnchainBillingCardInner(props: Props) {
         error?: string;
       };
       if (!prepareRes.ok) throw new Error(prepared.error ?? "Could not prepare gasless payment");
-
-      let signature: Hex | undefined;
-      if (prepared.authorization) {
-        const authorization = prepared.authorization;
-        signature = await signTypedDataAsync({
-          account: checksummed,
-          domain: authorization.domain,
-          types: authorization.types,
-          primaryType: authorization.primaryType,
-          message: {
-            ...authorization.message,
-            value: BigInt(authorization.message.value),
-            validAfter: BigInt(authorization.message.validAfter),
-            validBefore: BigInt(authorization.message.validBefore),
-          },
-        });
-      }
-
-      let txHash = prepared.txHash ?? null;
-      if (!txHash) {
-        const relayRes = await fetch("/api/portal/onchain/relay", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ invoice_id: props.invoice.id, signature }),
-        });
-        const relayed = await relayRes.json() as { txHash?: Hash; error?: string; warning?: string };
-        if (!relayRes.ok && relayRes.status !== 202) {
-          throw new Error(relayed.error ?? "Could not submit gasless payment");
-        }
-        txHash = relayed.txHash ?? null;
-        if (!txHash) {
-          throw new Error(relayed.warning ?? "Payment authorization is queued; RegenHub will keep retrying it. Do not authorize again.");
-        }
-      }
-      transferHash = txHash;
-      setSubmittedTxHash(txHash);
-      setMessage("Transaction submitted. RegenHub is checking OP confirmation…");
-      if (await pollOnchainPayment({
-        invoiceId: props.invoice.id,
-        txHash,
-        onStatus: (status) => {
-          if (status === "detected") {
-            setPaymentDetected(true);
-            setMessage("Payment received. RegenHub is completing safe OP confirmation…");
-          }
-        },
-      })) {
-        setMessage("Payment confirmed — membership is active.");
-        setTimeout(() => window.location.reload(), 1_500);
+      if (prepared.txHash) {
+        await confirmPayment(prepared.txHash);
         return;
       }
-      setMessage("Payment is still awaiting OP safe confirmation. Do not pay again; reopen this page to resume checking.");
+      if (prepared.authorization) {
+        setAuthorization(assertExpectedAuthorization(prepared.authorization, {
+          from: checksummed,
+          treasury: props.treasuryAddress,
+          token: props.tokenAddress,
+          amountMicros: props.invoice.amountMicros,
+          chainId: 10,
+        }));
+        setMessage("Review the exact authorization below, then open MetaMask from the next button.");
+        return;
+      }
+      await submitPayment();
     } catch (cause) {
-      setError(transferHash
-        ? `${cause instanceof Error ? cause.message : "Confirmation is delayed"}. Your transaction was submitted; do not pay again.`
-        : cause instanceof Error ? cause.message : "Payment could not be submitted");
+      setError(cause instanceof Error ? cause.message : "Payment could not be prepared");
       setMessage(null);
-    } finally { setBusy(false); }
-  }, [address, props.invoice, props.walletAddress, signTypedDataAsync, switchChainAsync]);
+    } finally {
+      setBusy(false);
+    }
+  }, [address, chainId, confirmPayment, props.invoice, props.tokenAddress, props.treasuryAddress, props.walletAddress, submitPayment, switchChainAsync]);
+
+  const authorizePayment = useCallback(async () => {
+    if (!props.invoice || !address || !authorization) return;
+    let signed = false;
+    setBusy(true); setError(null);
+    setMessage("Signature request sent. Open MetaMask if it did not appear automatically…");
+    try {
+      const checksummed = getAddress(address);
+      const signature = await withWalletTimeout(
+        signTypedDataAsync({
+          account: checksummed,
+          ...relayAuthorizationRequest(authorization),
+        }),
+        "MetaMask did not respond. Open MetaMask and cancel any request still waiting there before trying again.",
+      );
+      signed = true;
+      setAuthorization(null);
+      await submitPayment(signature);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Payment authorization failed");
+      setMessage(signed
+        ? "Your authorization was saved. Do not authorize again; RegenHub will retry the gas-sponsored submission."
+        : "The payment was not submitted. Review the authorization before trying again.");
+    } finally {
+      setBusy(false);
+    }
+  }, [address, authorization, props.invoice, signTypedDataAsync, submitPayment]);
 
   useEffect(() => {
     const invoice = props.invoice;
@@ -213,8 +240,8 @@ function OnchainBillingCardInner(props: Props) {
     const action = pendingAction;
     setPendingAction(null);
     setConnectModalSeen(false);
-    void (action === "verify" ? connectAndVerify() : pay());
-  }, [address, connectAndVerify, isConnected, pay, pendingAction]);
+    void (action === "verify" ? connectAndVerify() : preparePayment());
+  }, [address, connectAndVerify, isConnected, pendingAction, preparePayment]);
 
   useEffect(() => {
     if (!pendingAction) return;
@@ -231,7 +258,7 @@ function OnchainBillingCardInner(props: Props) {
   function begin(action: WalletAction) {
     setError(null); setMessage(null);
     if (isConnected && address) {
-      void (action === "verify" ? connectAndVerify() : pay());
+      void (action === "verify" ? connectAndVerify() : preparePayment());
       return;
     }
     setPendingAction(action);
@@ -267,15 +294,21 @@ function OnchainBillingCardInner(props: Props) {
             <p className="font-medium">${(props.invoice.amountCents / 100).toFixed(2)} USDC</p>
             <p className="text-xs text-muted">Due {new Date(props.invoice.dueAt).toLocaleDateString()}</p>
           </div>
-          <Button disabled={busy || Boolean(submittedTxHash) || !props.configured || ["submitted", "detected"].includes(props.invoice.status)} onClick={() => begin("pay")} className="bg-sage/20 hover:bg-sage/40 text-sage border border-sage/30 text-xs gap-2">
+          <Button disabled={busy || Boolean(submittedTxHash) || !props.configured || ["submitted", "detected"].includes(props.invoice.status)} onClick={() => authorization ? void authorizePayment() : begin("pay")} className="bg-sage/20 hover:bg-sage/40 text-sage border border-sage/30 text-xs gap-2">
             {busy && !paymentDetected && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-            {paymentDetected || props.invoice.status === "detected" ? "Payment received" : props.invoice.status === "submitted" ? "Confirming…" : "Review & pay"}
+            {paymentDetected || props.invoice.status === "detected" ? "Payment received" : props.invoice.status === "submitted" ? "Confirming…" : authorization ? `Authorize $${(props.invoice.amountCents / 100).toFixed(2)} in MetaMask` : "Prepare payment"}
           </Button>
         </div>
       ) : props.invoice?.status === "paid" ? (
         <p className="text-xs text-emerald-400 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> Payment confirmed.</p>
       ) : (
         <p className="text-xs text-emerald-400">Wallet verified. Your next invoice appears here seven days before renewal.</p>
+      )}
+      {props.invoice && authorization && (
+        <GaslessPaymentReview
+          amountCents={props.invoice.amountCents}
+          authorization={authorization}
+        />
       )}
       {props.walletAddress && <p className="text-[11px] text-muted font-mono break-all">Verified wallet: {props.walletAddress}</p>}
       {props.invoice?.txHash && <a className="text-xs text-sage underline" href={`https://optimistic.etherscan.io/tx/${props.invoice.txHash}`} target="_blank" rel="noreferrer">View transaction</a>}
