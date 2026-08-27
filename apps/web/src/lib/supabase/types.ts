@@ -395,7 +395,7 @@ export interface Database {
           to_address: string;
           token_contract: string;
           amount_micros: number;
-          chain_status: "safe" | "finalized" | "reorged";
+          chain_status: "included" | "safe" | "finalized" | "reorged";
           match_status: "credited" | "exception" | "rejected";
           exception_reason: string | null;
           observed_at: string;
@@ -416,7 +416,7 @@ export interface Database {
           to_address: string;
           token_contract: string;
           amount_micros: number;
-          chain_status: "safe" | "finalized" | "reorged";
+          chain_status: "included" | "safe" | "finalized" | "reorged";
           match_status: "credited" | "exception" | "rejected";
           exception_reason?: string | null;
           credited_at?: string | null;

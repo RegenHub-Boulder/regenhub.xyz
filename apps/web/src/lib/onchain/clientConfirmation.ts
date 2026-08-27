@@ -9,6 +9,7 @@ type PollOptions = {
   signal?: AbortSignal;
   attempts?: number;
   intervalMs?: number;
+  onStatus?: (status: string) => void;
 };
 
 export async function pollOnchainPayment({
@@ -17,6 +18,7 @@ export async function pollOnchainPayment({
   signal,
   attempts = CONFIRMATION_POLL_ATTEMPTS,
   intervalMs = CONFIRMATION_POLL_INTERVAL_MS,
+  onStatus,
 }: PollOptions) {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const response = await fetch("/api/portal/onchain/submit", {
@@ -29,6 +31,7 @@ export async function pollOnchainPayment({
     if (!response.ok && response.status !== 202) {
       throw new Error(result.error ?? "Could not track the transaction");
     }
+    onStatus?.(result.status);
     if (result.status === "paid") return true;
     if (attempt < attempts - 1) {
       await new Promise<void>((resolve, reject) => {

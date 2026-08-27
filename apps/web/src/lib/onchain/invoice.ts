@@ -25,6 +25,12 @@ export function addCalendarMonth(iso: string): string {
   return source.toISOString();
 }
 
+export function isRenewalInvoice(invoice: { period_start: string; due_at: string }): boolean {
+  const periodStart = new Date(invoice.period_start).getTime();
+  const dueAt = new Date(invoice.due_at).getTime();
+  return Number.isFinite(periodStart) && periodStart === dueAt;
+}
+
 export function invoiceValues(args: {
   subscriptionId: number;
   memberId: number;

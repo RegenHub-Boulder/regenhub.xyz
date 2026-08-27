@@ -63,6 +63,7 @@ function OnchainBillingCardInner(props: Props) {
   const [pendingAction, setPendingAction] = useState<WalletAction | null>(null);
   const [connectModalSeen, setConnectModalSeen] = useState(false);
   const [submittedTxHash, setSubmittedTxHash] = useState<Hash | null>(null);
+  const [paymentDetected, setPaymentDetected] = useState(props.invoice?.status === "detected");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -148,7 +149,16 @@ function OnchainBillingCardInner(props: Props) {
       transferHash = txHash;
       setSubmittedTxHash(txHash);
       setMessage("Transaction submitted. RegenHub is checking OP confirmation…");
-      if (await pollOnchainPayment({ invoiceId: props.invoice.id, txHash })) {
+      if (await pollOnchainPayment({
+        invoiceId: props.invoice.id,
+        txHash,
+        onStatus: (status) => {
+          if (status === "detected") {
+            setPaymentDetected(true);
+            setMessage("Payment received. RegenHub is completing safe OP confirmation…");
+          }
+        },
+      })) {
         setMessage("Payment confirmed — membership is active.");
         setTimeout(() => window.location.reload(), 1_500);
         return;
@@ -166,12 +176,21 @@ function OnchainBillingCardInner(props: Props) {
     const invoice = props.invoice;
     if (!invoice?.txHash || !["submitted", "detected"].includes(invoice.status)) return;
     const controller = new AbortController();
+    setPaymentDetected(invoice.status === "detected");
     setBusy(true);
-    setMessage("Transaction submitted. RegenHub is checking OP confirmation…");
+    setMessage(invoice.status === "detected"
+      ? "Payment received. RegenHub is completing safe OP confirmation…"
+      : "Transaction submitted. RegenHub is checking OP confirmation…");
     void pollOnchainPayment({
       invoiceId: invoice.id,
       txHash: invoice.txHash as Hash,
       signal: controller.signal,
+      onStatus: (status) => {
+        if (status === "detected") {
+          setPaymentDetected(true);
+          setMessage("Payment received. RegenHub is completing safe OP confirmation…");
+        }
+      },
     }).then((paid) => {
       if (paid) {
         setMessage("Payment confirmed — membership is active.");
@@ -249,8 +268,8 @@ function OnchainBillingCardInner(props: Props) {
             <p className="text-xs text-muted">Due {new Date(props.invoice.dueAt).toLocaleDateString()}</p>
           </div>
           <Button disabled={busy || Boolean(submittedTxHash) || !props.configured || ["submitted", "detected"].includes(props.invoice.status)} onClick={() => begin("pay")} className="bg-sage/20 hover:bg-sage/40 text-sage border border-sage/30 text-xs gap-2">
-            {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-            {["submitted", "detected"].includes(props.invoice.status) ? "Confirming…" : "Review & pay"}
+            {busy && !paymentDetected && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            {paymentDetected || props.invoice.status === "detected" ? "Payment received" : props.invoice.status === "submitted" ? "Confirming…" : "Review & pay"}
           </Button>
         </div>
       ) : props.invoice?.status === "paid" ? (

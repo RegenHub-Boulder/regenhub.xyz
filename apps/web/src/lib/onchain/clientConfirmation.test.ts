@@ -14,14 +14,17 @@ describe("pollOnchainPayment", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ status: "detected" }), { status: 202 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ status: "paid" }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
+    const onStatus = vi.fn();
 
     await expect(pollOnchainPayment({
       invoiceId: 101,
       txHash,
       attempts: 3,
       intervalMs: 0,
+      onStatus,
     })).resolves.toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(onStatus.mock.calls.map(([status]) => status)).toEqual(["submitted", "detected", "paid"]);
   });
 
   it("returns pending after the bounded confirmation window without creating another payment", async () => {

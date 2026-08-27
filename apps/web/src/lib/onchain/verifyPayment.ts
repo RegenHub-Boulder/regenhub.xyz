@@ -158,7 +158,7 @@ export type ProcessInvoiceResult =
   | { status: "paid"; txHash: string; paymentId: number; wasNew: boolean }
   | { status: "exception"; txHash: string; reason: string };
 
-/** Verify one submitted transaction and credit only after its block is OP-safe. */
+/** Verify one submitted transaction and credit its exact successful OP receipt. */
 export async function processOnchainInvoice(
   admin: ServiceClient,
   invoiceId: number,
@@ -264,19 +264,6 @@ export async function processOnchainInvoice(
     return { status: "exception", txHash, reason };
   }
 
-  const [safeBlock, finalizedBlock] = await Promise.all([
-    client.getBlock({ blockTag: "safe" }),
-    client.getBlock({ blockTag: "finalized" }),
-  ]);
-  if (receipt.blockNumber > safeBlock.number) {
-    await admin
-      .from("onchain_invoices")
-      .update({ status: "detected", detected_at: new Date().toISOString(), exception_reason: null })
-      .eq("id", invoice.id);
-    return { status: "detected", txHash };
-  }
-
-  const chainStatus = receipt.blockNumber <= finalizedBlock.number ? "finalized" : "safe";
   const rawLog = {
     address: transfer.raw.address,
     blockHash: transfer.raw.blockHash,
@@ -296,7 +283,7 @@ export async function processOnchainInvoice(
     p_to_address: transfer.to,
     p_token_contract: transfer.address,
     p_amount_micros: Number(transfer.amount),
-    p_chain_status: chainStatus,
+    p_chain_status: "included",
     p_raw_log: rawLog,
   });
   if (creditError) throw creditError;
@@ -338,7 +325,7 @@ export async function retryPendingOnchainEffects(admin: ServiceClient) {
   }
 }
 
-/** Mark previously safe credits finalized once OP's finalized head passes them. */
+/** Mark included/safe credits finalized once OP's finalized head passes them. */
 export async function advanceFinalizedOnchainPayments(admin: ServiceClient) {
   const client = getOpPublicClient();
   await assertOpPublicClient(client);
@@ -346,7 +333,7 @@ export async function advanceFinalizedOnchainPayments(admin: ServiceClient) {
   const { data, error } = await admin
     .from("onchain_payments")
     .select("id, block_number, block_hash")
-    .eq("chain_status", "safe")
+    .in("chain_status", ["included", "safe"])
     .lte("block_number", Number(finalized.number))
     .limit(100);
   if (error) throw error;

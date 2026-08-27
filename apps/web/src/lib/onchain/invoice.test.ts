@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { addCalendarMonth, discountedCents, invoiceValues, markDueOnchainSubscriptionsPastDue } from "./invoice";
+import { addCalendarMonth, discountedCents, invoiceValues, isRenewalInvoice, markDueOnchainSubscriptionsPastDue } from "./invoice";
 
 describe("on-chain invoice math", () => {
   it("uses the agreed membership rate while the crypto discount is zero", () => {
@@ -45,6 +45,17 @@ describe("on-chain invoice math", () => {
       period_end: "2026-10-01T00:00:00.000Z",
       due_at: "2026-09-08T00:00:00.000Z",
     });
+  });
+
+  it("distinguishes renewal dates from first-payment setup deadlines", () => {
+    expect(isRenewalInvoice({
+      period_start: "2026-09-27T21:27:14.059Z",
+      due_at: "2026-09-27T21:27:14.059+00:00",
+    })).toBe(true);
+    expect(isRenewalInvoice({
+      period_start: "2026-08-27T21:27:14.059Z",
+      due_at: "2026-09-03T21:27:14.095Z",
+    })).toBe(false);
   });
 
   it("never promotes an unpaid incomplete signup into past_due membership", async () => {
