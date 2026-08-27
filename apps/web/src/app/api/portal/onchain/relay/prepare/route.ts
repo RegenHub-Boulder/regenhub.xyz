@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
+import { getAddress, parseAbi } from "viem";
 import { createServiceClient } from "@/lib/supabase/admin";
 import {
   assertOpPublicClient,
@@ -13,6 +14,16 @@ import { publicAuthorization, type RelayJob } from "@/lib/onchain/gaslessRelay";
 import { requirePortalMember } from "@/lib/onchain/portalMember";
 
 const AUTHORIZATION_LIFETIME_SECONDS = 30 * 60;
+const USDC_BALANCE_ABI = parseAbi([
+  "function balanceOf(address account) view returns (uint256)",
+]);
+
+function formatUsdcMicros(value: bigint) {
+  const microsPerUsdc = BigInt(1_000_000);
+  const whole = value / microsPerUsdc;
+  const fraction = (value % microsPerUsdc).toString().padStart(6, "0").replace(/0+$/, "");
+  return fraction ? `${whole}.${fraction}` : whole.toString();
+}
 
 function responseForJob(job: RelayJob) {
   if (job.status === "submitted" && job.submitted_tx_hash) {
@@ -97,9 +108,39 @@ export async function POST(request: Request) {
     if (["signed", "submitting", "submitted"].includes(existing.status)) {
       return NextResponse.json(responseForJob(existing));
     }
-    if (existing.status === "prepared" && existing.valid_before > now + 30) {
-      return NextResponse.json(responseForJob(existing));
+  }
+
+  let authorizationFromBlock: number;
+  try {
+    const client = getOpPublicClient();
+    await assertOpPublicClient(client);
+    const observedBlock = await client.getBlockNumber();
+    const balance = await client.readContract({
+      address: NATIVE_USDC_ADDRESS,
+      abi: USDC_BALANCE_ABI,
+      functionName: "balanceOf",
+      args: [getAddress(wallet.address)],
+      blockNumber: observedBlock,
+    });
+    const required = BigInt(invoice.amount_usdc_micros);
+    if (balance < required) {
+      const shortfall = required - balance;
+      return NextResponse.json({
+        error: `This wallet has ${formatUsdcMicros(balance)} native USDC on OP Mainnet, but this payment requires ${formatUsdcMicros(required)}. Add ${formatUsdcMicros(shortfall)} USDC to this wallet before authorizing.`,
+        code: "insufficient_usdc_balance",
+        balance_usdc_micros: balance.toString(),
+        required_usdc_micros: required.toString(),
+        shortfall_usdc_micros: shortfall.toString(),
+      }, { status: 409 });
     }
+    authorizationFromBlock = Number(observedBlock);
+  } catch (error) {
+    console.error("[GaslessRelay] Could not verify wallet balance:", error);
+    return NextResponse.json({ error: "Could not verify the wallet's OP USDC balance" }, { status: 503 });
+  }
+
+  if (existing?.status === "prepared" && existing.valid_before > now + 30) {
+    return NextResponse.json(responseForJob(existing));
   }
 
   const values = {
@@ -115,21 +156,13 @@ export async function POST(request: Request) {
     valid_before: now + AUTHORIZATION_LIFETIME_SECONDS,
     signature: null,
     status: "prepared" as const,
-    authorization_from_block: 0,
+    authorization_from_block: authorizationFromBlock,
     submitted_tx_hash: null,
     attempts: 0,
     last_error: null,
     signed_at: null,
     submitted_at: null,
   };
-  try {
-    const client = getOpPublicClient();
-    await assertOpPublicClient(client);
-    values.authorization_from_block = Number(await client.getBlockNumber());
-  } catch (error) {
-    console.error("[GaslessRelay] Could not anchor authorization block:", error);
-    return NextResponse.json({ error: "Could not prepare the payment" }, { status: 503 });
-  }
   const { data: job, error: upsertError } = await admin
     .from("onchain_relay_jobs")
     .upsert(values, { onConflict: "invoice_id" })

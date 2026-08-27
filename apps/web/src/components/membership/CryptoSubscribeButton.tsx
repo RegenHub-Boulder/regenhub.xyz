@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Loader2, Wallet } from "lucide-react";
 import { RegenHubWalletProvider } from "@/components/web3/RegenHubWalletProvider";
+import { pollOnchainPayment } from "@/lib/onchain/clientConfirmation";
 
 type Setup = {
   subscription_id: number;
@@ -81,38 +82,25 @@ function CryptoSubscribeButtonInner({ planKey, className }: Props) {
   const [txHash, setTxHash] = useState<Hash | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const submitAndTrack = useCallback(async (invoiceId: number, hash: Hash) => {
-    for (let attempt = 0; attempt < 12; attempt += 1) {
-      const response = await fetch("/api/portal/onchain/submit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoice_id: invoiceId, tx_hash: hash }),
-      });
-      const result = await response.json();
-      if (!response.ok && response.status !== 202) {
-        throw new Error(result.error ?? "Could not track the transaction");
-      }
-      if (result.status === "paid") return true;
-      if (attempt < 11) await new Promise((resolve) => setTimeout(resolve, 5_000));
-    }
-    return false;
-  }, []);
-
   const confirmSubmittedPayment = useCallback(async (invoiceId: number, hash: Hash) => {
     setTxHash(hash);
     setPhase("confirming");
     sessionStorage.setItem(PENDING_PAYMENT_KEY, JSON.stringify({ invoiceId, hash }));
     try {
-      const paid = await submitAndTrack(invoiceId, hash);
+      const paid = await pollOnchainPayment({ invoiceId, txHash: hash });
       if (paid) {
         sessionStorage.removeItem(PENDING_PAYMENT_KEY);
         setPhase("complete");
         setTimeout(() => { window.location.href = "/portal?onchain=paid"; }, 1_500);
+      } else {
+        setError("OP safe confirmation is taking longer than expected. Your transaction was submitted; do not pay again. Use Check payment confirmation to resume.");
+        setPhase("idle");
       }
     } catch (cause) {
       setError(`${cause instanceof Error ? cause.message : "Confirmation is delayed"}. Your transaction was submitted; do not pay again. RegenHub will keep checking it.`);
+      setPhase("idle");
     }
-  }, [submitAndTrack]);
+  }, []);
 
   const sendPayment = useCallback(async (nextSetup: Setup) => {
     if (!address) throw new Error("Connect your wallet to continue.");
@@ -271,7 +259,7 @@ function CryptoSubscribeButtonInner({ planKey, className }: Props) {
         className={className ?? "btn-glass w-full gap-2"}
       >
         {phase === "complete" ? <CheckCircle2 className="w-4 h-4" /> : busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wallet className="w-4 h-4" />}
-        {phase === "complete" ? "Payment confirmed" : busy ? PHASE_LABELS[phase as Exclude<Phase, "idle" | "complete">] : setup ? `Retry $${(amountCents / 100).toFixed(2)} USDC payment` : "Pay with crypto"}
+        {phase === "complete" ? "Payment confirmed" : busy ? PHASE_LABELS[phase as Exclude<Phase, "idle" | "complete">] : txHash ? "Check payment confirmation" : setup ? `Retry $${(amountCents / 100).toFixed(2)} USDC payment` : "Pay with crypto"}
       </Button>
 
       {isConnected && address && (
