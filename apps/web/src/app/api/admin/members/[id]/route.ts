@@ -152,10 +152,11 @@ export async function DELETE(
   const supabase = await createClient();
   const { id } = await params;
 
-  // Fetch the member first so we can clear their lock code
+  // Fetch the member first so we can clear their lock code and check for
+  // state that deleting the member row would leave orphaned (see below).
   const { data: member } = await supabase
     .from("members")
-    .select("pin_code_slot")
+    .select("pin_code_slot, email")
     .eq("id", Number(id))
     .single();
 
@@ -174,6 +175,41 @@ export async function DELETE(
   // Service-role client for the write (members DELETE/UPDATE are revoked from
   // the authenticated role — migration 031). Route is requireAdmin-gated.
   const admin = createServiceClient();
+
+  // Deleting a member never touches auth.users or applications (see
+  // migration 050) — if this email can still sign in, or has an application
+  // on file, deleting the member row orphans that state. Non-blocking: warn
+  // rather than refuse the delete. This check is a nice-to-have, not a hard
+  // dependency — any failure here (RPC error, query error, thrown exception)
+  // is logged and swallowed so the delete itself always proceeds.
+  let warning: string | null = null;
+  if (member?.email) {
+    try {
+      const [{ data: liveAuthId, error: rpcErr }, { data: staleApplications, error: appsErr }] = await Promise.all([
+        admin.rpc("current_auth_user_for_email", { target_email: member.email }),
+        admin.from("applications").select("id").eq("email", member.email).limit(1),
+      ]);
+      if (rpcErr) console.error("[AdminMember DELETE] stale-link guard rpc failed:", rpcErr);
+      if (appsErr) console.error("[AdminMember DELETE] stale-link guard applications check failed:", appsErr);
+
+      const canStillSignIn = !rpcErr && !!liveAuthId;
+      const hasApplication = !appsErr && (staleApplications ?? []).length > 0;
+
+      if (canStillSignIn && hasApplication) {
+        warning =
+          "This member's email can still sign in and has an application on file — deleting only removed the member record. If they sign in again they may land on an unlinked-application screen; use the stale-links tool to relink them if that happens.";
+      } else if (canStillSignIn) {
+        warning =
+          "This member's email can still sign in — deleting only removed the member record. If they sign in again, use the stale-links tool to relink them if needed.";
+      } else if (hasApplication) {
+        warning =
+          "This member has an application on file under the same email — deleting only removed the member record. The application still refers to it.";
+      }
+    } catch (err) {
+      console.error("[AdminMember DELETE] stale-link guard failed:", err);
+    }
+  }
+
   const { error } = await admin
     .from("members")
     .delete()
@@ -183,5 +219,9 @@ export async function DELETE(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true, lock_status: lockStatus });
+  return NextResponse.json({
+    success: true,
+    lock_status: lockStatus,
+    ...(warning ? { warning } : {}),
+  });
 }

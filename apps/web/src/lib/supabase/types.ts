@@ -666,6 +666,20 @@ export interface Database {
           was_new: boolean;
         }>;
       };
+      find_stale_member_links: {
+        Args: Record<string, never>;
+        Returns: Array<{
+          member_id: number;
+          email: string | null;
+          name: string;
+          supabase_user_id: string | null;
+          has_did: boolean;
+        }>;
+      };
+      current_auth_user_for_email: {
+        Args: { target_email: string };
+        Returns: string | null;
+      };
     };
     CompositeTypes: { [_ in never]: never };
     Enums: {

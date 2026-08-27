@@ -3,7 +3,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Users, Key, Zap, UserPlus, AlertTriangle, ClipboardList, Calendar, DollarSign, Inbox } from "lucide-react";
+import { Users, Key, Zap, UserPlus, AlertTriangle, ClipboardList, Calendar, DollarSign, Inbox, Link2 } from "lucide-react";
 import { FunnelCard } from "@/components/admin/FunnelCard";
 import { effectiveMonthlyCents } from "@/lib/stripeNet";
 
@@ -271,6 +271,11 @@ export default async function AdminPage() {
               <Link href="/admin/members/new">
                 <Button size="sm" className="btn-glass w-full gap-2 text-xs">
                   <UserPlus className="w-3.5 h-3.5" /> Add Member
+                </Button>
+              </Link>
+              <Link href="/admin/members/stale-links">
+                <Button size="sm" className="btn-glass w-full gap-2 text-xs">
+                  <Link2 className="w-3.5 h-3.5" /> Stale Auth Links
                 </Button>
               </Link>
             </div>
