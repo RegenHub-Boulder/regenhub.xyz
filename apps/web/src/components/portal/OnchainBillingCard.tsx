@@ -130,21 +130,19 @@ function OnchainBillingCardInner(props: Props) {
       }
 
       let txHash = prepared.txHash ?? null;
-      for (let attempt = 0; !txHash && attempt < 12; attempt += 1) {
+      if (!txHash) {
         const relayRes = await fetch("/api/portal/onchain/relay", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ invoice_id: props.invoice.id, signature }),
         });
-        const relayed = await relayRes.json() as { txHash?: Hash; error?: string };
+        const relayed = await relayRes.json() as { txHash?: Hash; error?: string; warning?: string };
         if (!relayRes.ok && relayRes.status !== 202) {
           throw new Error(relayed.error ?? "Could not submit gasless payment");
         }
         txHash = relayed.txHash ?? null;
-        signature = undefined;
-        if (!txHash && attempt < 11) await new Promise((resolve) => setTimeout(resolve, 3_000));
-      }
-      if (!txHash) {
-        throw new Error("Payment authorization is queued; RegenHub will keep retrying it. Do not authorize again.");
+        if (!txHash) {
+          throw new Error(relayed.warning ?? "Payment authorization is queued; RegenHub will keep retrying it. Do not authorize again.");
+        }
       }
       transferHash = txHash;
       setSubmittedTxHash(txHash);

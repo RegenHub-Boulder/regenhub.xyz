@@ -152,24 +152,25 @@ function CryptoSubscribeButtonInner({ planKey, className }: Props) {
       });
     }
 
-    for (let attempt = 0; attempt < 12; attempt += 1) {
-      const relayRes = await fetch("/api/portal/onchain/relay", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoice_id: nextSetup.invoice.id, signature }),
-      });
-      const relayed = await relayRes.json() as { status?: string; txHash?: Hash; error?: string };
-      if (!relayRes.ok && relayRes.status !== 202) {
-        throw new Error(relayed.error ?? "Could not submit gasless payment");
-      }
-      if (relayed.txHash) {
-        await confirmSubmittedPayment(nextSetup.invoice.id, relayed.txHash);
-        return;
-      }
-      signature = undefined;
-      if (attempt < 11) await new Promise((resolve) => setTimeout(resolve, 3_000));
+    const relayRes = await fetch("/api/portal/onchain/relay", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ invoice_id: nextSetup.invoice.id, signature }),
+    });
+    const relayed = await relayRes.json() as {
+      status?: string;
+      txHash?: Hash;
+      error?: string;
+      warning?: string;
+    };
+    if (!relayRes.ok && relayRes.status !== 202) {
+      throw new Error(relayed.error ?? "Could not submit gasless payment");
     }
-    throw new Error("Payment authorization is queued; RegenHub will keep retrying it. Do not authorize again.");
+    if (relayed.txHash) {
+      await confirmSubmittedPayment(nextSetup.invoice.id, relayed.txHash);
+      return;
+    }
+    throw new Error(relayed.warning ?? "Payment authorization is queued; RegenHub will keep retrying it. Do not authorize again.");
   }, [address, confirmSubmittedPayment, signTypedDataAsync, switchChainAsync]);
 
   const verifyAndPay = useCallback(async () => {
