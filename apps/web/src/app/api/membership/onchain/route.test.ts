@@ -86,13 +86,45 @@ describe("POST /api/membership/onchain", () => {
       chain_id: 10,
       status: "open",
     });
-    expect(new Date(String(invoiceInsert?.due_at)).getTime()).toBeGreaterThan(Date.now() + 6 * 24 * 60 * 60 * 1000);
+    const insertedInvoice = invoiceInsert as Record<string, unknown> | null;
+    expect(new Date(String(insertedInvoice?.due_at)).getTime()).toBeGreaterThan(Date.now() + 6 * 24 * 60 * 60 * 1000);
     expect(from).not.toHaveBeenCalledWith("applications");
+    await expect(response.json()).resolves.toMatchObject({
+      subscription_id: 91,
+      payment: {
+        chain_id: 10,
+        token_address: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+        treasury_address: "0xA594263e0449A28eAEf5BA6420E81cC1996b7782",
+      },
+    });
+  });
+
+  it("resumes the same incomplete setup after an interrupted wallet flow", async () => {
+    const members = builder({ selectData: { id: 7, approved_for_daily: true, approved_for_full: true } });
+    const subscriptions = builder({ selectData: { id: 91, payment_rail: "onchain", plan_key: "hot_desk", status: "incomplete" } });
+    const wallets = builder({ selectData: { id: 12, address: "0x0000000000000000000000000000000000000001" } });
+    const invoices = builder({ selectData: { id: 101, amount_cents: 25_000, amount_usdc_micros: 250_000_000, due_at: "later", status: "open" } });
+    const from = vi.fn((table: string) => table === "members" ? members : table === "subscriptions" ? subscriptions : table === "member_wallets" ? wallets : invoices);
+    vi.mocked(createServiceClient).mockReturnValue({ from } as never);
+
+    const response = await POST(new Request("http://localhost/api/membership/onchain", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plan_key: "hot_desk" }),
+    }));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      subscription_id: 91,
+      invoice: { id: 101, status: "open" },
+    });
+    expect(subscriptions.insert).not.toHaveBeenCalled();
+    expect(invoices.insert).not.toHaveBeenCalled();
   });
 
   it("does not create a crypto membership beside an existing card membership", async () => {
     const members = builder({ selectData: { id: 7, approved_for_daily: true, approved_for_full: true } });
-    const subscriptions = builder({ selectData: { id: 44, payment_rail: "stripe" } });
+    const subscriptions = builder({ selectData: { id: 44, payment_rail: "stripe", plan_key: "hot_desk", status: "active" } });
     const from = vi.fn((table: string) => table === "members" ? members : subscriptions);
     vi.mocked(createServiceClient).mockReturnValue({ from } as never);
 

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import "@rainbow-me/rainbowkit/styles.css";
 import "./globals.css";
 // Validates required env vars at app boot — see lib/env.ts
 import "@/lib/env";
