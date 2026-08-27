@@ -59,6 +59,7 @@ const AUTHORIZATION_USED_EVENT = parseAbiItem(
 const AUTHORIZATION_CANCELED_EVENT = parseAbiItem(
   "event AuthorizationCanceled(address indexed authorizer, bytes32 indexed nonce)",
 );
+const MAX_LOG_BLOCKS_PER_REQUEST = BigInt(10);
 
 export function authorizationTypedData(job: Pick<RelayJob,
   "from_address" | "token_contract" | "treasury_address" | "amount_usdc_micros" | "valid_after" | "valid_before" | "authorization_nonce"
@@ -172,41 +173,75 @@ async function recoverUsedAuthorization(
 ): Promise<Hash | null> {
   const client = getOpPublicClient();
   await assertOpPublicClient(client);
+  const observedBlock = await client.getBlockNumber();
   const used = await client.readContract({
     address: getAddress(job.token_contract),
     abi: USDC_AUTHORIZATION_ABI,
     functionName: "authorizationState",
     args: [getAddress(job.from_address), job.authorization_nonce as Hex],
+    blockNumber: observedBlock,
   });
   if (!used) return null;
 
-  const logs = await client.getLogs({
-    address: getAddress(job.token_contract),
-    event: AUTHORIZATION_USED_EVENT,
-    args: {
-      authorizer: getAddress(job.from_address),
-      nonce: job.authorization_nonce as Hex,
-    },
-    fromBlock: BigInt(job.authorization_from_block),
-    toBlock: "latest",
-  });
-  const hashes = [...new Set(logs.map((log) => log.transactionHash).filter(Boolean))] as Hash[];
-  if (hashes.length === 0) {
-    const canceled = await client.getLogs({
-      address: getAddress(job.token_contract),
-      event: AUTHORIZATION_CANCELED_EVENT,
-      args: {
-        authorizer: getAddress(job.from_address),
-        nonce: job.authorization_nonce as Hex,
-      },
-      fromBlock: BigInt(job.authorization_from_block),
-      toBlock: "latest",
-    });
-    if (canceled.length > 0) {
-      throw new InvalidRelayJobError("payment authorization was canceled in the wallet");
+  const fromBlock = BigInt(job.authorization_from_block);
+  let throughBlock = observedBlock;
+  const latest = await client.getBlock({ blockNumber: observedBlock });
+  if (latest.timestamp > BigInt(job.valid_before)) {
+    const anchor = await client.getBlock({ blockNumber: fromBlock });
+    if (anchor.timestamp >= BigInt(job.valid_before)) {
+      throughBlock = fromBlock;
+    } else {
+      let low = fromBlock;
+      let high = observedBlock;
+      while (low < high) {
+        const middle = (low + high + BigInt(1)) / BigInt(2);
+        const block = await client.getBlock({ blockNumber: middle });
+        if (block.timestamp < BigInt(job.valid_before)) low = middle;
+        else high = middle - BigInt(1);
+      }
+      throughBlock = low;
     }
   }
-  if (hashes.length !== 1) {
+
+  let authorizationLogs: Awaited<ReturnType<typeof client.getLogs>> = [];
+  for (let chunkStart = fromBlock; chunkStart <= throughBlock; chunkStart += MAX_LOG_BLOCKS_PER_REQUEST) {
+    const chunkEnd = chunkStart + MAX_LOG_BLOCKS_PER_REQUEST - BigInt(1) < throughBlock
+      ? chunkStart + MAX_LOG_BLOCKS_PER_REQUEST - BigInt(1)
+      : throughBlock;
+    authorizationLogs = await client.getLogs({
+      address: getAddress(job.token_contract),
+      events: [AUTHORIZATION_USED_EVENT, AUTHORIZATION_CANCELED_EVENT],
+      fromBlock: chunkStart,
+      toBlock: chunkEnd,
+    });
+    authorizationLogs = authorizationLogs.filter((log) => {
+      const args = (log as { args?: { authorizer?: string; nonce?: Hex } }).args;
+      return args?.authorizer
+        && getAddress(args.authorizer) === getAddress(job.from_address)
+        && args.nonce?.toLowerCase() === job.authorization_nonce.toLowerCase();
+    });
+    if (authorizationLogs.length > 0) break;
+  }
+
+  const usedLogs = authorizationLogs.filter(
+    (log) => (log as { eventName?: string }).eventName === "AuthorizationUsed",
+  );
+  const canceledLogs = authorizationLogs.filter(
+    (log) => (log as { eventName?: string }).eventName === "AuthorizationCanceled",
+  );
+  const hashes = [...new Set(usedLogs
+    .map((log) => log.transactionHash)
+    .filter(Boolean))] as Hash[];
+  if (hashes.length === 0) {
+    if (canceledLogs.length > 0) {
+      throw new InvalidRelayJobError("payment authorization was canceled in the wallet");
+    }
+    // Circle reports both used and canceled authorizations as consumed. Do
+    // not infer a terminal cancellation from missing logs: a transient RPC
+    // inconsistency must remain retryable so a real transfer is not orphaned.
+    throw new Error("payment authorization is consumed but its event is not available yet");
+  }
+  if (hashes.length > 1) {
     throw new Error(`used authorization has ${hashes.length} matching transfer transactions`);
   }
   await recordSubmittedTransaction(admin, job, hashes[0]);
