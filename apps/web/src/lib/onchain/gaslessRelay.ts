@@ -104,15 +104,25 @@ async function claimWorker(admin: ServiceClient) {
   const token = randomUUID();
   const claimedAt = new Date().toISOString();
   const staleAt = new Date(Date.now() - WORKER_LEASE_MS).toISOString();
-  const { data, error } = await admin
-    .from("onchain_relay_worker")
-    .update({ lease_token: token, lease_claimed_at: claimedAt })
-    .eq("singleton", true)
-    .or(`lease_claimed_at.is.null,lease_claimed_at.lte.${staleAt}`)
-    .select("lease_token")
-    .maybeSingle();
-  if (error) throw error;
-  return data?.lease_token === token ? token : null;
+  const tryClaim = async (availability: "unclaimed" | "stale") => {
+    let query = admin
+      .from("onchain_relay_worker")
+      .update({ lease_token: token, lease_claimed_at: claimedAt })
+      .eq("singleton", true);
+    query = availability === "unclaimed"
+      ? query.is("lease_claimed_at", null)
+      : query.lte("lease_claimed_at", staleAt);
+    const { data, error } = await query.select("lease_token").maybeSingle();
+    if (error) throw error;
+    return data?.lease_token === token;
+  };
+
+  // PostgREST 12.2.12 miscompiles an OR filter on this PATCH into a qualified
+  // column reference that PostgreSQL rejects, even though the column exists.
+  // Two individually atomic conditional updates preserve the same lease
+  // semantics: claim an empty lease first, then recover a stale one.
+  if (await tryClaim("unclaimed")) return token;
+  return await tryClaim("stale") ? token : null;
 }
 
 async function releaseWorker(admin: ServiceClient, token: string) {

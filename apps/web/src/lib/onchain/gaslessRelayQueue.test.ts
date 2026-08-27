@@ -77,6 +77,7 @@ function fakeAdmin(state: State) {
     let operation: "select" | "update" = "select";
     let updateValue: Record<string, unknown> | null = null;
     let selectAfterUpdate = false;
+    let workerEligible = true;
     const chain: Record<string, unknown> = {};
     chain.select = vi.fn(() => { selectAfterUpdate = operation === "update"; return chain; });
     chain.update = vi.fn((value: Record<string, unknown>) => {
@@ -84,15 +85,30 @@ function fakeAdmin(state: State) {
       updateValue = value;
       return chain;
     });
-    for (const method of ["eq", "neq", "is", "in", "or", "order", "limit"]) {
+    for (const method of ["eq", "neq", "in", "or", "order", "limit"]) {
       chain[method] = vi.fn(() => chain);
     }
+    chain.is = vi.fn((column: string, value: unknown) => {
+      if (table === "onchain_relay_worker" && column === "lease_claimed_at" && value === null) {
+        workerEligible = state.worker.lease_claimed_at === null;
+      }
+      return chain;
+    });
+    chain.lte = vi.fn((column: string, value: string) => {
+      if (table === "onchain_relay_worker" && column === "lease_claimed_at") {
+        workerEligible = Boolean(
+          state.worker.lease_claimed_at
+          && new Date(state.worker.lease_claimed_at).getTime() <= new Date(value).getTime(),
+        );
+      }
+      return chain;
+    });
 
     const execute = async () => {
       if (operation === "update" && updateValue) {
         if (table === "onchain_relay_worker") {
           const claiming = Boolean(updateValue.lease_claimed_at);
-          if (claiming && state.worker.lease_claimed_at) return { data: null, error: null };
+          if (claiming && !workerEligible) return { data: null, error: null };
           Object.assign(state.worker, updateValue);
           return { data: selectAfterUpdate ? { lease_token: state.worker.lease_token } : null, error: null };
         }
@@ -230,6 +246,20 @@ describe("gasless relay queue", () => {
 
     await expect(processGaslessRelayQueue(admin as never, 101)).resolves.toEqual({ status: "busy" });
     expect(mocks.writeContract).not.toHaveBeenCalled();
+  });
+
+  it("recovers a stale worker lease without an OR filter", async () => {
+    const state = stateFor(relayJob());
+    state.worker = {
+      lease_token: "crashed-worker",
+      lease_claimed_at: new Date(Date.now() - 10 * 60_000).toISOString(),
+    };
+    const admin = fakeAdmin(state);
+
+    const result = await processGaslessRelayQueue(admin as never, 101);
+
+    expect(result).toEqual({ status: "submitted", invoiceId: 101, txHash });
+    expect(state.worker).toEqual({ lease_token: null, lease_claimed_at: null });
   });
 
   it("scans a consumed authorization in provider-safe ten-block chunks", async () => {
