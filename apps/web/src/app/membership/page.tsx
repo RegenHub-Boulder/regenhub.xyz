@@ -5,6 +5,7 @@ import { getSelfServePlans } from "@/lib/stripe";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SubscribeButton } from "@/components/membership/SubscribeButton";
+import { CryptoSubscribeButton } from "@/components/membership/CryptoSubscribeButton";
 import { Check, Sparkles, ArrowRight } from "lucide-react";
 import { isSyntheticEmail } from "@/lib/regenos/syntheticEmail";
 
@@ -211,13 +212,16 @@ export default async function MembershipPage({ searchParams }: PageProps) {
                           </Button>
                         </Link>
                       ) : (
-                        <SubscribeButton
-                          planKey={key}
-                          isAuthenticated={!!user}
-                          authedEmail={subscriptionEmail}
-                          cta={isFeatured ? "Subscribe — most popular" : "Subscribe"}
-                          className={isFeatured ? "btn-primary-glass w-full" : "btn-glass w-full"}
-                        />
+                        <div className="space-y-2">
+                          <SubscribeButton
+                            planKey={key}
+                            isAuthenticated={!!user}
+                            authedEmail={subscriptionEmail}
+                            cta={isFeatured ? "Pay by card — most popular" : "Pay by card"}
+                            className={isFeatured ? "btn-primary-glass w-full" : "btn-glass w-full"}
+                          />
+                          {user && <CryptoSubscribeButton planKey={key} />}
+                        </div>
                       )}
                     </CardContent>
                   </Card>
@@ -272,13 +276,16 @@ export default async function MembershipPage({ searchParams }: PageProps) {
                           <Button className="btn-glass w-full">Request Full Access →</Button>
                         </Link>
                       ) : (
-                        <SubscribeButton
-                          planKey={key}
-                          isAuthenticated={!!user}
-                          authedEmail={subscriptionEmail}
-                          cta={`Subscribe — ${def.label}`}
-                          className="btn-primary-glass w-full"
-                        />
+                        <div className="space-y-2">
+                          <SubscribeButton
+                            planKey={key}
+                            isAuthenticated={!!user}
+                            authedEmail={subscriptionEmail}
+                            cta={`Pay by card — ${def.label}`}
+                            className="btn-primary-glass w-full"
+                          />
+                          {user && <CryptoSubscribeButton planKey={key} />}
+                        </div>
                       )}
                     </CardContent>
                   </Card>

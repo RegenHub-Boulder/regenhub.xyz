@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link2, Loader2, CheckCircle } from "lucide-react";
@@ -12,11 +13,38 @@ import { Link2, Loader2, CheckCircle } from "lucide-react";
  * point them at /auth/login to pick up a regenOS session, then they come back.
  */
 export function LinkRegenOSCard() {
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [handle, setHandle] = useState<string | null | undefined>(undefined);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [linked, setLinked] = useState(false);
+
+  const link = useCallback(async () => {
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/auth/regenos/link", { method: "POST" });
+      const json = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        did?: string;
+        already?: boolean;
+        error?: string;
+      };
+      if (!res.ok || !json.ok) {
+        setErr(json.error ?? `Couldn't link (${res.status})`);
+        return;
+      }
+      setLinked(true);
+      setMsg(json.already ? "Already linked." : "Linked this regenOS identity to your membership.");
+      router.refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }, [router]);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,31 +66,6 @@ export function LinkRegenOSCard() {
       cancelled = true;
     };
   }, []);
-
-  async function link() {
-    setBusy(true);
-    setErr(null);
-    setMsg(null);
-    try {
-      const res = await fetch("/api/auth/regenos/link", { method: "POST" });
-      const json = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        did?: string;
-        already?: boolean;
-        error?: string;
-      };
-      if (!res.ok || !json.ok) {
-        setErr(json.error ?? `Couldn't link (${res.status})`);
-        return;
-      }
-      setLinked(true);
-      setMsg(json.already ? "Already linked." : "Linked this regenOS identity to your membership.");
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
 
   if (linked) {
     return (

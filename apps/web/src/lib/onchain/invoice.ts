@@ -30,6 +30,7 @@ export function invoiceValues(args: {
   memberId: number;
   periodStart: string;
   baseAmountCents: number;
+  dueAt?: string;
 }) {
   const amountCents = discountedCents(args.baseAmountCents);
   return {
@@ -37,7 +38,7 @@ export function invoiceValues(args: {
     member_id: args.memberId,
     period_start: args.periodStart,
     period_end: addCalendarMonth(args.periodStart),
-    due_at: args.periodStart,
+    due_at: args.dueAt ?? args.periodStart,
     base_amount_cents: args.baseAmountCents,
     discount_bps: ONCHAIN_DISCOUNT_BPS,
     amount_cents: amountCents,
@@ -107,6 +108,10 @@ export async function markDueOnchainSubscriptionsPastDue(
       .from("subscriptions")
       .update({ status: "past_due", past_due_since: nowIso })
       .eq("id", invoice.subscription_id)
+      // An incomplete subscription represents a first payment that has never
+      // been credited. It must not become scene membership or enter access
+      // downgrade machinery merely because its setup window elapsed.
+      .in("status", ["active", "trialing", "past_due"])
       .is("past_due_since", null);
   }
   return due?.length ?? 0;

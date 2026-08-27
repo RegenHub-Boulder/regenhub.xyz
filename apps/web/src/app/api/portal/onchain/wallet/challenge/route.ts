@@ -13,15 +13,28 @@ export async function POST(request: Request) {
   }
 
   const admin = createServiceClient();
-  const { data: subscription } = await admin
+  const { data: subscription, error: subscriptionError } = await admin
     .from("subscriptions")
-    .select("id")
+    .select("id, payment_rail")
     .eq("member_id", session.member.id)
-    .eq("payment_rail", "onchain")
     .in("status", ["active", "trialing", "past_due", "incomplete"])
+    .limit(1)
     .maybeSingle();
-  if (!subscription) {
-    return NextResponse.json({ error: "No on-chain membership is configured" }, { status: 409 });
+  if (subscriptionError) {
+    return NextResponse.json({ error: "Could not check membership billing" }, { status: 500 });
+  }
+  if (subscription?.payment_rail !== "onchain") {
+    if (subscription) {
+      return NextResponse.json({ error: "A card membership is already active" }, { status: 409 });
+    }
+    const { data: member } = await admin
+      .from("members")
+      .select("approved_for_daily, approved_for_full")
+      .eq("id", session.member.id)
+      .single();
+    if (!member?.approved_for_daily && !member?.approved_for_full) {
+      return NextResponse.json({ error: "Membership has not been approved yet" }, { status: 403 });
+    }
   }
 
   const address = getAddress(body.address);
