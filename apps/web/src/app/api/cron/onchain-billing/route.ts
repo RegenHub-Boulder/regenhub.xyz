@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { generateUpcomingOnchainInvoices, markDueOnchainSubscriptionsPastDue } from "@/lib/onchain/invoice";
+import { generateUpcomingOnchainInvoices, isRenewalInvoice, markDueOnchainSubscriptionsPastDue } from "@/lib/onchain/invoice";
 import { advanceFinalizedOnchainPayments, processOnchainInvoice, retryPendingOnchainEffects } from "@/lib/onchain/verifyPayment";
 import { isGaslessRelayConfigured } from "@/lib/onchain/config";
 import { processGaslessRelayQueue } from "@/lib/onchain/gaslessRelay";
@@ -41,6 +41,9 @@ export async function POST(req: Request) {
   if (reminderQueryError) throw reminderQueryError;
   let remindersSent = 0;
   for (const invoice of unsentReminders ?? []) {
+    // A first-payment invoice uses due_at as its seven-day setup deadline;
+    // it is not a renewal date and must not receive a renewal reminder.
+    if (!isRenewalInvoice(invoice)) continue;
     const { data: member } = await admin.from("members").select("name, email").eq("id", invoice.member_id).single();
     const { data: subscription } = await admin.from("subscriptions").select("plan_key").eq("id", invoice.subscription_id).single();
     if (!member?.email || !subscription) continue;
@@ -48,7 +51,7 @@ export async function POST(req: Request) {
       name: member.name,
       planLabel: planLabel(subscription.plan_key),
       amountUsdc: (invoice.amount_cents / 100).toFixed(2),
-      dueDate: new Date(invoice.due_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+      renewalDate: new Date(invoice.period_start).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
       siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz",
     });
     if (await sendEmail({ to: member.email, ...mail })) {

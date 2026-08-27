@@ -31,7 +31,7 @@ type Setup = {
   };
 };
 
-type Phase = "idle" | "connecting" | "verifying" | "preparing" | "sending" | "confirming" | "complete";
+type Phase = "idle" | "connecting" | "verifying" | "preparing" | "sending" | "confirming" | "received" | "complete";
 
 type RelayAuthorization = {
   domain: {
@@ -67,6 +67,7 @@ const PHASE_LABELS: Record<Exclude<Phase, "idle" | "complete">, string> = {
   preparing: "Preparing your membership invoice…",
   sending: "Authorizing gasless USDC payment…",
   confirming: "Confirming on OP Mainnet…",
+  received: "Payment received",
 };
 
 function CryptoSubscribeButtonInner({ planKey, className }: Props) {
@@ -87,7 +88,13 @@ function CryptoSubscribeButtonInner({ planKey, className }: Props) {
     setPhase("confirming");
     sessionStorage.setItem(PENDING_PAYMENT_KEY, JSON.stringify({ invoiceId, hash }));
     try {
-      const paid = await pollOnchainPayment({ invoiceId, txHash: hash });
+      const paid = await pollOnchainPayment({
+        invoiceId,
+        txHash: hash,
+        onStatus: (status) => {
+          if (status === "detected") setPhase("received");
+        },
+      });
       if (paid) {
         sessionStorage.removeItem(PENDING_PAYMENT_KEY);
         setPhase("complete");
@@ -258,7 +265,7 @@ function CryptoSubscribeButtonInner({ planKey, className }: Props) {
         disabled={busy || phase === "complete"}
         className={className ?? "btn-glass w-full gap-2"}
       >
-        {phase === "complete" ? <CheckCircle2 className="w-4 h-4" /> : busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wallet className="w-4 h-4" />}
+        {phase === "complete" || phase === "received" ? <CheckCircle2 className="w-4 h-4" /> : busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wallet className="w-4 h-4" />}
         {phase === "complete" ? "Payment confirmed" : busy ? PHASE_LABELS[phase as Exclude<Phase, "idle" | "complete">] : txHash ? "Check payment confirmation" : setup ? `Retry $${(amountCents / 100).toFixed(2)} USDC payment` : "Pay with crypto"}
       </Button>
 
