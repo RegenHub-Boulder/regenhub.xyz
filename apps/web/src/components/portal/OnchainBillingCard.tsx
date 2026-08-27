@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Loader2, Wallet } from "lucide-react";
 import { RegenHubWalletProvider } from "@/components/web3/RegenHubWalletProvider";
+import { pollOnchainPayment } from "@/lib/onchain/clientConfirmation";
 
 type Props = {
   walletAddress: string | null;
@@ -147,21 +148,12 @@ function OnchainBillingCardInner(props: Props) {
       transferHash = txHash;
       setSubmittedTxHash(txHash);
       setMessage("Transaction submitted. RegenHub is checking OP confirmation…");
-      for (let attempt = 0; attempt < 12; attempt += 1) {
-        const res = await fetch("/api/portal/onchain/submit", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ invoice_id: props.invoice.id, tx_hash: txHash }),
-        });
-        const result = await res.json();
-        if (!res.ok && res.status !== 202) throw new Error(result.error ?? "Could not track transaction");
-        if (result.status === "paid") {
-          setMessage("Payment confirmed — membership is active.");
-          setTimeout(() => window.location.reload(), 1_500);
-          return;
-        }
-        if (attempt < 11) await new Promise((resolve) => setTimeout(resolve, 5_000));
+      if (await pollOnchainPayment({ invoiceId: props.invoice.id, txHash })) {
+        setMessage("Payment confirmed — membership is active.");
+        setTimeout(() => window.location.reload(), 1_500);
+        return;
       }
-      setMessage("Payment submitted — confirmation will finish automatically.");
+      setMessage("Payment is still awaiting OP safe confirmation. Do not pay again; reopen this page to resume checking.");
     } catch (cause) {
       setError(transferHash
         ? `${cause instanceof Error ? cause.message : "Confirmation is delayed"}. Your transaction was submitted; do not pay again.`
@@ -169,6 +161,33 @@ function OnchainBillingCardInner(props: Props) {
       setMessage(null);
     } finally { setBusy(false); }
   }, [address, props.invoice, props.walletAddress, signTypedDataAsync, switchChainAsync]);
+
+  useEffect(() => {
+    const invoice = props.invoice;
+    if (!invoice?.txHash || !["submitted", "detected"].includes(invoice.status)) return;
+    const controller = new AbortController();
+    setBusy(true);
+    setMessage("Transaction submitted. RegenHub is checking OP confirmation…");
+    void pollOnchainPayment({
+      invoiceId: invoice.id,
+      txHash: invoice.txHash as Hash,
+      signal: controller.signal,
+    }).then((paid) => {
+      if (paid) {
+        setMessage("Payment confirmed — membership is active.");
+        setTimeout(() => window.location.reload(), 1_500);
+      } else {
+        setMessage("Payment is still awaiting OP safe confirmation. Do not pay again; reopen this page to resume checking.");
+      }
+    }).catch((cause) => {
+      if (!controller.signal.aborted) {
+        setError(`${cause instanceof Error ? cause.message : "Confirmation is delayed"}. Your transaction was submitted; do not pay again.`);
+      }
+    }).finally(() => {
+      if (!controller.signal.aborted) setBusy(false);
+    });
+    return () => controller.abort();
+  }, [props.invoice]);
 
   useEffect(() => {
     if (!pendingAction || !isConnected || !address) return;

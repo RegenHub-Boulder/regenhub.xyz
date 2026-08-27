@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   requirePortalMember: vi.fn(),
   createServiceClient: vi.fn(),
   getBlockNumber: vi.fn(),
+  readContract: vi.fn(),
 }));
 
 vi.mock("@/lib/onchain/portalMember", () => ({ requirePortalMember: mocks.requirePortalMember }));
@@ -11,7 +12,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createServiceClient: mocks.createServic
 vi.mock("@/lib/onchain/config", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/onchain/config")>(),
   isGaslessRelayConfigured: () => true,
-  getOpPublicClient: () => ({ getBlockNumber: mocks.getBlockNumber }),
+  getOpPublicClient: () => ({ getBlockNumber: mocks.getBlockNumber, readContract: mocks.readContract }),
   assertOpPublicClient: vi.fn(async () => undefined),
 }));
 
@@ -64,6 +65,7 @@ beforeEach(() => {
     member: { id: 7, disabled: false },
   });
   mocks.getBlockNumber.mockResolvedValue(140_000_000n);
+  mocks.readContract.mockResolvedValue(500_000_000n);
 });
 describe("POST /api/portal/onchain/relay/prepare", () => {
   it("builds authorization only from the member's frozen invoice and verified wallet", async () => {
@@ -130,6 +132,35 @@ describe("POST /api/portal/onchain/relay/prepare", () => {
     expect(from).not.toHaveBeenCalledWith("onchain_relay_jobs");
   });
 
+  it("reports the exact native OP USDC shortfall before requesting a signature", async () => {
+    const jobs = jobsBuilder();
+    const tables = {
+      onchain_invoices: selectBuilder(invoice),
+      subscriptions: selectBuilder({ wallet_id: 12, payment_rail: "onchain" }),
+      member_wallets: selectBuilder({ address: "0x1111111111111111111111111111111111111111" }),
+      onchain_relay_jobs: jobs.chain,
+    };
+    mocks.createServiceClient.mockReturnValue({
+      from: (table: keyof typeof tables) => tables[table],
+    });
+    mocks.readContract.mockResolvedValue(3_858_523n);
+
+    const response = await POST(new Request("http://localhost/api/portal/onchain/relay/prepare", {
+      method: "POST",
+      body: JSON.stringify({ invoice_id: 101 }),
+    }));
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: "This wallet has 3.858523 native USDC on OP Mainnet, but this payment requires 250. Add 246.141477 USDC to this wallet before authorizing.",
+      code: "insufficient_usdc_balance",
+      balance_usdc_micros: "3858523",
+      required_usdc_micros: "250000000",
+      shortfall_usdc_micros: "246141477",
+    });
+    expect(jobs.chain.upsert).not.toHaveBeenCalled();
+  });
+
   it("does not overwrite an expired signed job before the worker can recover a consumed authorization", async () => {
     const existing = {
       invoice_id: 101,
@@ -166,5 +197,6 @@ describe("POST /api/portal/onchain/relay/prepare", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ status: "queued" });
     expect(jobs.chain.upsert).not.toHaveBeenCalled();
+    expect(mocks.readContract).not.toHaveBeenCalled();
   });
 });
