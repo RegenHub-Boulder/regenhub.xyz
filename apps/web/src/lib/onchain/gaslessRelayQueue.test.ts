@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   writeContract: vi.fn(),
   getBlockNumber: vi.fn(),
+  getBlock: vi.fn(),
   readContract: vi.fn(),
   getLogs: vi.fn(),
 }));
@@ -15,6 +16,7 @@ vi.mock("./config", async (importOriginal) => ({
   ...await importOriginal<typeof import("./config")>(),
   getOpPublicClient: () => ({
     getBlockNumber: mocks.getBlockNumber,
+    getBlock: mocks.getBlock,
     readContract: mocks.readContract,
     getLogs: mocks.getLogs,
   }),
@@ -27,6 +29,14 @@ import { processGaslessRelayQueue } from "./gaslessRelay";
 
 const txHash = `0x${"aa".repeat(32)}` as const;
 const fromAddress = "0x1111111111111111111111111111111111111111";
+
+function authorizationLog(eventName: "AuthorizationUsed" | "AuthorizationCanceled") {
+  return {
+    eventName,
+    args: { authorizer: fromAddress, nonce: `0x${"ab".repeat(32)}` },
+    transactionHash: txHash,
+  };
+}
 
 function relayJob(overrides: Partial<RelayJob> = {}): RelayJob {
   return {
@@ -127,6 +137,7 @@ function stateFor(job: RelayJob): State {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getBlockNumber.mockResolvedValue(140_000_000n);
+  mocks.getBlock.mockResolvedValue({ timestamp: BigInt(Math.floor(Date.now() / 1000)) });
   mocks.readContract.mockResolvedValue(false);
   mocks.getLogs.mockResolvedValue([]);
   mocks.writeContract.mockResolvedValue(txHash);
@@ -165,14 +176,17 @@ describe("gasless relay queue", () => {
     }));
     const admin = fakeAdmin(state);
     mocks.readContract.mockResolvedValue(true);
-    mocks.getLogs.mockResolvedValue([{ transactionHash: txHash }]);
+    mocks.getLogs.mockResolvedValue([authorizationLog("AuthorizationUsed")]);
 
     const result = await processGaslessRelayQueue(admin as never, 101);
 
     expect(result).toEqual({ status: "submitted", invoiceId: 101, txHash });
+    expect(mocks.readContract).toHaveBeenCalledWith(expect.objectContaining({
+      blockNumber: 140_000_000n,
+    }));
     expect(mocks.getLogs).toHaveBeenCalledWith(expect.objectContaining({
       fromBlock: 139_999_900n,
-      args: { authorizer: fromAddress, nonce: state.job.authorization_nonce },
+      toBlock: 139_999_909n,
     }));
     expect(mocks.writeContract).not.toHaveBeenCalled();
   });
@@ -180,18 +194,32 @@ describe("gasless relay queue", () => {
   it("recovers a consumed authorization after its signing window expires instead of inviting a second payment", async () => {
     const state = stateFor(relayJob({
       status: "submitting",
-      valid_before: Math.floor(Date.now() / 1000) - 1,
+      authorization_from_block: 1_000,
+      valid_before: 1_025,
       attempts: 1,
     }));
     const admin = fakeAdmin(state);
+    mocks.getBlockNumber.mockResolvedValue(1_100n);
+    mocks.getBlock.mockImplementation(async ({ blockNumber }: { blockNumber: bigint }) => ({
+      timestamp: blockNumber,
+    }));
     mocks.readContract.mockResolvedValue(true);
-    mocks.getLogs.mockResolvedValue([{ transactionHash: txHash }]);
+    mocks.getLogs.mockImplementation(async ({ fromBlock }: { fromBlock: bigint }) => (
+      fromBlock === 1_020n
+        ? [authorizationLog("AuthorizationUsed")]
+        : []
+    ));
 
     const result = await processGaslessRelayQueue(admin as never, 101);
 
     expect(result).toEqual({ status: "submitted", invoiceId: 101, txHash });
     expect(state.job.status).toBe("submitted");
     expect(state.invoice).toMatchObject({ status: "submitted", submitted_tx_hash: txHash });
+    expect(mocks.getLogs).toHaveBeenCalledTimes(3);
+    expect(mocks.getLogs).toHaveBeenLastCalledWith(expect.objectContaining({
+      fromBlock: 1_020n,
+      toBlock: 1_024n,
+    }));
     expect(mocks.writeContract).not.toHaveBeenCalled();
   });
 
@@ -204,17 +232,53 @@ describe("gasless relay queue", () => {
     expect(mocks.writeContract).not.toHaveBeenCalled();
   });
 
+  it("scans a consumed authorization in provider-safe ten-block chunks", async () => {
+    const state = stateFor(relayJob({
+      status: "submitting",
+      authorization_from_block: 139_999_900,
+      attempts: 1,
+    }));
+    const admin = fakeAdmin(state);
+    mocks.readContract.mockResolvedValue(true);
+    mocks.getLogs.mockImplementation(async ({ fromBlock }: { fromBlock: bigint }) => (
+      fromBlock === 139_999_920n
+        ? [authorizationLog("AuthorizationUsed")]
+        : []
+    ));
+
+    const result = await processGaslessRelayQueue(admin as never, 101);
+
+    expect(result).toEqual({ status: "submitted", invoiceId: 101, txHash });
+    expect(mocks.getLogs).toHaveBeenCalledTimes(3);
+    for (const [request] of mocks.getLogs.mock.calls) {
+      expect(request.toBlock - request.fromBlock).toBeLessThanOrEqual(9n);
+    }
+    expect(mocks.writeContract).not.toHaveBeenCalled();
+  });
+
   it("expires a wallet-canceled authorization instead of retrying it forever", async () => {
     const state = stateFor(relayJob({ status: "submitting", attempts: 1 }));
     const admin = fakeAdmin(state);
     mocks.readContract.mockResolvedValue(true);
-    mocks.getLogs
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ transactionHash: txHash }]);
+    mocks.getBlockNumber.mockResolvedValue(139_999_900n);
+    mocks.getLogs.mockResolvedValue([authorizationLog("AuthorizationCanceled")]);
 
     await expect(processGaslessRelayQueue(admin as never, 101))
       .rejects.toThrow("authorization was canceled");
     expect(state.job.status).toBe("expired");
+    expect(mocks.writeContract).not.toHaveBeenCalled();
+  });
+
+  it("keeps a consumed authorization retryable when neither event is available yet", async () => {
+    const state = stateFor(relayJob({ status: "submitting", attempts: 1 }));
+    const admin = fakeAdmin(state);
+    mocks.readContract.mockResolvedValue(true);
+    mocks.getBlockNumber.mockResolvedValue(139_999_900n);
+    mocks.getLogs.mockResolvedValue([]);
+
+    await expect(processGaslessRelayQueue(admin as never, 101))
+      .rejects.toThrow("event is not available yet");
+    expect(state.job.status).toBe("submitting");
     expect(mocks.writeContract).not.toHaveBeenCalled();
   });
 });
