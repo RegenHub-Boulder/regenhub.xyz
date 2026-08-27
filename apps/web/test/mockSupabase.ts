@@ -32,6 +32,10 @@ export type SupabaseMockOpts = {
   selects?: Record<string, Partial<CannedResponse> & { data?: unknown }>;
   /** Default response for INSERT / UPDATE / DELETE on any table. */
   mutations?: Partial<CannedResponse>;
+  /** Map of rpc function name → response returned when that function is called.
+   *  Falls back to { data: null, error: null } for any unlisted function, same
+   *  as the pre-existing unconditional default. */
+  rpcs?: Record<string, Partial<CannedResponse> & { data?: unknown }>;
 };
 
 export function makeSupabaseMock(opts: SupabaseMockOpts = {}) {
@@ -39,7 +43,10 @@ export function makeSupabaseMock(opts: SupabaseMockOpts = {}) {
     getUser: vi.fn().mockResolvedValue({ data: { user: opts.auth?.user ?? null } }),
   };
 
-  const rpc = vi.fn().mockResolvedValue({ data: null, error: null });
+  const rpc = vi.fn((fnName: string) => {
+    const resp = opts.rpcs?.[fnName];
+    return Promise.resolve({ data: resp?.data ?? null, error: resp?.error ?? null });
+  });
 
   function tableBuilder(table: string) {
     const selectResp: CannedResponse = {

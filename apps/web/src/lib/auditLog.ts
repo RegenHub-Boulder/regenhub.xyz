@@ -16,6 +16,7 @@ export const AuditAction = {
   FULL_ACCESS_REVOKED:    "full_access_revoked",
   MEMBER_DISABLED:        "member_disabled",
   MEMBER_DELETED:         "member_deleted",
+  MEMBER_AUTH_RELINKED:   "member_auth_relinked",
   // Balance/credit changes
   PASSES_GRANTED:         "passes_granted",
   PASSES_ADJUSTED:        "passes_adjusted",
