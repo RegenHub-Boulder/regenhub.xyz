@@ -92,6 +92,10 @@ export async function POST() {
         const json = (await res.json().catch(() => null)) as { message?: string; error?: string } | null;
         // revokeMembership 404s when there was nothing to delete — already not a scene member.
         if (plan.action === "revoke" && res.status === 404) {
+          await admin
+            .from("members")
+            .update({ regenos_synced_role: null, regenos_synced_at: new Date().toISOString() })
+            .eq("id", row.id);
           results.push({
             id: row.id,
             name: row.name,
@@ -111,6 +115,15 @@ export async function POST() {
         });
         continue;
       }
+      // Only a confirmed regenOS success updates our record of its state —
+      // a failed call tells us nothing about what regenOS actually holds.
+      await admin
+        .from("members")
+        .update({
+          regenos_synced_role: plan.action === "set" ? plan.role : null,
+          regenos_synced_at: new Date().toISOString(),
+        })
+        .eq("id", row.id);
       results.push({
         id: row.id,
         name: row.name,

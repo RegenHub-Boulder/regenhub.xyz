@@ -123,6 +123,8 @@ export interface Database {
           approved_for_full: boolean;
           approved_for_full_at: string | null;
           approved_for_full_by: number | null;
+          regenos_synced_role: string | null;
+          regenos_synced_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -153,6 +155,8 @@ export interface Database {
           approved_for_full?: boolean;
           approved_for_full_at?: string | null;
           approved_for_full_by?: number | null;
+          regenos_synced_role?: string | null;
+          regenos_synced_at?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["members"]["Insert"]>;
         Relationships: [];
