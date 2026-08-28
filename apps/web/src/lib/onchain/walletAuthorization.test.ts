@@ -3,7 +3,9 @@ import type { RelayAuthorization } from "./walletAuthorization";
 import {
   assertExpectedAuthorization,
   authorizationExpiresAt,
+  metaMaskConnectTypedData,
   relayAuthorizationRequest,
+  shouldUseMetaMaskConnectForAuthorization,
   withWalletTimeout,
 } from "./walletAuthorization";
 
@@ -80,5 +82,24 @@ describe("wallet authorization helpers", () => {
     const rejection = expect(result).rejects.toThrow("Open MetaMask");
     await vi.advanceTimersByTimeAsync(1_000);
     await rejection;
+  });
+
+  it("uses MetaMask Connect only for the deprecated external mobile connector", () => {
+    expect(shouldUseMetaMaskConnectForAuthorization("metaMaskSDK", "Mozilla/5.0 (Linux; Android 15)", false)).toBe(true);
+    expect(shouldUseMetaMaskConnectForAuthorization("metaMaskSDK", "Mozilla/5.0 (iPhone)", true)).toBe(false);
+    expect(shouldUseMetaMaskConnectForAuthorization("injected", "Mozilla/5.0 (Linux; Android 15)", false)).toBe(false);
+    expect(shouldUseMetaMaskConnectForAuthorization("metaMaskSDK", "Mozilla/5.0 (Macintosh)", false)).toBe(false);
+  });
+
+  it("serializes complete EIP-712 data for MetaMask Connect", () => {
+    const typedData = JSON.parse(metaMaskConnectTypedData(authorization));
+    expect(typedData.primaryType).toBe("TransferWithAuthorization");
+    expect(typedData.types.EIP712Domain).toEqual([
+      { name: "name", type: "string" },
+      { name: "version", type: "string" },
+      { name: "chainId", type: "uint256" },
+      { name: "verifyingContract", type: "address" },
+    ]);
+    expect(typedData.message).toEqual(authorization.message);
   });
 });

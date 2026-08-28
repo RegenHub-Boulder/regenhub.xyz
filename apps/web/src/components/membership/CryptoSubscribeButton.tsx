@@ -17,6 +17,8 @@ import { pollOnchainPayment } from "@/lib/onchain/clientConfirmation";
 import {
   assertExpectedAuthorization,
   relayAuthorizationRequest,
+  shouldUseMetaMaskConnectForAuthorization,
+  signAuthorizationWithMetaMaskConnect,
   type RelayAuthorization,
   withWalletTimeout,
 } from "@/lib/onchain/walletAuthorization";
@@ -129,11 +131,18 @@ function CryptoSubscribeButtonInner({ planKey, className }: Props) {
     setError(null);
     setPhase("signing");
     try {
+      const useMetaMaskConnect = shouldUseMetaMaskConnectForAuthorization(
+        connector?.id,
+        window.navigator.userAgent,
+        Boolean((window.ethereum as { isMetaMask?: boolean } | undefined)?.isMetaMask),
+      );
       const signature = await withWalletTimeout(
-        signTypedDataAsync({
-          account: address,
-          ...relayAuthorizationRequest(authorization),
-        }),
+        useMetaMaskConnect
+          ? signAuthorizationWithMetaMaskConnect(authorization, address)
+          : signTypedDataAsync({
+              account: address,
+              ...relayAuthorizationRequest(authorization),
+            }),
         "MetaMask did not respond. Open MetaMask and cancel any request still waiting there before trying again.",
       );
       signed = true;
@@ -143,7 +152,7 @@ function CryptoSubscribeButtonInner({ planKey, className }: Props) {
       setError(cause instanceof Error ? cause.message : "Payment authorization failed");
       setPhase(signed ? "idle" : "review");
     }
-  }, [address, authorization, setup, signTypedDataAsync, submitPayment]);
+  }, [address, authorization, connector?.id, setup, signTypedDataAsync, submitPayment]);
 
   const preparePayment = useCallback(async (nextSetup: Setup) => {
     if (!address) throw new Error("Connect your wallet to continue.");

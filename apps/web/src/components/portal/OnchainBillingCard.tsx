@@ -17,6 +17,8 @@ import { pollOnchainPayment } from "@/lib/onchain/clientConfirmation";
 import {
   assertExpectedAuthorization,
   relayAuthorizationRequest,
+  shouldUseMetaMaskConnectForAuthorization,
+  signAuthorizationWithMetaMaskConnect,
   type RelayAuthorization,
   withWalletTimeout,
 } from "@/lib/onchain/walletAuthorization";
@@ -179,11 +181,18 @@ function OnchainBillingCardInner(props: Props) {
     setMessage("Signature request sent. Open MetaMask if it did not appear automatically…");
     try {
       const checksummed = getAddress(address);
+      const useMetaMaskConnect = shouldUseMetaMaskConnectForAuthorization(
+        connector?.id,
+        window.navigator.userAgent,
+        Boolean((window.ethereum as { isMetaMask?: boolean } | undefined)?.isMetaMask),
+      );
       const signature = await withWalletTimeout(
-        signTypedDataAsync({
-          account: checksummed,
-          ...relayAuthorizationRequest(authorization),
-        }),
+        useMetaMaskConnect
+          ? signAuthorizationWithMetaMaskConnect(authorization, checksummed)
+          : signTypedDataAsync({
+              account: checksummed,
+              ...relayAuthorizationRequest(authorization),
+            }),
         "MetaMask did not respond. Open MetaMask and cancel any request still waiting there before trying again.",
       );
       signed = true;
@@ -197,7 +206,7 @@ function OnchainBillingCardInner(props: Props) {
     } finally {
       setBusy(false);
     }
-  }, [address, authorization, props.invoice, signTypedDataAsync, submitPayment]);
+  }, [address, authorization, connector?.id, props.invoice, signTypedDataAsync, submitPayment]);
 
   useEffect(() => {
     const invoice = props.invoice;
