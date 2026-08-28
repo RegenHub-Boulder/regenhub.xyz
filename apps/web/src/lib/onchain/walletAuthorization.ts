@@ -1,4 +1,4 @@
-import type { Address, Hex } from "viem";
+import { isHex, size, type Address, type Hex } from "viem";
 
 export type RelayAuthorization = {
   domain: {
@@ -35,6 +35,64 @@ export function relayAuthorizationRequest(authorization: RelayAuthorization) {
       validBefore: BigInt(authorization.message.validBefore),
     },
   } as const;
+}
+
+export function shouldUseMetaMaskConnectForAuthorization(
+  connectorId: string | undefined,
+  userAgent: string,
+  hasInjectedMetaMask: boolean,
+) {
+  return connectorId === "metaMaskSDK"
+    && /Android|iPhone|iPad|iPod/i.test(userAgent)
+    && !hasInjectedMetaMask;
+}
+
+export function metaMaskConnectTypedData(authorization: RelayAuthorization) {
+  return JSON.stringify({
+    domain: authorization.domain,
+    types: {
+      EIP712Domain: [
+        { name: "name", type: "string" },
+        { name: "version", type: "string" },
+        { name: "chainId", type: "uint256" },
+        { name: "verifyingContract", type: "address" },
+      ],
+      ...authorization.types,
+    },
+    primaryType: authorization.primaryType,
+    message: authorization.message,
+  });
+}
+
+/** Sign through MetaMask's supported mobile transport, bypassing its deprecated SDK. */
+export async function signAuthorizationWithMetaMaskConnect(
+  authorization: RelayAuthorization,
+  expectedAccount: Address,
+): Promise<Hex> {
+  const { createEVMClient } = await import("@metamask/connect-evm");
+  const client = await createEVMClient({
+    dapp: { name: "RegenHub Boulder", url: window.location.origin },
+    api: { supportedNetworks: { "0xa": "https://mainnet.optimism.io" } },
+    analytics: { enabled: false },
+    skipAutoAnnounce: true,
+  });
+  const typedData = metaMaskConnectTypedData(authorization);
+  const connected = await client.connectWith({
+    account: expectedAccount,
+    chainIds: ["0xa"],
+    method: "eth_signTypedData_v4",
+    params: (account) => [account, typedData],
+  });
+  const selected = connected.accounts.some(
+    (account) => account.toLowerCase() === expectedAccount.toLowerCase(),
+  );
+  if (!selected || Number.parseInt(connected.chainId, 16) !== 10) {
+    throw new Error("MetaMask connected a different wallet or network. Nothing was signed.");
+  }
+  if (typeof connected.result !== "string" || !isHex(connected.result) || size(connected.result) !== 65) {
+    throw new Error("MetaMask returned an invalid payment authorization. Nothing was submitted.");
+  }
+  return connected.result as Hex;
 }
 
 export function authorizationExpiresAt(authorization: RelayAuthorization) {
