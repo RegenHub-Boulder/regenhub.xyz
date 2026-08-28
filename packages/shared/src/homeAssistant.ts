@@ -18,6 +18,7 @@ const LOCK_ENTITIES = (process.env.HA_LOCK_ENTITIES ?? "lock.front_door_lock")
   .filter(Boolean);
 
 const SUPPORT_CONTACT = "@UnforcedAG on Telegram";
+const HEALTHY_BATTERY_PERCENT = 50;
 
 export type LockResult = {
   entity: string;
@@ -77,23 +78,48 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * lock's Z-Wave radio ACKs the command — BEFORE the lock commits the change to
  * memory. On a low-battery or flapping node the radio can ACK (cheap) while the
  * EEPROM write (expensive) silently fails, so the change never takes and we'd
- * otherwise report success. We read the node's status + battery alarm from HA's
- * cache (NO Z-Wave radio traffic) and return a human warning if either looks
- * bad, so callers can say "may not have applied — test it" instead of a false
- * green check.
+ * otherwise report success. We read the node's status + battery alarm and
+ * percentage from HA's cache (NO Z-Wave radio traffic) and return a human
+ * warning if the available readings indicate a real problem, so callers can
+ * say "may not have applied — test it" instead of a false green check.
  *
  * Returns undefined when the lock looks healthy, OR when the health sensors
  * aren't present (we don't second-guess a 200 we can't corroborate). Naming
  * follows Z-Wave JS defaults: lock.<base> -> sensor.<base>_node_status,
- * binary_sensor.<base>_replace_battery_now.
+ * binary_sensor.<base>_replace_battery_now, sensor.<base>_battery_level.
  */
 async function lockHealthWarning(lockEntity: string): Promise<string | undefined> {
   const base = lockEntity.replace(/^lock\./, "");
-  const [nodeStatus, batteryLow] = await Promise.all([
+  const [nodeStatus, batteryLow, batteryLevel] = await Promise.all([
     getEntityState(`sensor.${base}_node_status`),
     getEntityState(`binary_sensor.${base}_replace_battery_now`),
+    getEntityState(`sensor.${base}_battery_level`),
   ]);
-  if (batteryLow === "on") return "is low on battery — the change may not have applied";
+  return evaluateLockHealth(nodeStatus, batteryLow, batteryLevel);
+}
+
+/**
+ * Interpret cached lock-health readings without causing any HA or Z-Wave I/O.
+ *
+ * Some locks latch `replace_battery_now` after a battery swap. A clearly
+ * healthy numeric reading overrides that stale alarm, while a low, missing, or
+ * invalid percentage keeps the conservative warning behavior.
+ */
+export function evaluateLockHealth(
+  nodeStatus: string | null,
+  batteryLow: string | null,
+  batteryLevel: string | null,
+): string | undefined {
+  const parsedBatteryLevel = batteryLevel === null ? Number.NaN : Number(batteryLevel);
+  // Require an at-least-half-full report before overriding the lock's own alarm.
+  // Lower or unreadable values retain the conservative warning.
+  const hasHealthyBatteryReading =
+    Number.isFinite(parsedBatteryLevel) && parsedBatteryLevel >= HEALTHY_BATTERY_PERCENT;
+
+  if (batteryLow === "on" && !hasHealthyBatteryReading) {
+    const percentage = Number.isFinite(parsedBatteryLevel) ? ` (${parsedBatteryLevel}%)` : "";
+    return `is low on battery${percentage} — the change may not have applied`;
+  }
   if (nodeStatus && nodeStatus !== "alive") return `was ${nodeStatus} on the mesh — the change may not have applied`;
   return undefined;
 }
