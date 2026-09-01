@@ -67,11 +67,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Account not found or disabled" }, { status: 403 });
   }
 
-  // The day_codes table + balance RPCs have no INSERT/EXECUTE policy for
-  // regular members (RLS only grants them SELECT of their own codes), so all
-  // the privileged writes below go through the service-role client. The user
-  // is already authenticated and their member row resolved above, and every
-  // write is scoped explicitly to member.id — so this is safe.
+  // The day_codes table has no INSERT policy for regular members (RLS only
+  // grants them SELECT of their own codes), and migration 052 scoped the
+  // balance RPCs to service_role, so all the privileged writes below go
+  // through the service-role client. The user is already authenticated and
+  // their member row resolved above, and every write is scoped explicitly to
+  // member.id — so this is safe.
   const admin = createServiceClient();
 
   const isFullMember = member.member_type !== "day_pass";

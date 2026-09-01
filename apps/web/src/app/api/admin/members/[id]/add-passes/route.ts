@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/admin";
 
 export async function POST(
@@ -10,7 +10,10 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const supabase = await createClient();
+  // Migration 052 scoped the balance RPCs to the service role, matching how
+  // every other caller drives them. This route is requireAdmin-gated above
+  // and the count is bounded below, so the privileged client is safe here.
+  const admin = createServiceClient();
   const { id } = await params;
   const body = await request.json();
   const count = parseInt(body.count);
@@ -21,7 +24,7 @@ export async function POST(
 
   if (count > 0) {
     // Atomic increment
-    const { data: newBalance, error } = await supabase.rpc(
+    const { data: newBalance, error } = await admin.rpc(
       "increment_day_pass_balance",
       { p_member_id: Number(id), p_amount: count }
     );
@@ -37,7 +40,7 @@ export async function POST(
     return NextResponse.json({ balance: newBalance });
   } else {
     // Atomic decrement
-    const { data: newBalance, error } = await supabase.rpc(
+    const { data: newBalance, error } = await admin.rpc(
       "decrement_day_pass_balance",
       { p_member_id: Number(id), p_amount: Math.abs(count) }
     );
