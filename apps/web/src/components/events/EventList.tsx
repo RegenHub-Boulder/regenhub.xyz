@@ -25,14 +25,12 @@ export const LUMA_EMBED_SRC = "https://lu.ma/embed/calendar/cal-ZCWMKx1NMCXGd7v/
 export function LumaEmbed() {
   return (
     <div className="glass-panel-subtle rounded-lg overflow-hidden">
-      <div className="relative w-full" style={{ paddingBottom: "75%" }}>
-        <iframe
-          src={LUMA_EMBED_SRC}
-          className="absolute top-0 left-0 w-full h-full"
-          frameBorder="0"
-          allowFullScreen
-        />
-      </div>
+      <iframe
+        src={LUMA_EMBED_SRC}
+        className="w-full h-[520px]"
+        frameBorder="0"
+        allowFullScreen
+      />
     </div>
   );
 }
