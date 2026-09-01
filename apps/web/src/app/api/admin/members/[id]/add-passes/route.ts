@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/admin";
 
 export async function POST(
@@ -10,7 +10,10 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const supabase = await createClient();
+  // Balance RPCs are service-role only (migration 052); requireAdmin() above
+  // is the authorization check, so the privileged call goes through the
+  // service client — same pattern as /api/portal/request-daypass.
+  const supabase = createServiceClient();
   const { id } = await params;
   const body = await request.json();
   const count = parseInt(body.count);
