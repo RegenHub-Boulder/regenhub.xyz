@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import { RegenosOAuthError, requestAuthorizeUrl } from "@/lib/regenos/oauth";
 
 /**
@@ -55,9 +56,9 @@ export function OAuthSignInButton() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-2">
+    <form onSubmit={onSubmit} className="glass-panel-subtle p-4 space-y-2">
       <div className="space-y-2">
-        <Label htmlFor="regenos-oauth-identifier">Or sign in with your atproto handle</Label>
+        <Label htmlFor="regenos-oauth-identifier">Sign in with your atproto handle</Label>
         <Input
           id="regenos-oauth-identifier"
           value={identifier}
@@ -75,7 +76,20 @@ export function OAuthSignInButton() {
           {error}
         </p>
       )}
-      <Button type="submit" disabled={!canSubmit} className="btn-glass w-full">
+      {/* `.btn-glass` alone is too close to its own `disabled:opacity-50` dimming
+          to read as "enabled but waiting for input" — once a handle is typed,
+          switch to a visibly brighter treatment so the button doesn't look
+          permanently disabled. */}
+      <Button
+        type="submit"
+        disabled={!canSubmit}
+        className={cn(
+          "w-full",
+          canSubmit
+            ? "bg-white/15 border border-sage/50 text-foreground hover:bg-white/20 hover:border-sage/70"
+            : "btn-glass",
+        )}
+      >
         {busy ? "Taking you there…" : "Sign in with atproto"}
       </Button>
     </form>
