@@ -1,12 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { isoToLocalInput } from "@/lib/regenos/eventForm";
 import {
+  backfillMissingDescriptions,
   extractLumaUrls,
   fetchLumaHtml,
   isAllowedLumaUrl,
   lumaEventToFormValues,
   parseLumaHtml,
   splitAddress,
+  type ParsedLumaEvent,
 } from "./lumaImport";
 
 const CALENDAR_LD = JSON.stringify({
@@ -165,6 +167,59 @@ describe("lumaEventToFormValues", () => {
     expect(form.startsAt).toBe(isoToLocalInput("2026-08-14T15:00:00.000-06:00"));
     expect(form.endsAt).toBe(isoToLocalInput("2026-08-14T20:30:00.000-06:00"));
     expect(form.startsAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+  });
+});
+
+describe("backfillMissingDescriptions", () => {
+  it("fetches the individual event page for a listing item missing a description", async () => {
+    const events: ParsedLumaEvent[] = [
+      {
+        url: "https://luma.com/regenhub-mp3c",
+        name: "Co-op Launch Party at RegenHub",
+        startAt: "2026-08-14T15:00:00.000-06:00",
+        endAt: null,
+        placeName: "RegenHub",
+        street: "1515 Walnut St",
+        description: "",
+      },
+    ];
+    const fetcher = async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "https://luma.com/regenhub-mp3c") {
+        return new Response(
+          JSON.stringify({
+            "@type": "Event",
+            name: "Co-op Launch Party at RegenHub",
+            url: "https://luma.com/regenhub-mp3c",
+            startDate: "2026-08-14T15:00:00.000-06:00",
+            description: "Come celebrate the launch!",
+          }),
+          { status: 200, headers: { "content-type": "text/html" } },
+        );
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    };
+    const [result] = await backfillMissingDescriptions(events, fetcher as typeof fetch);
+    expect(result?.description).toBe("Come celebrate the launch!");
+  });
+
+  it("leaves the event alone when it already has a description, has no URL, or the follow-up fails", async () => {
+    const already: ParsedLumaEvent = {
+      url: "https://luma.com/a",
+      name: "A",
+      startAt: null,
+      endAt: null,
+      placeName: "",
+      street: "",
+      description: "already set",
+    };
+    const noUrl: ParsedLumaEvent = { ...already, url: "", description: "" };
+    const failing: ParsedLumaEvent = { ...already, url: "https://luma.com/b", description: "" };
+    const fetcher = async () => {
+      throw new Error("network down");
+    };
+    const result = await backfillMissingDescriptions([already, noUrl, failing], fetcher as typeof fetch);
+    expect(result).toEqual([already, noUrl, failing]);
   });
 });
 

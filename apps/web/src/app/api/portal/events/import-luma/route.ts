@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import {
+  backfillMissingDescriptions,
   extractLumaUrls,
   fetchLumaHtml,
   parseLumaHtml,
@@ -75,5 +76,7 @@ export async function POST(request: Request) {
     unique.push(e);
   }
 
-  return NextResponse.json({ events: unique, errors });
+  const enriched = await backfillMissingDescriptions(unique);
+
+  return NextResponse.json({ events: enriched, errors });
 }

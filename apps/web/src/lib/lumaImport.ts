@@ -193,6 +193,33 @@ export async function fetchLumaHtml(
   throw new Error(`${startUrl}: too many redirects`);
 }
 
+/**
+ * A Luma calendar/listing page's JSON-LD `Event` items never carry a
+ * `description` — only an individual event's own page does. Bulk-importing
+ * a listing (paste a calendar URL/HTML, get many events) otherwise ships
+ * every one of them with no description at all. Best-effort, one follow-up
+ * fetch per event missing a description: a failed follow-up leaves that
+ * event as parsed rather than failing the whole import.
+ */
+export async function backfillMissingDescriptions(
+  events: ParsedLumaEvent[],
+  fetcher: typeof fetch = fetch,
+): Promise<ParsedLumaEvent[]> {
+  return Promise.all(
+    events.map(async (e) => {
+      if (e.description || !e.url || !isAllowedLumaUrl(e.url)) return e;
+      try {
+        const { html } = await fetchLumaHtml(e.url, fetcher);
+        const [detail] = parseLumaHtml(html);
+        if (detail?.description) return { ...e, description: detail.description };
+      } catch {
+        // best-effort — keep the event without a description rather than fail the import
+      }
+      return e;
+    }),
+  );
+}
+
 export function lumaEventToFormValues(e: ParsedLumaEvent): EventFormValues {
   return {
     name: e.name,
