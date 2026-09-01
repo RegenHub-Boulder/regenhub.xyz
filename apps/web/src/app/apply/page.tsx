@@ -4,9 +4,11 @@ import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { RegenosLoginPanel } from "@/components/auth/RegenosLoginPanel";
 import ApplyForm from "./ApplyForm";
 import regenHubFull from "@/assets/regenhub-full.svg";
 import { isSyntheticEmail } from "@/lib/regenos/syntheticEmail";
+import { isRegenosLoginEnabled } from "@/lib/regenos/config";
 
 export const metadata: Metadata = {
   title: "Apply for Membership — RegenHub",
@@ -23,6 +25,7 @@ export default async function ApplyPage() {
   // free-day/member folks upgrade against their real record. The magic link
   // creates an account for brand-new people too, then returns them here.
   if (!user) {
+    const regenosEnabled = isRegenosLoginEnabled();
     return (
       <div className="min-h-screen px-6 py-12">
         <div className="max-w-md mx-auto space-y-8">
@@ -39,7 +42,24 @@ export default async function ApplyPage() {
 
           <Card className="glass-panel">
             <CardContent className="p-8">
-              <LoginForm next="/apply" />
+              {regenosEnabled ? (
+                <>
+                  {/* Same regenOS front door as /auth/login — kept consistent so
+                      the sign-in experience doesn't change shape depending on
+                      which page sent you here. */}
+                  <RegenosLoginPanel next="/apply" />
+                  <details className="mt-6">
+                    <summary className="text-xs text-muted text-center cursor-pointer list-none hover:text-forest transition-colors">
+                      Having trouble signing in?
+                    </summary>
+                    <div className="mt-4">
+                      <LoginForm next="/apply" />
+                    </div>
+                  </details>
+                </>
+              ) : (
+                <LoginForm next="/apply" />
+              )}
             </CardContent>
           </Card>
 

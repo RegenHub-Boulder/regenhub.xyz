@@ -187,7 +187,11 @@ export function RegenosLoginPanel({ next = "/portal" }: { next?: string }) {
 
   return (
     <Panel>
-      <form onSubmit={handleSubmit} className="space-y-4">
+      {/* One bordered card = one door: the "Continue with regenOS" button is
+          the submit action for the email field directly above it, not a
+          separate third option. Grouping them in a shared panel makes that
+          relationship visible instead of just structural. */}
+      <form onSubmit={handleSubmit} className="glass-panel-subtle p-4 space-y-4">
         <div className="space-y-2">
           <Label htmlFor="regenos-email">Sign in with your membership email</Label>
           <Input
@@ -208,6 +212,11 @@ export function RegenosLoginPanel({ next = "/portal" }: { next?: string }) {
           {busy ? "Checking…" : "Continue with regenOS"}
         </Button>
       </form>
+      <div className="flex items-center gap-3 text-xs text-muted" aria-hidden="true">
+        <span className="h-px flex-1 bg-white/10" />
+        or
+        <span className="h-px flex-1 bg-white/10" />
+      </div>
       <OAuthSignInButton />
     </Panel>
   );
