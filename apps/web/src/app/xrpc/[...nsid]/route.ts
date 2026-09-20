@@ -66,10 +66,70 @@ const ALLOWED_NSIDS = new Set([
   "social.scenius.deleteEvent",
 ]);
 
-// Request headers we must NOT blindly forward (hop-by-hop / host-rewriting).
-const STRIP_REQUEST = new Set(["host", "connection", "content-length", "accept-encoding"]);
-// Response headers we must NOT copy back (Next re-computes encoding/length).
-const STRIP_RESPONSE = new Set(["content-encoding", "content-length", "transfer-encoding", "connection"]);
+// Request headers we must NOT blindly forward (hop-by-hop / host-rewriting),
+// plus every way the edge spells "the visitor's IP address" — handing the
+// AppView a third party's address is not something borrowing two flows should
+// do, and stripping one spelling while forwarding another would just be the
+// same leak under a different name. Cookie is rebuilt rather than copied (see
+// relayableCookies). Origin and Sec-Fetch-* deliberately survive this filter —
+// the AppView's CSRF guard reads them verbatim, and that is the point.
+const STRIP_REQUEST = new Set([
+  "host",
+  "connection",
+  "content-length",
+  "accept-encoding",
+  "cookie",
+  "x-forwarded-for",
+  "x-real-ip",
+  "cf-connecting-ip",
+  "true-client-ip",
+  "x-forwarded-proto",
+  "cf-ipcountry",
+  "cf-ray",
+  "cf-visitor",
+  "x-vercel-forwarded-for",
+  "x-vercel-ip-country",
+]);
+// Response headers we must NOT copy back (Next re-computes encoding/length;
+// set-cookie is filtered and re-emitted via getSetCookie below, and never
+// access-control-* family is also dropped (see STRIP_RESPONSE_PREFIX): the
+// AppView answers CORS for its OWN frontends, and re-publishing that grant
+// under regenhub.xyz would let a third origin make credentialed calls against
+// session-bearing endpoints here. Same-origin is the whole design; the
+// browser never needs a preflight to reach its own site.
+const STRIP_RESPONSE = new Set([
+  "content-encoding",
+  "content-length",
+  "transfer-encoding",
+  "connection",
+  "set-cookie",
+]);
+const STRIP_RESPONSE_PREFIX = "access-control-";
+
+/**
+ * This origin also carries the site's own auth cookies (Supabase's `sb-…`).
+ * Copying the whole Cookie header upstream would hand a member's live Supabase
+ * session to regenOS; the `__Host-rs_` pair (`__Host-rs_session`,
+ * `__Host-rs_pending`) is all the AppView ever needs from us.
+ */
+const RELAY_COOKIE_PREFIX = "__Host-rs_";
+
+/** The subset of the browser's Cookie header the AppView is allowed to see. */
+function relayableCookies(header: string | null): string | null {
+  if (!header) return null;
+  const kept = header
+    .split(";")
+    .map((pair) => pair.trim())
+    .filter((pair) => pair.startsWith(RELAY_COOKIE_PREFIX));
+  return kept.length ? kept.join("; ") : null;
+}
+
+/** A Set-Cookie line is relayed only if it names one of regenOS's own cookies —
+ * upstream must not be able to set or overwrite any other cookie on
+ * regenhub.xyz. */
+function isRelayableSetCookie(line: string): boolean {
+  return line.trimStart().startsWith(RELAY_COOKIE_PREFIX);
+}
 
 async function proxy(req: NextRequest, nsid: string[]): Promise<NextResponse> {
   if (!isRegenosLoginEnabled()) {
@@ -89,6 +149,9 @@ async function proxy(req: NextRequest, nsid: string[]): Promise<NextResponse> {
     if (STRIP_REQUEST.has(key.toLowerCase())) return;
     headers.set(key, value);
   });
+  // The rebuilt Cookie lands here; nothing else forwards cookies.
+  const cookie = relayableCookies(req.headers.get("Cookie"));
+  if (cookie) headers.set("Cookie", cookie);
 
   const init: RequestInit = {
     method: req.method,
@@ -116,15 +179,20 @@ async function proxy(req: NextRequest, nsid: string[]): Promise<NextResponse> {
   const body = await upstream.arrayBuffer();
   const res = new NextResponse(body, { status: upstream.status });
   upstream.headers.forEach((value, key) => {
-    if (!STRIP_RESPONSE.has(key.toLowerCase())) res.headers.set(key, value);
+    const lower = key.toLowerCase();
+    if (STRIP_RESPONSE.has(lower) || lower.startsWith(STRIP_RESPONSE_PREFIX)) return;
+    res.headers.set(key, value);
   });
   // getSetCookie() preserves multiple Set-Cookie headers a flat forEach would
-  // coalesce — relay each verbatim so the browser stores the AppView's own
-  // `__Host-rs_session` on regenhub.xyz.
+  // coalesce — relay only the AppView's own `__Host-rs_` cookies verbatim so
+  // the browser stores the session on regenhub.xyz, and drop anything else
+  // upstream tries to set on this origin.
   const setCookies = upstream.headers.getSetCookie?.() ?? [];
   if (setCookies.length > 0) {
     res.headers.delete("set-cookie");
-    for (const c of setCookies) res.headers.append("set-cookie", c);
+    for (const c of setCookies) {
+      if (isRelayableSetCookie(c)) res.headers.append("set-cookie", c);
+    }
   }
   return res;
 }
