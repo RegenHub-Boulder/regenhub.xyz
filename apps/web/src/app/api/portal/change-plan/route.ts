@@ -12,7 +12,7 @@ interface ChangePlanBody {
  * POST /api/portal/change-plan
  *
  * Lets a member swap to any self-serve tier — including desk tiers
- * ($250/$500) — without admin involvement on the target side. Discounts
+ * ($250/$500) for members approved for Full Access. Discounts
  * attached to the subscription (e.g. LVB cohort coupons) carry forward
  * automatically: Stripe keeps the coupon on the subscription across item
  * changes.
@@ -51,11 +51,20 @@ export async function POST(req: Request) {
   // Resolve member + their active subscription
   const { data: member } = await supabase
     .from("members")
-    .select("id, name, email")
+    .select("id, name, email, approved_for_full")
     .eq("supabase_user_id", user.id)
     .single();
   if (!member) {
     return NextResponse.json({ error: "Member profile not found" }, { status: 404 });
+  }
+
+  const isDeskTier =
+    target.grantsMemberType === "cold_desk" || target.grantsMemberType === "hot_desk";
+  if (isDeskTier && !member.approved_for_full) {
+    return NextResponse.json(
+      { error: "Desk tiers need approval — get in touch." },
+      { status: 403 },
+    );
   }
 
   const admin = createServiceClient();

@@ -520,6 +520,7 @@ export default async function PortalPage() {
               <div className="flex gap-2 flex-wrap">
                 {canChangePlan && (
                   <ChangePlanButton
+                    approvedForFull={!!member.approved_for_full}
                     currentPlanKey={activeSubscription.plan_key}
                     currentMonthlyCents={activeSubscription.monthly_cents}
                     hasDiscount={(activeSubscription.discount_cents ?? 0) > 0}

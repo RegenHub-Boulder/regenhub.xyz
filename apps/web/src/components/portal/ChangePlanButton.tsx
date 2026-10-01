@@ -13,15 +13,17 @@ const SELF_SERVE_PLANS = getSelfServePlans().map(({ key, def }) => ({
   label: def.label,
   dollars: def.defaultMonthlyCents / 100,
   passes: def.monthlyDayPasses ?? 0,
+  isDeskTier: def.grantsMemberType === "cold_desk" || def.grantsMemberType === "hot_desk",
 }));
 
 interface Props {
   currentPlanKey: string;
   currentMonthlyCents: number;
   hasDiscount?: boolean;
+  approvedForFull: boolean;
 }
 
-export function ChangePlanButton({ currentPlanKey, currentMonthlyCents, hasDiscount }: Props) {
+export function ChangePlanButton({ currentPlanKey, currentMonthlyCents, hasDiscount, approvedForFull }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -32,7 +34,7 @@ export function ChangePlanButton({ currentPlanKey, currentMonthlyCents, hasDisco
   // Only show change-plan when current plan is in the self-serve ladder
   if (!current) return null;
 
-  const options = SELF_SERVE_PLANS.filter((p) => p.key !== currentPlanKey);
+  const options = SELF_SERVE_PLANS.filter((p) => p.key !== currentPlanKey && (!p.isDeskTier || approvedForFull));
 
   async function switchTo(planKey: string) {
     setBusy(true);
