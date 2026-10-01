@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/admin";
 import { clearUserCode, formatLockStatus, LOCK_FAILURE_MSG } from "@regenhub/shared";
 
 export async function POST(request: Request) {
@@ -43,12 +44,13 @@ export async function POST(request: Request) {
     );
   }
 
-  const { error } = await supabase
+  const { data: updated, error } = await createServiceClient()
     .from("day_codes")
     .update({ is_active: false, revoked_at: new Date().toISOString() })
-    .eq("id", codeId);
+    .eq("id", codeId)
+    .select("id");
 
-  if (error) {
+  if (error || !updated?.length) {
     console.error("[DB] Failed to mark code revoked:", error);
     return NextResponse.json({ error: "Lock cleared but DB update failed" }, { status: 500 });
   }

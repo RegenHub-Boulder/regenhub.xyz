@@ -9,6 +9,7 @@ export function RevokeCodeButton({ codeId }: { codeId: number }) {
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lockWarning, setLockWarning] = useState<string | null>(null);
   const [revoked, setRevoked] = useState(false);
   const router = useRouter();
 
@@ -25,8 +26,13 @@ export function RevokeCodeButton({ codeId }: { codeId: number }) {
         const json = await res.json();
         throw new Error(json.error ?? "Failed to revoke");
       }
+      const json = await res.json();
+      const warning = typeof json.lock_status === "string" && !json.lock_status.startsWith("Code set on ")
+        ? json.lock_status
+        : null;
+      setLockWarning(warning);
       setRevoked(true);
-      setTimeout(() => router.refresh(), 800);
+      if (!warning) setTimeout(() => router.refresh(), 800);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to revoke";
       setError(msg);
@@ -38,7 +44,7 @@ export function RevokeCodeButton({ codeId }: { codeId: number }) {
   if (revoked) {
     return (
       <span className="flex items-center gap-1 text-xs text-sage">
-        <Check className="w-3.5 h-3.5" /> Revoked
+        <Check className="w-3.5 h-3.5" /> {lockWarning ?? "Revoked"}
       </span>
     );
   }
