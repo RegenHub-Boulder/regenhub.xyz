@@ -90,7 +90,7 @@ export function OAuthSignInButton() {
         type="submit"
         disabled={!canSubmit}
         className={cn(
-          "w-full",
+          "w-full h-auto min-h-10 whitespace-normal py-2 text-center",
           canSubmit
             ? "bg-white/15 border border-sage/50 text-foreground hover:bg-white/20 hover:border-sage/70"
             : "btn-glass",
