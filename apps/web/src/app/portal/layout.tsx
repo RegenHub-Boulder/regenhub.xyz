@@ -14,9 +14,12 @@ export default async function PortalLayout({ children }: { children: React.React
 
   const { data: member } = await supabase
     .from("members")
-    .select("is_admin")
+    .select("is_admin, disabled")
     .eq("supabase_user_id", user.id)
     .single();
+
+  // Matches the admin layout's gate: disabling a member also removes admin.
+  const isAdmin = !!member?.is_admin && !member.disabled;
 
   // Steward-ness is a regenOS read, and doing it here would put an AppView
   // round-trip on every portal page. The link is flag-gated; the page itself
@@ -29,7 +32,7 @@ export default async function PortalLayout({ children }: { children: React.React
     { href: "/portal/passes", label: "Live Codes" },
     { href: "/portal/profile", label: "Profile" },
     ...(eventsEnabled ? [{ href: "/portal/events", label: "Events" }] : []),
-    ...(member?.is_admin ? [{ href: "/admin", label: "Admin", accent: true }] : []),
+    ...(isAdmin ? [{ href: "/admin", label: "Admin", accent: true }] : []),
   ];
 
   return (
@@ -56,7 +59,7 @@ export default async function PortalLayout({ children }: { children: React.React
               {eventsEnabled && (
                 <Link href="/portal/events" className="text-muted hover:text-foreground transition-colors">Events</Link>
               )}
-              {member?.is_admin && (
+              {isAdmin && (
                 <Link href="/admin" className="text-gold hover:text-gold/80 transition-colors">Admin</Link>
               )}
             </div>

@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/admin";
-import { unsubscribeToken } from "@/lib/newsletter";
+import { verifyUnsubscribeToken } from "@/lib/newsletter";
 
 /**
  * GET /api/newsletter/unsubscribe?email=…&token=…
@@ -32,7 +32,7 @@ export async function GET(req: Request) {
   if (!email || !token) {
     return page("Invalid link", "This unsubscribe link is missing some pieces. If you're trying to stop the newsletter, reply to any issue and we'll take care of it by hand.", false);
   }
-  if (token !== unsubscribeToken(email)) {
+  if (!verifyUnsubscribeToken(email, token)) {
     return page("Invalid link", "This unsubscribe link doesn't check out. If you're trying to stop the newsletter, reply to any issue and we'll take care of it by hand.", false);
   }
 

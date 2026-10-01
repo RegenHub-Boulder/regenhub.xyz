@@ -19,6 +19,12 @@ import {
   calculateExpiration,
 } from "./helpers/slotManager.js";
 import { handleHoldOpen, handleRelock, startDoorHoldLoop } from "./doorHolds.js";
+import {
+  clearPending,
+  getPending,
+  setPending,
+  type PendingAction,
+} from "./pendingActions.js";
 
 async function getUsedDayCodeSlots(): Promise<Set<number>> {
   const { data } = await db.from("day_codes").select("pin_slot").eq("is_active", true);
@@ -32,14 +38,6 @@ async function getUsedMemberSlots(): Promise<Set<number>> {
 
 let bot: TelegramBot;
 
-type PendingAction = {
-  type: "newcode" | "quickcode" | "addmember" | "addpasses" | "addadmin" | "changetype";
-  step: string;
-  data: Record<string, unknown>;
-  timestamp: number;
-};
-
-const pending = new Map<number, PendingAction>();
 const ITEMS_PER_PAGE = 10;
 
 async function react(msg: TelegramBot.Message) {
@@ -158,7 +156,7 @@ async function handleNewCode(msg: TelegramBot.Message, match: RegExpExecArray | 
 
   if (arg) {
     const newCode = arg.toLowerCase() === "random"
-      ? String(Math.floor(100000 + Math.random() * 900000))
+      ? generateRandomCode()
       : /^\d{4,6}$/.test(arg) ? arg : null;
 
     if (!newCode) return bot.sendMessage(msg.chat.id, "Invalid code. Use 4-6 digits or 'random'.");
@@ -176,7 +174,9 @@ async function handleNewCode(msg: TelegramBot.Message, match: RegExpExecArray | 
     }
   }
 
-  pending.set(msg.chat.id, { type: "newcode", step: "awaiting_code", data: { userId: user.id, slot: user.pin_code_slot }, timestamp: Date.now() });
+  const ownerId = msg.from?.id;
+  if (ownerId === undefined) return;
+  setPending(msg.chat.id, { type: "newcode", step: "awaiting_code", data: { userId: user.id, slot: user.pin_code_slot }, timestamp: Date.now(), ownerId });
   return bot.sendMessage(msg.chat.id, "Send a 4-6 digit code, or 'random'. Type 'cancel' to abort.");
 }
 
@@ -269,8 +269,11 @@ async function handleQuickCode(msg: TelegramBot.Message, match: RegExpExecArray 
   const admin = await findAdminByTelegram(msg.from?.username ?? "");
   if (!admin) return bot.sendMessage(msg.chat.id, "Admins only.");
 
+  const ownerId = msg.from?.id;
+  if (ownerId === undefined) return;
+
   const label = match?.[1]?.trim() ?? null;
-  pending.set(msg.chat.id, { type: "quickcode", step: "awaiting_expiration", data: { label }, timestamp: Date.now() });
+  setPending(msg.chat.id, { type: "quickcode", step: "awaiting_expiration", data: { label }, timestamp: Date.now(), ownerId });
 
   return bot.sendMessage(msg.chat.id, `Quick code${label ? ` for "${label}"` : ""}. Choose expiration:`, {
     reply_markup: {
@@ -322,7 +325,7 @@ async function handleAdmin(msg: TelegramBot.Message) {
   const admin = await findAdminByTelegram(msg.from?.username ?? "");
   if (!admin) return bot.sendMessage(msg.chat.id, "Admins only.");
 
-  pending.delete(msg.chat.id);
+  clearPending(msg.chat.id);
 
   return bot.sendMessage(msg.chat.id, "Admin Management:", {
     reply_markup: {
@@ -608,31 +611,32 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
   const admin = await findAdminByTelegram(username);
   if (!admin) return bot.sendMessage(chatId, "Admins only.");
 
-  if (data.startsWith("expire_")) return handleExpirationCallback(chatId, data);
+  const userId = query.from.id;
+  if (data.startsWith("expire_")) return handleExpirationCallback(chatId, userId, data);
   if (data.startsWith("revoke_")) return handleRevokeCallback(chatId, parseInt(data.replace("revoke_", "")));
   if (data.startsWith("page_codes_")) return sendCodesList(chatId, parseInt(data.replace("page_codes_", "")));
   if (data.startsWith("page_members_")) return sendMembersList(chatId, parseInt(data.replace("page_members_", "")));
-  if (data.startsWith("admin_")) return handleAdminMenu(chatId, data, admin);
-  if (data.startsWith("membertype_")) return handleMemberType(chatId, data);
-  if (data.startsWith("changeto_")) return handleChangeToCallback(chatId, data);
+  if (data.startsWith("admin_")) return handleAdminMenu(chatId, userId, data, admin);
+  if (data.startsWith("membertype_")) return handleMemberType(chatId, userId, data);
+  if (data.startsWith("changeto_")) return handleChangeToCallback(chatId, userId, data);
   if (data.startsWith("confirm_removeadmin_")) return handleRemoveAdmin(chatId, parseInt(data.replace("confirm_removeadmin_", "")));
 }
 
-async function handleExpirationCallback(chatId: number, data: string) {
-  const p = pending.get(chatId);
+async function handleExpirationCallback(chatId: number, userId: number, data: string) {
+  const p = getPending(chatId, userId);
   if (!p || p.type !== "quickcode") return;
 
   const preset = data.replace("expire_", "");
   if (preset === "custom") {
     p.step = "awaiting_custom_time";
     p.timestamp = Date.now();
-    pending.set(chatId, p);
+    setPending(chatId, p);
     return bot.sendMessage(chatId, "Enter expiration time (e.g. '8:30pm', '9pm'). Type 'cancel' to abort.");
   }
 
   const exp = calculateExpiration(preset);
   if (!exp) return bot.sendMessage(chatId, "Couldn't parse time.");
-  pending.delete(chatId);
+  clearPending(chatId);
   return createQuickCode(chatId, exp, p.data.label as string | null);
 }
 
@@ -699,12 +703,12 @@ async function handleRevokeCallback(chatId: number, codeId: number) {
   return bot.sendMessage(chatId, reply);
 }
 
-async function handleAdminMenu(chatId: number, data: string, admin: MemberRow) {
-  pending.delete(chatId);
+async function handleAdminMenu(chatId: number, ownerId: number, data: string, admin: MemberRow) {
+  clearPending(chatId);
 
   switch (data) {
     case "admin_addmember":
-      pending.set(chatId, { type: "addmember", step: "awaiting_type", data: {}, timestamp: Date.now() });
+      setPending(chatId, { type: "addmember", step: "awaiting_type", data: {}, timestamp: Date.now(), ownerId });
       return bot.sendMessage(chatId, "Coworking membership type?", {
         reply_markup: { inline_keyboard: [
           [{ text: "Cold Desk", callback_data: "membertype_cold_desk" }, { text: "Hot Desk", callback_data: "membertype_hot_desk" }],
@@ -713,18 +717,18 @@ async function handleAdminMenu(chatId: number, data: string, admin: MemberRow) {
       });
 
     case "admin_addpasses":
-      pending.set(chatId, { type: "addpasses", step: "awaiting_username", data: {}, timestamp: Date.now() });
+      setPending(chatId, { type: "addpasses", step: "awaiting_username", data: {}, timestamp: Date.now(), ownerId });
       return bot.sendMessage(chatId, "Enter member's Telegram username (@username). Type 'cancel' to abort.");
 
     case "admin_changetype":
-      pending.set(chatId, { type: "changetype", step: "awaiting_username", data: {}, timestamp: Date.now() });
+      setPending(chatId, { type: "changetype", step: "awaiting_username", data: {}, timestamp: Date.now(), ownerId });
       return bot.sendMessage(chatId, "Enter member's Telegram username (@username). Type 'cancel' to abort.");
 
     case "admin_togglecoop":
       return bot.sendMessage(chatId, "Use /coop @username to toggle co-op member status.\n\nExample: /coop @johndoe");
 
     case "admin_addadmin":
-      pending.set(chatId, { type: "addadmin", step: "awaiting_username", data: {}, timestamp: Date.now() });
+      setPending(chatId, { type: "addadmin", step: "awaiting_username", data: {}, timestamp: Date.now(), ownerId });
       return bot.sendMessage(chatId, "Enter Telegram username of new admin. Type 'cancel' to abort.");
 
     case "admin_removeadmin": {
@@ -739,13 +743,13 @@ async function handleAdminMenu(chatId: number, data: string, admin: MemberRow) {
   }
 }
 
-async function handleMemberType(chatId: number, data: string) {
-  const p = pending.get(chatId);
+async function handleMemberType(chatId: number, userId: number, data: string) {
+  const p = getPending(chatId, userId);
   if (!p || p.type !== "addmember") return;
   p.data.memberType = data.replace("membertype_", "");
   p.step = "awaiting_name";
   p.timestamp = Date.now();
-  pending.set(chatId, p);
+  setPending(chatId, p);
   return bot.sendMessage(chatId, "Enter the member's name. Type 'cancel' to abort.");
 }
 
@@ -767,18 +771,20 @@ async function handleMessage(msg: TelegramBot.Message) {
   const text = msg.text?.trim();
   if (!text || text.startsWith("/")) return;
 
-  const p = pending.get(chatId);
+  // Only the person who started the flow can continue it — in a group chat
+  // everyone else is talking in the same conversation.
+  const p = getPending(chatId, msg.from?.id);
   if (!p) return;
 
   await react(msg);
 
   if (Date.now() - p.timestamp > 5 * 60 * 1000) {
-    pending.delete(chatId);
+    clearPending(chatId);
     return bot.sendMessage(chatId, "Action timed out. Start again.");
   }
 
   if (text.toLowerCase() === "cancel") {
-    pending.delete(chatId);
+    clearPending(chatId);
     return bot.sendMessage(chatId, "Cancelled.");
   }
 
@@ -794,7 +800,7 @@ async function handleMessage(msg: TelegramBot.Message) {
 
 async function handleNewCodeFlow(chatId: number, text: string, p: PendingAction) {
   const code = text.toLowerCase() === "random"
-    ? String(Math.floor(100000 + Math.random() * 900000))
+    ? generateRandomCode()
     : /^\d{4,6}$/.test(text) ? text : null;
 
   if (!code) return bot.sendMessage(chatId, "Send 4-6 digits or 'random'. Type 'cancel' to abort.");
@@ -803,13 +809,13 @@ async function handleNewCodeFlow(chatId: number, text: string, p: PendingAction)
   try {
     const lockResults = await setUserCode(p.data.slot as number, code);
     await db.from("members").update({ pin_code: code }).eq("id", p.data.userId as number);
-    pending.delete(chatId);
+    clearPending(chatId);
     const status = formatLockStatus(lockResults);
     let reply = `Code updated!\n\n🔑 *${code}*\n\n${status}`;
     return bot.sendMessage(chatId, reply, { parse_mode: "Markdown" });
   } catch (err) {
     console.error("[NewCode] Failed to program lock:", err);
-    pending.delete(chatId);
+    clearPending(chatId);
     return bot.sendMessage(chatId, `⚠️ ${LOCK_FAILURE_MSG}`);
   }
 }
@@ -818,7 +824,7 @@ async function handleQuickCodeFlow(chatId: number, text: string, p: PendingActio
   if (p.step !== "awaiting_custom_time") return;
   const exp = calculateExpiration(text);
   if (!exp || exp <= new Date()) return bot.sendMessage(chatId, "Couldn't parse that time. Try '9pm' or '8:30pm'. Type 'cancel' to abort.");
-  pending.delete(chatId);
+  clearPending(chatId);
   return createQuickCode(chatId, exp, p.data.label as string | null);
 }
 
@@ -828,7 +834,7 @@ async function handleAddMemberFlow(chatId: number, text: string, p: PendingActio
       p.data.name = text;
       p.step = "awaiting_telegram";
       p.timestamp = Date.now();
-      pending.set(chatId, p);
+      setPending(chatId, p);
       return bot.sendMessage(chatId, "Enter Telegram username (@username) or 'skip':");
 
     case "awaiting_telegram": {
@@ -840,27 +846,27 @@ async function handleAddMemberFlow(chatId: number, text: string, p: PendingActio
       if (p.data.memberType !== "day_pass") {
         p.step = "awaiting_pincode";
         p.timestamp = Date.now();
-        pending.set(chatId, p);
+        setPending(chatId, p);
         return bot.sendMessage(chatId, "Enter a 4-6 digit pin code, or 'random':");
       } else {
         p.step = "awaiting_passes";
         p.timestamp = Date.now();
-        pending.set(chatId, p);
+        setPending(chatId, p);
         return bot.sendMessage(chatId, "How many day passes? (default: 10):");
       }
     }
 
     case "awaiting_pincode": {
-      const pin = text.toLowerCase() === "random" ? String(Math.floor(100000 + Math.random() * 900000)) : /^\d{4,6}$/.test(text) ? text : null;
+      const pin = text.toLowerCase() === "random" ? generateRandomCode() : /^\d{4,6}$/.test(text) ? text : null;
       if (!pin) return bot.sendMessage(chatId, "Invalid. Enter 4-6 digits or 'random':");
       p.data.pinCode = pin;
-      pending.delete(chatId);
+      clearPending(chatId);
       return createMember(chatId, p.data);
     }
 
     case "awaiting_passes":
       p.data.passes = parseInt(text) || 10;
-      pending.delete(chatId);
+      clearPending(chatId);
       return createMember(chatId, p.data);
   }
 }
@@ -941,7 +947,7 @@ async function handleAddPassesFlow(chatId: number, text: string, p: PendingActio
     p.data.memberName = member.name;
     p.step = "awaiting_count";
     p.timestamp = Date.now();
-    pending.set(chatId, p);
+    setPending(chatId, p);
     return bot.sendMessage(chatId, `Found: ${member.name}\nHow many day passes to add?`);
   }
 
@@ -953,7 +959,7 @@ async function handleAddPassesFlow(chatId: number, text: string, p: PendingActio
       p_member_id: p.data.memberId as number,
       p_amount: count,
     });
-    pending.delete(chatId);
+    clearPending(chatId);
     if (error || newBalance === -1) {
       return bot.sendMessage(chatId, "Failed to update balance. Member may have been deleted.");
     }
@@ -963,12 +969,12 @@ async function handleAddPassesFlow(chatId: number, text: string, p: PendingActio
 
 async function handleAddAdminFlow(chatId: number, text: string) {
   const tg = text.startsWith("@") ? text : `@${text}`;
-  const { data: member } = await db.from("members").select("id, name, is_admin").eq("telegram_username", tg).single();
+  const { data: member } = await db.from("members").select("id, name, is_admin").eq("telegram_username", tg).eq("disabled", false).single();
   if (!member) return bot.sendMessage(chatId, `${tg} not found. They must be registered first. Try again or 'cancel':`);
-  if (member.is_admin) { pending.delete(chatId); return bot.sendMessage(chatId, `${member.name} is already an admin.`); }
+  if (member.is_admin) { clearPending(chatId); return bot.sendMessage(chatId, `${member.name} is already an admin.`); }
 
   await db.from("members").update({ is_admin: true }).eq("id", member.id);
-  pending.delete(chatId);
+  clearPending(chatId);
   return bot.sendMessage(chatId, `${member.name} (${tg}) is now an admin.`);
 }
 
@@ -979,7 +985,9 @@ async function handleChangeType(msg: TelegramBot.Message) {
   const admin = await findAdminByTelegram(msg.from?.username ?? "");
   if (!admin) return bot.sendMessage(msg.chat.id, "Admins only.");
 
-  pending.set(msg.chat.id, { type: "changetype", step: "awaiting_username", data: {}, timestamp: Date.now() });
+  const ownerId = msg.from?.id;
+  if (ownerId === undefined) return;
+  setPending(msg.chat.id, { type: "changetype", step: "awaiting_username", data: {}, timestamp: Date.now(), ownerId });
   return bot.sendMessage(msg.chat.id, "Enter member's Telegram username (@username). Type 'cancel' to abort.");
 }
 
@@ -987,7 +995,8 @@ async function handleChangeTypeFlow(chatId: number, text: string, p: PendingActi
   if (p.step !== "awaiting_username") return;
 
   const tg = text.startsWith("@") ? text : `@${text}`;
-  const member = await findMemberByTelegram(tg.replace("@", ""));
+  // Admin tooling acting on a member — disabled rows stay reachable here.
+  const member = await findMemberByTelegram(tg.replace("@", ""), { includeDisabled: true });
   if (!member) return bot.sendMessage(chatId, `${tg} not found. Try again or 'cancel':`);
 
   const typeLabel =
@@ -1002,7 +1011,7 @@ async function handleChangeTypeFlow(chatId: number, text: string, p: PendingActi
   p.data.currentCode = member.pin_code;
   p.step = "awaiting_type";
   p.timestamp = Date.now();
-  pending.set(chatId, p);
+  setPending(chatId, p);
 
   return bot.sendMessage(chatId, `${member.name} is currently: *${typeLabel}*\n\nSelect new type:`, {
     parse_mode: "Markdown",
@@ -1013,8 +1022,8 @@ async function handleChangeTypeFlow(chatId: number, text: string, p: PendingActi
   });
 }
 
-async function handleChangeToCallback(chatId: number, data: string) {
-  const p = pending.get(chatId);
+async function handleChangeToCallback(chatId: number, userId: number, data: string) {
+  const p = getPending(chatId, userId);
   if (!p || p.type !== "changetype") return;
 
   const newType = data.replace("changeto_", "") as "cold_desk" | "hot_desk" | "hub_friend" | "day_pass";
@@ -1023,7 +1032,7 @@ async function handleChangeToCallback(chatId: number, data: string) {
   const currentType = p.data.currentType as string;
   const currentSlot = p.data.currentSlot as number | null;
 
-  pending.delete(chatId);
+  clearPending(chatId);
 
   if (newType === currentType) {
     return bot.sendMessage(chatId, `${memberName} is already ${newType}. No changes made.`);
@@ -1116,7 +1125,7 @@ async function handleCoop(msg: TelegramBot.Message, match: RegExpExecArray | nul
   }
 
   const tg = arg.startsWith("@") ? arg : `@${arg}`;
-  const member = await findMemberByTelegram(tg.replace("@", ""));
+  const member = await findMemberByTelegram(tg.replace("@", ""), { includeDisabled: true });
   if (!member) return bot.sendMessage(msg.chat.id, `${tg} not found.`);
 
   const newStatus = !member.is_coop_member;

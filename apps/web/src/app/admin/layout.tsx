@@ -24,11 +24,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   const { data: member } = await supabase
     .from("members")
-    .select("is_admin")
+    .select("is_admin, disabled")
     .eq("supabase_user_id", user.id)
     .single();
 
-  if (!member?.is_admin) redirect("/portal");
+  // A disabled member is not an admin, whatever their is_admin flag says.
+  if (!member?.is_admin || member.disabled) redirect("/portal");
 
   return (
     <div className="min-h-screen">

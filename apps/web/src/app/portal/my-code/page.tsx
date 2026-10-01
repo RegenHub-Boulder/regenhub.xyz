@@ -16,7 +16,7 @@ export default async function MyCodePage() {
 
   const { data: member } = await supabase
     .from("members")
-    .select("id, name, pin_code, pin_code_slot, nfc_key_address, member_type")
+    .select("id, name, pin_code, pin_code_slot, nfc_key_address, member_type, disabled")
     .eq("supabase_user_id", user.id)
     .single();
 
@@ -37,6 +37,29 @@ export default async function MyCodePage() {
           </Link>
           <Link href="/apply">
             <Button className="btn-primary-glass">Apply to join</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (member.disabled) {
+    // Same gate the regenerate-code route already applies — a disabled member
+    // has no door access, so don't show them the PIN either.
+    return (
+      <div className="glass-panel p-8 text-center max-w-md mx-auto mt-8">
+        <AlertCircle className="w-8 h-8 text-amber-400 mx-auto mb-3" />
+        <h2 className="font-semibold mb-2">Your membership is inactive</h2>
+        <p className="text-sm text-muted mb-5">
+          Door codes are paused while a membership is inactive. Reactivate from the
+          membership page, or get in touch and we&apos;ll sort it out.
+        </p>
+        <div className="flex gap-2 justify-center flex-wrap">
+          <Link href="/membership">
+            <Button className="btn-primary-glass">Membership</Button>
+          </Link>
+          <Link href="/portal">
+            <Button className="btn-glass">Back to portal</Button>
           </Link>
         </div>
       </div>

@@ -26,19 +26,31 @@ export type MemberRow = {
   invite_code: string | null;
 };
 
-export async function findMemberByTelegram(username: string): Promise<MemberRow | null> {
+/**
+ * Resolve a member by their Telegram handle.
+ *
+ * Disabled members are excluded by default: `disabled` is how access is taken
+ * away, so to every self-service path (/mycode, /newcode, /daypass, /invite)
+ * and to every admin check, a disabled member is simply not a member. Admin
+ * tooling that operates *on* a member — /changetype, /coop — passes
+ * `{ includeDisabled: true }` so it can still reach those rows.
+ */
+export async function findMemberByTelegram(
+  username: string,
+  opts: { includeDisabled?: boolean } = {},
+): Promise<MemberRow | null> {
   const p = telegramIlikePatterns(username);
   if (!p) return null;
-  const { data } = await db
+  let q = db
     .from("members")
     .select("*")
-    .or(`telegram_username.ilike.${p.bare},telegram_username.ilike.${p.withAt}`)
-    .limit(1)
-    .maybeSingle();
+    .or(`telegram_username.ilike.${p.bare},telegram_username.ilike.${p.withAt}`);
+  if (!opts.includeDisabled) q = q.eq("disabled", false);
+  const { data } = await q.limit(1).maybeSingle();
   return data ?? null;
 }
 
 export async function findAdminByTelegram(username: string): Promise<MemberRow | null> {
   const member = await findMemberByTelegram(username);
-  return member?.is_admin ? member : null;
+  return member?.is_admin && !member.disabled ? member : null;
 }

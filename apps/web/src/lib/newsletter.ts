@@ -1,4 +1,4 @@
-import { createHmac } from "crypto";
+import { createHmac, timingSafeEqual } from "crypto";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { fetchUpcomingLumaEvents, type LumaEvent } from "@/lib/luma";
 import type { HubDigestStats } from "@/lib/email";
@@ -13,12 +13,53 @@ type ServiceClient = ReturnType<typeof createServiceClient>;
 
 // ---------- Unsubscribe tokens ----------
 
-/** HMAC of the email keyed off CRON_SECRET. The "unsub:" prefix scopes the
- *  derivation so the token can't be confused with anything else derived from
- *  the same secret. */
-export function unsubscribeToken(email: string): string {
-  const secret = process.env.CRON_SECRET ?? "dev-secret";
+/**
+ * Keys that may sign an unsubscribe token, most-preferred first.
+ *
+ * `NEWSLETTER_UNSUBSCRIBE_SECRET` is the dedicated key — unsubscribe links go
+ * out in every issue and live in inboxes forever, so they should not share a
+ * secret with the cron bearer token. `CRON_SECRET` stays in the list as a
+ * fallback so links already mailed keep verifying while the new var is rolled
+ * out; drop it from the environment once you're happy to invalidate them.
+ *
+ * There is no baked-in default: an empty secret would make every unsubscribe
+ * link forgeable, so outside development we would rather fail loudly.
+ */
+function unsubscribeSecrets(): string[] {
+  const secrets = [
+    process.env.NEWSLETTER_UNSUBSCRIBE_SECRET,
+    process.env.CRON_SECRET,
+  ].filter((s): s is string => !!s && s.length > 0);
+
+  if (secrets.length === 0) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "NEWSLETTER_UNSUBSCRIBE_SECRET is not set (and no CRON_SECRET to fall back on) — " +
+          "refusing to sign unsubscribe links with a default secret.",
+      );
+    }
+    return ["dev-secret"];
+  }
+  return secrets;
+}
+
+function sign(email: string, secret: string): string {
   return createHmac("sha256", secret).update(`unsub:${email.toLowerCase()}`).digest("hex").slice(0, 32);
+}
+
+/** HMAC of the email. The "unsub:" prefix scopes the derivation so the token
+ *  can't be confused with anything else derived from the same secret. */
+export function unsubscribeToken(email: string): string {
+  return sign(email, unsubscribeSecrets()[0]);
+}
+
+/** Constant-time check of a token against every accepted signing key. */
+export function verifyUnsubscribeToken(email: string, token: string): boolean {
+  const given = Buffer.from(token);
+  return unsubscribeSecrets().some((secret) => {
+    const expected = Buffer.from(sign(email, secret));
+    return given.length === expected.length && timingSafeEqual(given, expected);
+  });
 }
 
 export function unsubscribeUrl(email: string, siteUrl: string): string {

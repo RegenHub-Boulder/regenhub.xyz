@@ -48,6 +48,8 @@ The `.dockerignore` has an exception (`!**/.env.production`) so the file is avai
 | `REGENOS_COLLECTIVE_DID` | Web (runtime) | The RegenHub collective's `did:plc:…`. Required alongside the base URL for the events swap. |
 | `REGENOS_WEB_URL` | Web (runtime) | Public regenOS web origin. **Only** used for the subscribable `calendar.ics` feed URL — event *pages* are in-site (`/events/<did>/<rkey>`) and never depend on this. Unset = no "Subscribe to the calendar" line. |
 | `REGENOS_LOGIN_ENABLED` | Web (runtime) | **Default off.** `true`/`1`/`yes` turns on the regenOS login lane + the `/xrpc` proxy. |
+| `CRON_SECRET` | Web (runtime) | Bearer token required by every `/api/cron/*` route. |
+| `NEWSLETTER_UNSUBSCRIBE_SECRET` | Web (runtime) | Signs newsletter unsubscribe links. Give it its own value — those links sit in inboxes forever and shouldn't share the cron bearer token. Falls back to `CRON_SECRET` if unset (already-mailed links keep verifying); in production, with neither set, signing throws instead of using a default. |
 
 ## Project Structure
 ```
