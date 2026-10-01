@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
@@ -20,6 +20,7 @@ interface MobileNavProps {
 export function MobileNav({ links, trailing }: MobileNavProps) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const openButtonRef = useRef<HTMLButtonElement>(null);
 
   // Close drawer on route change — links already call setOpen(false) on click,
   // but this catches programmatic navigation and browser back/forward.
@@ -29,9 +30,16 @@ export function MobileNav({ links, trailing }: MobileNavProps) {
   // Prevent body scroll when drawer is open
   useEffect(() => {
     if (open) {
+      const openButton = openButtonRef.current;
       document.body.style.overflow = "hidden";
+      const onKeyDown = (event: KeyboardEvent) => {
+        if (event.key === "Escape") setOpen(false);
+      };
+      document.addEventListener("keydown", onKeyDown);
       return () => {
         document.body.style.overflow = "";
+        document.removeEventListener("keydown", onKeyDown);
+        openButton?.focus();
       };
     }
   }, [open]);
@@ -40,6 +48,7 @@ export function MobileNav({ links, trailing }: MobileNavProps) {
     <>
       {/* Hamburger button — visible only on mobile */}
       <button
+        ref={openButtonRef}
         onClick={() => setOpen(true)}
         className="sm:hidden p-2 -ml-2 text-muted hover:text-foreground transition-colors"
         aria-label="Open menu"
@@ -58,6 +67,8 @@ export function MobileNav({ links, trailing }: MobileNavProps) {
 
       {/* Drawer */}
       <div
+        inert={!open}
+        aria-hidden={!open}
         className={`fixed top-0 left-0 z-[101] h-full w-72 sm:hidden
           glass-panel-strong border-r border-white/10
           transform transition-transform duration-250 ease-out
