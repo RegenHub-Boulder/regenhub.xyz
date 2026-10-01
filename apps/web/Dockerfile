@@ -53,6 +53,9 @@ COPY --from=builder /app/apps/web/public           ./apps/web/public
 # cwd/../../supabase/migrations and finds it either way. MIGRATIONS_DIR overrides.
 COPY supabase/migrations ./supabase/migrations
 
+RUN mkdir -p /app/apps/web/apps/web/.next/cache && \
+    chown nextjs:nodejs /app/apps/web/apps/web/.next/cache
+
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000
