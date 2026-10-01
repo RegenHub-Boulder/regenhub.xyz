@@ -31,6 +31,28 @@ const DESK_PERKS = [
   "Path to co-op ownership",
 ];
 
+// The three ways in, in the order a stranger meets them.
+const LADDER = [
+  {
+    step: 1,
+    title: "Free day",
+    price: "Free",
+    body: "Come work for a day on us. No card, no commitment — pick a date and we'll send you a door code. One per person.",
+  },
+  {
+    step: 2,
+    title: "Day pass",
+    price: "$30 / day",
+    body: "Liked it? Drop in whenever, Monday to Friday, no contract. Members pay $25 and bank unused passes.",
+  },
+  {
+    step: 3,
+    title: "Membership",
+    price: "from $30 / month",
+    body: "Contributing tiers support the cooperative and credit day passes monthly. Desk tiers add a permanent door code and 24/7 access.",
+  },
+] as const;
+
 interface PageProps {
   searchParams: Promise<{ cancelled?: string }>;
 }
@@ -71,6 +93,11 @@ export default async function MembershipPage({ searchParams }: PageProps) {
     }
   }
   const showNotApprovedBanner = user !== null && approvedForDaily === false && !hasActiveSub;
+  // Anonymous visitors used to get five live "Pay by card" buttons that ended
+  // in a 403 from /api/membership/subscribe with the raw error on screen.
+  // Nobody can buy a membership before we've approved them, so anyone who
+  // isn't approved sees the ladder in words instead of a checkout grid.
+  const showLadderInsteadOfCheckout = user === null || showNotApprovedBanner;
   // Show desk-not-approved card only when they ARE approved for membership
   // but not yet for desks — otherwise the generic not-approved banner covers it.
   const showDeskGate = user !== null && approvedForDaily === true && !approvedForFull && !hasActiveSub;
@@ -85,18 +112,20 @@ export default async function MembershipPage({ searchParams }: PageProps) {
   );
 
   return (
-    <div className="min-h-screen px-6 py-12">
+    <div className="px-6 py-12">
       <div className="max-w-5xl mx-auto space-y-12">
         <header className="text-center space-y-3">
           <p className="text-sm text-sage uppercase tracking-wider flex items-center justify-center gap-2">
             <Sparkles className="w-4 h-4" />
             RegenHub Membership
           </p>
-          <h1 className="text-4xl sm:text-5xl font-bold text-forest">Pick your tier</h1>
+          <h1 className="text-4xl sm:text-5xl font-bold text-forest">
+            {showLadderInsteadOfCheckout ? "How to join" : "Pick your tier"}
+          </h1>
           <p className="text-muted max-w-2xl mx-auto">
-            Step into a cooperative building economic democracy in Boulder. Contributing tiers
-            ($30–$100/mo) support the space and unlock member events. Full Access ($250–$500/mo)
-            adds a permanent door code and 24/7 access.
+            {showLadderInsteadOfCheckout
+              ? "RegenHub is a cooperative coworking space in Boulder. There are three ways in, and the first one is free."
+              : "Step into a cooperative building economic democracy in Boulder. Contributing tiers ($30–$100/mo) support the space and unlock member events. Full Access ($250–$500/mo) adds a permanent door code and 24/7 access."}
           </p>
         </header>
 
@@ -159,8 +188,46 @@ export default async function MembershipPage({ searchParams }: PageProps) {
           </div>
         )}
 
+        {/* The ladder, in plain words — what a stranger actually needs to know. */}
+        {showLadderInsteadOfCheckout && (
+          <section className="space-y-5">
+            <div className="grid md:grid-cols-3 gap-5">
+              {LADDER.map(({ step, title, price, body }) => (
+                <Card key={title} className="glass-panel">
+                  <CardContent className="p-6 space-y-2">
+                    <p className="text-xs uppercase tracking-wider text-sage">Step {step}</p>
+                    <h2 className="text-xl font-semibold text-forest">{title}</h2>
+                    <p className="text-2xl font-bold text-gold">{price}</p>
+                    <p className="text-sm text-muted leading-relaxed">{body}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            {!user && (
+              <div className="glass-panel p-6 max-w-2xl mx-auto text-center space-y-3">
+                <p className="font-medium">Apply first</p>
+                <p className="text-sm text-muted">
+                  We welcome each member personally, so joining starts with an application rather
+                  than a checkout page. Tell us about you and we&apos;ll be in touch — or come try
+                  a free day before you decide anything.
+                </p>
+                <div className="flex gap-3 justify-center flex-wrap">
+                  <Link href="/apply">
+                    <Button className="btn-primary-glass gap-2">
+                      Apply to join <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  </Link>
+                  <Link href="/freeday">
+                    <Button className="btn-glass">Try a free day first</Button>
+                  </Link>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
         {/* Contributing tiers ($30 / $50 / $100) */}
-        {!hasActiveSub && (
+        {!hasActiveSub && !showLadderInsteadOfCheckout && (
           <section className="space-y-5">
             <div className="text-center">
               <h2 className="text-2xl font-semibold text-forest">Contributing Member</h2>
@@ -176,7 +243,10 @@ export default async function MembershipPage({ searchParams }: PageProps) {
                     className={`glass-panel relative ${isFeatured ? "border border-sage/40" : ""}`}
                   >
                     {isFeatured && (
-                      <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-sage text-forest text-xs font-semibold px-3 py-0.5 rounded-full">
+                      <span
+                        className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-xs font-semibold px-3 py-0.5 rounded-full"
+                        style={{ background: "var(--sage)", color: "var(--forest-deep)" }}
+                      >
                         Most popular
                       </span>
                     )}
@@ -205,24 +275,16 @@ export default async function MembershipPage({ searchParams }: PageProps) {
                           </div>
                         ))}
                       </div>
-                      {showNotApprovedBanner ? (
-                        <Link href="/apply" className="block">
-                          <Button className={isFeatured ? "btn-primary-glass w-full" : "btn-glass w-full"}>
-                            Apply to join →
-                          </Button>
-                        </Link>
-                      ) : (
-                        <div className="space-y-2">
-                          <SubscribeButton
-                            planKey={key}
-                            isAuthenticated={!!user}
-                            authedEmail={subscriptionEmail}
-                            cta={isFeatured ? "Pay by card — most popular" : "Pay by card"}
-                            className={isFeatured ? "btn-primary-glass w-full" : "btn-glass w-full"}
-                          />
-                          {user && <CryptoSubscribeButton planKey={key} />}
-                        </div>
-                      )}
+                      <div className="space-y-2">
+                        <SubscribeButton
+                          planKey={key}
+                          isAuthenticated={!!user}
+                          authedEmail={subscriptionEmail}
+                          cta={isFeatured ? "Pay by card — most popular" : "Pay by card"}
+                          className={isFeatured ? "btn-primary-glass w-full" : "btn-glass w-full"}
+                        />
+                        {user && <CryptoSubscribeButton planKey={key} />}
+                      </div>
                     </CardContent>
                   </Card>
                 );
@@ -232,7 +294,7 @@ export default async function MembershipPage({ searchParams }: PageProps) {
         )}
 
         {/* Full Access tiers ($250 / $500) */}
-        {!hasActiveSub && deskPlans.length > 0 && (
+        {!hasActiveSub && !showLadderInsteadOfCheckout && deskPlans.length > 0 && (
           <section className="space-y-5 pt-4">
             <div className="text-center">
               <h2 className="text-2xl font-semibold text-forest">Full Access</h2>
@@ -267,11 +329,7 @@ export default async function MembershipPage({ searchParams }: PageProps) {
                           </div>
                         ))}
                       </div>
-                      {showNotApprovedBanner ? (
-                        <Link href="/apply" className="block">
-                          <Button className="btn-glass w-full">Apply to join →</Button>
-                        </Link>
-                      ) : showDeskGate ? (
+                      {showDeskGate ? (
                         <Link href="/apply" className="block">
                           <Button className="btn-glass w-full">Request Full Access →</Button>
                         </Link>
@@ -298,12 +356,14 @@ export default async function MembershipPage({ searchParams }: PageProps) {
           </section>
         )}
 
-        {/* Promo code hint */}
-        <div className="glass-panel p-4 max-w-2xl mx-auto text-center">
-          <p className="text-sm text-muted">
-            Have a promotion code (cohort discount, trial, etc.)? Paste it on the Stripe checkout page after clicking Subscribe.
-          </p>
-        </div>
+        {/* Promo code hint — only meaningful once there's a checkout button to click */}
+        {!showLadderInsteadOfCheckout && (
+          <div className="glass-panel p-4 max-w-2xl mx-auto text-center">
+            <p className="text-sm text-muted">
+              Have a promotion code (cohort discount, trial, etc.)? Paste it on the Stripe checkout page after clicking Subscribe.
+            </p>
+          </div>
+        )}
 
         {/* Footer link */}
         <p className="text-center text-xs text-muted">

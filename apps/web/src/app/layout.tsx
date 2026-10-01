@@ -5,12 +5,16 @@ import "./globals.css";
 // Validates required env vars at app boot — see lib/env.ts
 import "@/lib/env";
 import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
+import { OG_IMAGES, SITE_DESCRIPTION, siteUrl } from "@/lib/metadata";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
+  // Makes the relative og:image below resolve to an absolute URL, which is the
+  // only kind a social crawler will fetch.
+  metadataBase: siteUrl(),
   title: "RegenHub Boulder",
-  description: "Boulder's regenerative cooperative workspace — community, economic democracy, and regenerative technology.",
+  description: SITE_DESCRIPTION,
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
@@ -18,9 +22,17 @@ export const metadata: Metadata = {
     title: "RegenHub",
   },
   openGraph: {
+    type: "website",
     title: "RegenHub Boulder",
-    description: "A regenerative innovation hub in Boulder, CO",
-    siteName: "RegenHub",
+    description: SITE_DESCRIPTION,
+    siteName: "RegenHub Boulder",
+    images: OG_IMAGES,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "RegenHub Boulder",
+    description: SITE_DESCRIPTION,
+    images: OG_IMAGES,
   },
 };
 

@@ -174,7 +174,7 @@ export default function FreeDayForm({
   if (submitted) {
     const isPending = submittedStatus === "pending";
     return (
-      <div className="min-h-screen flex items-center justify-center px-6">
+      <div className="min-h-[60vh] flex items-center justify-center px-6">
         <Card className="glass-panel-strong max-w-md w-full">
           <CardContent className="p-10 text-center">
             {isPending ? (
@@ -210,7 +210,7 @@ export default function FreeDayForm({
 
   if (claim?.status === "pending") {
     return (
-      <div className="min-h-screen flex items-center justify-center px-6">
+      <div className="min-h-[60vh] flex items-center justify-center px-6">
         <Card className="glass-panel-strong max-w-md w-full">
           <CardContent className="p-10 text-center">
             <Clock className="w-12 h-12 text-sage mx-auto mb-4" />
@@ -247,7 +247,7 @@ export default function FreeDayForm({
 
   if (claim?.status === "expired") {
     return (
-      <div className="min-h-screen px-6 py-12">
+      <div className="px-6 py-12">
         <div className="max-w-2xl mx-auto space-y-8">
           <div className="text-center">
             <Link href="/">
@@ -320,7 +320,7 @@ export default function FreeDayForm({
 
   if (claim?.status === "activated" || doorCode) {
     return (
-      <div className="min-h-screen px-6 py-12">
+      <div className="px-6 py-12">
         <div className="max-w-2xl mx-auto space-y-8">
           <div className="text-center">
             <Link href="/">
@@ -403,7 +403,7 @@ export default function FreeDayForm({
 
   if (claim?.status === "reserved" && claim.claimed_date && claim.claimed_date !== today) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-6">
+      <div className="min-h-[60vh] flex items-center justify-center px-6">
         <Card className="glass-panel-strong max-w-md w-full">
           <CardContent className="p-10 text-center">
             <Calendar className="w-12 h-12 text-sage mx-auto mb-4" />
@@ -439,7 +439,7 @@ export default function FreeDayForm({
 
   if (claim?.status === "reserved" && (!claim.claimed_date || claim.claimed_date === today)) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-6">
+      <div className="min-h-[60vh] flex items-center justify-center px-6">
         <Card className="glass-panel-strong max-w-md w-full">
           <CardContent className="p-10 text-center">
             <Zap className="w-12 h-12 text-gold mx-auto mb-4" />
@@ -486,7 +486,7 @@ export default function FreeDayForm({
   // ── Render: Landing page / signup form ──────────────────────
 
   return (
-    <div className="min-h-screen px-6 py-12">
+    <div className="px-6 py-12">
       <div className="max-w-2xl mx-auto space-y-8">
         {/* Hero */}
         <div className="text-center">

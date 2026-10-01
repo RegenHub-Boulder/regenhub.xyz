@@ -26,7 +26,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
   const regenosEnabled = isRegenosLoginEnabled();
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6">
+    <div className="min-h-[60vh] flex items-center justify-center px-6">
       <div className="w-full max-w-md">
         <div className="glass-panel-strong p-8">
           <div className="text-center mb-8">

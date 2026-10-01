@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import FreeDayForm from "./FreeDayForm";
 import type { Metadata } from "next";
+import { OG_IMAGES } from "@/lib/metadata";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,6 +17,7 @@ export const metadata: Metadata = {
     description:
       "Try Boulder's regenerative coworking space for free. Get a door code and come work with us for a day.",
     url: "https://regenhub.xyz/freeday",
+    images: OG_IMAGES,
   },
 };
 
@@ -67,7 +69,7 @@ export default async function FreeDayPage({
     existingMember.member_type !== "day_pass"
   ) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-6">
+      <div className="min-h-[60vh] flex items-center justify-center px-6">
         <Card className="glass-panel-strong max-w-md w-full">
           <CardContent className="p-10 text-center">
             <CheckCircle className="w-12 h-12 text-sage mx-auto mb-4" />

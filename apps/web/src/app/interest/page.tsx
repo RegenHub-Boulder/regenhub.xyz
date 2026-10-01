@@ -7,7 +7,7 @@ export const metadata = { title: "Stay in Touch — RegenHub" };
 
 export default function InterestPage() {
   return (
-    <div className="min-h-screen px-6 py-12">
+    <div className="px-6 py-12">
       <div className="max-w-xl mx-auto space-y-8">
         <div className="text-center">
           <Link href="/">

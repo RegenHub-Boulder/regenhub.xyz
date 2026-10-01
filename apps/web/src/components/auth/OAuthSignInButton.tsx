@@ -58,7 +58,7 @@ export function OAuthSignInButton() {
   return (
     <form onSubmit={onSubmit} className="glass-panel-subtle p-4 space-y-2">
       <div className="space-y-2">
-        <Label htmlFor="regenos-oauth-identifier">Sign in with your atproto handle</Label>
+        <Label htmlFor="regenos-oauth-identifier">Sign in with your community account</Label>
         <Input
           id="regenos-oauth-identifier"
           value={identifier}
@@ -70,6 +70,12 @@ export function OAuthSignInButton() {
           disabled={busy}
           className="bg-white/10 border-white/20 text-foreground placeholder:text-muted"
         />
+        {/* The one place the underlying names are allowed to appear: a person
+            who has a handle needs to recognise it, and nobody else should have
+            to learn what "atproto" means to sign in. */}
+        <p className="text-xs text-muted">
+          Your handle from regenOS, Bluesky, or another atproto service.
+        </p>
       </div>
       {error && (
         <p className="text-red-400 text-sm" role="alert">
@@ -90,7 +96,7 @@ export function OAuthSignInButton() {
             : "btn-glass",
         )}
       >
-        {busy ? "Taking you there…" : "Sign in with atproto"}
+        {busy ? "Taking you there…" : "Continue with your community account"}
       </Button>
     </form>
   );

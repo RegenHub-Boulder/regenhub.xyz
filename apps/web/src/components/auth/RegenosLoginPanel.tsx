@@ -112,12 +112,12 @@ export function RegenosLoginPanel({ next = "/portal" }: { next?: string }) {
         body: JSON.stringify({ email }),
       });
       if (!res.ok) {
-        setError("regenOS didn't accept that email. Try the classic sign-in link below.");
+        setError("We couldn't sign you in with that email. Try the sign-in link below.");
         return;
       }
       data = (await res.json()) as BeginSignupResponse;
     } catch {
-      setError("Can't reach regenOS right now. Use the classic sign-in link below.");
+      setError("We can't reach the sign-in service right now. Use the sign-in link below.");
       return;
     } finally {
       setBusy(false);
@@ -144,7 +144,7 @@ export function RegenosLoginPanel({ next = "/portal" }: { next?: string }) {
     return (
       <Panel>
         <p className="text-sm text-muted">
-          You&apos;re signed in to regenOS as <strong>{existingHandle}</strong>.
+          You&apos;re signed in as <strong>{existingHandle}</strong>.
         </p>
         {error && <p className="text-red-400 text-sm">{error}</p>}
         <Button onClick={finish} disabled={busy} className="btn-primary-glass w-full">
@@ -160,7 +160,7 @@ export function RegenosLoginPanel({ next = "/portal" }: { next?: string }) {
         <div className="text-center space-y-1">
           <div className="text-3xl">📬</div>
           <p className="text-sm text-muted">
-            regenOS sent a sign-in link to <strong>{email}</strong>. Open it, then come back here.
+            We sent a sign-in link to <strong>{email}</strong>. Open it, then come back here.
           </p>
         </div>
         {error && <p className="text-red-400 text-sm">{error}</p>}
@@ -175,8 +175,8 @@ export function RegenosLoginPanel({ next = "/portal" }: { next?: string }) {
     return (
       <Panel>
         <p className="text-sm text-muted">
-          No regenOS account for <strong>{email}</strong> yet. Use the classic sign-in link below —
-          it works exactly as it always has.
+          We don&apos;t have a community account for <strong>{email}</strong> yet. Use the email
+          sign-in link below — it works exactly as it always has.
         </p>
         <Button onClick={() => setStage("idle")} className="btn-glass w-full">
           Try a different email
@@ -187,13 +187,13 @@ export function RegenosLoginPanel({ next = "/portal" }: { next?: string }) {
 
   return (
     <Panel>
-      {/* One bordered card = one door: the "Continue with regenOS" button is
+      {/* One bordered card = one door: the "Continue with email" button is
           the submit action for the email field directly above it, not a
           separate third option. Grouping them in a shared panel makes that
           relationship visible instead of just structural. */}
       <form onSubmit={handleSubmit} className="glass-panel-subtle p-4 space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="regenos-email">Sign in with your membership email</Label>
+          <Label htmlFor="regenos-email">Sign in with your email</Label>
           <Input
             id="regenos-email"
             type="email"
@@ -209,7 +209,7 @@ export function RegenosLoginPanel({ next = "/portal" }: { next?: string }) {
         </div>
         {error && <p className="text-red-400 text-sm">{error}</p>}
         <Button type="submit" disabled={busy} className="btn-primary-glass w-full">
-          {busy ? "Checking…" : "Continue with regenOS"}
+          {busy ? "Checking…" : "Continue with email"}
         </Button>
       </form>
       <div className="flex items-center gap-3 text-xs text-muted" aria-hidden="true">

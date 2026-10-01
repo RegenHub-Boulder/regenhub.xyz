@@ -9,11 +9,12 @@ import { ForestMascot } from "@/components/landing/ForestMascot";
 import HeroInterestForm from "@/components/landing/HeroInterestForm";
 import CommunityGallery from "@/components/landing/CommunityGallery";
 import UpcomingEvents from "@/components/landing/UpcomingEvents";
+import { PublicHeader } from "@/components/layout/PublicHeader";
+import { PublicFooter } from "@/components/layout/PublicFooter";
+import { HUB_ADDRESS, HUB_EMAIL, HUB_TELEGRAM } from "@/components/layout/publicNav";
 
 export type SignedInMember = { name: string } | null;
 import forestBackground from "@/assets/forest-background.jpg";
-import regenHubLogo from "@/assets/regenhub-logo.svg";
-import regenHubText from "@/assets/regenhub-text.svg";
 import regenHubFull from "@/assets/regenhub-full.svg";
 
 export default function RegenHubLanding({ signedInMember }: { signedInMember?: SignedInMember }) {
@@ -29,21 +30,7 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
         }}
       />
 
-      {/* Header */}
-      <header className="relative z-50 px-6 py-4">
-        <nav className="glass-panel-subtle max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Image src={regenHubLogo} alt="RegenHub" width={32} height={32} className="animate-sway" />
-            <Image src={regenHubText} alt="RegenHub" height={32} className="h-8 w-auto" />
-          </div>
-          <div className="flex items-center gap-4">
-            <p className="text-sm text-muted hidden sm:block">Boulder&apos;s Regenerative Workspace</p>
-            <Link href="/portal">
-              <Button size="sm" className="btn-glass">Member Portal</Button>
-            </Link>
-          </div>
-        </nav>
-      </header>
+      <PublicHeader />
 
       {/* Hero */}
       <section className="relative px-6 py-16 md:py-24">
@@ -218,7 +205,7 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
                     <MapPin className="w-5 h-5 text-sage" />
                     <span className="font-medium">Location</span>
                   </div>
-                  <p className="text-muted">Boulder, Colorado</p>
+                  <p className="text-muted">{HUB_ADDRESS}</p>
                 </div>
                 <div className="space-y-3">
                   <div className="flex items-center justify-center gap-2">
@@ -229,11 +216,11 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
                 </div>
               </div>
               <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
-                <a href="mailto:boulder.regenhub@gmail.com" className="flex items-center justify-center gap-2 hover:text-sage transition-colors">
+                <a href={`mailto:${HUB_EMAIL}`} className="flex items-center justify-center gap-2 hover:text-sage transition-colors">
                   <Mail className="w-5 h-5" />
-                  boulder.regenhub@gmail.com
+                  {HUB_EMAIL}
                 </a>
-                <a href="https://t.me/+Mg1PLuT9pX9mMGVh" target="_blank" rel="noopener noreferrer"
+                <a href={HUB_TELEGRAM} target="_blank" rel="noopener noreferrer"
                   className="flex items-center justify-center gap-2 hover:text-sage transition-colors">
                   <span>Telegram</span> Community Chat
                 </a>
@@ -251,42 +238,7 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="relative px-6 py-12 mt-16">
-        <div className="max-w-4xl mx-auto">
-          <div className="glass-panel p-8 text-center">
-            <div className="flex items-center justify-center gap-2 mb-4">
-              <Image src={regenHubLogo} alt="RegenHub" width={32} height={32} className="animate-sway" />
-              <Image src={regenHubText} alt="RegenHub" height={32} className="h-8 w-auto" />
-            </div>
-            <p className="text-lg font-medium mb-2">Building economic democracy and regenerative livelihoods</p>
-            <div className="text-sm text-muted space-y-1 mb-6">
-              <p>&copy; 2026 RegenHub Limited Cooperative Association</p>
-              <p>A Colorado public benefit limited cooperative association</p>
-            </div>
-            <div className="flex justify-center gap-4 flex-wrap">
-              {[
-                { label: "Telegram", href: "https://t.me/+Mg1PLuT9pX9mMGVh", external: true },
-                { label: "Email", href: "mailto:boulder.regenhub@gmail.com", external: false },
-                { label: "Free Day", href: "/freeday", external: false },
-                { label: "Apply", href: "/apply", external: false },
-                { label: "Stay in Touch", href: "/interest", external: false },
-                { label: "Dispatches", href: "/news", external: false },
-                { label: "Events", href: "/events", external: false },
-                { label: "Portal", href: "/portal", external: false },
-              ].map(({ label, href, external }) => (
-                <Button key={label} variant="ghost" size="sm" className="btn-glass" asChild>
-                  {external ? (
-                    <a href={href} target="_blank" rel="noopener noreferrer">{label}</a>
-                  ) : (
-                    <Link href={href}>{label}</Link>
-                  )}
-                </Button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </footer>
+      <PublicFooter />
 
       {/* Hopping mascot — client component */}
       <ForestMascot />

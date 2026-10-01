@@ -34,7 +34,7 @@ export default async function NewsIssuePage({ params }: { params: Promise<{ key:
   const html = markdownToEmailHtml(issue.markdown_body);
 
   return (
-    <main className="min-h-screen px-4 py-10">
+    <div className="px-4 py-10">
       <article
         className="mx-auto max-w-[620px] rounded-xl bg-white shadow-lg p-8 sm:p-10"
         style={{ color: "#1a1a1a", fontFamily: cardFont, lineHeight: 1.6 }}
@@ -51,6 +51,6 @@ export default async function NewsIssuePage({ params }: { params: Promise<{ key:
           <a href="https://regenhub.xyz/freeday" style={{ color: "#2d5e3e" }}>Grab a free day pass</a>
         </p>
       </article>
-    </main>
+    </div>
   );
 }

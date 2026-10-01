@@ -24,7 +24,7 @@ export default async function NewsIndexPage() {
   const issues = (data ?? []) as IssueRow[];
 
   return (
-    <main className="min-h-screen px-4 py-10">
+    <div className="px-4 py-10">
       <div
         className="mx-auto max-w-[620px] rounded-xl bg-white shadow-lg p-8 sm:p-10"
         style={{ color: "#1a1a1a", fontFamily: cardFont, lineHeight: 1.55 }}
@@ -57,6 +57,6 @@ export default async function NewsIndexPage() {
           </ul>
         )}
       </div>
-    </main>
+    </div>
   );
 }

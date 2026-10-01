@@ -92,7 +92,7 @@ export default function ApplyForm({ authenticatedEmail, initial }: Props) {
   }
 
   return (
-    <div className="min-h-screen px-6 py-12">
+    <div className="px-6 py-12">
       <div className="max-w-2xl mx-auto space-y-8">
         <div className="text-center">
           <Link href="/">

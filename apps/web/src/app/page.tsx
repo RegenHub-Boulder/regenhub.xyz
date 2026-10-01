@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { OG_IMAGES } from "@/lib/metadata";
 import { createClient } from "@/lib/supabase/server";
 import RegenHubLanding, { type SignedInMember } from "@/components/landing/RegenHubLanding";
 
@@ -14,11 +15,13 @@ export const metadata: Metadata = {
     siteName: "RegenHub Boulder",
     type: "website",
     locale: "en_US",
+    images: OG_IMAGES,
   },
   twitter: {
     card: "summary_large_image",
     title: "RegenHub Boulder",
     description: "A regenerative innovation hub in Boulder, CO. Community. Democracy. Regeneration.",
+    images: OG_IMAGES,
   },
 };
 

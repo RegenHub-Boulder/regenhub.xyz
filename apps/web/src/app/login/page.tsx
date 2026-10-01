@@ -45,7 +45,7 @@ export default async function MagicLinkLoginPage({ searchParams }: PageProps) {
   // Same shell as /auth/login — one card, centred, so arriving from the inbox
   // looks like the page they'd have reached by hand.
   return (
-    <div className="min-h-screen flex items-center justify-center px-6">
+    <div className="min-h-[60vh] flex items-center justify-center px-6">
       <div className="w-full max-w-md">
         <div className="glass-panel-strong p-8">
           <div className="text-center mb-8">

@@ -9,7 +9,7 @@ export const metadata = { title: "You're on the list — RegenHub" };
 
 export default function InterestSuccessPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center px-6 py-12">
+    <div className="min-h-[60vh] flex items-center justify-center px-6 py-12">
       <div className="max-w-md w-full space-y-6">
         <div className="text-center">
           <Link href="/">

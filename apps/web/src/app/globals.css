@@ -19,6 +19,10 @@
   --foreground: #e8f0e4;
   --muted-foreground: #b7c9ad;
   --primary: var(--forest);
+  /* Heading colour. `--forest-light` (#3d7a55) renders 2.8:1 on --background
+     and fails WCAG AA for any text size; sage is the same family at 7.3:1.
+     Everything that reads as a heading goes through .text-forest below. */
+  --heading: var(--sage);
   --primary-foreground: #f0f7ec;
   --secondary: var(--sage);
   --accent: var(--gold);
@@ -116,7 +120,7 @@ body {
 }
 
 /* ---- Utility ---- */
-.text-forest { color: var(--forest-light); }
+.text-forest { color: var(--heading); }
 .text-sage   { color: var(--sage); }
 .text-gold   { color: var(--gold); }
 .text-muted  { color: var(--muted-foreground); }

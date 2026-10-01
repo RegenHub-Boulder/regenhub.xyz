@@ -159,6 +159,30 @@ export interface RegenosEventLocation {
   postalCode?: string;
 }
 
+/**
+ * One address line out of whatever fields the record actually carries —
+ * `"RegenHub · 1515 Walnut St, Boulder, CO 80302"`.
+ *
+ * Deduplicated on purpose. Events imported from Luma often land with the city
+ * as the venue *name* and the same city in `locality`/`region`, which used to
+ * print "Boulder, CO · Boulder, CO" on the event page. When one half already
+ * contains the other, the longer half is the whole answer.
+ */
+export function formatEventLocation(location: RegenosEventLocation): string {
+  const clean = (v?: string) => v?.trim() ?? "";
+  const cityLine = [clean(location.locality), clean(location.region)].filter(Boolean).join(", ");
+  // "Boulder, CO 80302" — the ZIP follows the state with a space, not a comma.
+  const cityZip = [cityLine, clean(location.postalCode)].filter(Boolean).join(" ");
+  const street = [clean(location.street), cityZip].filter(Boolean).join(", ");
+  const name = clean(location.name);
+
+  if (!street) return name;
+  if (!name) return street;
+  if (street.toLowerCase().includes(name.toLowerCase())) return street;
+  if (name.toLowerCase().includes(street.toLowerCase())) return name;
+  return `${name} · ${street}`;
+}
+
 /** One public event, whole — what `/events/<did>/<rkey>` renders. */
 export interface RegenosEventDetail {
   uri: string;

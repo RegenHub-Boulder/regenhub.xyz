@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, CalendarDays, KeyRound, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { fetchPublicRegenosEvent, type RegenosEventLocation } from "@/lib/regenos/events";
+import { fetchPublicRegenosEvent, formatEventLocation } from "@/lib/regenos/events";
 import { formatEventRange } from "@/components/events/EventList";
 
 /**
@@ -42,23 +42,16 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
-/** "RegenHub · 1515 Walnut St, Boulder, CO 80302" from whatever fields the record actually carries. */
-function formatLocation(location: RegenosEventLocation): string {
-  const cityLine = [location.locality, location.region].filter(Boolean).join(", ");
-  const street = [location.street, cityLine, location.postalCode].filter(Boolean).join(", ");
-  return [location.name, street].filter(Boolean).join(" · ");
-}
-
 export default async function EventDetailPage({ params }: PageProps) {
   const { did, rkey } = await readParams(params);
   const event = await fetchPublicRegenosEvent(did, rkey);
   if (!event) notFound();
 
   const when = formatEventRange(event.startAt, event.endAt);
-  const location = event.location ? formatLocation(event.location) : "";
+  const location = event.location ? formatEventLocation(event.location) : "";
 
   return (
-    <div className="min-h-screen px-6 py-12">
+    <div className="px-6 py-12">
       <div className="max-w-3xl mx-auto space-y-8">
         <p className="text-sm">
           <Link

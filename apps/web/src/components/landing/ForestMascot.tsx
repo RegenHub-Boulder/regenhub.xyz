@@ -71,7 +71,9 @@ export function ForestMascot() {
         className="animate-hop opacity-80 hover:opacity-100 hover:scale-110 transition-all duration-300"
       />
       {mascotClicks > 0 && (
-        <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-white/90 px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap shadow-lg text-forest">
+        <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-white/90 px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap shadow-lg"
+          style={{ color: "var(--forest-deep)" }}
+        >
           {MASCOT_SAYINGS[mascotClicks % MASCOT_SAYINGS.length]}
         </div>
       )}

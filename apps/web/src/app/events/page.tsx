@@ -36,7 +36,7 @@ export default async function EventsPage() {
   const icsUrl = source === "regenos" ? regenosCalendarIcsUrl() : null;
 
   return (
-    <div className="min-h-screen px-6 py-12">
+    <div className="px-6 py-12">
       <div className="max-w-4xl mx-auto space-y-10">
         <div className="text-center space-y-3">
           <h1 className="text-3xl md:text-4xl font-bold text-forest flex items-center justify-center gap-3">
