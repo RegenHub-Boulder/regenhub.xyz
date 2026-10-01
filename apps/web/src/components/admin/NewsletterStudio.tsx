@@ -49,6 +49,8 @@ export function NewsletterStudio({
 }) {
   const [subject, setSubject] = useState(initialDraft?.subject ?? "");
   const [markdown, setMarkdown] = useState(initialDraft?.markdown_body ?? "");
+  const [savedContent, setSavedContent] = useState({ subject, markdown });
+  const dirty = subject !== savedContent.subject || markdown !== savedContent.markdown;
   const [issueId, setIssueId] = useState<number | null>(initialDraft?.id ?? null);
   const [status, setStatus] = useState(initialDraft?.status ?? "draft");
   const [issueKey] = useState(initialDraft?.issue_key ?? null);
@@ -75,6 +77,7 @@ export function NewsletterStudio({
     setBusy("save"); setErr(null); setMsg(null);
     try {
       const d = await api<{ draft: Draft }>("/api/admin/newsletter/draft", { subject, markdown, issue_key: issueKey });
+      setSavedContent({ subject, markdown });
       setIssueId(d.draft.id); setStatus(d.draft.status); setMsg("Draft saved.");
       onMutate?.(d.draft.id ?? undefined);
       return d.draft.id;
@@ -111,7 +114,7 @@ export function NewsletterStudio({
 
   async function prepare() {
     let id = issueId;
-    if (!id) { id = await saveDraft(); if (!id) return; }
+    if (!id || dirty) { id = await saveDraft(); if (!id) return; }
     setBusy("prepare"); setErr(null); setMsg(null);
     try {
       const r = await api<{ total: number }>("/api/admin/newsletter/prepare", { issue_id: id });
@@ -123,7 +126,7 @@ export function NewsletterStudio({
 
   async function runSend(retry = false) {
     let id = issueId;
-    if (!id) { id = await saveDraft(); if (!id) return; }
+    if (!id || (!retry && dirty)) { id = await saveDraft(); if (!id) return; }
     if (!progress?.total) { setErr("Prepare the audience first."); return; }
     if (!retry) {
       // Only the not-yet-sent recipients actually go out (the ledger skips sent ones).
@@ -170,7 +173,7 @@ export function NewsletterStudio({
             <input
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              disabled={sent}
+              disabled={sent || sending || busy === "save"}
               className="w-full mt-1 px-3 py-2 rounded-md bg-black/20 border border-white/10 text-sm"
               placeholder="RegenHub dispatch — …"
             />
@@ -180,14 +183,14 @@ export function NewsletterStudio({
             <textarea
               value={markdown}
               onChange={(e) => setMarkdown(e.target.value)}
-              disabled={sent}
+              disabled={sent || sending || busy === "save"}
               rows={16}
               className="w-full mt-1 px-3 py-2 rounded-md bg-black/20 border border-white/10 text-sm font-mono leading-relaxed"
               placeholder="## News from the cooperative&#10;&#10;Hi friends, …"
             />
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" disabled={!!busy || sent} onClick={saveDraft} className="btn-glass text-xs gap-1 h-7">
+            <Button size="sm" disabled={!!busy || sent || sending} onClick={saveDraft} className="btn-glass text-xs gap-1 h-7">
               {busy === "save" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Save draft
             </Button>
             <Button size="sm" disabled={!!busy} onClick={() => setShowPreview((v) => !v)} className="btn-glass text-xs gap-1 h-7">
@@ -224,7 +227,7 @@ export function NewsletterStudio({
             <Button size="sm" disabled={!!busy || sent} onClick={importLuma} className="btn-glass text-xs gap-1 h-7">
               {busy === "luma" ? <Loader2 className="w-3 h-3 animate-spin" /> : <DownloadCloud className="w-3 h-3" />} Import Luma contacts
             </Button>
-            <Button size="sm" disabled={!!busy || sent} onClick={prepare} className="btn-glass text-xs gap-1 h-7">
+            <Button size="sm" disabled={!!busy || sent || sending} onClick={prepare} className="btn-glass text-xs gap-1 h-7">
               {busy === "prepare" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Users className="w-3 h-3" />} Prepare audience
             </Button>
           </div>
