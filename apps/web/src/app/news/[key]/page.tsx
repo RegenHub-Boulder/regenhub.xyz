@@ -23,15 +23,15 @@ export default async function NewsIssuePage({ params }: { params: Promise<{ key:
   const admin = createServiceClient();
   const { data: issue } = await admin
     .from("newsletter_issues")
-    .select("issue_key, subject, markdown_body, status, created_at")
+    .select("issue_key, subject, markdown_body, compiled_html, status, created_at")
     .eq("issue_key", key)
     .maybeSingle();
-  if (!issue || !issue.markdown_body) notFound();
+  if (!issue || (!issue.markdown_body && !issue.compiled_html)) notFound();
 
   const dateLabel = issue.created_at
     ? new Date(issue.created_at).toLocaleDateString("en-US", { timeZone: "America/Denver", year: "numeric", month: "long", day: "numeric" })
     : "";
-  const html = markdownToEmailHtml(issue.markdown_body);
+  const html = issue.markdown_body ? markdownToEmailHtml(issue.markdown_body) : issue.compiled_html.replaceAll("{{NEWSLETTER_UNSUBSCRIBE}}", "/news");
 
   return (
     <div className="px-4 py-10">

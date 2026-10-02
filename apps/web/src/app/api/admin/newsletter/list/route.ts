@@ -8,7 +8,7 @@ export async function GET() {
   const admin = createServiceClient();
   const { data } = await admin
     .from("newsletter_issues")
-    .select("id, issue_key, subject, markdown_body, status, created_at, updated_at, recipients_count, sent_count")
+    .select("id, issue_key, subject, markdown_body, compiled_html, status, created_at, updated_at, recipients_count, sent_count")
     .order("updated_at", { ascending: false });
   return NextResponse.json({ issues: data ?? [] });
 }

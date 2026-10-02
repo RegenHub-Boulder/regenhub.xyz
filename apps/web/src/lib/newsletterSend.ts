@@ -1,90 +1,63 @@
-/**
- * Transparent, resumable newsletter send engine.
- *
- * The audience is materialized into one `newsletter_sends` row per recipient
- * (status pending). A send then works through those rows in small rate-limited
- * batches, marking each sent/failed, retrying, and backing off on Resend rate
- * limits. Because the ledger is the source of truth:
- *   - re-running never double-sends (unique issue_id+email + status check)
- *   - a crash/timeout mid-send is fully resumable (just call sendBatch again)
- *   - "did everyone get it?" is answerable exactly (count by status)
- */
-
+/** Database-owned delivery ledger shared by admin and cron. Never retry UNKNOWN. */
 import type { createServiceClient } from "@/lib/supabase/admin";
-import { compileAudience } from "@/lib/newsletter";
 import { renderDraftEmail } from "@/lib/newsletterMarkdown";
-import { sendEmailDetailed } from "@/lib/email";
+import { sendEmailDetailed, isEmailConfigured, type SendEmailInput } from "@/lib/email";
 import { unsubscribeUrl } from "@/lib/newsletter";
+import { defaultEmailFrom, defaultEmailReplyTo } from "@regenhub/shared";
 
 type Admin = ReturnType<typeof createServiceClient>;
-
-const RATE_DELAY_MS = 600;      // ~1.6/s between sends — under Resend's default
-const RATE_LIMIT_BACKOFF_MS = 2500;
-const MAX_ATTEMPTS = 5;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+export const UNSUBSCRIBE_PLACEHOLDER = "{{NEWSLETTER_UNSUBSCRIBE}}";
 
 export interface Progress {
   total: number;
   sent: number;
-  failed: number;       // terminal failures (attempts exhausted)
-  pending: number;      // includes retriable failures
+  failed: number;
+  pending: number;
+  active: number;
+  unknown: number;
+  skipped: number;
   done: boolean;
 }
 
-/** Materialize the audience into pending ledger rows. Idempotent. */
+// Supabase RPC errors must propagate: a lost begin/complete acknowledgement
+// cannot be interpreted as permission to send again or as successful delivery.
+export async function newsletterRpc<T>(admin: Admin, name: string, args: Record<string, unknown>): Promise<T> {
+  const { data, error } = await admin.rpc(name, args);
+  if (error) throw new Error(`${name}: ${error.message}`);
+  return data as T;
+}
+
 export async function prepareIssue(admin: Admin, issueId: number): Promise<{ audience: number; total: number }> {
-  const audience = await compileAudience(admin);
-  const rows = audience
-    .filter((r) => r.email)
-    .map((r) => ({
-      issue_id: issueId,
-      email: r.email.toLowerCase(),
-      name: r.name,
-      status: "pending" as const,
-    }));
-
-  // Insert in chunks, ignoring rows that already exist for this issue.
-  for (let i = 0; i < rows.length; i += 500) {
-    const chunk = rows.slice(i, i + 500);
-    const { error } = await admin
-      .from("newsletter_sends")
-      .upsert(chunk, { onConflict: "issue_id,email", ignoreDuplicates: true });
-    if (error) console.error("[Newsletter] prepare upsert error:", error);
-  }
-
-  const { count } = await admin
-    .from("newsletter_sends")
-    .select("*", { count: "exact", head: true })
-    .eq("issue_id", issueId);
-  return { audience: rows.length, total: count ?? 0 };
+  const total = await newsletterRpc<number>(admin, "newsletter_prepare", { p_issue: issueId });
+  return { audience: total, total };
 }
-
-/** Count the ledger by status. */
 export async function issueProgress(admin: Admin, issueId: number): Promise<Progress> {
-  const { data } = await admin
-    .from("newsletter_sends")
-    .select("status, attempts")
-    .eq("issue_id", issueId);
-  const p: Progress = { total: 0, sent: 0, failed: 0, pending: 0, done: false };
-  for (const r of data ?? []) {
-    p.total++;
-    if (r.status === "sent") p.sent++;
-    else if (r.status === "failed" && (r.attempts ?? 0) >= MAX_ATTEMPTS) p.failed++;
-    else p.pending++;
-  }
-  p.done = p.total > 0 && p.pending === 0;
-  return p;
+  return newsletterRpc(admin, "newsletter_progress", { p_issue: issueId });
+}
+export async function retryFailed(admin: Admin, issueId: number): Promise<number> {
+  return newsletterRpc(admin, "newsletter_retry_failed", { p_issue: issueId });
 }
 
-/** Reset terminal failures back to pending so they can be retried. */
-export async function retryFailed(admin: Admin, issueId: number): Promise<number> {
-  const { data } = await admin
-    .from("newsletter_sends")
-    .update({ status: "pending", attempts: 0, last_error: null })
-    .eq("issue_id", issueId)
-    .eq("status", "failed")
-    .select("id");
-  return (data ?? []).length;
+interface Snapshot {
+  subject: string;
+  markdown: string | null;
+  html: string | null;
+  text: string | null;
+  context: { siteUrl: string; from: string; replyTo: string; issueKey: string };
+}
+interface Claim { id: number; email: string; fence: number; payload: SendEmailInput | null; snapshot: Snapshot }
+interface Authorization { payload: SendEmailInput; providerKey: string }
+
+function payloadFor(claim: Claim): SendEmailInput {
+  if (claim.payload) return claim.payload;
+  const { snapshot: s } = claim;
+  const href = unsubscribeUrl(claim.email, s.context.siteUrl);
+  const rendered = s.markdown
+    ? renderDraftEmail(s.markdown, href, `${s.context.siteUrl.replace(/\/$/, "")}/news/${s.context.issueKey}`)
+    : { html: (s.html ?? "").split(UNSUBSCRIBE_PLACEHOLDER).join(href),
+        text: (s.text ?? "").split(UNSUBSCRIBE_PLACEHOLDER).join(href) };
+  return { to: claim.email, subject: s.subject, ...rendered, from: s.context.from, replyTo: s.context.replyTo };
 }
 
 export interface BatchResult {
@@ -92,79 +65,57 @@ export interface BatchResult {
   sent: number;
   failed: number;
   rateLimited: number;
-  /** True when the run stopped because Resend's daily quota was reached. */
   quotaReached: boolean;
   progress: Progress;
 }
 
-/**
- * Send the next batch of up to `limit` recipients. Call repeatedly until
- * `progress.done`. Rate-limited recipients are left pending (not counted as a
- * failed attempt) and retried on the next batch after a backoff.
- */
 export async function sendBatch(
   admin: Admin,
   issueId: number,
-  opts: { markdown: string; subject: string; siteUrl: string; issueKey?: string; limit?: number },
+  // Content arguments retained for callers during transition but NEVER trusted;
+  // the database returns the immutable revision that won the first claim.
+  opts: { markdown?: string; subject?: string; siteUrl: string; issueKey?: string; limit?: number },
 ): Promise<BatchResult> {
-  const limit = opts.limit ?? 20;
-
-  const { data: rows } = await admin
-    .from("newsletter_sends")
-    .select("id, email, name, attempts")
-    .eq("issue_id", issueId)
-    .neq("status", "sent")
-    .lt("attempts", MAX_ATTEMPTS)
-    .order("id", { ascending: true })
-    .limit(limit);
-
-  let sent = 0, failed = 0, rateLimited = 0;
+  if (!isEmailConfigured()) throw new Error("Newsletter email is not configured");
+  const limit = Math.min(50, Math.max(1, Math.floor(opts.limit ?? 20)));
+  let processed = 0, sent = 0, failed = 0, rateLimited = 0;
   let quotaReached = false;
-
-  const base = opts.siteUrl.replace(/\/$/, "");
-  const archiveHref = opts.issueKey ? `${base}/news/${opts.issueKey}` : `${base}/news`;
-  for (const row of rows ?? []) {
-    const { html, text } = renderDraftEmail(opts.markdown, unsubscribeUrl(row.email, opts.siteUrl), archiveHref);
-    const result = await sendEmailDetailed({ to: row.email, subject: opts.subject, html, text });
-
-    if (result.ok) {
-      sent++;
-      await admin.from("newsletter_sends").update({
-        status: "sent",
-        attempts: (row.attempts ?? 0) + 1,
-        sent_at: new Date().toISOString(),
-        resend_id: result.id ?? null,
-        last_error: null,
-      }).eq("id", row.id);
-    } else if (result.quotaExceeded) {
-      // Daily sending quota reached — won't clear for hours. Leave this recipient
-      // pending (do NOT burn an attempt) and STOP the run: the issue stays
-      // 'sending' and fully resumable once quota resets / plan is bumped.
-      quotaReached = true;
-      await admin.from("newsletter_sends").update({
-        status: "pending",
-        last_error: "daily email quota reached — will resume",
-      }).eq("id", row.id);
-      break;
-    } else if (result.rateLimited) {
-      // Not the recipient's fault — keep pending, don't burn an attempt, back off.
-      rateLimited++;
-      await admin.from("newsletter_sends").update({
-        status: "pending",
-        last_error: "rate limited — will retry",
-      }).eq("id", row.id);
-      await sleep(RATE_LIMIT_BACKOFF_MS);
-    } else {
-      failed++;
-      await admin.from("newsletter_sends").update({
-        status: "failed",
-        attempts: (row.attempts ?? 0) + 1,
-        last_error: result.error ?? "send failed",
-      }).eq("id", row.id);
+  for (let j = 0; j < limit; j++) {
+    const claim = await newsletterRpc<Claim | null>(admin, "newsletter_claim", {
+      p_issue: issueId,
+      p_context: { siteUrl: opts.siteUrl, from: defaultEmailFrom(), replyTo: defaultEmailReplyTo(), issueKey: opts.issueKey },
+    });
+    if (!claim) break;
+    // Render failures leave a pre-I/O claim, safely released on lease expiry.
+    const authorized = await newsletterRpc<Authorization | null>(admin, "newsletter_begin", {
+      p_issue: issueId, p_send: claim.id, p_fence: claim.fence, p_payload: payloadFor(claim),
+    });
+    processed++;
+    if (!authorized) continue; // stale fence or newly unsubscribed
+    // This is the only external call. A thrown transport error / 5xx / missing
+    // provider ID is uncertain acceptance, not a terminal retryable rejection.
+    let result;
+    try {
+      result = await sendEmailDetailed(authorized.payload, { idempotencyKey: authorized.providerKey });
+    } catch (error) {
+      result = { ok: false, uncertain: true, rateLimited: false, quotaExceeded: false,
+        error: error instanceof Error ? error.message : "provider transport failure" };
     }
-
-    await sleep(RATE_DELAY_MS);
+    const outcome = result.ok && result.id ? "sent"
+      : result.uncertain || (result.ok && !result.id) ? "unknown"
+      : result.rateLimited || result.quotaExceeded ? "pending" : "failed";
+    const recorded = await newsletterRpc<boolean>(admin, "newsletter_complete", {
+      p_issue: issueId, p_send: claim.id, p_fence: claim.fence, p_outcome: outcome,
+      p_provider_id: result.id ?? null, p_error: result.error ?? null,
+      p_delay: result.quotaExceeded ? 3600 : 30,
+    });
+    if (!recorded) throw new Error("Delivery lease expired; result requires supervised resolution");
+    if (outcome === "sent") sent++;
+    if (outcome === "failed") failed++;
+    if (result.rateLimited) rateLimited++;
+    if (result.quotaExceeded) { quotaReached = true; break; }
+    if (result.rateLimited) break;
+    await sleep(600);
   }
-
-  return { processed: (rows ?? []).length, sent, failed, rateLimited, quotaReached, progress: await issueProgress(admin, issueId) };
+  return { processed, sent, failed, rateLimited, quotaReached, progress: await issueProgress(admin, issueId) };
 }

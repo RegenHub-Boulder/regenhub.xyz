@@ -11,6 +11,7 @@ interface Draft {
   issue_key: string | null;
   subject: string;
   markdown_body: string | null;
+  compiled_html?: string | null;
   status: string;
 }
 interface Progress {
@@ -18,6 +19,9 @@ interface Progress {
   sent: number;
   failed: number;
   pending: number;
+  active: number;
+  unknown: number;
+  skipped: number;
   done: boolean;
 }
 
@@ -62,6 +66,7 @@ export function NewsletterStudio({
   const stopRef = useRef(false);
 
   const sent = status === "sent";
+  const frozen = status !== "draft" || sending;
 
   // On open, load the current send progress for an existing issue so a
   // partially-sent / reopened issue shows its real state (and Resume/Retry work)
@@ -123,11 +128,11 @@ export function NewsletterStudio({
 
   async function runSend(retry = false) {
     let id = issueId;
-    if (!id) { id = await saveDraft(); if (!id) return; }
+    if (!id || (status === "draft" && !initialDraft?.compiled_html)) { id = await saveDraft(); if (!id) return; }
     if (!progress?.total) { setErr("Prepare the audience first."); return; }
     if (!retry) {
       // Only the not-yet-sent recipients actually go out (the ledger skips sent ones).
-      const toSend = progress.pending + progress.failed;
+      const toSend = retry ? progress.failed : progress.pending;
       const ok = window.confirm(`Send "${subject}" to ${toSend} recipient${toSend === 1 ? "" : "s"}? This goes to real inboxes (already-sent are skipped).`);
       if (!ok) return;
     }
@@ -143,12 +148,18 @@ export function NewsletterStudio({
         );
         first = false;
         setProgress(r.progress);
+        setStatus(r.progress.done ? "sent" : "sending");
         if (r.quotaReached) {
           setErr(`⏸ Daily email quota reached — ${r.progress.sent}/${r.progress.total} delivered. Already-sent are saved; come back and click Send to resume once the quota resets or your Resend plan is bumped.`);
           break;
         }
-        if (r.progress.done) { setStatus("sent"); setMsg("All recipients processed. 🎉"); break; }
-        if (r.processed === 0) { setMsg("Nothing left to send."); break; }
+        if (r.progress.done) { setStatus("sent"); setMsg("All recipients processed. Check failed and skipped counts."); break; }
+        if (r.processed === 0) {
+          setMsg(r.progress.unknown ? "Uncertain deliveries need supervised resolution. They will not be resent."
+            : r.progress.active ? "Another worker is delivering recipients. Refresh status to follow progress."
+            : "No recipients ready now. Retry failed recipients explicitly, or resume after rate limits clear.");
+          break;
+        }
       }
       if (stopRef.current) setMsg("Paused. Click Send to resume — already-sent recipients are skipped.");
     } catch (e) { setErr(errMessage(e)); }
@@ -170,7 +181,7 @@ export function NewsletterStudio({
             <input
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              disabled={sent}
+              disabled={frozen}
               className="w-full mt-1 px-3 py-2 rounded-md bg-black/20 border border-white/10 text-sm"
               placeholder="RegenHub dispatch — …"
             />
@@ -180,14 +191,15 @@ export function NewsletterStudio({
             <textarea
               value={markdown}
               onChange={(e) => setMarkdown(e.target.value)}
-              disabled={sent}
+              disabled={frozen}
               rows={16}
               className="w-full mt-1 px-3 py-2 rounded-md bg-black/20 border border-white/10 text-sm font-mono leading-relaxed"
               placeholder="## News from the cooperative&#10;&#10;Hi friends, …"
             />
           </div>
+          {!markdown && initialDraft?.compiled_html && <p className="text-xs text-muted">Scheduled dispatch content is available in Show preview.</p>}
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" disabled={!!busy || sent} onClick={saveDraft} className="btn-glass text-xs gap-1 h-7">
+            <Button size="sm" disabled={!!busy || frozen || !markdown} onClick={saveDraft} className="btn-glass text-xs gap-1 h-7">
               {busy === "save" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Save draft
             </Button>
             <Button size="sm" disabled={!!busy} onClick={() => setShowPreview((v) => !v)} className="btn-glass text-xs gap-1 h-7">
@@ -205,7 +217,7 @@ export function NewsletterStudio({
                   fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
                   lineHeight: 1.55,
                 }}
-                dangerouslySetInnerHTML={{ __html: markdownToEmailHtml(markdown) }}
+                dangerouslySetInnerHTML={{ __html: markdown ? markdownToEmailHtml(markdown) : (initialDraft?.compiled_html ?? "").replaceAll("{{NEWSLETTER_UNSUBSCRIBE}}", "/news") }}
               />
             </div>
           )}
@@ -224,7 +236,7 @@ export function NewsletterStudio({
             <Button size="sm" disabled={!!busy || sent} onClick={importLuma} className="btn-glass text-xs gap-1 h-7">
               {busy === "luma" ? <Loader2 className="w-3 h-3 animate-spin" /> : <DownloadCloud className="w-3 h-3" />} Import Luma contacts
             </Button>
-            <Button size="sm" disabled={!!busy || sent} onClick={prepare} className="btn-glass text-xs gap-1 h-7">
+            <Button size="sm" disabled={!!busy || frozen} onClick={prepare} className="btn-glass text-xs gap-1 h-7">
               {busy === "prepare" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Users className="w-3 h-3" />} Prepare audience
             </Button>
           </div>
@@ -245,6 +257,9 @@ export function NewsletterStudio({
                 <span className="text-emerald-400">✓ {progress.sent} sent</span>
                 <span>{progress.pending} pending</span>
                 {progress.failed > 0 && <span className="text-red-400">{progress.failed} failed</span>}
+                <span>{progress.active} active</span>
+                <span>{progress.unknown} uncertain</span>
+                <span>{progress.skipped} skipped</span>
                 <span>of {progress.total}</span>
                 {sending && <span className="text-sage">· sending…</span>}
               </div>
@@ -267,6 +282,8 @@ export function NewsletterStudio({
               </Button>
             )}
           </div>
+          {progress && progress.unknown > 0 && <p className="text-xs text-amber-400">Uncertain deliveries are quarantined. An operator must review provider evidence using the newsletter delivery runbook before resolving them.</p>}
+          {frozen && !sent && <p className="text-xs text-muted">This issue revision is frozen. Compose a new issue to change content.</p>}
           {sent && <p className="text-xs text-emerald-400">This issue is marked sent. Compose a new draft for the next one.</p>}
         </CardContent>
       </Card>

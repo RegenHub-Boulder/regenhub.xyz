@@ -5,9 +5,9 @@ import { sendBatch, retryFailed } from "@/lib/newsletterSend";
 
 /**
  * POST { issue_id, retry_failed?, limit? } — send the next batch of recipients.
- * The studio calls this repeatedly until progress.done. Resumable + rate-limit
- * aware; never double-sends (ledger status guards it). When the ledger is fully
- * drained, the issue is finalized to status='sent'.
+ * Only the database can authorize a recipient call or finalize an issue.
+ * Unknown deliveries require supervised resolution; explicit retry only reopens
+ * terminal failures. Active and unknown rows prevent finalization.
  */
 export async function POST(request: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -23,43 +23,19 @@ export async function POST(request: Request) {
     .eq("id", issueId)
     .maybeSingle();
   if (!issue) return NextResponse.json({ error: "issue not found" }, { status: 404 });
-  if (!issue.markdown_body || !issue.subject) {
+  if (!issue.subject) {
     return NextResponse.json({ error: "draft is missing a subject or body" }, { status: 400 });
   }
 
-  // A plain send won't touch a fully-sent issue (guards against accidental
-  // re-send). But an explicit retry_failed MAY reopen a 'sent' issue to re-send
-  // failures (e.g. after a quota bump) — that's the whole point of retry.
-  const isRetry = !!body.retry_failed;
-  if (issue.status === "sent" && !isRetry) {
-    return NextResponse.json(
-      { error: "Issue already fully sent. Use Retry to re-send any failed recipients." },
-      { status: 409 },
-    );
+  try {
+    if (body.retry_failed) await retryFailed(admin, issueId);
+    const result = await sendBatch(admin, issueId, {
+      siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz",
+      issueKey: issue.issue_key,
+      limit: Number(body.limit) || 20,
+    });
+    return NextResponse.json(result);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Newsletter delivery failed" }, { status: 503 });
   }
-
-  if (isRetry) await retryFailed(admin, issueId);
-  await admin.from("newsletter_issues").update({ status: "sending" }).eq("id", issueId);
-
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
-  const result = await sendBatch(admin, issueId, {
-    markdown: issue.markdown_body,
-    subject: issue.subject,
-    siteUrl,
-    issueKey: issue.issue_key,
-    limit: Number(body.limit) || 20,
-  });
-
-  if (result.progress.done) {
-    await admin
-      .from("newsletter_issues")
-      .update({
-        status: "sent",
-        recipients_count: result.progress.total,
-        sent_count: result.progress.sent,
-      })
-      .eq("id", issueId);
-  }
-
-  return NextResponse.json(result);
 }

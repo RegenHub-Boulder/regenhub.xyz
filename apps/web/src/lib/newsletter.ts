@@ -233,7 +233,7 @@ export function newsletterIncludesStats(): boolean {
   return process.env.NEWSLETTER_INCLUDE_STATS === "true";
 }
 
-export function renderNewsletterHtml(issue: CompiledIssue, recipientEmail: string, siteUrl: string): string {
+export function renderNewsletterHtml(issue: CompiledIssue, recipientEmail: string, siteUrl: string, unsubscribeHref?: string): string {
   const { stats } = issue;
   const base = siteUrl.replace(/\/$/, "");
   const includeStats = newsletterIncludesStats();
@@ -283,13 +283,13 @@ export function renderNewsletterHtml(issue: CompiledIssue, recipientEmail: strin
       <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0 12px;" />
       <p style="font-size: 11px; color: #999;">
         You're receiving this because you're a RegenHub member or joined our list.
-        <a href="${unsubscribeUrl(recipientEmail, siteUrl)}" style="color: #999;">Unsubscribe</a>
+        <a href="${unsubscribeHref ?? unsubscribeUrl(recipientEmail, siteUrl)}" style="color: #999;">Unsubscribe</a>
       </p>
     </div>
   `;
 }
 
-export function renderNewsletterText(issue: CompiledIssue, recipientEmail: string, siteUrl: string): string {
+export function renderNewsletterText(issue: CompiledIssue, recipientEmail: string, siteUrl: string, unsubscribeHref?: string): string {
   const { stats } = issue;
   const base = siteUrl.replace(/\/$/, "");
   const includeStats = newsletterIncludesStats();
@@ -306,5 +306,5 @@ export function renderNewsletterText(issue: CompiledIssue, recipientEmail: strin
     ? `\nTHE NUMBERS (${stats.monthLabel})\nMonthly recurring revenue: ${mrr}\nPaying members: ${stats.payingMembers}\nNew members: ${stats.newMembers}\nDoor entries: ${stats.totalVisits}\nDay codes issued: ${stats.dayCodesIssued}\nFree-day signups: ${stats.freeDaySignups}\n\nMembers by tier:\n${tierText}\n`
     : "";
 
-  return `REGENHUB DISPATCH\n${noteText}${eventsText}${statsText}\nCome co-work: ${base}/freeday · Membership: ${base}/membership\n\nQuestions or ideas — just reply, it goes straight to a human.\n\nWith gratitude,\nRegenHub\n1515 Walnut St, Suite 200, Boulder, CO\n\nUnsubscribe: ${unsubscribeUrl(recipientEmail, siteUrl)}`;
+  return `REGENHUB DISPATCH\n${noteText}${eventsText}${statsText}\nCome co-work: ${base}/freeday · Membership: ${base}/membership\n\nQuestions or ideas — just reply, it goes straight to a human.\n\nWith gratitude,\nRegenHub\n1515 Walnut St, Suite 200, Boulder, CO\n\nUnsubscribe: ${unsubscribeHref ?? unsubscribeUrl(recipientEmail, siteUrl)}`;
 }

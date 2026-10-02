@@ -10,6 +10,7 @@ interface Issue {
   issue_key: string;
   subject: string;
   markdown_body: string | null;
+  compiled_html?: string | null;
   status: string;
   created_at: string | null;
   updated_at: string | null;
@@ -83,7 +84,7 @@ export function NewsletterManager({ initialIssues }: { initialIssues: Issue[] })
     selectedId === "new"
       ? { id: null, issue_key: seedKey, subject: "", markdown_body: "", status: "draft" }
       : selected
-        ? { id: selected.id, issue_key: selected.issue_key, subject: selected.subject, markdown_body: selected.markdown_body, status: selected.status }
+        ? { id: selected.id, issue_key: selected.issue_key, subject: selected.subject, markdown_body: selected.markdown_body, compiled_html: selected.compiled_html, status: selected.status }
         : null;
   // Remount the studio on selection change so its internal editor state resets.
   const studioKey = selectedId === "new" ? `new-${seedKey}` : `issue-${selectedId}`;

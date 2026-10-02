@@ -63,6 +63,8 @@ export async function sendEmail(input: SendEmailInput): Promise<boolean> {
 
 export interface SendResult {
   ok: boolean;
+  /** Acceptance cannot be excluded: quarantine; never blindly retry. */
+  uncertain?: boolean;
   /** Transient per-second rate limit (429 "too many requests") — back off + retry. */
   rateLimited: boolean;
   /** Daily sending quota reached — won't clear for hours. STOP and resume later;
@@ -86,7 +88,7 @@ function classifyError(blob: string): { rateLimited: boolean; quotaExceeded: boo
  * rate-limit (retry) apart from a hard failure (give up) and record the Resend
  * message id. Used by the newsletter send engine.
  */
-export async function sendEmailDetailed(input: SendEmailInput): Promise<SendResult> {
+export async function sendEmailDetailed(input: SendEmailInput, options?: { idempotencyKey: string }): Promise<SendResult> {
   const resend = getResend();
   if (!resend) return { ok: false, rateLimited: false, quotaExceeded: false, error: "email not configured" };
   try {
@@ -97,17 +99,20 @@ export async function sendEmailDetailed(input: SendEmailInput): Promise<SendResu
       html: input.html,
       text: input.text ?? input.html.replace(/<[^>]+>/g, ""),
       replyTo: input.replyTo ?? defaultReplyTo(),
-    });
+    }, options);
     if (error) {
       const message = (error as { message?: string }).message ?? "send failed";
       const { rateLimited, quotaExceeded } = classifyError(`${(error as { name?: string }).name ?? ""} ${message}`);
-      return { ok: false, rateLimited, quotaExceeded, error: message };
+      // Only explicit provider rejections are known non-acceptance. SDK transport
+      // failures may be returned as error objects, rather than thrown.
+      const status = (error as { statusCode?: number }).statusCode;
+      const uncertain = !status || status >= 500 || status === 408 || status === 409;
+      return { ok: false, uncertain, rateLimited: !uncertain && rateLimited, quotaExceeded: !uncertain && quotaExceeded, error: message };
     }
     return { ok: true, rateLimited: false, quotaExceeded: false, id: data?.id };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    const { rateLimited, quotaExceeded } = classifyError(msg);
-    return { ok: false, rateLimited, quotaExceeded, error: msg };
+    return { ok: false, uncertain: true, rateLimited: false, quotaExceeded: false, error: msg };
   }
 }
 

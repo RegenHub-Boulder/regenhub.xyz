@@ -18,7 +18,7 @@ export default async function NewsletterPage() {
   const supabase = createServiceClient();
   const { data: issues } = await supabase
     .from("newsletter_issues")
-    .select("id, issue_key, subject, markdown_body, status, created_at, updated_at, recipients_count, sent_count")
+    .select("id, issue_key, subject, markdown_body, compiled_html, status, created_at, updated_at, recipients_count, sent_count")
     .order("updated_at", { ascending: false });
 
   return (
@@ -27,8 +27,7 @@ export default async function NewsletterPage() {
         <h1 className="text-2xl font-bold text-forest">Newsletter</h1>
         <p className="text-muted text-sm mt-1">
           Draft in Markdown (you or Claude), preview the real email, then send —
-          with per-recipient tracking, automatic retries, and rate-limit back-off
-          so you can see every one land. Sent issues are published to{" "}
+          with per-recipient tracking and explicit retries for rejected deliveries. Sent issues are published to{" "}
           <a href="/news" className="text-sage hover:underline" target="_blank" rel="noopener noreferrer">regenhub.xyz/news</a>.
         </p>
       </div>

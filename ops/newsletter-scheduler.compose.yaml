@@ -1,0 +1,25 @@
+# Merge with the web application's Compose configuration (same network/image).
+# This sidecar is the concrete automatic continuation mechanism. Do not deploy
+# it before the supervised 053 migration/new-worker transition. It never runs
+# the bot or the web server, and the route still requires the autosend switch.
+services:
+  newsletter-scheduler:
+    image: ${REGENHUB_WEB_IMAGE:?Set the same built image used by the web service}
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    environment:
+      CRON_SECRET: ${CRON_SECRET:?Supply the existing cron bearer token at runtime}
+      NEWSLETTER_CRON_URL: http://web:3000/api/cron/newsletter
+    command:
+      - |
+        while :; do
+          curl --fail --silent --show-error --max-time 90 --output /dev/null \
+            --request POST --header "Authorization: Bearer $$CRON_SECRET" \
+            --header 'Content-Type: application/json' --data '{}' \
+            "$$NEWSLETTER_CRON_URL" || true
+          sleep 60
+        done
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: ["ALL"]

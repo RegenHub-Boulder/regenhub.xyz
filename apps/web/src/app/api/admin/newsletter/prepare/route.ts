@@ -24,6 +24,9 @@ export async function POST(request: Request) {
   if (!issue) return NextResponse.json({ error: "issue not found" }, { status: 404 });
   if (issue.status === "sent") return NextResponse.json({ error: "issue already sent" }, { status: 409 });
 
-  const result = await prepareIssue(admin, issueId);
-  return NextResponse.json(result);
+  try {
+    return NextResponse.json(await prepareIssue(admin, issueId));
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Audience preparation failed" }, { status: 503 });
+  }
 }
