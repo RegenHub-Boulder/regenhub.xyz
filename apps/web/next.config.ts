@@ -68,6 +68,8 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  cacheHandler: require.resolve("./cache-handler.cjs"),
+  cacheMaxMemorySize: 0,
   transpilePackages: ["@regenhub/shared"],
   turbopack: {
     root: path.resolve(__dirname, "../.."),

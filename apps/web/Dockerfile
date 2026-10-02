@@ -27,6 +27,10 @@ RUN pnpm build
 # Build web
 WORKDIR /app/apps/web
 ENV NEXT_TELEMETRY_DISABLED=1
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+ARG NEXT_PUBLIC_SITE_URL
+ARG NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
 RUN pnpm build
 
 # --- runner ---
@@ -45,6 +49,7 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static     ./apps/web/.next/static
 COPY --from=builder /app/apps/web/public           ./apps/web/public
+COPY --from=builder /app/apps/web/cache-handler.cjs ./apps/web/cache-handler.cjs
 
 # The SQL migrations ship with the app so the MCP's run_migration tool can apply
 # them (lib/migrations.ts). Lands at /app/apps/web/supabase/migrations — the
@@ -52,6 +57,13 @@ COPY --from=builder /app/apps/web/public           ./apps/web/public
 # so resolveMigrationsDir() tries both cwd/supabase/migrations and
 # cwd/../../supabase/migrations and finds it either way. MIGRATIONS_DIR overrides.
 COPY supabase/migrations ./supabase/migrations
+
+# Code, static assets, migrations and every parent directory remain root-owned.
+# Only data storage is owned by the runtime UID; do not chown .next/server.
+ENV ISR_CACHE_DIR=/var/cache/regenhub-isr
+RUN chmod -R go-w /app && \
+    mkdir -p /var/cache/regenhub-isr apps/web/.next/cache && \
+    chown 1001:1001 /var/cache/regenhub-isr apps/web/.next/cache
 
 USER nextjs
 EXPOSE 3000

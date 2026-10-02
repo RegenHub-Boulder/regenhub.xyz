@@ -524,3 +524,10 @@ curl -X PATCH "$COOLIFY_URL/api/v1/applications/<app-uuid>" \
 ```
 
 **Note on Traefik + Docker Engine 29.2:** Docker's label-based auto-discovery is broken (Traefik v3.x sends API v1.24, Docker 29.2 requires min v1.44). The fix requires upgrading Docker Engine to a version with a lower minimum, or waiting for Coolify to ship a Traefik version that negotiates API version correctly. Until then, static route files + the update script are the workaround.
+
+### ISR data storage
+
+See [ISR-STORAGE.md](./ISR-STORAGE.md) for the isolated cache directory, dedicated
+volume ownership, single-replica limitation, upgrade checks, and reproducible
+built-runner regeneration smoke. This runtime/storage change needs an explicit
+deployment go; merging or building the change does not authorize deployment.

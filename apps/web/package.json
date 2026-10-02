@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run",
+    "test": "vitest run && node --test ../../scripts/isr-cache.test.cjs",
     "test:watch": "vitest"
   },
   "dependencies": {
