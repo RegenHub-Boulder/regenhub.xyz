@@ -13,7 +13,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "test:door-slots": "node --test --experimental-test-isolation=none test/doorSlotOwnership.test.ts"
   },
   "devDependencies": {
     "typescript": "^5.9.3"

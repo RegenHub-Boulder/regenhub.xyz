@@ -1,0 +1,19 @@
+✔ legacy allocator permits a late clear to erase a new code (retained reproduction) (2.498496ms)
+✔ an acknowledged clear must retain the slot while its device command is live (1.500369ms)
+✔ overlapping commands cannot dispatch while first command is suspended (1.815358ms)
+✔ timeout or partial clear remains quarantined (0.645933ms)
+✔ DB failure after I/O leaves pending and forbids takeover (0.709989ms)
+✔ lost reserve response never dispatches or replays the permit (0.630754ms)
+✔ reservation snapshots identity across awaits and dispatch receives frozen context (0.467053ms)
+✔ migration executes and post-seed privileges retain RPC-only service access (3145.422329ms)
+✔ initial quarantine rejects evidence predating initialization (1699.525797ms)
+✔ exact-door, malformed and timestamp evidence fails closed; current evidence recovers (2025.214288ms)
+✔ generation fencing, replay tombstone, rollback and overlapping reservations (1789.788723ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8806.541143

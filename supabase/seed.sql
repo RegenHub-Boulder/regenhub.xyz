@@ -13,3 +13,12 @@ grant all on all functions in schema public to anon, authenticated, service_role
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
 alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
 alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
+
+-- The inactive door-slot foundation has stricter privileges than legacy tables.
+-- Reapply its boundary AFTER blanket local grants, including BYPASSRLS roles.
+revoke all on public.door_slot_targets, public.door_slots,
+  public.door_slot_operations, public.door_slot_recoveries from public, anon, authenticated, service_role;
+revoke all on sequence public.door_slot_recoveries_id_seq from public, anon, authenticated, service_role;
+revoke all on function public.door_slot_reserve(integer,text,uuid,text) from public, anon, authenticated;
+revoke all on function public.door_slot_quarantine(integer,bigint,uuid) from public, anon, authenticated;
+revoke all on function public.door_slot_recover(integer,bigint,text,timestamptz,text[],timestamptz[]) from public, anon, authenticated, service_role;

@@ -1,0 +1,14 @@
+✔ legacy allocator permits a late clear to erase a new code (retained reproduction) (13.327391ms)
+✔ an acknowledged clear must retain the slot while its device command is live (6.562676ms)
+✔ overlapping commands cannot dispatch while first command is suspended (0.666393ms)
+✔ timeout or partial clear remains quarantined (5.644224ms)
+✔ DB failure after I/O leaves pending and forbids takeover (1.002897ms)
+✔ lost reserve response never dispatches or replays the permit (0.591668ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 280.519816

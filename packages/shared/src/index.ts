@@ -30,3 +30,6 @@ export {
   isFrontLockEntity,
   withoutFrontLocks,
 } from "./homeAssistant.js";
+
+export { runReservedDoorOperation } from "./doorSlotOwnership.js";
+export type { DoorSlotDatabase, DoorOperation, ReservedDoorOperation } from "./doorSlotOwnership.js";

@@ -1,0 +1,28 @@
+✖ an acknowledged clear must retain the slot while its device command is live (14.483629ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 285.885695
+
+✖ failing tests:
+
+test at packages/shared/test/doorSlotOwnership.test.ts:6:1
+✖ an acknowledged clear must retain the slot while its device command is live (14.483629ms)
+  AssertionError [ERR_ASSERTION]: late clear erased new code; physicalCode=null
+
+  true !== false
+
+      at TestContext.<anonymous> (file:///home/uni/.hermes/cache/scratch/rh-98/worktree/packages/shared/test/doorSlotOwnership.test.ts:19:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

@@ -1,0 +1,85 @@
+✔ legacy allocator permits a late clear to erase a new code (retained reproduction) (20.23894ms)
+✔ an acknowledged clear must retain the slot while its device command is live (4.092037ms)
+✔ overlapping commands cannot dispatch while first command is suspended (2.554604ms)
+✔ timeout or partial clear remains quarantined (12.704511ms)
+✔ DB failure after I/O leaves pending and forbids takeover (0.757525ms)
+✔ lost reserve response never dispatches or replays the permit (2.755934ms)
+✖ reservation snapshots identity across awaits and dispatch receives frozen context (10.197228ms)
+✖ migration executes and post-seed privileges retain RPC-only service access (23686.719944ms)
+✖ initial quarantine rejects evidence predating initialization (9396.83004ms)
+✖ exact-door, malformed and timestamp evidence fails closed; current evidence recovers (13359.857341ms)
+✔ generation fencing, replay tombstone, rollback and overlapping reservations (13008.219198ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 7
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 60374.236563
+
+✖ failing tests:
+
+test at packages/shared/test/doorSlotOwnership.test.ts:112:1
+✖ reservation snapshots identity across awaits and dispatch receives frozen context (10.197228ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  undefined !== 101
+
+      at file:///home/uni/.hermes/cache/scratch/rh-98/worktree/packages/shared/test/doorSlotOwnership.test.ts:126:12
+      at runReservedDoorOperation (file:///home/uni/.hermes/cache/scratch/rh-98/worktree/packages/shared/src/doorSlotOwnership.ts:40:35)
+      at async TestContext.<anonymous> (file:///home/uni/.hermes/cache/scratch/rh-98/worktree/packages/shared/test/doorSlotOwnership.test.ts:124:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 101,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at packages/shared/test/doorSlotPostgres.test.mjs:19:1
+✖ migration executes and post-seed privileges retain RPC-only service access (23686.719944ms)
+  AssertionError [ERR_ASSERTION]: anon door_slots SELECT
+
+  true !== false
+
+      at TestContext.<anonymous> (file:///home/uni/.hermes/cache/scratch/rh-98/worktree/packages/shared/test/doorSlotPostgres.test.mjs:26:18)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at packages/shared/test/doorSlotPostgres.test.mjs:41:1
+✖ initial quarantine rejects evidence predating initialization (9396.83004ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at async TestContext.<anonymous> (file:///home/uni/.hermes/cache/scratch/rh-98/worktree/packages/shared/test/doorSlotPostgres.test.mjs:43:9)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /fresh empty readback/,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at packages/shared/test/doorSlotPostgres.test.mjs:46:1
+✖ exact-door, malformed and timestamp evidence fails closed; current evidence recovers (13359.857341ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at async TestContext.<anonymous> (file:///home/uni/.hermes/cache/scratch/rh-98/worktree/packages/shared/test/doorSlotPostgres.test.mjs:50:7)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'rejects',
+    diff: 'simple'
+  }
