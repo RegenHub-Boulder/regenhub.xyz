@@ -2,10 +2,10 @@ import { readFileSync, existsSync } from 'node:fs';
 import { expect, it } from 'vitest';
 import { migrationNumber } from './migrations';
 
-const path = new URL('../../../../supabase/migrations/054_newsletter_claims.sql', import.meta.url);
+const path = new URL('../../../../supabase/migrations/055_newsletter_claims.sql', import.meta.url);
 const sql = readFileSync(path, 'utf8');
 it('ships newsletter claims as 054, leaving 053 for the lock-slot migration', () => {
-  expect(migrationNumber('054_newsletter_claims.sql')).toBe(54);
+  expect(migrationNumber('055_newsletter_claims.sql')).toBe(54);
   expect(existsSync(new URL('../../../../supabase/migrations/053_newsletter_claims.sql', import.meta.url))).toBe(false);
 });
 it('dispatch authorization fences both leases and retains original dispatch provenance', () => {
