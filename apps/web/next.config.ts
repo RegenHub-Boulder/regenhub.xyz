@@ -68,6 +68,11 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  experimental: {
+    // Keep regenerated pages/routes (and fetch results) in memory: Next's
+    // default disk cache writes ISR data beside executable .next/server code.
+    isrFlushToDisk: false,
+  },
   transpilePackages: ["@regenhub/shared"],
   turbopack: {
     root: path.resolve(__dirname, "../.."),
