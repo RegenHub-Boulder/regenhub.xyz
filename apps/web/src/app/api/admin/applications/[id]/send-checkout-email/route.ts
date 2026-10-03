@@ -1,5 +1,5 @@
+import { requireAdmin } from "@/lib/admin";
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { sendApplicationCheckoutEmail } from "@/lib/applicationCheckout";
 
@@ -22,19 +22,8 @@ export async function POST(
   const isSystemCaller =
     !!cronSecret && req.headers.get("authorization") === `Bearer ${cronSecret}`;
 
-  if (!isSystemCaller) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const { data: adminMember } = await supabase
-      .from("members")
-      .select("is_admin")
-      .eq("supabase_user_id", user.id)
-      .single();
-    if (!adminMember?.is_admin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+  if (!isSystemCaller && !await requireAdmin()) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { id: idParam } = await ctx.params;

@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { makeSupabaseMock } from "../../../../../../test/mockSupabase";
 
-vi.mock("@regenhub/shared", () => ({
+vi.mock("@regenhub/shared", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@regenhub/shared")>(),
   setUserCode: vi.fn(async () => []), clearUserCode: vi.fn(),
   formatLockStatus: () => "ok", generateRandomCode: vi.fn(),
   MEMBER_SLOT_MIN: 1, MEMBER_SLOT_MAX: 100, LOCK_FAILURE_MSG: "failed",
@@ -25,6 +26,7 @@ function req() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(createServiceClient).mockReturnValue(makeSupabaseMock() as never);
 });
 
 describe("DELETE /api/admin/members/[id]", () => {
@@ -134,4 +136,15 @@ it("explicit admin enable clears disabled", async () => {
   const builder = vi.mocked(admin.from).mock.results[0].value;
   expect(builder.update).toHaveBeenCalledWith({ disabled: false });
   expect(setUserCode).not.toHaveBeenCalled();
+});
+
+it("retains member and slot when clear cannot be confirmed", async () => {
+  const { clearUserCode } = await import("@regenhub/shared");
+  vi.mocked(requireAdmin).mockResolvedValue(ADMIN_USER as never);
+  vi.mocked(createClient).mockResolvedValue(makeSupabaseMock({ selects: { members: { data: { pin_code_slot: 12, email: null } } } }) as never);
+  const admin = makeSupabaseMock();
+  vi.mocked(createServiceClient).mockReturnValue(admin as never);
+  vi.mocked(clearUserCode).mockRejectedValue(new Error("partial clear; quarantined"));
+  expect((await DELETE(req(), ctx)).status).toBe(502);
+  expect(admin.from).not.toHaveBeenCalled();
 });

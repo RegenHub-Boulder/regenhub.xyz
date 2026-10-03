@@ -1,3 +1,4 @@
+import { lockWriterFetch } from "@regenhub/shared";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import type { Database } from "./types";
@@ -9,6 +10,7 @@ export async function createClient() {
     process.env.SUPABASE_INTERNAL_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      global: { fetch: lockWriterFetch },
       cookieOptions: { name: "sb-regenhub" },
       cookies: {
         getAll() {

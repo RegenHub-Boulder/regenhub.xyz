@@ -1,3 +1,7 @@
+import { redirect } from "next/navigation";
+import { requireAdmin } from "@/lib/admin";
+import { createServiceClient } from "@/lib/supabase/admin";
+import { QuarantinedSlots, type QuarantinedSlot } from "@/components/admin/QuarantinedSlots";
 import { createClient } from "@/lib/supabase/server";
 import { AdminTabs, type TabDef } from "@/components/admin/AdminTabs";
 import { LiveCodesSection, type CodeWithMember } from "@/components/admin/LiveCodesSection";
@@ -13,7 +17,15 @@ const TABS: TabDef<AccessTab>[] = [
 ];
 
 export default async function AccessPage() {
+  if (!await requireAdmin()) redirect("/portal");
   const supabase = await createClient();
+  const service = createServiceClient();
+  const { data: quarantine, error: quarantineError } = await service.from("lock_slot_quarantine")
+    .select("slot, reason, quarantined_at").order("slot");
+  if (quarantineError) throw quarantineError;
+  const { data: writer, error: writerError } = await service.from("lock_slot_writer")
+    .select("acquired_at, holder_label").eq("id", 1).maybeSingle();
+  if (writerError) throw writerError;
 
   // Capture a server-side `now` for "expiring soon" + "ago" calculations.
   // eslint-disable-next-line react-hooks/purity -- server component, renders once per request
@@ -83,11 +95,21 @@ export default async function AccessPage() {
             />
           ),
           sync: (
-            <LockSyncSection
-              members={slotRows}
-              lastRun={(lastRun as LastRun | null) ?? null}
-              nowMs={nowMs}
-            />
+            <div className="space-y-6">
+              {writer && (
+                <div className={`text-sm ${nowMs - Date.parse(writer.acquired_at) > 120_000 ? "text-red-600" : "text-amber-500"}`}>
+                  <p>Door-code writer held by {writer.holder_label} for {Math.max(0, Math.floor((nowMs - Date.parse(writer.acquired_at)) / 1000))} seconds (since {writer.acquired_at}).</p>
+                  {nowMs - Date.parse(writer.acquired_at) > 120_000 && <p role="alert">Warning: reservation held for over 2 minutes; operator attention required.</p>}
+                  <p>See “Stuck reservation recovery” under “Door-code writer reservation” in DEPLOYMENT.md.</p>
+                </div>
+              )}
+              <QuarantinedSlots slots={(quarantine ?? []) as QuarantinedSlot[]} />
+              <LockSyncSection
+                members={slotRows}
+                lastRun={(lastRun as LastRun | null) ?? null}
+                nowMs={nowMs}
+              />
+            </div>
           ),
         }}
       </AdminTabs>

@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/admin";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
@@ -11,7 +12,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
  * history stays browsable in the table).
  */
 
-async function requireAdmin() {
+async function requireAdminMember() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" as const, status: 401 as const };
@@ -25,7 +26,8 @@ async function requireAdmin() {
 }
 
 export async function GET() {
-  const auth = await requireAdmin();
+  if (!await requireAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const auth = await requireAdminMember();
   if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   const admin = createServiceClient();
@@ -41,7 +43,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const auth = await requireAdmin();
+  if (!await requireAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const auth = await requireAdminMember();
   if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   const body = (await req.json().catch(() => null)) as { note?: string } | null;

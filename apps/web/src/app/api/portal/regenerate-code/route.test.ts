@@ -9,7 +9,8 @@ vi.mock("@/lib/supabase/admin", () => ({
   createServiceClient: vi.fn(),
 }));
 
-vi.mock("@regenhub/shared", () => ({
+vi.mock("@regenhub/shared", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@regenhub/shared")>(),
   setUserCode: vi.fn(),
   formatLockStatus: vi.fn(() => "Code set on front door and back door"),
   generateRandomCode: vi.fn(() => "424242"),
@@ -38,6 +39,7 @@ function makeRequest(body?: unknown): Request {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(createServiceClient).mockReturnValue(makeSupabaseMock() as never);
   vi.mocked(setUserCode).mockResolvedValue([{ entity: "lock.front", ok: true }]);
 });
 

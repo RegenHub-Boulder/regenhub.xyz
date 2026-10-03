@@ -524,3 +524,17 @@ curl -X PATCH "$COOLIFY_URL/api/v1/applications/<app-uuid>" \
 ```
 
 **Note on Traefik + Docker Engine 29.2:** Docker's label-based auto-discovery is broken (Traefik v3.x sends API v1.24, Docker 29.2 requires min v1.44). The fix requires upgrading Docker Engine to a version with a lower minimum, or waiting for Coolify to ship a Traefik version that negotiates API version correctly. Until then, static route files + the update script are the workaround.
+
+## Door-code writer reservation
+
+The global PIN writer reservation never expires. The admin Access / Lock Sync page shows its holder and age, with a warning after two minutes. Apply migration `054_lock_writer_holder.sql` before deploying the updated web and bot; it adds the holder label and preserves any held reservation. Rebuild the shared package before building either app.
+
+### Stuck reservation recovery
+
+There is deliberately no force-free button. Stop/fence **all** PIN writers first and prove the old reservation holder cannot resume and outstanding HA/Z-Wave writes cannot replay. If that cannot be established, keep the reservation/quarantines and escalate to the authorized operator. With those conditions met, an authorized database administrator may delete **only** the reservation row while writers are stopped:
+
+```sql
+delete from public.lock_slot_writer where id = 1;
+```
+
+Never delete `lock_slot_quarantine` rows to make slots free. Restart only updated writers, inspect the quarantine list, and use **Retry clear** for each affected slot. Each retry independently requires every configured door to report clean success before removing quarantine and releasing its business assignment. An offline/failed door keeps the slot held.

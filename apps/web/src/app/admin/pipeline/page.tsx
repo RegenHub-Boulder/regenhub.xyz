@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { requireAdmin } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { AdminTabs, type TabDef } from "@/components/admin/AdminTabs";
@@ -30,6 +32,7 @@ export default async function PipelinePage({
 }: {
   searchParams: Promise<{ tab?: string; linked?: string }>;
 }) {
+  if (!await requireAdmin()) redirect("/portal");
   const params = await searchParams;
 
   // Parse the interests filter from the same URL (carried through the tab)

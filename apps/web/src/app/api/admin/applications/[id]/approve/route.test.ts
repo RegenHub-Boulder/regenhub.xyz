@@ -30,13 +30,13 @@ beforeEach(() => {
 });
 
 describe("POST /api/admin/applications/[id]/approve", () => {
-  it("returns 401 when no auth user", async () => {
+  it("returns 403 when no auth user", async () => {
     vi.mocked(createClient).mockResolvedValue(
       makeSupabaseMock({ auth: { user: null } }) as never,
     );
 
     const res = await POST(makeRequest({ plan_key: "cold_desk", monthly_cents: 50000 }), ctx);
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(403);
   });
 
   it("returns 403 when caller is not an admin", async () => {

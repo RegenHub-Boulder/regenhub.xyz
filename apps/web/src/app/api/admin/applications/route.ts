@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/admin";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import type { ApplicationStatus } from "@/lib/supabase/types";
@@ -16,6 +17,8 @@ import { logAction, AuditAction } from "@/lib/auditLog";
  *   - approved/rejected/closed → pending  (revert)
  */
 export async function PATCH(req: Request) {
+  if (!await requireAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

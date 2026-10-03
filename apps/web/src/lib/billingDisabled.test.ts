@@ -85,6 +85,8 @@ function database(disabled = true) {
     }
     return builder;
   }, rpc: async (name: string, args: Row) => {
+    if (["acquire_lock_writer", "release_lock_writer", "check_lock_writer"].includes(name)) return { data: true, error: null };
+    if (name === "list_lock_quarantines") return { data: [], error: null };
     expect(name).toBe("credit_onchain_invoice");
     const invoice = rows.onchain_invoices.find(r => r.id === args.p_invoice_id)!;
     let paid = rows.onchain_payments.find(r => r.invoice_id === invoice.id);
