@@ -45,7 +45,10 @@ export function makeSupabaseMock(opts: SupabaseMockOpts = {}) {
 
   const rpc = vi.fn((fnName: string) => {
     const resp = opts.rpcs?.[fnName];
-    return Promise.resolve({ data: resp?.data ?? null, error: resp?.error ?? null });
+    return Promise.resolve({ data: resp?.data ?? (
+      ["acquire_lock_writer", "check_lock_writer", "release_lock_writer"].includes(fnName) ? true :
+      fnName === "list_lock_quarantines" ? [] : null
+    ), error: resp?.error ?? null });
   });
 
   function tableBuilder(table: string) {

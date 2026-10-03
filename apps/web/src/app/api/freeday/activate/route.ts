@@ -1,3 +1,4 @@
+import { withWebLockWriter } from "@/lib/lockWriter";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
@@ -80,7 +81,7 @@ async function notifyTelegram(name: string) {
   }
 }
 
-export async function POST() {
+async function guardedPOST() {
   // Require authentication
   const supabase = await createClient();
   const {
@@ -274,4 +275,8 @@ export async function POST() {
     expires_at: expiresAt.toISOString(),
     lock_status: lockStatus,
   });
+}
+
+export async function POST(...args: Parameters<typeof guardedPOST>) {
+  return withWebLockWriter(() => guardedPOST(...args));
 }

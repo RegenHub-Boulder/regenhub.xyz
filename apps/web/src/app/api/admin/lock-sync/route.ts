@@ -1,10 +1,11 @@
+import { withWebLockWriter } from "@/lib/lockWriter";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/admin";
-import { setUserCode, clearUserCode, type LockResult } from "@regenhub/shared";
+import { setUserCode, clearUserCode, type LockResult, quarantinedSlots } from "@regenhub/shared";
 
-export async function POST() {
+async function guardedPOST() {
   const adminUser = await requireAdmin();
   if (!adminUser) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -22,8 +23,13 @@ export async function POST() {
 
   const results: Array<{ name: string; slot: number; action: "set" | "clear"; ok: boolean; partial?: string[] }> = [];
 
+  const quarantines = await quarantinedSlots();
   for (const m of members) {
     const slot = m.pin_code_slot!;
+    if (quarantines.has(slot)) {
+      results.push({ name: m.name, slot, action: "clear", ok: false });
+      continue;
+    }
     try {
       let lockResults: LockResult[];
       if (!m.disabled && m.pin_code) {
@@ -66,4 +72,8 @@ export async function POST() {
   }
 
   return NextResponse.json({ synced, failed, partial, results });
+}
+
+export async function POST(...args: Parameters<typeof guardedPOST>) {
+  return withWebLockWriter(() => guardedPOST(...args));
 }

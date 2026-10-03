@@ -1,3 +1,4 @@
+import { withWebLockWriter } from "@/lib/lockWriter";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/admin";
@@ -11,7 +12,7 @@ import {
   LOCK_FAILURE_MSG,
 } from "@regenhub/shared";
 
-export async function POST(request: Request) {
+async function guardedPOST(request: Request) {
   if (!await requireAdmin()) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -96,4 +97,8 @@ export async function POST(request: Request) {
     pin_slot: allocation.slot,
     lock_status: lockStatus,
   });
+}
+
+export async function POST(...args: Parameters<typeof guardedPOST>) {
+  return withWebLockWriter(() => guardedPOST(...args));
 }

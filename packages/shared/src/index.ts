@@ -30,3 +30,5 @@ export {
   isFrontLockEntity,
   withoutFrontLocks,
 } from "./homeAssistant.js";
+
+export { withLockWriter, lockWriterFetch, quarantinedSlots, quarantineSlot, clearSlotSafely } from "./lockSlotSafety.js";

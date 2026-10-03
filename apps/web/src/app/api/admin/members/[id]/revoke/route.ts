@@ -1,3 +1,4 @@
+import { withWebLockWriter } from "@/lib/lockWriter";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
@@ -7,7 +8,7 @@ interface RevokeBody {
   refund_last_purchase?: boolean;
 }
 
-export async function POST(
+async function guardedPOST(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
@@ -120,4 +121,8 @@ export async function POST(
     cancel_errors: cancelErrors,
     refunded,
   });
+}
+
+export async function POST(...args: Parameters<typeof guardedPOST>) {
+  return withWebLockWriter(() => guardedPOST(...args));
 }

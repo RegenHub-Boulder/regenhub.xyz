@@ -1,3 +1,4 @@
+import { withWebLockWriter } from "@/lib/lockWriter";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
@@ -10,6 +11,7 @@ import {
   MEMBER_SLOT_MIN,
   MEMBER_SLOT_MAX,
   LOCK_FAILURE_MSG,
+  quarantinedSlots,
 } from "@regenhub/shared";
 
 const PERMANENT_TYPES = ["cold_desk", "hot_desk", "hub_friend"];
@@ -22,13 +24,14 @@ async function nextFreeSlot(
     .select("pin_code_slot")
     .not("pin_code_slot", "is", null);
   const used = new Set((data ?? []).map((r) => r.pin_code_slot as number));
+  for (const slot of await quarantinedSlots()) used.add(slot);
   for (let s = MEMBER_SLOT_MIN; s <= MEMBER_SLOT_MAX; s++) {
     if (!used.has(s)) return s;
   }
   return null;
 }
 
-export async function PATCH(
+async function guardedPATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -94,6 +97,22 @@ export async function PATCH(
     }
   }
 
+  // Moving/removing a slot must clear its previous occupant before the edit.
+  const releasesOldSlot = current.pin_code_slot && (
+    ("pin_code_slot" in update && update.pin_code_slot !== current.pin_code_slot) ||
+    update.member_type === "day_pass"
+  );
+  if (releasesOldSlot) {
+    try { await clearUserCode(current.pin_code_slot!); }
+    catch {
+      return NextResponse.json({ error: "Previous PIN slot is quarantined; retry clear in Lock Sync." }, { status: 502 });
+    }
+    if (update.member_type === "day_pass") {
+      update.pin_code_slot = null;
+      update.pin_code = null;
+    }
+  }
+
   // Migration 031 revoked UPDATE on members from the authenticated role (anon
   // SDK lockdown), so admin writes must go through the service-role client.
   // The route is requireAdmin-gated and fields are whitelisted above, so this
@@ -141,7 +160,7 @@ export async function PATCH(
   return NextResponse.json({ member: data, lock_status: lockStatus });
 }
 
-export async function DELETE(
+async function guardedDELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -168,7 +187,7 @@ export async function DELETE(
       lockStatus = formatLockStatus(lockResults);
     } catch (err) {
       console.error("[AdminMember DELETE] Failed to clear lock code:", err);
-      lockStatus = `Could not clear door code from lock — run Lock Sync after deleting. ${LOCK_FAILURE_MSG}`;
+      return NextResponse.json({ error: "Member retained: PIN slot quarantined. Retry clear in Lock Sync." }, { status: 502 });
     }
   }
 
@@ -224,4 +243,12 @@ export async function DELETE(
     lock_status: lockStatus,
     ...(warning ? { warning } : {}),
   });
+}
+
+export async function PATCH(...args: Parameters<typeof guardedPATCH>) {
+  return withWebLockWriter(() => guardedPATCH(...args));
+}
+
+export async function DELETE(...args: Parameters<typeof guardedDELETE>) {
+  return withWebLockWriter(() => guardedDELETE(...args));
 }

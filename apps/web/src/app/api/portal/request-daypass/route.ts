@@ -1,3 +1,4 @@
+import { withWebLockWriter } from "@/lib/lockWriter";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
@@ -49,7 +50,7 @@ function calculateDayPassExpiry(): string {
   return exp.toISOString();
 }
 
-export async function POST(request: Request) {
+async function guardedPOST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -170,4 +171,8 @@ export async function POST(request: Request) {
     balance_remaining: newBalance as number,
     lock_status: lockStatus,
   });
+}
+
+export async function POST(...args: Parameters<typeof guardedPOST>) {
+  return withWebLockWriter(() => guardedPOST(...args));
 }

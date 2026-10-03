@@ -1,3 +1,5 @@
+import { createServiceClient } from "@/lib/supabase/admin";
+import { QuarantinedSlots, type QuarantinedSlot } from "@/components/admin/QuarantinedSlots";
 import { createClient } from "@/lib/supabase/server";
 import { AdminTabs, type TabDef } from "@/components/admin/AdminTabs";
 import { LiveCodesSection, type CodeWithMember } from "@/components/admin/LiveCodesSection";
@@ -14,6 +16,13 @@ const TABS: TabDef<AccessTab>[] = [
 
 export default async function AccessPage() {
   const supabase = await createClient();
+  const service = createServiceClient();
+  const { data: quarantine, error: quarantineError } = await service.from("lock_slot_quarantine")
+    .select("slot, reason, quarantined_at").order("slot");
+  if (quarantineError) throw quarantineError;
+  const { data: writer, error: writerError } = await service.from("lock_slot_writer")
+    .select("acquired_at").eq("id", 1).maybeSingle();
+  if (writerError) throw writerError;
 
   // Capture a server-side `now` for "expiring soon" + "ago" calculations.
   // eslint-disable-next-line react-hooks/purity -- server component, renders once per request
@@ -83,11 +92,19 @@ export default async function AccessPage() {
             />
           ),
           sync: (
-            <LockSyncSection
-              members={slotRows}
-              lastRun={(lastRun as LastRun | null) ?? null}
-              nowMs={nowMs}
-            />
+            <div className="space-y-6">
+              {writer && (
+                <p className="text-sm text-amber-500">
+                  Door-code operation in progress since {writer.acquired_at}. If it remains after the operation finishes, contact an operator before retrying.
+                </p>
+              )}
+              <QuarantinedSlots slots={(quarantine ?? []) as QuarantinedSlot[]} />
+              <LockSyncSection
+                members={slotRows}
+                lastRun={(lastRun as LastRun | null) ?? null}
+                nowMs={nowMs}
+              />
+            </div>
           ),
         }}
       </AdminTabs>

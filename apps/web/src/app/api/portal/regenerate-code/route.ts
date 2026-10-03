@@ -1,9 +1,10 @@
+import { withWebLockWriter } from "@/lib/lockWriter";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { setUserCode, formatLockStatus, generateRandomCode, LOCK_FAILURE_MSG } from "@regenhub/shared";
 
-export async function POST(req: Request) {
+async function guardedPOST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     const customCode: string | undefined = body.code;
@@ -66,4 +67,8 @@ export async function POST(req: Request) {
     console.error("[regenerate-code] Unhandled error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
+}
+
+export async function POST(...args: Parameters<typeof guardedPOST>) {
+  return withWebLockWriter(() => guardedPOST(...args));
 }
