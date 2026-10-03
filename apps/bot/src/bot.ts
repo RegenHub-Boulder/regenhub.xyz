@@ -1267,7 +1267,7 @@ const handleChangeToCallback = (...args: Parameters<typeof handleChangeToCallbac
   runBotLockWriter(args[0], () => handleChangeToCallbackImpl(...args));
 
 async function runBotLockWriter<T>(chatId: number, work: () => Promise<T>) {
-  try { return await withLockWriter(db, work); }
+  try { return await withLockWriter(db, work, "Bot PIN writer"); }
   catch (error) {
     console.error("[LockWriter] Bot PIN operation unavailable:", error);
     return bot.sendMessage(chatId, "Door-code operation unavailable. Retry later or contact an admin.");

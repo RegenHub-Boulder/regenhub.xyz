@@ -12,11 +12,14 @@ it("migration is idempotent and enforces reservation, quarantine and service-onl
       insert into day_codes values(1,101,'1234',true);`);
     const migration = await readFile(new URL("../../../../supabase/migrations/053_lock_slot_quarantine.sql", import.meta.url), "utf8");
     await pg.exec(migration); await pg.exec(migration);
+    const visibility = await readFile(new URL("../../../../supabase/migrations/054_lock_writer_holder.sql", import.meta.url), "utf8");
+    await pg.exec(visibility); await pg.exec(visibility);
     const token = "00000000-0000-4000-8000-000000000001";
     const other = "00000000-0000-4000-8000-000000000002";
     const query = async (sql: string, args: unknown[] = []) => (await pg.query(sql, args)).rows as Record<string, unknown>[];
-    expect((await query("select acquire_lock_writer($1) ok", [token]))[0].ok).toBe(true);
+    expect((await query("select acquire_lock_writer($1, 'Web PIN writer') ok", [token]))[0].ok).toBe(true);
     expect((await query("select acquire_lock_writer($1) ok", [other]))[0].ok).toBe(false);
+    expect((await query("select holder_label from lock_slot_writer"))[0].holder_label).toBe("Web PIN writer");
     await expect(pg.exec("update members set pin_code='5678' where id=1")).rejects.toThrow(/requires PIN writer/);
     await pg.query("select set_config('request.headers',$1,false)", [JSON.stringify({ "x-lock-writer-token": token })]);
     await pg.exec("update members set pin_code='5678' where id=1");

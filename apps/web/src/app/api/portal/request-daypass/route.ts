@@ -50,7 +50,7 @@ function calculateDayPassExpiry(): string {
   return exp.toISOString();
 }
 
-async function guardedPOST(request: Request) {
+export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -58,121 +58,119 @@ async function guardedPOST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const { label, expires_in_hours } = body;
 
-  const { data: member } = await supabase
-    .from("members")
-    .select("id, member_type, disabled, day_passes_balance")
-    .eq("supabase_user_id", user.id)
-    .single();
+  return withWebLockWriter(async () => {
+    const { data: member } = await supabase
+      .from("members")
+      .select("id, member_type, disabled, day_passes_balance")
+      .eq("supabase_user_id", user.id)
+      .single();
 
-  if (!member || member.disabled) {
-    return NextResponse.json({ error: "Account not found or disabled" }, { status: 403 });
-  }
+    if (!member || member.disabled) {
+      return NextResponse.json({ error: "Account not found or disabled" }, { status: 403 });
+    }
 
-  // The day_codes table + balance RPCs have no INSERT/EXECUTE policy for
-  // regular members (RLS only grants them SELECT of their own codes), so all
-  // the privileged writes below go through the service-role client. The user
-  // is already authenticated and their member row resolved above, and every
-  // write is scoped explicitly to member.id — so this is safe.
-  const admin = createServiceClient();
+    // The day_codes table + balance RPCs have no INSERT/EXECUTE policy for
+    // regular members (RLS only grants them SELECT of their own codes), so all
+    // the privileged writes below go through the service-role client. The user
+    // is already authenticated and their member row resolved above, and every
+    // write is scoped explicitly to member.id — so this is safe.
+    const admin = createServiceClient();
 
-  const isFullMember = member.member_type !== "day_pass";
+    const isFullMember = member.member_type !== "day_pass";
 
-  // Day pass members: enforce 6 PM Mountain Time expiry and block weekends
-  let expiresAt: string | null;
-  if (isFullMember) {
-    // Full members get flexible expiry (as sent by client)
-    expiresAt = expires_in_hours == null
-      ? null
-      : new Date(Date.now() + Math.min(Math.max(Number(expires_in_hours) || 24, 1), 720) * 60 * 60 * 1000).toISOString();
-  } else {
-    // Day pass members: always expires at 6 PM Mountain Time, block weekends
-    const { dayOfWeek } = todayParts();
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
+    // Day pass members: enforce 6 PM Mountain Time expiry and block weekends
+    let expiresAt: string | null;
+    if (isFullMember) {
+      // Full members get flexible expiry (as sent by client)
+      expiresAt = expires_in_hours == null
+        ? null
+        : new Date(Date.now() + Math.min(Math.max(Number(expires_in_hours) || 24, 1), 720) * 60 * 60 * 1000).toISOString();
+    } else {
+      // Day pass members: always expires at 6 PM Mountain Time, block weekends
+      const { dayOfWeek } = todayParts();
+      if (dayOfWeek === 0 || dayOfWeek === 6) {
+        return NextResponse.json(
+          { error: "Day passes are available Monday–Friday. See you next week!" },
+          { status: 400 }
+        );
+      }
+      expiresAt = calculateDayPassExpiry();
+    }
+
+    // Atomic decrement — prevents double-spend race condition
+    const { data: newBalance, error: rpcError } = await admin.rpc(
+      "decrement_day_pass_balance",
+      { p_member_id: member.id, p_amount: 1 }
+    );
+
+    if (rpcError || newBalance === -1) {
       return NextResponse.json(
-        { error: "Day passes are available Monday–Friday. See you next week!" },
+        { error: "No day passes remaining — contact an admin to top up" },
         { status: 400 }
       );
     }
-    expiresAt = calculateDayPassExpiry();
-  }
 
-  // Atomic decrement — prevents double-spend race condition
-  const { data: newBalance, error: rpcError } = await admin.rpc(
-    "decrement_day_pass_balance",
-    { p_member_id: member.id, p_amount: 1 }
-  );
+    const code = generateRandomCode();
 
-  if (rpcError || newBalance === -1) {
-    return NextResponse.json(
-      { error: "No day passes remaining — contact an admin to top up" },
-      { status: 400 }
-    );
-  }
+    // Atomic slot claim: INSERT, retry on unique-violation if a concurrent
+    // request beat us to this slot. Combined with migration 018's partial
+    // unique index, this prevents two day-codes from sharing a slot.
+    const allocation = await allocateSlotWithRetry<{ id: number; pin_slot: number }>({
+      min: DAY_CODE_SLOT_MIN,
+      max: DAY_CODE_SLOT_MAX,
+      getUsedSlots: async () => {
+        const { data } = await admin
+          .from("day_codes")
+          .select("pin_slot")
+          .eq("is_active", true);
+        return new Set(data?.map((r) => r.pin_slot) ?? []);
+      },
+      tryInsert: (slot) =>
+        admin
+          .from("day_codes")
+          .insert({
+            member_id: member.id,
+            label: label ?? null,
+            code,
+            pin_slot: slot,
+            issued_at: new Date().toISOString(),
+            expires_at: expiresAt,
+            is_active: true,
+          })
+          .select("id, pin_slot")
+          .single(),
+    });
 
-  const code = generateRandomCode();
+    if (!allocation.ok) {
+      // Refund — couldn't allocate a slot
+      await admin.rpc("increment_day_pass_balance", { p_member_id: member.id, p_amount: 1 });
+      const status = allocation.exhausted ? 503 : 500;
+      const msg = allocation.exhausted ? "No available door code slots" : "Could not save day code";
+      if (!allocation.exhausted) console.error("[DB] Day code insert failed:", allocation.error);
+      return NextResponse.json({ error: msg }, { status });
+    }
 
-  // Atomic slot claim: INSERT, retry on unique-violation if a concurrent
-  // request beat us to this slot. Combined with migration 018's partial
-  // unique index, this prevents two day-codes from sharing a slot.
-  const allocation = await allocateSlotWithRetry<{ id: number; pin_slot: number }>({
-    min: DAY_CODE_SLOT_MIN,
-    max: DAY_CODE_SLOT_MAX,
-    getUsedSlots: async () => {
-      const { data } = await admin
+    let lockStatus: string;
+    try {
+      const lockResults = await setUserCode(allocation.slot, code);
+      lockStatus = formatLockStatus(lockResults);
+    } catch (err) {
+      console.error("[Lock] Failed to set day code:", err);
+      // Roll back: deactivate the just-inserted day_code so its slot frees up,
+      // then refund the balance.
+      await admin
         .from("day_codes")
-        .select("pin_slot")
-        .eq("is_active", true);
-      return new Set(data?.map((r) => r.pin_slot) ?? []);
-    },
-    tryInsert: (slot) =>
-      admin
-        .from("day_codes")
-        .insert({
-          member_id: member.id,
-          label: label ?? null,
-          code,
-          pin_slot: slot,
-          issued_at: new Date().toISOString(),
-          expires_at: expiresAt,
-          is_active: true,
-        })
-        .select("id, pin_slot")
-        .single(),
+        .update({ is_active: false, revoked_at: new Date().toISOString() })
+        .eq("id", allocation.data.id);
+      await admin.rpc("increment_day_pass_balance", { p_member_id: member.id, p_amount: 1 });
+      return NextResponse.json({ error: LOCK_FAILURE_MSG }, { status: 502 });
+    }
+
+    return NextResponse.json({
+      code,
+      expires_at: expiresAt,
+      balance_remaining: newBalance as number,
+      lock_status: lockStatus,
+    });
   });
-
-  if (!allocation.ok) {
-    // Refund — couldn't allocate a slot
-    await admin.rpc("increment_day_pass_balance", { p_member_id: member.id, p_amount: 1 });
-    const status = allocation.exhausted ? 503 : 500;
-    const msg = allocation.exhausted ? "No available door code slots" : "Could not save day code";
-    if (!allocation.exhausted) console.error("[DB] Day code insert failed:", allocation.error);
-    return NextResponse.json({ error: msg }, { status });
-  }
-
-  let lockStatus: string;
-  try {
-    const lockResults = await setUserCode(allocation.slot, code);
-    lockStatus = formatLockStatus(lockResults);
-  } catch (err) {
-    console.error("[Lock] Failed to set day code:", err);
-    // Roll back: deactivate the just-inserted day_code so its slot frees up,
-    // then refund the balance.
-    await admin
-      .from("day_codes")
-      .update({ is_active: false, revoked_at: new Date().toISOString() })
-      .eq("id", allocation.data.id);
-    await admin.rpc("increment_day_pass_balance", { p_member_id: member.id, p_amount: 1 });
-    return NextResponse.json({ error: LOCK_FAILURE_MSG }, { status: 502 });
-  }
-
-  return NextResponse.json({
-    code,
-    expires_at: expiresAt,
-    balance_remaining: newBalance as number,
-    lock_status: lockStatus,
-  });
-}
-
-export async function POST(...args: Parameters<typeof guardedPOST>) {
-  return withWebLockWriter(() => guardedPOST(...args));
 }

@@ -58,5 +58,5 @@ export function startScheduler() {
 }
 
 export async function expireOldCodes(client = db, clear = clearUserCode) {
-  return withLockWriter(client, () => guardedExpireOldCodes(client, clear));
+  return withLockWriter(client, () => guardedExpireOldCodes(client, clear), "Bot expiry scheduler");
 }

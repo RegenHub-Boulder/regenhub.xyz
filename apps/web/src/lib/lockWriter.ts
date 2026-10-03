@@ -4,7 +4,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 
 export async function withWebLockWriter(work: () => Promise<Response>): Promise<Response> {
   try {
-    return await withLockWriter(createServiceClient(), work);
+    return await withLockWriter(createServiceClient(), work, "Web PIN writer");
   } catch (error) {
     console.error("[LockWriter] PIN operation failed:", error);
     return NextResponse.json({ error: "Door-code operation unavailable; retry later or contact an admin." }, { status: 503 });

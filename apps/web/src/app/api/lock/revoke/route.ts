@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/admin";
 import { clearUserCode, formatLockStatus, LOCK_FAILURE_MSG } from "@regenhub/shared";
 
-async function guardedPOST(request: Request) {
+export async function POST(request: Request) {
   if (!await requireAdmin()) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -12,41 +12,39 @@ async function guardedPOST(request: Request) {
   const supabase = await createClient();
   const { codeId } = await request.json();
 
-  const { data: code } = await supabase
-    .from("day_codes")
-    .select("pin_slot, is_active")
-    .eq("id", codeId)
-    .single();
+  return withWebLockWriter(async () => {
+    const { data: code } = await supabase
+      .from("day_codes")
+      .select("pin_slot, is_active")
+      .eq("id", codeId)
+      .single();
 
-  if (!code || !code.is_active) {
-    return NextResponse.json({ error: "Code not found or already revoked" }, { status: 404 });
-  }
+    if (!code || !code.is_active) {
+      return NextResponse.json({ error: "Code not found or already revoked" }, { status: 404 });
+    }
 
-  let lockStatus: string;
-  try {
-    const lockResults = await clearUserCode(code.pin_slot);
-    lockStatus = formatLockStatus(lockResults);
-  } catch (err) {
-    console.error("[Lock] Failed to clear code from HA:", err);
-    return NextResponse.json(
-      { error: LOCK_FAILURE_MSG },
-      { status: 502 }
-    );
-  }
+    let lockStatus: string;
+    try {
+      const lockResults = await clearUserCode(code.pin_slot);
+      lockStatus = formatLockStatus(lockResults);
+    } catch (err) {
+      console.error("[Lock] Failed to clear code from HA:", err);
+      return NextResponse.json(
+        { error: LOCK_FAILURE_MSG },
+        { status: 502 }
+      );
+    }
 
-  const { error } = await supabase
-    .from("day_codes")
-    .update({ is_active: false, revoked_at: new Date().toISOString() })
-    .eq("id", codeId);
+    const { error } = await supabase
+      .from("day_codes")
+      .update({ is_active: false, revoked_at: new Date().toISOString() })
+      .eq("id", codeId);
 
-  if (error) {
-    console.error("[DB] Failed to mark code revoked:", error);
-    return NextResponse.json({ error: "Lock cleared but DB update failed" }, { status: 500 });
-  }
+    if (error) {
+      console.error("[DB] Failed to mark code revoked:", error);
+      return NextResponse.json({ error: "Lock cleared but DB update failed" }, { status: 500 });
+    }
 
-  return NextResponse.json({ success: true, lock_status: lockStatus });
-}
-
-export async function POST(...args: Parameters<typeof guardedPOST>) {
-  return withWebLockWriter(() => guardedPOST(...args));
+    return NextResponse.json({ success: true, lock_status: lockStatus });
+  });
 }

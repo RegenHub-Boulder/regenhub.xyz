@@ -81,7 +81,7 @@ async function notifyTelegram(name: string) {
   }
 }
 
-async function guardedPOST() {
+export async function POST() {
   // Require authentication
   const supabase = await createClient();
   const {
@@ -92,191 +92,189 @@ async function guardedPOST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const admin = createServiceClient();
+  return withWebLockWriter(async () => {
+    const admin = createServiceClient();
 
-  // Find user's claim (by supabase_user_id or email fallback)
-  let { data: claim } = await admin
-    .from("free_day_claims")
-    .select("*")
-    .eq("supabase_user_id", user.id)
-    .single();
-
-  if (!claim && user.email) {
-    const { data: emailClaim } = await admin
+    // Find user's claim (by supabase_user_id or email fallback)
+    let { data: claim } = await admin
       .from("free_day_claims")
       .select("*")
-      .eq("email", user.email)
-      .is("supabase_user_id", null)
+      .eq("supabase_user_id", user.id)
       .single();
 
-    if (emailClaim) {
-      await admin
+    if (!claim && user.email) {
+      const { data: emailClaim } = await admin
         .from("free_day_claims")
-        .update({ supabase_user_id: user.id })
-        .eq("id", emailClaim.id);
-      claim = { ...emailClaim, supabase_user_id: user.id };
+        .select("*")
+        .eq("email", user.email)
+        .is("supabase_user_id", null)
+        .single();
+
+      if (emailClaim) {
+        await admin
+          .from("free_day_claims")
+          .update({ supabase_user_id: user.id })
+          .eq("id", emailClaim.id);
+        claim = { ...emailClaim, supabase_user_id: user.id };
+      }
     }
-  }
 
-  if (!claim) {
-    return NextResponse.json(
-      { error: "No free day claim found. Visit /freeday to claim yours." },
-      { status: 404 }
-    );
-  }
+    if (!claim) {
+      return NextResponse.json(
+        { error: "No free day claim found. Visit /freeday to claim yours." },
+        { status: 404 }
+      );
+    }
 
-  // Already activated — return the existing code
-  if (claim.status === "activated" && claim.day_code_id) {
-    const { data: existingCode } = await admin
-      .from("day_codes")
-      .select("code, expires_at")
-      .eq("id", claim.day_code_id)
-      .single();
+    // Already activated — return the existing code
+    if (claim.status === "activated" && claim.day_code_id) {
+      const { data: existingCode } = await admin
+        .from("day_codes")
+        .select("code, expires_at")
+        .eq("id", claim.day_code_id)
+        .single();
 
-    if (existingCode) {
-      return NextResponse.json({
-        code: existingCode.code,
-        expires_at: existingCode.expires_at,
-        lock_status: null,
-        already_activated: true,
+      if (existingCode) {
+        return NextResponse.json({
+          code: existingCode.code,
+          expires_at: existingCode.expires_at,
+          lock_status: null,
+          already_activated: true,
+        });
+      }
+    }
+
+    if (claim.status !== "reserved") {
+      return NextResponse.json(
+        { error: "This claim cannot be activated" },
+        { status: 400 }
+      );
+    }
+
+    // Legacy date check: if the claim has a specific date, it must be today.
+    // New claims have NULL claimed_date and skip this — they activate any weekday.
+    const today = getTodayMountain();
+    if (claim.claimed_date && claim.claimed_date !== today) {
+      const dateStr = new Date(
+        claim.claimed_date + "T12:00:00"
+      ).toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
       });
+      return NextResponse.json(
+        {
+          error: `Your free day is reserved for ${dateStr}. Come back then to get your code!`,
+        },
+        { status: 400 }
+      );
     }
-  }
 
-  if (claim.status !== "reserved") {
-    return NextResponse.json(
-      { error: "This claim cannot be activated" },
-      { status: 400 }
-    );
-  }
+    // Both paths still require a weekday — door codes only valid during business hours.
+    const todayDayOfWeek = new Date(today + "T12:00:00").getDay(); // 0=Sun, 6=Sat
+    if (todayDayOfWeek === 0 || todayDayOfWeek === 6) {
+      return NextResponse.json(
+        {
+          error: "Free days are only available Monday through Friday. Come back during the week!",
+        },
+        { status: 400 }
+      );
+    }
 
-  // Legacy date check: if the claim has a specific date, it must be today.
-  // New claims have NULL claimed_date and skip this — they activate any weekday.
-  const today = getTodayMountain();
-  if (claim.claimed_date && claim.claimed_date !== today) {
-    const dateStr = new Date(
-      claim.claimed_date + "T12:00:00"
-    ).toLocaleDateString("en-US", {
-      weekday: "long",
-      month: "long",
-      day: "numeric",
+    const code = generateRandomCode();
+    const expiresAt = calculateFreeDayExpiration();
+
+    // The free-day approval trigger (migration 016) auto-creates a day_pass
+    // member when status flips to 'reserved' — so by the time we get here the
+    // member row exists. Look it up so we can link day_code.member_id correctly
+    // (without this the unlock event lands in access_logs as "unattributed").
+    const { data: linkedMember } = await admin
+      .from("members")
+      .select("id, disabled")
+      .eq("email", claim.email)
+      .maybeSingle();
+
+    if (linkedMember?.disabled) {
+      return NextResponse.json({ error: "Member is disabled" }, { status: 403 });
+    }
+
+    // Atomic slot claim: INSERT-with-retry against the partial unique index.
+    // If a concurrent request claims the chosen slot first, retry with the
+    // next free one.
+    const allocation = await allocateSlotWithRetry<{ id: number }>({
+      min: DAY_CODE_SLOT_MIN,
+      max: DAY_CODE_SLOT_MAX,
+      getUsedSlots: async () => {
+        const { data } = await admin
+          .from("day_codes")
+          .select("pin_slot")
+          .eq("is_active", true);
+        return new Set(data?.map((r) => r.pin_slot) ?? []);
+      },
+      tryInsert: (slot) =>
+        admin
+          .from("day_codes")
+          .insert({
+            day_pass_id: null,
+            member_id: linkedMember?.id ?? null,
+            label: `Free Day: ${claim.name}`,
+            code,
+            pin_slot: slot,
+            issued_at: new Date().toISOString(),
+            expires_at: expiresAt.toISOString(),
+            is_active: true,
+          })
+          .select("id")
+          .single(),
     });
-    return NextResponse.json(
-      {
-        error: `Your free day is reserved for ${dateStr}. Come back then to get your code!`,
-      },
-      { status: 400 }
-    );
-  }
 
-  // Both paths still require a weekday — door codes only valid during business hours.
-  const todayDayOfWeek = new Date(today + "T12:00:00").getDay(); // 0=Sun, 6=Sat
-  if (todayDayOfWeek === 0 || todayDayOfWeek === 6) {
-    return NextResponse.json(
-      {
-        error: "Free days are only available Monday through Friday. Come back during the week!",
-      },
-      { status: 400 }
-    );
-  }
+    if (!allocation.ok) {
+      if (!allocation.exhausted) console.error("[FreeDay] DB insert error:", allocation.error);
+      return NextResponse.json(
+        {
+          error: allocation.exhausted
+            ? "All temporary door code slots are in use right now. Please try again in a bit."
+            : "Code could not be saved",
+        },
+        { status: allocation.exhausted ? 503 : 500 }
+      );
+    }
 
-  const code = generateRandomCode();
-  const expiresAt = calculateFreeDayExpiration();
-
-  // The free-day approval trigger (migration 016) auto-creates a day_pass
-  // member when status flips to 'reserved' — so by the time we get here the
-  // member row exists. Look it up so we can link day_code.member_id correctly
-  // (without this the unlock event lands in access_logs as "unattributed").
-  const { data: linkedMember } = await admin
-    .from("members")
-    .select("id, disabled")
-    .eq("email", claim.email)
-    .maybeSingle();
-
-  if (linkedMember?.disabled) {
-    return NextResponse.json({ error: "Member is disabled" }, { status: 403 });
-  }
-
-  // Atomic slot claim: INSERT-with-retry against the partial unique index.
-  // If a concurrent request claims the chosen slot first, retry with the
-  // next free one.
-  const allocation = await allocateSlotWithRetry<{ id: number }>({
-    min: DAY_CODE_SLOT_MIN,
-    max: DAY_CODE_SLOT_MAX,
-    getUsedSlots: async () => {
-      const { data } = await admin
+    // Set code on the physical locks
+    let lockStatus: string;
+    try {
+      const lockResults = await setUserCode(allocation.slot, code);
+      lockStatus = formatLockStatus(lockResults);
+    } catch (err) {
+      console.error("[FreeDay] Lock error:", err);
+      // Roll back the day_code so its slot frees up for another attempt.
+      await admin
         .from("day_codes")
-        .select("pin_slot")
-        .eq("is_active", true);
-      return new Set(data?.map((r) => r.pin_slot) ?? []);
-    },
-    tryInsert: (slot) =>
-      admin
-        .from("day_codes")
-        .insert({
-          day_pass_id: null,
-          member_id: linkedMember?.id ?? null,
-          label: `Free Day: ${claim.name}`,
-          code,
-          pin_slot: slot,
-          issued_at: new Date().toISOString(),
-          expires_at: expiresAt.toISOString(),
-          is_active: true,
-        })
-        .select("id")
-        .single(),
-  });
+        .update({ is_active: false, revoked_at: new Date().toISOString() })
+        .eq("id", allocation.data.id);
+      return NextResponse.json(
+        { error: LOCK_FAILURE_MSG },
+        { status: 502 }
+      );
+    }
 
-  if (!allocation.ok) {
-    if (!allocation.exhausted) console.error("[FreeDay] DB insert error:", allocation.error);
-    return NextResponse.json(
-      {
-        error: allocation.exhausted
-          ? "All temporary door code slots are in use right now. Please try again in a bit."
-          : "Code could not be saved",
-      },
-      { status: allocation.exhausted ? 503 : 500 }
-    );
-  }
-
-  // Set code on the physical locks
-  let lockStatus: string;
-  try {
-    const lockResults = await setUserCode(allocation.slot, code);
-    lockStatus = formatLockStatus(lockResults);
-  } catch (err) {
-    console.error("[FreeDay] Lock error:", err);
-    // Roll back the day_code so its slot frees up for another attempt.
+    // Update claim status
     await admin
-      .from("day_codes")
-      .update({ is_active: false, revoked_at: new Date().toISOString() })
-      .eq("id", allocation.data.id);
-    return NextResponse.json(
-      { error: LOCK_FAILURE_MSG },
-      { status: 502 }
-    );
-  }
+      .from("free_day_claims")
+      .update({
+        status: "activated",
+        day_code_id: allocation.data.id,
+        activated_at: new Date().toISOString(),
+      })
+      .eq("id", claim.id);
 
-  // Update claim status
-  await admin
-    .from("free_day_claims")
-    .update({
-      status: "activated",
-      day_code_id: allocation.data.id,
-      activated_at: new Date().toISOString(),
-    })
-    .eq("id", claim.id);
+    // Notify Telegram (fire-and-forget)
+    notifyTelegram(claim.name);
 
-  // Notify Telegram (fire-and-forget)
-  notifyTelegram(claim.name);
-
-  return NextResponse.json({
-    code,
-    expires_at: expiresAt.toISOString(),
-    lock_status: lockStatus,
+    return NextResponse.json({
+      code,
+      expires_at: expiresAt.toISOString(),
+      lock_status: lockStatus,
+    });
   });
-}
-
-export async function POST(...args: Parameters<typeof guardedPOST>) {
-  return withWebLockWriter(() => guardedPOST(...args));
 }

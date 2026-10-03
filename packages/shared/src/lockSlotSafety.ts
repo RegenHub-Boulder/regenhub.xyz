@@ -15,12 +15,12 @@ async function rpc(db: LockDatabase, name: string, args: Record<string, unknown>
   return result.data;
 }
 
-export async function withLockWriter<T>(db: LockDatabase, work: () => Promise<T>): Promise<T> {
+export async function withLockWriter<T>(db: LockDatabase, work: () => Promise<T>, holderLabel = "PIN writer"): Promise<T> {
   if (writers.getStore()) return work();
   const token = randomUUID();
   let acquired = false;
   for (let attempt = 0; attempt < 100; attempt++) {
-    if (await rpc(db, "acquire_lock_writer", { p_token: token })) { acquired = true; break; }
+    if (await rpc(db, "acquire_lock_writer", { p_token: token, p_holder_label: holderLabel })) { acquired = true; break; }
     await new Promise(resolve => setTimeout(resolve, 100));
   }
   if (!acquired) throw new Error("Door-code writer busy; retry later. A stopped writer requires operator recovery.");

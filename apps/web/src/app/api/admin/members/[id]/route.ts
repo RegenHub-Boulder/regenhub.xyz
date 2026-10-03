@@ -31,7 +31,7 @@ async function nextFreeSlot(
   return null;
 }
 
-async function guardedPATCH(
+export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -42,17 +42,6 @@ async function guardedPATCH(
   const supabase = await createClient();
   const { id } = await params;
   const body = await request.json();
-
-  // Fetch current member state to detect upgrades
-  const { data: current } = await supabase
-    .from("members")
-    .select("*")
-    .eq("id", Number(id))
-    .single();
-
-  if (!current) {
-    return NextResponse.json({ error: "Member not found" }, { status: 404 });
-  }
 
   const allowed = [
     "name", "email", "member_type", "is_coop_member", "is_admin",
@@ -73,94 +62,107 @@ async function guardedPATCH(
 
   // Auto-assign slot + code when upgrading from day_pass to a permanent type
   const newType = update.member_type as string | undefined;
-  const isUpgrade =
-    newType &&
-    PERMANENT_TYPES.includes(newType) &&
-    current.member_type === "day_pass" &&
-    !current.pin_code_slot;
+  return withWebLockWriter(async () => {
+    // Fetch current member state to detect upgrades
+    const { data: current } = await supabase
+      .from("members")
+      .select("*")
+      .eq("id", Number(id))
+      .single();
 
-  if (isUpgrade) {
-    // Only auto-assign if not explicitly provided in the request
-    if (!("pin_code_slot" in update) || !update.pin_code_slot) {
-      const slot = await nextFreeSlot(supabase);
-      if (slot === null) {
-        return NextResponse.json(
-          { error: "No free PIN slots available (all 100 member slots in use)" },
-          { status: 409 }
-        );
+    if (!current) {
+      return NextResponse.json({ error: "Member not found" }, { status: 404 });
+    }
+
+    const isUpgrade =
+      newType &&
+      PERMANENT_TYPES.includes(newType) &&
+      current.member_type === "day_pass" &&
+      !current.pin_code_slot;
+
+    if (isUpgrade) {
+      // Only auto-assign if not explicitly provided in the request
+      if (!("pin_code_slot" in update) || !update.pin_code_slot) {
+        const slot = await nextFreeSlot(supabase);
+        if (slot === null) {
+          return NextResponse.json(
+            { error: "No free PIN slots available (all 100 member slots in use)" },
+            { status: 409 }
+          );
+        }
+        update.pin_code_slot = slot;
       }
-      update.pin_code_slot = slot;
+
+      if (!("pin_code" in update) || !update.pin_code) {
+        update.pin_code = generateRandomCode();
+      }
     }
 
-    if (!("pin_code" in update) || !update.pin_code) {
-      update.pin_code = generateRandomCode();
+    // Moving/removing a slot must clear its previous occupant before the edit.
+    const releasesOldSlot = current.pin_code_slot && (
+      ("pin_code_slot" in update && update.pin_code_slot !== current.pin_code_slot) ||
+      update.member_type === "day_pass"
+    );
+    if (releasesOldSlot) {
+      try { await clearUserCode(current.pin_code_slot!); }
+      catch {
+        return NextResponse.json({ error: "Previous PIN slot is quarantined; retry clear in Lock Sync." }, { status: 502 });
+      }
+      if (update.member_type === "day_pass") {
+        update.pin_code_slot = null;
+        update.pin_code = null;
+      }
     }
-  }
 
-  // Moving/removing a slot must clear its previous occupant before the edit.
-  const releasesOldSlot = current.pin_code_slot && (
-    ("pin_code_slot" in update && update.pin_code_slot !== current.pin_code_slot) ||
-    update.member_type === "day_pass"
-  );
-  if (releasesOldSlot) {
-    try { await clearUserCode(current.pin_code_slot!); }
-    catch {
-      return NextResponse.json({ error: "Previous PIN slot is quarantined; retry clear in Lock Sync." }, { status: 502 });
+    // Migration 031 revoked UPDATE on members from the authenticated role (anon
+    // SDK lockdown), so admin writes must go through the service-role client.
+    // The route is requireAdmin-gated and fields are whitelisted above, so this
+    // is safe.
+    const admin = createServiceClient();
+    const { data, error } = await admin
+      .from("members")
+      .update(update)
+      .eq("id", Number(id))
+      .select()
+      .single();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
-    if (update.member_type === "day_pass") {
-      update.pin_code_slot = null;
-      update.pin_code = null;
+
+    // Sync lock
+    let lockStatus: string | null = null;
+
+    if ("disabled" in update && data.disabled && data.pin_code_slot) {
+      // Member was just disabled — clear their lock code
+      try {
+        const lockResults = await clearUserCode(data.pin_code_slot);
+        lockStatus = formatLockStatus(lockResults);
+      } catch (lockErr) {
+        console.error("[AdminMember PATCH] Lock clear failed:", lockErr);
+        lockStatus = `Member disabled but lock code could not be cleared — run Lock Sync. ${LOCK_FAILURE_MSG}`;
+      }
+    } else if (
+      data.pin_code &&
+      data.pin_code_slot &&
+      !data.disabled &&
+      (isUpgrade || "pin_code" in update || "pin_code_slot" in update)
+    ) {
+      // PIN was updated or member was upgraded — sync to lock
+      try {
+        const lockResults = await setUserCode(data.pin_code_slot, data.pin_code);
+        lockStatus = formatLockStatus(lockResults);
+      } catch (lockErr) {
+        console.error("[AdminMember PATCH] Lock sync failed:", lockErr);
+        lockStatus = `Member updated but lock sync failed — run Lock Sync. ${LOCK_FAILURE_MSG}`;
+      }
     }
-  }
 
-  // Migration 031 revoked UPDATE on members from the authenticated role (anon
-  // SDK lockdown), so admin writes must go through the service-role client.
-  // The route is requireAdmin-gated and fields are whitelisted above, so this
-  // is safe.
-  const admin = createServiceClient();
-  const { data, error } = await admin
-    .from("members")
-    .update(update)
-    .eq("id", Number(id))
-    .select()
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  // Sync lock
-  let lockStatus: string | null = null;
-
-  if ("disabled" in update && data.disabled && data.pin_code_slot) {
-    // Member was just disabled — clear their lock code
-    try {
-      const lockResults = await clearUserCode(data.pin_code_slot);
-      lockStatus = formatLockStatus(lockResults);
-    } catch (lockErr) {
-      console.error("[AdminMember PATCH] Lock clear failed:", lockErr);
-      lockStatus = `Member disabled but lock code could not be cleared — run Lock Sync. ${LOCK_FAILURE_MSG}`;
-    }
-  } else if (
-    data.pin_code &&
-    data.pin_code_slot &&
-    !data.disabled &&
-    (isUpgrade || "pin_code" in update || "pin_code_slot" in update)
-  ) {
-    // PIN was updated or member was upgraded — sync to lock
-    try {
-      const lockResults = await setUserCode(data.pin_code_slot, data.pin_code);
-      lockStatus = formatLockStatus(lockResults);
-    } catch (lockErr) {
-      console.error("[AdminMember PATCH] Lock sync failed:", lockErr);
-      lockStatus = `Member updated but lock sync failed — run Lock Sync. ${LOCK_FAILURE_MSG}`;
-    }
-  }
-
-  return NextResponse.json({ member: data, lock_status: lockStatus });
+    return NextResponse.json({ member: data, lock_status: lockStatus });
+  });
 }
 
-async function guardedDELETE(
+export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -171,84 +173,78 @@ async function guardedDELETE(
   const supabase = await createClient();
   const { id } = await params;
 
-  // Fetch the member first so we can clear their lock code and check for
-  // state that deleting the member row would leave orphaned (see below).
-  const { data: member } = await supabase
-    .from("members")
-    .select("pin_code_slot, email")
-    .eq("id", Number(id))
-    .single();
+  return withWebLockWriter(async () => {
+    // Fetch the member first so we can clear their lock code and check for
+    // state that deleting the member row would leave orphaned (see below).
+    const { data: member } = await supabase
+      .from("members")
+      .select("pin_code_slot, email")
+      .eq("id", Number(id))
+      .single();
 
-  // Clear the lock code if they have a slot assigned
-  let lockStatus: string | null = null;
-  if (member?.pin_code_slot) {
-    try {
-      const lockResults = await clearUserCode(member.pin_code_slot);
-      lockStatus = formatLockStatus(lockResults);
-    } catch (err) {
-      console.error("[AdminMember DELETE] Failed to clear lock code:", err);
-      return NextResponse.json({ error: "Member retained: PIN slot quarantined. Retry clear in Lock Sync." }, { status: 502 });
-    }
-  }
-
-  // Service-role client for the write (members DELETE/UPDATE are revoked from
-  // the authenticated role — migration 031). Route is requireAdmin-gated.
-  const admin = createServiceClient();
-
-  // Deleting a member never touches auth.users or applications (see
-  // migration 050) — if this email can still sign in, or has an application
-  // on file, deleting the member row orphans that state. Non-blocking: warn
-  // rather than refuse the delete. This check is a nice-to-have, not a hard
-  // dependency — any failure here (RPC error, query error, thrown exception)
-  // is logged and swallowed so the delete itself always proceeds.
-  let warning: string | null = null;
-  if (member?.email) {
-    try {
-      const [{ data: liveAuthId, error: rpcErr }, { data: staleApplications, error: appsErr }] = await Promise.all([
-        admin.rpc("current_auth_user_for_email", { target_email: member.email }),
-        admin.from("applications").select("id").eq("email", member.email).limit(1),
-      ]);
-      if (rpcErr) console.error("[AdminMember DELETE] stale-link guard rpc failed:", rpcErr);
-      if (appsErr) console.error("[AdminMember DELETE] stale-link guard applications check failed:", appsErr);
-
-      const canStillSignIn = !rpcErr && !!liveAuthId;
-      const hasApplication = !appsErr && (staleApplications ?? []).length > 0;
-
-      if (canStillSignIn && hasApplication) {
-        warning =
-          "This member's email can still sign in and has an application on file — deleting only removed the member record. If they sign in again they may land on an unlinked-application screen; use the stale-links tool to relink them if that happens.";
-      } else if (canStillSignIn) {
-        warning =
-          "This member's email can still sign in — deleting only removed the member record. If they sign in again, use the stale-links tool to relink them if needed.";
-      } else if (hasApplication) {
-        warning =
-          "This member has an application on file under the same email — deleting only removed the member record. The application still refers to it.";
+    // Clear the lock code if they have a slot assigned
+    let lockStatus: string | null = null;
+    if (member?.pin_code_slot) {
+      try {
+        const lockResults = await clearUserCode(member.pin_code_slot);
+        lockStatus = formatLockStatus(lockResults);
+      } catch (err) {
+        console.error("[AdminMember DELETE] Failed to clear lock code:", err);
+        return NextResponse.json({ error: "Member retained: PIN slot quarantined. Retry clear in Lock Sync." }, { status: 502 });
       }
-    } catch (err) {
-      console.error("[AdminMember DELETE] stale-link guard failed:", err);
     }
-  }
 
-  const { error } = await admin
-    .from("members")
-    .delete()
-    .eq("id", Number(id));
+    // Service-role client for the write (members DELETE/UPDATE are revoked from
+    // the authenticated role — migration 031). Route is requireAdmin-gated.
+    const admin = createServiceClient();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+    // Deleting a member never touches auth.users or applications (see
+    // migration 050) — if this email can still sign in, or has an application
+    // on file, deleting the member row orphans that state. Non-blocking: warn
+    // rather than refuse the delete. This check is a nice-to-have, not a hard
+    // dependency — any failure here (RPC error, query error, thrown exception)
+    // is logged and swallowed so the delete itself always proceeds.
+    let warning: string | null = null;
+    if (member?.email) {
+      try {
+        const [{ data: liveAuthId, error: rpcErr }, { data: staleApplications, error: appsErr }] = await Promise.all([
+          admin.rpc("current_auth_user_for_email", { target_email: member.email }),
+          admin.from("applications").select("id").eq("email", member.email).limit(1),
+        ]);
+        if (rpcErr) console.error("[AdminMember DELETE] stale-link guard rpc failed:", rpcErr);
+        if (appsErr) console.error("[AdminMember DELETE] stale-link guard applications check failed:", appsErr);
 
-  return NextResponse.json({
-    success: true,
-    lock_status: lockStatus,
-    ...(warning ? { warning } : {}),
+        const canStillSignIn = !rpcErr && !!liveAuthId;
+        const hasApplication = !appsErr && (staleApplications ?? []).length > 0;
+
+        if (canStillSignIn && hasApplication) {
+          warning =
+            "This member's email can still sign in and has an application on file — deleting only removed the member record. If they sign in again they may land on an unlinked-application screen; use the stale-links tool to relink them if that happens.";
+        } else if (canStillSignIn) {
+          warning =
+            "This member's email can still sign in — deleting only removed the member record. If they sign in again, use the stale-links tool to relink them if needed.";
+        } else if (hasApplication) {
+          warning =
+            "This member has an application on file under the same email — deleting only removed the member record. The application still refers to it.";
+        }
+      } catch (err) {
+        console.error("[AdminMember DELETE] stale-link guard failed:", err);
+      }
+    }
+
+    const { error } = await admin
+      .from("members")
+      .delete()
+      .eq("id", Number(id));
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      lock_status: lockStatus,
+      ...(warning ? { warning } : {}),
+    });
   });
-}
-
-export async function PATCH(...args: Parameters<typeof guardedPATCH>) {
-  return withWebLockWriter(() => guardedPATCH(...args));
-}
-
-export async function DELETE(...args: Parameters<typeof guardedDELETE>) {
-  return withWebLockWriter(() => guardedDELETE(...args));
 }
