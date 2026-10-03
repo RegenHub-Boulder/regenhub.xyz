@@ -14,9 +14,8 @@
   --color-card: var(--card);
   --color-border: var(--border);
   --color-ring: var(--ring);
-  /* Shared UI tokens without palette definitions retain their existing fallback behavior. */
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
+  /* Shared UI tokens are paired with existing palette colours in :root.
+     Destructive tokens stay unmapped (no palette colour yet), preserving prior behaviour. */
   --color-input: var(--input);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-accent-foreground: var(--accent-foreground);
@@ -53,6 +52,11 @@
   --card: rgba(30, 55, 36, 0.6);
   --border: rgba(168, 192, 154, 0.2);
   --ring: var(--sage);
+  /* Foregrounds for the light accent/secondary fills: dark text, from the existing palette. */
+  --accent-foreground: var(--forest-deep);
+  --secondary-foreground: var(--forest-deep);
+  --card-foreground: var(--foreground);
+  --input: var(--border);
 
   /* Glass effect values */
   --glass-bg: rgba(30, 55, 36, 0.45);

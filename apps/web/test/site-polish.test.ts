@@ -28,3 +28,12 @@ it("keeps supplied photo descriptions and supplies distinct neutral fallbacks", 
   expect(new Set(alts).size).toBe(25);
   expect(alts[2]).toBe("RegenHub community photo 3 of 25");
 });
+
+it("pairs every light fill token with a defined dark foreground", () => {
+  const css = source("app/globals.css");
+  for (const token of ["accent-foreground", "secondary-foreground", "card-foreground", "input"]) {
+    expect(css).toMatch(new RegExp(`--color-${token}: var\\(--${token}\\)`));
+    expect(css).toMatch(new RegExp(`\\n\\s*--${token}: `));
+  }
+  expect(css).toMatch(/--accent-foreground: var\(--forest-deep\)/);
+});
