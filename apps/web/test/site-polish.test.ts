@@ -37,3 +37,9 @@ it("pairs every light fill token with a defined dark foreground", () => {
   }
   expect(css).toMatch(/--accent-foreground: var\(--forest-deep\)/);
 });
+
+it("keeps ghost and outline hovers as a subtle tint so caller text colours stay readable", () => {
+  const button = source("components/ui/button.tsx");
+  expect(button).not.toMatch(/hover:bg-accent/);
+  expect(button).toMatch(/ghost: "hover:bg-white\/5"/);
+});
