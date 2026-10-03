@@ -24,16 +24,24 @@ export function ForestMascot() {
   const [scrollOpacity, setScrollOpacity] = useState(1);
 
   useEffect(() => {
-    const id = setInterval(() => {
-      setMascotX((x) => {
-        const w = window.innerWidth;
-        const nx = x + 2 * mascotDir;
-        if (nx > w) return -200;
-        if (nx < -200) return w;
-        return nx;
-      });
-    }, 50);
-    return () => clearInterval(id);
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let id: ReturnType<typeof setInterval> | undefined;
+    const update = () => {
+      clearInterval(id);
+      if (media.matches) return;
+      id = setInterval(() => {
+        setMascotX((x) => {
+          const w = window.innerWidth;
+          const nx = x + 2 * mascotDir;
+          if (nx > w) return -200;
+          if (nx < -200) return w;
+          return nx;
+        });
+      }, 50);
+    };
+    update();
+    media.addEventListener("change", update);
+    return () => { clearInterval(id); media.removeEventListener("change", update); };
   }, [mascotDir]);
 
   useEffect(() => {
