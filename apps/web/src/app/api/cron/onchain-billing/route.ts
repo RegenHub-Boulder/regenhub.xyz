@@ -69,7 +69,7 @@ export async function POST(req: Request) {
     try { confirmations.push(await processOnchainInvoice(admin, invoice.id)); }
     catch (cause) { confirmations.push({ status: "retry_error", invoiceId: invoice.id, error: cause instanceof Error ? cause.message : "unknown" }); }
   }
-  await retryPendingOnchainEffects(admin);
+  const effectsFailures = await retryPendingOnchainEffects(admin);
   const finalized = await advanceFinalizedOnchainPayments(admin);
-  return NextResponse.json({ gaslessRelays, invoicesCreated: created.length, remindersSent, pastDue, confirmations, finalized });
+  return NextResponse.json({ gaslessRelays, invoicesCreated: created.length, remindersSent, pastDue, confirmations, effectsFailures, finalized });
 }

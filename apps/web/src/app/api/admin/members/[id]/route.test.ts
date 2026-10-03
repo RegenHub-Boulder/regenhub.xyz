@@ -133,5 +133,5 @@ it("explicit admin enable clears disabled", async () => {
   expect((await response.json()).member.disabled).toBe(false);
   const builder = vi.mocked(admin.from).mock.results[0].value;
   expect(builder.update).toHaveBeenCalledWith({ disabled: false });
-  expect(setUserCode).toHaveBeenCalledWith(12, "123456");
+  expect(setUserCode).not.toHaveBeenCalled();
 });

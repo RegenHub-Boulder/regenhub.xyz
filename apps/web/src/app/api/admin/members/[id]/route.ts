@@ -126,7 +126,7 @@ export async function PATCH(
     data.pin_code &&
     data.pin_code_slot &&
     !data.disabled &&
-    (isUpgrade || "pin_code" in update || "pin_code_slot" in update || (current.disabled && update.disabled === false))
+    (isUpgrade || "pin_code" in update || "pin_code_slot" in update)
   ) {
     // PIN was updated or member was upgraded — sync to lock
     try {
