@@ -1,11 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { makeSupabaseMock } from "../../../../../../test/mockSupabase";
 
+vi.mock("@regenhub/shared", () => ({
+  setUserCode: vi.fn(async () => []), clearUserCode: vi.fn(),
+  formatLockStatus: () => "ok", generateRandomCode: vi.fn(),
+  MEMBER_SLOT_MIN: 1, MEMBER_SLOT_MAX: 100, LOCK_FAILURE_MSG: "failed",
+}));
 vi.mock("@/lib/admin", () => ({ requireAdmin: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createServiceClient: vi.fn() }));
 
-import { DELETE } from "./route";
+import { setUserCode } from "@regenhub/shared";
+import { DELETE, PATCH } from "./route";
 import { requireAdmin } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
@@ -115,4 +121,17 @@ describe("DELETE /api/admin/members/[id]", () => {
     expect(json.warning).toMatch(/can still sign in/);
     expect(json.warning).toMatch(/application on file/);
   });
+});
+
+it("explicit admin enable clears disabled", async () => {
+  vi.mocked(requireAdmin).mockResolvedValue(ADMIN_USER as never);
+  vi.mocked(createClient).mockResolvedValue(makeSupabaseMock({ selects: { members: { data: { id: 7, disabled: true, member_type: "day_pass" } } } }) as never);
+  const admin = makeSupabaseMock({ selects: { members: { data: { id: 7, disabled: false, pin_code_slot: 12, pin_code: "123456" } } } });
+  vi.mocked(createServiceClient).mockReturnValue(admin as never);
+  const response = await PATCH(new Request("http://localhost/api/admin/members/7", { method: "PATCH", body: JSON.stringify({ disabled: false }) }), ctx);
+  expect(response.status).toBe(200);
+  expect((await response.json()).member.disabled).toBe(false);
+  const builder = vi.mocked(admin.from).mock.results[0].value;
+  expect(builder.update).toHaveBeenCalledWith({ disabled: false });
+  expect(setUserCode).toHaveBeenCalledWith(12, "123456");
 });

@@ -34,12 +34,26 @@ function memberUpdates(sb: ReturnType<typeof makeSupabaseMock>) {
 }
 
 describe("membership lifecycle", () => {
+  it.each(["Stripe", "on-chain"])("%s activation preserves admin disable on late events and retries", async () => {
+    const member = { id: 41, disabled: true };
+    const sb = makeSupabaseMock({ selects: { members: { data: member } } });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await activateMembershipAccess(sb as never, {
+        memberId: 41, currentPinSlot: null, grantsMemberType: "hot_desk",
+      });
+    }
+    expect(memberUpdates(sb)).toEqual([]);
+    expect(member.disabled).toBe(true);
+    expect(allocateSlotWithRetry).not.toHaveBeenCalled();
+    expect(setUserCode).not.toHaveBeenCalled();
+  });
+
   it("keeps the shared billing grace at seven days", () => {
     expect(BILLING_GRACE_DAYS).toBe(7);
   });
 
   it("activates a contributing member without allocating a permanent PIN", async () => {
-    const sb = makeSupabaseMock();
+    const sb = makeSupabaseMock({ selects: { members: { data: { id: 41, disabled: false } } } });
 
     const result = await activateMembershipAccess(sb as never, {
       memberId: 41,
@@ -47,13 +61,13 @@ describe("membership lifecycle", () => {
       grantsMemberType: "day_pass",
     });
 
-    expect(memberUpdates(sb)).toContainEqual({ member_type: "day_pass", disabled: false });
+    expect(memberUpdates(sb)).toContainEqual({ member_type: "day_pass" });
     expect(allocateSlotWithRetry).not.toHaveBeenCalled();
     expect(result).toEqual({ autoAllocatedSlot: null, autoAllocationFailure: null });
   });
 
   it("allocates and pushes a permanent PIN for a new desk member", async () => {
-    const sb = makeSupabaseMock({ selects: { members: { data: [] } } });
+    const sb = makeSupabaseMock({ selects: { members: { data: { id: 41, disabled: false } } } });
     vi.mocked(allocateSlotWithRetry).mockImplementation(async (options: never) => {
       const { tryInsert } = options as { tryInsert: (slot: number) => Promise<unknown> };
       await tryInsert(22);
@@ -67,7 +81,7 @@ describe("membership lifecycle", () => {
       grantsMemberType: "hot_desk",
     });
 
-    expect(memberUpdates(sb)).toContainEqual({ member_type: "hot_desk", disabled: false });
+    expect(memberUpdates(sb)).toContainEqual({ member_type: "hot_desk" });
     expect(memberUpdates(sb)).toContainEqual({ pin_code_slot: 22, pin_code: "654321" });
     expect(setUserCode).toHaveBeenCalledWith(22, "654321");
     expect(result).toEqual({ autoAllocatedSlot: 22, autoAllocationFailure: null });

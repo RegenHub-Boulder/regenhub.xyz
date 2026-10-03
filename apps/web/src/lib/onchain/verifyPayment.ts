@@ -123,11 +123,12 @@ async function completePaymentEffects(
     ]);
     if (!member || !plan) throw new Error("credited payment has no member or plan");
 
-    await activateMembershipAccess(admin, {
+    const activation = await activateMembershipAccess(admin, {
       memberId: member.id,
       currentPinSlot: member.pin_code_slot,
       grantsMemberType: plan.grantsMemberType,
     });
+    if (activation.autoAllocationFailure) throw new Error(activation.autoAllocationFailure);
     await grantSubscriptionPasses(admin, {
       memberId: member.id,
       subscriptionId: args.subscriptionId,
