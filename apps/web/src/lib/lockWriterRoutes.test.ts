@@ -8,6 +8,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createServiceClient: vi.fn() }));
 vi.mock("@/lib/stripe", () => ({ getStripe: vi.fn(), isStripeConfigured: () => false }));
 
 const routes = [
+  { name: "admin onchain subscription", load: () => import("../app/api/admin/members/[id]/onchain-subscription/route"), admin: true },
   { name: "admin lock sync", load: () => import("../app/api/admin/lock-sync/route"), admin: true },
   { name: "admin quarantine", load: () => import("../app/api/admin/lock-quarantine/route"), admin: true },
   { name: "admin quickcode", load: () => import("../app/api/admin/quickcode/route"), admin: true },
@@ -39,6 +40,10 @@ describe.each(routes)("$name authorization before reservation", ({ load, admin }
       const response = await handler(new Request("http://localhost/test", { method: "POST", body: "{}" }), { params: Promise.resolve({ id: "1" }) });
       if (state === "disabled-admin") expect(response.status).toBe(403);
       else expect([401, 403]).toContain(response.status);
+      if (admin) {
+        expect(createServiceClient).not.toHaveBeenCalled();
+        expect(service.from).not.toHaveBeenCalled();
+      }
       expect(service.rpc).not.toHaveBeenCalled();
       expect(session.rpc).not.toHaveBeenCalled();
     });

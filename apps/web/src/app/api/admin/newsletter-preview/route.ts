@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/admin";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
@@ -21,6 +22,8 @@ import {
  * before the real biweekly send.
  */
 export async function POST() {
+  if (!await requireAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
