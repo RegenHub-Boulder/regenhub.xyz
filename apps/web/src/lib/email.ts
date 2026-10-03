@@ -1,10 +1,20 @@
 import { Resend } from "resend";
 
 let resendClient: Resend | null = null;
+let resendTimeoutInstalled = false;
 
 function getResend(): Resend | null {
   if (!process.env.RESEND_API_KEY) return null;
   if (!resendClient) resendClient = new Resend(process.env.RESEND_API_KEY);
+  if (resendClient && !resendTimeoutInstalled) {
+    const fetchRequest = resendClient.fetchRequest.bind(resendClient);
+    // SDK 6.12.4 passes these options directly to fetch (dist/index.mjs).
+    resendClient.fetchRequest = (path, options = {}) => fetchRequest(path, {
+      ...options, signal: AbortSignal.timeout(30_000),
+    });
+    resendTimeoutInstalled = true;
+  }
+
   return resendClient;
 }
 

@@ -17,7 +17,7 @@ import { sendBatch, retryFailed, prepareIssue } from "./newsletterSend";
 const provider = vi.mocked(sendEmailDetailed);
 function database(count = 1) {
   let active = false;
-  const row = { id: 1, email: "a@example.com", name: null, status: "pending", attempts: 0, claim_token: "", claimed_at: 0, first_attempt_at: 0, payload: null as unknown };
+  const row = { id: 1, email: "a@example.com", name: null, status: "pending", attempts: 0, claim_token: "", claimed_at: 0, first_attempt_at: null as number | null, payload: null as unknown };
   const recipients = Array.from({ length: count }, (_, i) => i === 0 ? row : { ...row, id: i + 1, email: `recipient${i}@example.com` });
   let writes = 0;
   const admin = {
@@ -31,9 +31,15 @@ function database(count = 1) {
       if (name === "newsletter_claim_recipient") {
         const row = recipients.find((r) => r.id === args.p_id)!;
         const now = Date.now();
-        if (row.status !== "pending" && !(row.status === "sending" && now - row.claimed_at >= 900000 && now - row.first_attempt_at < 82800000)) return { data: [], error: null };
+        if (row.status !== "pending" && !(row.status === "sending" && now - row.claimed_at >= 900000 && (row.first_attempt_at === null || now - row.first_attempt_at < 82800000))) return { data: [], error: null };
         row.status = "sending"; row.claim_token = String(args.p_token); row.claimed_at = now;
-        row.first_attempt_at ||= now; row.payload ||= args.p_payload;
+        row.payload ||= args.p_payload;
+        return { data: [{ ...row }], error: null };
+      }
+      if (name === "newsletter_dispatch_recipient") {
+        const row = recipients.find((r) => r.id === args.p_id)!;
+        if (row.claim_token !== args.p_token || row.status !== "sending" || Date.now() - row.claimed_at >= 900000) return { data: [], error: null };
+        row.first_attempt_at ??= Date.now();
         return { data: [{ ...row }], error: null };
       }
       if (name === "newsletter_prepare") return { data: 1, error: null };

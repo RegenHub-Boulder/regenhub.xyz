@@ -52,7 +52,7 @@ export async function issueProgress(admin: Admin, issueId: number): Promise<Prog
     else {
       p.pending++;
       if (r.status === "sending") p.sending++;
-      if (r.status === "unknown") p.unknown++;
+      if (r.status === "unknown" || r.status === "needs_review") p.unknown++;
     }
   }
   p.done = p.total > 0 && p.pending === 0;
@@ -113,15 +113,25 @@ export async function sendBatch(
       if (claimError) throw claimError;
       if (!claims?.length) continue;
       const claim = claims[0];
+      const dispatchStarted = performance.now();
+      const { data: dispatches, error: dispatchError } = await admin.rpc("newsletter_dispatch_recipient", {
+        p_issue: issueId, p_id: row.id, p_token: token,
+      });
+      if (dispatchError) throw dispatchError;
+      if (!dispatches?.length || performance.now() - dispatchStarted >= 30_000) continue;
+      // A dispatch RPC acknowledgement can itself be delayed. Bound its age
+      // using elapsed local time as well as the database lease/token fence.
       processed++;
+      // An earlier dispatch may have been accepted even when this replay is rejected.
+      const recovering = claim.first_attempt_at != null;
       const result = await sendEmailDetailed(claim.payload);
       const update: Record<string, unknown> = result.ok
         ? { status: "sent", sent_at: new Date().toISOString(), resend_id: result.id ?? null, last_error: null, attempts: claim.attempts + 1 }
-        : result.ambiguous
+        : recovering || result.ambiguous
           ? { status: "sending", last_error: result.error }
           : result.rateLimited || result.quotaExceeded
-            ? { status: "pending", last_error: result.error, first_attempt_at: null }
-            : { status: "failed", last_error: result.error, attempts: claim.attempts + 1, first_attempt_at: null };
+            ? { status: "pending", last_error: result.error }
+            : { status: "failed", last_error: result.error, attempts: claim.attempts + 1 };
       const { data: written, error: writeError } = await admin.from("newsletter_sends").update(update)
         .eq("id", row.id).eq("claim_token", token).eq("status", "sending").select("id");
       if (writeError) throw writeError;
@@ -129,7 +139,7 @@ export async function sendBatch(
       if (result.ok) sent++;
       else if (result.quotaExceeded) { quotaReached = true; break; }
       else if (result.rateLimited) { rateLimited++; await sleep(RATE_LIMIT_BACKOFF_MS); }
-      else if (!result.ambiguous) failed++;
+      else if (!recovering && !result.ambiguous) failed++;
       await sleep(RATE_DELAY_MS);
     }
   } finally {

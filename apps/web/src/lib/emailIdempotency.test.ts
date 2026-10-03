@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 const { send } = vi.hoisted(() => ({ send: vi.fn() }));
-vi.mock("resend", () => ({ Resend: class { emails = { send }; } }));
+vi.mock("resend", () => ({ Resend: class { fetchRequest = vi.fn(); emails = { send }; } }));
 import { sendEmailDetailed } from "./email";
 afterEach(() => { vi.unstubAllEnvs(); send.mockReset(); });
 const input = { to: "test@example.com", subject: "test", html: "hello", idempotencyKey: "newsletter:1:1" };
