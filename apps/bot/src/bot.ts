@@ -807,6 +807,12 @@ async function handleNewCodeFlow(chatId: number, text: string, p: PendingAction)
 
   await bot.sendMessage(chatId, "⏳ Programming door locks...");
   try {
+    const { data: member } = await db.from("members").select("id")
+      .eq("id", p.data.userId as number).eq("disabled", false).maybeSingle();
+    if (!member) {
+      clearPending(chatId);
+      return bot.sendMessage(chatId, "Member not found or disabled.");
+    }
     const lockResults = await setUserCode(p.data.slot as number, code);
     await db.from("members").update({ pin_code: code }).eq("id", p.data.userId as number);
     clearPending(chatId);
@@ -1031,6 +1037,12 @@ async function handleChangeToCallback(chatId: number, userId: number, data: stri
   const memberName = p.data.memberName as string;
   const currentType = p.data.currentType as string;
   const currentSlot = p.data.currentSlot as number | null;
+  const { data: eligible } = await db.from("members").select("id")
+    .eq("id", memberId).eq("disabled", false).maybeSingle();
+  if (!eligible) {
+    clearPending(chatId);
+    return bot.sendMessage(chatId, "Member not found or disabled.");
+  }
 
   clearPending(chatId);
 
@@ -1057,6 +1069,7 @@ async function handleChangeToCallback(chatId: number, userId: number, data: stri
         db.from("members")
           .update({ member_type: newType, pin_code_slot: slot, pin_code: code })
           .eq("id", memberId)
+          .eq("disabled", false)
           .select("id, pin_code_slot")
           .single(),
     });

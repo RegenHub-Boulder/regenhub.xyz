@@ -94,7 +94,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ error: subscriptionError?.message ?? "Could not create subscription" }, { status: 400 });
   }
 
-  await activateMembershipAccess(admin, {
+  const activation = await activateMembershipAccess(admin, {
     memberId,
     currentPinSlot: member.pin_code_slot,
     grantsMemberType: plan.grantsMemberType,
@@ -107,5 +107,5 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     payload: { member_id: memberId, plan_key: body.plan_key, monthly_cents: monthlyCents, wallet: address },
   }, admin);
 
-  return NextResponse.json({ subscription, wallet_id: walletId, invoices_created: invoices.length });
+  return NextResponse.json({ subscription, wallet_id: walletId, invoices_created: invoices.length, access_warning: activation.autoAllocationFailure });
 }

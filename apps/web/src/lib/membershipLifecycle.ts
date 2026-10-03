@@ -34,13 +34,26 @@ export async function activateMembershipAccess(
     grantsMemberType: MemberType | null;
   },
 ): Promise<ActivationResult> {
+  // Admin disable is independent of payment state; billing never clears it.
+  const { data: member, error: memberError } = await admin
+    .from("members")
+    .select("disabled")
+    .eq("id", args.memberId)
+    .single();
+  if (memberError) throw memberError;
+  if (!member) throw new Error("Membership member not found");
+  if (member.disabled) return { autoAllocatedSlot: null, autoAllocationFailure: null };
+
   if (args.grantsMemberType) {
-    await admin
+    const { data: updated, error } = await admin
       .from("members")
-      .update({ member_type: args.grantsMemberType, disabled: false })
-      .eq("id", args.memberId);
-  } else {
-    await admin.from("members").update({ disabled: false }).eq("id", args.memberId);
+      .update({ member_type: args.grantsMemberType })
+      .eq("id", args.memberId)
+      .eq("disabled", false)
+      .select("id")
+      .maybeSingle();
+    if (error) throw error;
+    if (!updated) return { autoAllocatedSlot: null, autoAllocationFailure: null };
   }
 
   const needsSlot =
@@ -66,6 +79,7 @@ export async function activateMembershipAccess(
         .from("members")
         .update({ pin_code_slot: slot, pin_code: code })
         .eq("id", args.memberId)
+        .eq("disabled", false)
         .select("id, pin_code_slot")
         .single(),
   });

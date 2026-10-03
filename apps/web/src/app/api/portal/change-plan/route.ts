@@ -51,11 +51,15 @@ export async function POST(req: Request) {
   // Resolve member + their active subscription
   const { data: member } = await supabase
     .from("members")
-    .select("id, name, email")
+    .select("id, name, email, disabled")
     .eq("supabase_user_id", user.id)
     .single();
   if (!member) {
     return NextResponse.json({ error: "Member profile not found" }, { status: 404 });
+  }
+
+  if (member.disabled) {
+    return NextResponse.json({ error: "Member is disabled" }, { status: 403 });
   }
 
   const admin = createServiceClient();
@@ -91,6 +95,22 @@ export async function POST(req: Request) {
 
   if (sub.plan_key === targetKey) {
     return NextResponse.json({ error: "You're already on that plan." }, { status: 400 });
+  }
+
+  // An identity-preserving write makes the local eligibility check atomic.
+  // It does not serialize later Stripe I/O with an admin disable.
+  const { data: eligible, error: eligibilityError } = await admin
+    .from("members")
+    .update({ id: member.id })
+    .eq("id", member.id)
+    .eq("disabled", false)
+    .select("id")
+    .maybeSingle();
+  if (eligibilityError) {
+    return NextResponse.json({ error: "Could not check member access" }, { status: 500 });
+  }
+  if (!eligible) {
+    return NextResponse.json({ error: "Member is disabled" }, { status: 403 });
   }
 
   // Fetch the Stripe subscription to get the current item id (need it to swap)

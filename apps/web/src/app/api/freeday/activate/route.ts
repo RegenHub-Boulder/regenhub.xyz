@@ -188,9 +188,13 @@ export async function POST() {
   // (without this the unlock event lands in access_logs as "unattributed").
   const { data: linkedMember } = await admin
     .from("members")
-    .select("id")
+    .select("id, disabled")
     .eq("email", claim.email)
     .maybeSingle();
+
+  if (linkedMember?.disabled) {
+    return NextResponse.json({ error: "Member is disabled" }, { status: 403 });
+  }
 
   // Atomic slot claim: INSERT-with-retry against the partial unique index.
   // If a concurrent request claims the chosen slot first, retry with the

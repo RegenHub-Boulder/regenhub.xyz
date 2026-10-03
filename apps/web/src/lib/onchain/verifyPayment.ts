@@ -123,11 +123,12 @@ async function completePaymentEffects(
     ]);
     if (!member || !plan) throw new Error("credited payment has no member or plan");
 
-    await activateMembershipAccess(admin, {
+    const activation = await activateMembershipAccess(admin, {
       memberId: member.id,
       currentPinSlot: member.pin_code_slot,
       grantsMemberType: plan.grantsMemberType,
     });
+    if (activation.autoAllocationFailure) throw new Error(activation.autoAllocationFailure);
     await grantSubscriptionPasses(admin, {
       memberId: member.id,
       subscriptionId: args.subscriptionId,
@@ -143,9 +144,11 @@ async function completePaymentEffects(
       .is("effects_completed_at", null);
     if (completeError) throw completeError;
   } catch (error) {
+    // Release the lease while retaining attempt order for fair retries, without
+    // changing credited financial fields or adding a last-attempt column.
     await admin
       .from("onchain_payments")
-      .update({ effects_claimed_at: null })
+      .update({ effects_claimed_at: new Date(Date.now() - EFFECTS_CLAIM_LEASE_MS).toISOString() })
       .eq("id", args.paymentId)
       .eq("effects_claimed_at", claimAt)
       .is("effects_completed_at", null);
@@ -307,22 +310,32 @@ export async function retryPendingOnchainEffects(admin: ServiceClient) {
     .select("id, invoice_id, member_id, onchain_invoices(subscription_id, subscriptions(plan_key))")
     .eq("match_status", "credited")
     .is("effects_completed_at", null)
+    .order("effects_claimed_at", { ascending: true, nullsFirst: true })
+    .order("id", { ascending: true })
     .limit(50);
   if (error) throw error;
+  const failures: { paymentId: number; error: string }[] = [];
   for (const payment of pending ?? []) {
     const invoice = payment.onchain_invoices as unknown as {
       subscription_id: number;
       subscriptions: { plan_key: string } | null;
     } | null;
     if (!invoice?.subscriptions) continue;
-    await completePaymentEffects(admin, {
-      paymentId: payment.id,
-      invoiceId: payment.invoice_id,
-      memberId: payment.member_id,
-      subscriptionId: invoice.subscription_id,
-      planKey: invoice.subscriptions.plan_key,
-    });
+    try {
+      await completePaymentEffects(admin, {
+        paymentId: payment.id,
+        invoiceId: payment.invoice_id,
+        memberId: payment.member_id,
+        subscriptionId: invoice.subscription_id,
+        planKey: invoice.subscriptions.plan_key,
+      });
+    } catch (cause) {
+      const error = cause instanceof Error ? cause.message : String(cause);
+      console.error(`[OnchainBilling] Payment ${payment.id} effects failed:`, cause);
+      failures.push({ paymentId: payment.id, error });
+    }
   }
+  return failures;
 }
 
 /** Mark included/safe credits finalized once OP's finalized head passes them. */
