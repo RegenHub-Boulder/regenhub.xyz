@@ -21,7 +21,7 @@ for (const seconds of [30, 120, 121]) {
       lock_slot_writer: { data: { acquired_at: new Date(Date.now() - seconds * 1000).toISOString(), holder_label: "Bot PIN writer", token: "private-token" } },
       lock_slot_quarantine: { data: [] },
     } });
-    vi.mocked(createClient).mockResolvedValue(makeSupabaseMock() as never);
+    vi.mocked(createClient).mockResolvedValue(makeSupabaseMock({ auth: { user: { id: "admin", email: "admin@example.test" } }, selects: { members: { data: { is_admin: true, disabled: false } } } }) as never);
     vi.mocked(createServiceClient).mockReturnValue(service as never);
     const markup = renderToStaticMarkup(await AccessPage());
     expect(markup).toContain(`Bot PIN writer for ${seconds} seconds`);
@@ -33,7 +33,22 @@ for (const seconds of [30, 120, 121]) {
   });
 }
 it("shows no held reservation when free", async () => {
-  vi.mocked(createClient).mockResolvedValue(makeSupabaseMock() as never);
+  vi.mocked(createClient).mockResolvedValue(makeSupabaseMock({ auth: { user: { id: "admin", email: "admin@example.test" } }, selects: { members: { data: { is_admin: true, disabled: false } } } }) as never);
   vi.mocked(createServiceClient).mockReturnValue(makeSupabaseMock() as never);
   expect(renderToStaticMarkup(await AccessPage())).not.toContain("Door-code writer held");
 });
+
+for (const state of ["unauthenticated", "non-admin", "disabled-admin"]) {
+  it(`denies ${state} before any service-role read`, async () => {
+    const session = makeSupabaseMock({
+      auth: { user: state === "unauthenticated" ? null : { id: "caller", email: "caller@example.test" } },
+      selects: { members: { data: { is_admin: state === "disabled-admin", disabled: state === "disabled-admin" } } },
+    });
+    const service = makeSupabaseMock();
+    vi.mocked(createClient).mockResolvedValue(session as never);
+    vi.mocked(createServiceClient).mockReturnValue(service as never);
+    await expect(AccessPage()).rejects.toThrow("NEXT_REDIRECT");
+    expect(createServiceClient).not.toHaveBeenCalled();
+    expect(service.from).not.toHaveBeenCalled();
+  });
+}

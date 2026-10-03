@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/admin";
 import { withWebLockWriter } from "@/lib/lockWriter";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -18,12 +19,7 @@ export async function POST(
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: adminMember } = await supabase
-    .from("members")
-    .select("is_admin")
-    .eq("supabase_user_id", user.id)
-    .single();
-  if (!adminMember?.is_admin) {
+  if (!await requireAdmin()) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { requireAdmin } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { QuarantinedSlots, type QuarantinedSlot } from "@/components/admin/QuarantinedSlots";
 import { createClient } from "@/lib/supabase/server";
@@ -15,6 +17,7 @@ const TABS: TabDef<AccessTab>[] = [
 ];
 
 export default async function AccessPage() {
+  if (!await requireAdmin()) redirect("/portal");
   const supabase = await createClient();
   const service = createServiceClient();
   const { data: quarantine, error: quarantineError } = await service.from("lock_slot_quarantine")

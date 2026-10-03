@@ -24,11 +24,12 @@ const routes = [
 
 beforeEach(() => vi.clearAllMocks());
 describe.each(routes)("$name authorization before reservation", ({ load, admin }) => {
-  for (const authenticated of admin ? [false, true] : [false]) {
-    it(`${authenticated ? "non-admin" : "unauthenticated"} request never acquires`, async () => {
+  for (const state of admin ? ["unauthenticated", "non-admin", "disabled-admin"] : ["unauthenticated"]) {
+    const authenticated = state !== "unauthenticated";
+    it(`${state} request never acquires`, async () => {
       const session = makeSupabaseMock({
         auth: { user: authenticated ? { id: "regular-user", email: "member@example.test" } : null },
-        selects: { members: { data: { is_admin: false, disabled: false } } },
+        selects: { members: { data: { is_admin: state === "disabled-admin", disabled: state === "disabled-admin" } } },
       });
       const service = makeSupabaseMock();
       vi.mocked(createClient).mockResolvedValue(session as never);
@@ -36,7 +37,8 @@ describe.each(routes)("$name authorization before reservation", ({ load, admin }
       const route = await load();
       const handler = route.POST as (request: Request, context: { params: Promise<{ id: string }> }) => Promise<Response>;
       const response = await handler(new Request("http://localhost/test", { method: "POST", body: "{}" }), { params: Promise.resolve({ id: "1" }) });
-      expect([401, 403]).toContain(response.status);
+      if (state === "disabled-admin") expect(response.status).toBe(403);
+      else expect([401, 403]).toContain(response.status);
       expect(service.rpc).not.toHaveBeenCalled();
       expect(session.rpc).not.toHaveBeenCalled();
     });
@@ -57,4 +59,23 @@ it.each([
   const handler = route.POST as (request: Request, context: { params: Promise<{ id: string }> }) => Promise<Response>;
   expect((await handler(new Request("http://localhost/test", { method: "POST", body: JSON.stringify(body) }), { params: Promise.resolve({ id }) })).status).toBe(400);
   expect(service.rpc).not.toHaveBeenCalled();
+});
+
+it.each([
+  { name: "send approval email", load: () => import("../app/api/admin/members/[id]/send-approval-email/route") },
+  { name: "send payment reminder", load: () => import("../app/api/admin/members/[id]/send-payment-reminder/route") },
+  { name: "create checkout", load: () => import("../app/api/admin/members/[id]/create-checkout/route") },
+])("$name rejects disabled admins before service access", async ({ load }) => {
+  const session = makeSupabaseMock({
+    auth: { user: { id: "disabled-admin", email: "admin@example.test" } },
+    selects: { members: { data: { is_admin: true, disabled: true } } },
+  });
+  const service = makeSupabaseMock();
+  vi.mocked(createClient).mockResolvedValue(session as never);
+  vi.mocked(createServiceClient).mockReturnValue(service as never);
+  const { POST } = await load();
+  const response = await POST(new Request("http://localhost/test", { method: "POST", body: "{}" }), { params: Promise.resolve({ id: "1" }) });
+  expect(response.status).toBe(403);
+  expect(createServiceClient).not.toHaveBeenCalled();
+  expect(service.from).not.toHaveBeenCalled();
 });

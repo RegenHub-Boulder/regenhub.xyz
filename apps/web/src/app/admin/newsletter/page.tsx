@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { requireAdmin } from "@/lib/admin";
 import type { Metadata } from "next";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { NewsletterManager } from "@/components/admin/NewsletterManager";
@@ -10,11 +12,13 @@ export const dynamic = "force-dynamic";
  * on the right composes/sends the selected one or a fresh draft. Drafts are
  * authored in Markdown (by an admin or by Claude via the newsletter skill),
  * previewed as the real email, then sent transparently with per-recipient
- * tracking. The /admin layout gates access to admins; newsletter_issues isn't in
+ * tracking. The page verifies an active admin before service-role reads.
+ * newsletter_issues isn't in
  * the generated Database types yet, so we read via the untyped service client
  * (consistent with the newsletter API routes).
  */
 export default async function NewsletterPage() {
+  if (!await requireAdmin()) redirect("/portal");
   const supabase = createServiceClient();
   const { data: issues } = await supabase
     .from("newsletter_issues")
