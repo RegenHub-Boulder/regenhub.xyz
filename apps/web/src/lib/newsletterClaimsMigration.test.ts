@@ -4,9 +4,10 @@ import { migrationNumber } from './migrations';
 
 const path = new URL('../../../../supabase/migrations/055_newsletter_claims.sql', import.meta.url);
 const sql = readFileSync(path, 'utf8');
-it('ships newsletter claims as 054, leaving 053 for the lock-slot migration', () => {
-  expect(migrationNumber('055_newsletter_claims.sql')).toBe(54);
+it('ships newsletter claims as 055, after lock-slot migrations 053 and 054', () => {
+  expect(migrationNumber('055_newsletter_claims.sql')).toBe(55);
   expect(existsSync(new URL('../../../../supabase/migrations/053_newsletter_claims.sql', import.meta.url))).toBe(false);
+  expect(existsSync(new URL('../../../../supabase/migrations/054_newsletter_claims.sql', import.meta.url))).toBe(false);
 });
 it('dispatch authorization fences both leases and retains original dispatch provenance', () => {
   const dispatch = sql.split('create or replace function public.newsletter_dispatch_recipient')[1].split('end $$;')[0];
