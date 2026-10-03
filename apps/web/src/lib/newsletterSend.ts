@@ -1,15 +1,5 @@
-/**
- * Transparent, resumable newsletter send engine.
- *
- * The audience is materialized into one `newsletter_sends` row per recipient
- * (status pending). A send then works through those rows in small rate-limited
- * batches, marking each sent/failed, retrying, and backing off on Resend rate
- * limits. Because the ledger is the source of truth:
- *   - re-running never double-sends (unique issue_id+email + status check)
- *   - a crash/timeout mid-send is fully resumable (just call sendBatch again)
- *   - "did everyone get it?" is answerable exactly (count by status)
- */
-
+import { defaultEmailFrom, defaultEmailReplyTo } from "@regenhub/shared";
+import { randomUUID } from "crypto";
 import type { createServiceClient } from "@/lib/supabase/admin";
 import { compileAudience } from "@/lib/newsletter";
 import { renderDraftEmail } from "@/lib/newsletterMarkdown";
@@ -20,57 +10,50 @@ type Admin = ReturnType<typeof createServiceClient>;
 
 const RATE_DELAY_MS = 600;      // ~1.6/s between sends — under Resend's default
 const RATE_LIMIT_BACKOFF_MS = 2500;
-const MAX_ATTEMPTS = 5;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export interface Progress {
   total: number;
   sent: number;
-  failed: number;       // terminal failures (attempts exhausted)
-  pending: number;      // includes retriable failures
+  failed: number;       // definitive provider rejection; explicit retry only
+  pending: number;      // includes active claims and unknown delivery
+  sending: number;
+  unknown: number;
   done: boolean;
 }
 
 /** Materialize the audience into pending ledger rows. Idempotent. */
 export async function prepareIssue(admin: Admin, issueId: number): Promise<{ audience: number; total: number }> {
   const audience = await compileAudience(admin);
-  const rows = audience
-    .filter((r) => r.email)
-    .map((r) => ({
-      issue_id: issueId,
-      email: r.email.toLowerCase(),
-      name: r.name,
-      status: "pending" as const,
-    }));
-
-  // Insert in chunks, ignoring rows that already exist for this issue.
-  for (let i = 0; i < rows.length; i += 500) {
-    const chunk = rows.slice(i, i + 500);
-    const { error } = await admin
-      .from("newsletter_sends")
-      .upsert(chunk, { onConflict: "issue_id,email", ignoreDuplicates: true });
-    if (error) console.error("[Newsletter] prepare upsert error:", error);
-  }
-
-  const { count } = await admin
-    .from("newsletter_sends")
-    .select("*", { count: "exact", head: true })
-    .eq("issue_id", issueId);
-  return { audience: rows.length, total: count ?? 0 };
+  const { data, error } = await admin.rpc("newsletter_prepare", {
+    p_issue: issueId, p_rows: audience.filter((r) => r.email),
+  });
+  if (error) throw error;
+  return { audience: audience.length, total: data ?? 0 };
 }
 
 /** Count the ledger by status. */
 export async function issueProgress(admin: Admin, issueId: number): Promise<Progress> {
-  const { data } = await admin
-    .from("newsletter_sends")
-    .select("status, attempts")
-    .eq("issue_id", issueId);
-  const p: Progress = { total: 0, sent: 0, failed: 0, pending: 0, done: false };
-  for (const r of data ?? []) {
+  // Page the ledger; PostgREST's default row cap must not mark a large issue done early.
+  const rows: { status: string; attempts: number }[] = [];
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await admin.from("newsletter_sends")
+      .select("status, attempts").eq("issue_id", issueId)
+      .order("id", { ascending: true }).range(offset, offset + 499);
+    if (error) throw error;
+    rows.push(...(data ?? []));
+    if (!data || data.length < 500) break;
+  }
+  const p: Progress = { total: 0, sent: 0, failed: 0, pending: 0, sending: 0, unknown: 0, done: false };
+  for (const r of rows) {
     p.total++;
     if (r.status === "sent") p.sent++;
-    else if (r.status === "failed" && (r.attempts ?? 0) >= MAX_ATTEMPTS) p.failed++;
-    else p.pending++;
+    else if (r.status === "failed" || r.status === "skipped") p.failed++;
+    else {
+      p.pending++;
+      if (r.status === "sending") p.sending++;
+      if (r.status === "unknown") p.unknown++;
+    }
   }
   p.done = p.total > 0 && p.pending === 0;
   return p;
@@ -78,13 +61,9 @@ export async function issueProgress(admin: Admin, issueId: number): Promise<Prog
 
 /** Reset terminal failures back to pending so they can be retried. */
 export async function retryFailed(admin: Admin, issueId: number): Promise<number> {
-  const { data } = await admin
-    .from("newsletter_sends")
-    .update({ status: "pending", attempts: 0, last_error: null })
-    .eq("issue_id", issueId)
-    .eq("status", "failed")
-    .select("id");
-  return (data ?? []).length;
+  const { data, error } = await admin.rpc("newsletter_retry", { p_issue: issueId });
+  if (error) throw error;
+  return data ?? 0;
 }
 
 export interface BatchResult {
@@ -107,64 +86,55 @@ export async function sendBatch(
   issueId: number,
   opts: { markdown: string; subject: string; siteUrl: string; issueKey?: string; limit?: number },
 ): Promise<BatchResult> {
-  const limit = opts.limit ?? 20;
-
-  const { data: rows } = await admin
-    .from("newsletter_sends")
-    .select("id, email, name, attempts")
-    .eq("issue_id", issueId)
-    .neq("status", "sent")
-    .lt("attempts", MAX_ATTEMPTS)
-    .order("id", { ascending: true })
-    .limit(limit);
-
-  let sent = 0, failed = 0, rateLimited = 0;
+  const token = randomUUID();
+  const { data: snapshots, error } = await admin.rpc("newsletter_begin_run", {
+    p_issue: issueId, p_token: token, p_site: opts.siteUrl,
+  });
+  if (error) throw error;
+  let processed = 0, sent = 0, failed = 0, rateLimited = 0;
   let quotaReached = false;
-
-  const base = opts.siteUrl.replace(/\/$/, "");
-  const archiveHref = opts.issueKey ? `${base}/news/${opts.issueKey}` : `${base}/news`;
-  for (const row of rows ?? []) {
-    const { html, text } = renderDraftEmail(opts.markdown, unsubscribeUrl(row.email, opts.siteUrl), archiveHref);
-    const result = await sendEmailDetailed({ to: row.email, subject: opts.subject, html, text });
-
-    if (result.ok) {
-      sent++;
-      await admin.from("newsletter_sends").update({
-        status: "sent",
-        attempts: (row.attempts ?? 0) + 1,
-        sent_at: new Date().toISOString(),
-        resend_id: result.id ?? null,
-        last_error: null,
-      }).eq("id", row.id);
-    } else if (result.quotaExceeded) {
-      // Daily sending quota reached — won't clear for hours. Leave this recipient
-      // pending (do NOT burn an attempt) and STOP the run: the issue stays
-      // 'sending' and fully resumable once quota resets / plan is bumped.
-      quotaReached = true;
-      await admin.from("newsletter_sends").update({
-        status: "pending",
-        last_error: "daily email quota reached — will resume",
-      }).eq("id", row.id);
-      break;
-    } else if (result.rateLimited) {
-      // Not the recipient's fault — keep pending, don't burn an attempt, back off.
-      rateLimited++;
-      await admin.from("newsletter_sends").update({
-        status: "pending",
-        last_error: "rate limited — will retry",
-      }).eq("id", row.id);
-      await sleep(RATE_LIMIT_BACKOFF_MS);
-    } else {
-      failed++;
-      await admin.from("newsletter_sends").update({
-        status: "failed",
-        attempts: (row.attempts ?? 0) + 1,
-        last_error: result.error ?? "send failed",
-      }).eq("id", row.id);
+  if (!snapshots?.length) return { processed, sent, failed, rateLimited, quotaReached, progress: await issueProgress(admin, issueId) };
+  const snapshot = snapshots[0];
+  try {
+    const { data: rows, error: readError } = await admin.from("newsletter_sends")
+      .select("id, email, name, attempts").eq("issue_id", issueId)
+      .in("status", ["pending", "sending"]).order("id", { ascending: true }).limit(100);
+    if (readError) throw readError;
+    const base = snapshot.site_url.replace(/\/$/, "");
+    for (const row of rows ?? []) {
+      if (processed >= Math.min(Math.max(opts.limit ?? 20, 1), 100)) break;
+      const { html, text } = renderDraftEmail(snapshot.markdown_body,
+        unsubscribeUrl(row.email, snapshot.site_url), `${base}/news/${snapshot.issue_key}`);
+      const payload = { from: defaultEmailFrom(), replyTo: defaultEmailReplyTo(), to: row.email, subject: snapshot.subject, html, text,
+        idempotencyKey: `newsletter:${issueId}:${row.id}` };
+      const { data: claims, error: claimError } = await admin.rpc("newsletter_claim_recipient", {
+        p_issue: issueId, p_id: row.id, p_token: token, p_payload: payload,
+      });
+      if (claimError) throw claimError;
+      if (!claims?.length) continue;
+      const claim = claims[0];
+      processed++;
+      const result = await sendEmailDetailed(claim.payload);
+      const update: Record<string, unknown> = result.ok
+        ? { status: "sent", sent_at: new Date().toISOString(), resend_id: result.id ?? null, last_error: null, attempts: claim.attempts + 1 }
+        : result.ambiguous
+          ? { status: "sending", last_error: result.error }
+          : result.rateLimited || result.quotaExceeded
+            ? { status: "pending", last_error: result.error, first_attempt_at: null }
+            : { status: "failed", last_error: result.error, attempts: claim.attempts + 1, first_attempt_at: null };
+      const { data: written, error: writeError } = await admin.from("newsletter_sends").update(update)
+        .eq("id", row.id).eq("claim_token", token).eq("status", "sending").select("id");
+      if (writeError) throw writeError;
+      if (!written?.length) continue;
+      if (result.ok) sent++;
+      else if (result.quotaExceeded) { quotaReached = true; break; }
+      else if (result.rateLimited) { rateLimited++; await sleep(RATE_LIMIT_BACKOFF_MS); }
+      else if (!result.ambiguous) failed++;
+      await sleep(RATE_DELAY_MS);
     }
-
-    await sleep(RATE_DELAY_MS);
+  } finally {
+    const { error: releaseError } = await admin.rpc("newsletter_end_run", { p_issue: issueId, p_token: token });
+    if (releaseError) throw releaseError;
   }
-
-  return { processed: (rows ?? []).length, sent, failed, rateLimited, quotaReached, progress: await issueProgress(admin, issueId) };
+  return { processed, sent, failed, rateLimited, quotaReached, progress: await issueProgress(admin, issueId) };
 }

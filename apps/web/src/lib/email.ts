@@ -15,6 +15,7 @@ export function isEmailConfigured(): boolean {
 import { defaultEmailFrom as defaultFrom, defaultEmailReplyTo as defaultReplyTo } from "@regenhub/shared";
 
 export interface SendEmailInput {
+  idempotencyKey?: string;
   to: string;
   subject: string;
   html: string;
@@ -62,6 +63,8 @@ export async function sendEmail(input: SendEmailInput): Promise<boolean> {
 }
 
 export interface SendResult {
+  /** Provider acceptance is uncertain; recover only within its idempotency window. */
+  ambiguous?: boolean;
   ok: boolean;
   /** Transient per-second rate limit (429 "too many requests") — back off + retry. */
   rateLimited: boolean;
@@ -97,17 +100,21 @@ export async function sendEmailDetailed(input: SendEmailInput): Promise<SendResu
       html: input.html,
       text: input.text ?? input.html.replace(/<[^>]+>/g, ""),
       replyTo: input.replyTo ?? defaultReplyTo(),
-    });
+    }, { idempotencyKey: input.idempotencyKey });
     if (error) {
       const message = (error as { message?: string }).message ?? "send failed";
       const { rateLimited, quotaExceeded } = classifyError(`${(error as { name?: string }).name ?? ""} ${message}`);
-      return { ok: false, rateLimited, quotaExceeded, error: message };
+      // Only explicit rejection codes are terminal. Unknown/new provider errors
+      // must retain the claim because the request may have been accepted.
+      const rejected = /^(validation_error|invalid_from_address|invalid_parameter|missing_required_field|invalid_api_key|missing_api_key|restricted_api_key|invalid_access|invalid_attachment|invalid_region|security_error)$/.test(error.name);
+      return { ok: false, rateLimited, quotaExceeded, ambiguous: !rateLimited && !quotaExceeded && !rejected, error: message };
     }
-    return { ok: true, rateLimited: false, quotaExceeded: false, id: data?.id };
+    if (!data?.id) return { ok: false, ambiguous: true, rateLimited: false, quotaExceeded: false, error: "Provider returned no message id" };
+    return { ok: true, rateLimited: false, quotaExceeded: false, id: data.id };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     const { rateLimited, quotaExceeded } = classifyError(msg);
-    return { ok: false, rateLimited, quotaExceeded, error: msg };
+    return { ok: false, rateLimited, quotaExceeded, ambiguous: true, error: msg };
   }
 }
 

@@ -6,7 +6,7 @@ import { prepareIssue } from "@/lib/newsletterSend";
 /**
  * POST { issue_id } — materialize the current audience (members + interests −
  * unsubscribes) into pending `newsletter_sends` rows. Idempotent: re-running
- * only adds recipients that aren't already in the ledger for this issue.
+ * only adds recipients while the issue remains an unfrozen draft.
  */
 export async function POST(request: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -18,12 +18,18 @@ export async function POST(request: Request) {
   const admin = createServiceClient();
   const { data: issue } = await admin
     .from("newsletter_issues")
-    .select("id, status")
+    .select("id, status, delivery_snapshot")
     .eq("id", issueId)
     .maybeSingle();
   if (!issue) return NextResponse.json({ error: "issue not found" }, { status: 404 });
-  if (issue.status === "sent") return NextResponse.json({ error: "issue already sent" }, { status: 409 });
+  if (issue.status !== "draft" || issue.delivery_snapshot) return NextResponse.json({ error: "issue is frozen for delivery" }, { status: 409 });
 
-  const result = await prepareIssue(admin, issueId);
-  return NextResponse.json(result);
+  try {
+    return NextResponse.json(await prepareIssue(admin, issueId));
+  } catch (error) {
+    if ((error as { code?: string }).code === "55000") {
+      return NextResponse.json({ error: "issue is frozen for delivery" }, { status: 409 });
+    }
+    throw error;
+  }
 }
