@@ -2,6 +2,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import CommunityGalleryClient from "./CommunityGalleryClient";
 
+import type { GalleryPhoto } from "./galleryPhotos";
+
 const PHOTO_DIR = path.join(process.cwd(), "public", "regenhubphotos");
 const PHOTO_PATTERN = /\.(jpe?g|png|webp)$/i;
 
@@ -15,12 +17,13 @@ const PHOTO_PATTERN = /\.(jpe?g|png|webp)$/i;
  * each visit gets a different ordering.
  */
 export default async function CommunityGallery() {
-  let photos: string[] = [];
+  let photos: GalleryPhoto[] = [];
   try {
     const files = await fs.readdir(PHOTO_DIR);
     photos = files
       .filter((f) => PHOTO_PATTERN.test(f))
-      .map((f) => `/regenhubphotos/${f}`);
+      .sort()
+      .map((f) => ({ src: `/regenhubphotos/${f}` }));
   } catch (err) {
     console.error("[CommunityGallery] Failed to read photo directory:", err);
     return null;

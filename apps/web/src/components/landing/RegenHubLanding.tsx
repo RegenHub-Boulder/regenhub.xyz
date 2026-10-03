@@ -36,10 +36,10 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
       <section className="relative px-6 py-16 md:py-24">
         <div className="max-w-4xl mx-auto text-center">
           <div className="glass-panel-strong p-8 md:p-12 hover-lift animate-fade-in-up">
-            <Image src={regenHubFull} alt="RegenHub" height={160} className="h-32 md:h-40 w-auto mx-auto mb-6" />
-            <p className="text-xl md:text-2xl mb-3 text-muted max-w-2xl mx-auto leading-relaxed">
+            <Image src={regenHubFull} alt="RegenHub" height={160} priority sizes="(min-width: 768px) 294px, 236px" className="h-32 md:h-40 w-auto mx-auto mb-6" />
+            <h1 className="text-xl md:text-2xl mb-3 text-muted max-w-2xl mx-auto leading-relaxed">
               Boulder&apos;s regenerative coworking space
-            </p>
+            </h1>
             <p className="text-base text-muted/80 mb-8 max-w-lg mx-auto">
               A cooperative workspace for builders and changemakers.
               Your first day is free.
