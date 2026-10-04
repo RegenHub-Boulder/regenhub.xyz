@@ -1,3 +1,4 @@
+import { quarantinedSlots } from "./lockSlotSafety.js";
 /**
  * Atomic PIN-slot allocation via INSERT-with-retry.
  *
@@ -50,6 +51,7 @@ export async function allocateSlotWithRetry<T extends object>(opts: AllocateOpts
     }
 
     const used = await opts.getUsedSlots();
+    for (const slot of await quarantinedSlots()) used.add(slot);
 
     let chosen: number | null = null;
     for (let s = opts.min; s <= opts.max; s++) {

@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { requireAdmin } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,6 +10,7 @@ import { FunnelCard } from "@/components/admin/FunnelCard";
 import { effectiveMonthlyCents } from "@/lib/stripeNet";
 
 export default async function AdminPage() {
+  if (!await requireAdmin()) redirect("/portal");
   const supabase = await createClient();
   const admin = createServiceClient();
 

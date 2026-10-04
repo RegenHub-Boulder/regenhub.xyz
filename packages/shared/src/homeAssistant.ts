@@ -1,3 +1,4 @@
+import { assertLockWriter, clearSlotSafely, quarantineSlot, quarantinedSlots, finishSlotSet } from "./lockSlotSafety.js";
 /**
  * Home Assistant integration — Z-Wave lock control
  *
@@ -41,6 +42,7 @@ async function haPost(endpoint: string, data: Record<string, unknown>) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(data),
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!res.ok) {
@@ -56,13 +58,16 @@ async function haPost(endpoint: string, data: Record<string, unknown>) {
 async function haPostWithRetry(
   endpoint: string,
   data: Record<string, unknown>,
-  retries = 3
+  retries = 3,
+  onAttemptFailure?: () => void,
 ): Promise<void> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
+      if (endpoint.includes("lock_usercode")) await assertLockWriter(data.code_slot as number);
       await haPost(endpoint, data);
       return;
     } catch (err) {
+      onAttemptFailure?.();
       if (attempt === retries) throw err;
       await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
     }
@@ -134,7 +139,7 @@ export function evaluateLockHealth(
  * - If some fail -> returns LockResult[] with partial success.
  * - If all succeed -> returns LockResult[] with all ok.
  */
-export async function setUserCode(slot: number, code: string): Promise<LockResult[]> {
+async function pushUserCode(slot: number, code: string): Promise<LockResult[]> {
   const payload = {
     entity_id: "",
     code_slot: slot,
@@ -178,13 +183,17 @@ export async function setUserCode(slot: number, code: string): Promise<LockResul
 /**
  * Clear a user code from all locks. Same resilience pattern as setUserCode.
  */
-export async function clearUserCode(slot: number): Promise<LockResult[]> {
+async function removeUserCode(slot: number): Promise<LockResult[]> {
   const results = await Promise.allSettled(
     LOCK_ENTITIES.map(async (entity) => {
       const data = { entity_id: entity, code_slot: slot };
-      await haPostWithRetry("/services/zwave_js/clear_lock_usercode", data);
+      let uncertainAttempt = false;
+      const markUncertain = () => { uncertainAttempt = true; };
+      await haPostWithRetry("/services/zwave_js/clear_lock_usercode", data, 3, markUncertain);
       await sleep(3000);
-      await haPostWithRetry("/services/zwave_js/clear_lock_usercode", data, 1);
+      await haPostWithRetry("/services/zwave_js/clear_lock_usercode", data, 1, markUncertain);
+      // A later ACK cannot recall a timed-out command still queued in HA.
+      if (uncertainAttempt) throw new Error("Clear had a failed or timed-out attempt; separate clear retry required");
     })
   );
 
@@ -209,6 +218,28 @@ export async function clearUserCode(slot: number): Promise<LockResult[]> {
   }
 
   return lockResults;
+}
+
+/** Guarded transport: every attempt/re-send checks the durable reservation. */
+export async function setUserCode(slot: number, code: string): Promise<LockResult[]> {
+  await assertLockWriter(slot);
+  const alreadyQuarantined = (await quarantinedSlots()).has(slot);
+  await quarantineSlot(slot, "SET in progress or interrupted");
+  try {
+    const results = await pushUserCode(slot, code);
+    // SET never proves an old slot empty. Keep the slot quarantined after
+    // uncertainty; only an explicit all-door CLEAR may release it.
+    if (results.some(r => !r.ok || r.warning)) await quarantineSlot(slot, "SET incomplete; clear required before reuse", results);
+    else if (!alreadyQuarantined) await finishSlotSet(slot);
+    return results;
+  } catch (error) {
+    await quarantineSlot(slot, "SET threw or timed out; clear required before reuse");
+    throw error;
+  }
+}
+
+export async function clearUserCode(slot: number): Promise<LockResult[]> {
+  return clearSlotSafely(slot, () => removeUserCode(slot), LOCK_ENTITIES);
 }
 
 /** Human-readable lock name from entity ID. */
@@ -322,6 +353,7 @@ export async function getEntityState(entityId: string): Promise<string | null> {
   try {
     const res = await fetch(`${HA_URL}/states/${entityId}`, {
       headers: { Authorization: `Bearer ${HA_TOKEN}` },
+      signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { state?: string };

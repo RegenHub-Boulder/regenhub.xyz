@@ -1,3 +1,4 @@
+import { withLockWriter } from "@regenhub/shared";
 import type { MemberType } from "@/lib/supabase/types";
 import { createServiceClient } from "@/lib/supabase/admin";
 import {
@@ -26,7 +27,7 @@ export type ActivationResult = {
  * owns the shared member tier + permanent PIN behavior so Stripe and on-chain
  * payments cannot drift.
  */
-export async function activateMembershipAccess(
+async function activateMembershipAccessImpl(
   admin: ServiceClient,
   args: {
     memberId: number;
@@ -37,7 +38,7 @@ export async function activateMembershipAccess(
   // Admin disable is independent of payment state; billing never clears it.
   const { data: member, error: memberError } = await admin
     .from("members")
-    .select("disabled")
+    .select("disabled, pin_code_slot")
     .eq("id", args.memberId)
     .single();
   if (memberError) throw memberError;
@@ -58,7 +59,7 @@ export async function activateMembershipAccess(
 
   const needsSlot =
     (args.grantsMemberType === "cold_desk" || args.grantsMemberType === "hot_desk") &&
-    !args.currentPinSlot;
+    !member.pin_code_slot;
   if (!needsSlot) {
     return { autoAllocatedSlot: null, autoAllocationFailure: null };
   }
@@ -120,7 +121,7 @@ export type DowngradeResult = {
 };
 
 /** Downgrade a lapsed/canceled membership and revoke its permanent door PIN. */
-export async function downgradeMembershipAccess(
+async function downgradeMembershipAccessImpl(
   admin: ServiceClient,
   args: {
     memberId: number;
@@ -128,7 +129,10 @@ export async function downgradeMembershipAccess(
     revokePermanentPin: boolean;
   },
 ): Promise<DowngradeResult> {
-  const revokedSlot = args.revokePermanentPin ? args.currentPinSlot : null;
+  const { data: current, error: readError } = await admin.from("members")
+    .select("pin_code_slot").eq("id", args.memberId).single();
+  if (readError) throw readError;
+  const revokedSlot = args.revokePermanentPin ? current?.pin_code_slot ?? null : null;
   let lockStatus: string | null = null;
   let lockRevokeFailed = false;
 
@@ -146,7 +150,7 @@ export async function downgradeMembershipAccess(
     pin_code_slot?: null;
     pin_code?: null;
   } = { member_type: "day_pass" };
-  if (revokedSlot) {
+  if (revokedSlot && !lockRevokeFailed) {
     memberUpdate.pin_code_slot = null;
     memberUpdate.pin_code = null;
   }
@@ -156,5 +160,13 @@ export async function downgradeMembershipAccess(
     .update(memberUpdate)
     .eq("id", args.memberId);
 
-  return { revokedSlot, lockStatus, lockRevokeFailed, memberUpdateError };
+  return { revokedSlot: lockRevokeFailed ? null : revokedSlot, lockStatus, lockRevokeFailed, memberUpdateError };
+}
+
+export async function activateMembershipAccess(...args: Parameters<typeof activateMembershipAccessImpl>) {
+  return withLockWriter(args[0], () => activateMembershipAccessImpl(...args));
+}
+
+export async function downgradeMembershipAccess(...args: Parameters<typeof downgradeMembershipAccessImpl>) {
+  return withLockWriter(args[0], () => downgradeMembershipAccessImpl(...args));
 }

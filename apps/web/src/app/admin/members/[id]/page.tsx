@@ -1,6 +1,7 @@
+import { requireAdmin } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { notFound } from "next/navigation";
+import { redirect, notFound } from "next/navigation";
 import { MemberForm } from "@/components/admin/MemberForm";
 import { AddPassesCard } from "@/components/admin/AddPassesCard";
 import { SubscriptionCard } from "@/components/admin/SubscriptionCard";
@@ -20,6 +21,7 @@ function fmtShortDate(iso: string) {
 }
 
 export default async function EditMemberPage({ params }: { params: Promise<{ id: string }> }) {
+  if (!await requireAdmin()) redirect("/portal");
   const { id } = await params;
   const supabase = await createClient();
 
@@ -78,7 +80,7 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
     : null;
 
   // Fetch admin_actions targeting this member (joined with actor name) for the Activity tab.
-  // Service client because admin_actions RLS is admins-only-read; this page itself is an admin page.
+  // Service client after the page-level active-admin check above.
   const adminClient = createServiceClient();
   const { data: rawActions } = await adminClient
     .from("admin_actions")

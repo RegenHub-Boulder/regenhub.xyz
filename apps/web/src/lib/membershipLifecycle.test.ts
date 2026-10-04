@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { makeSupabaseMock } from "../../test/mockSupabase";
 
-vi.mock("@regenhub/shared", () => ({
+vi.mock("@regenhub/shared", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@regenhub/shared")>(),
   MEMBER_SLOT_MIN: 1,
   MEMBER_SLOT_MAX: 100,
   generateRandomCode: vi.fn(() => "654321"),
@@ -88,7 +89,7 @@ describe("membership lifecycle", () => {
   });
 
   it("downgrades a desk member and revokes the permanent PIN", async () => {
-    const sb = makeSupabaseMock();
+    const sb = makeSupabaseMock({ selects: { members: { data: { pin_code_slot: 22 } } } });
     vi.mocked(clearUserCode).mockResolvedValue([{ entity: "lock.front", ok: true }]);
 
     const result = await downgradeMembershipAccess(sb as never, {
@@ -123,4 +124,14 @@ describe("membership lifecycle", () => {
     expect(clearUserCode).not.toHaveBeenCalled();
     expect(memberUpdates(sb)).toContainEqual({ member_type: "day_pass" });
   });
+});
+
+it("uncertain billing clear keeps the current slot even when the caller supplied a stale slot", async () => {
+  const sb = makeSupabaseMock({ selects: { members: { data: { pin_code_slot: 22 } } } });
+  vi.mocked(clearUserCode).mockRejectedValue(new Error("partial clear; quarantined"));
+  const result = await downgradeMembershipAccess(sb as never, { memberId: 41, currentPinSlot: 99, revokePermanentPin: true });
+  expect(clearUserCode).toHaveBeenCalledWith(22);
+  expect(result.lockRevokeFailed).toBe(true);
+  expect(result.revokedSlot).toBeNull();
+  expect(memberUpdates(sb)).toEqual([{ member_type: "day_pass" }]);
 });

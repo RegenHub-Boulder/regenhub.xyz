@@ -1,3 +1,4 @@
+import { withLockWriter } from "@regenhub/shared";
 import TelegramBot from "node-telegram-bot-api";
 import { db, findMemberByTelegram, findAdminByTelegram, type MemberRow } from "./db/supabase.js";
 import { sendEmail, freeDayApprovedEmail, freeDayPlusMembershipApprovedEmail, membershipApprovedEmail } from "./email.js";
@@ -145,7 +146,7 @@ async function handleMyCode(msg: TelegramBot.Message) {
   });
 }
 
-async function handleNewCode(msg: TelegramBot.Message, match: RegExpExecArray | null) {
+async function handleNewCodeImpl(msg: TelegramBot.Message, match: RegExpExecArray | null) {
   await react(msg);
   const user = await findMemberByTelegram(msg.from?.username ?? "");
   if (!user) return bot.sendMessage(msg.chat.id, "Not registered. Contact an admin.");
@@ -180,7 +181,7 @@ async function handleNewCode(msg: TelegramBot.Message, match: RegExpExecArray | 
   return bot.sendMessage(msg.chat.id, "Send a 4-6 digit code, or 'random'. Type 'cancel' to abort.");
 }
 
-async function handleDayPass(msg: TelegramBot.Message) {
+async function handleDayPassImpl(msg: TelegramBot.Message) {
   await react(msg);
   const user = await findMemberByTelegram(msg.from?.username ?? "");
   if (!user) return bot.sendMessage(msg.chat.id, "Not registered. Contact an admin.");
@@ -640,7 +641,7 @@ async function handleExpirationCallback(chatId: number, userId: number, data: st
   return createQuickCode(chatId, exp, p.data.label as string | null);
 }
 
-async function createQuickCode(chatId: number, expiresAt: Date, label: string | null) {
+async function createQuickCodeImpl(chatId: number, expiresAt: Date, label: string | null) {
   const code = generateRandomCode();
 
   const allocation = await allocateSlotWithRetry<{ id: number }>({
@@ -683,7 +684,7 @@ async function createQuickCode(chatId: number, expiresAt: Date, label: string | 
   return bot.sendMessage(chatId, text, { parse_mode: "Markdown" });
 }
 
-async function handleRevokeCallback(chatId: number, codeId: number) {
+async function handleRevokeCallbackImpl(chatId: number, codeId: number) {
   const { data: code } = await db.from("day_codes").select("code, pin_slot, is_active").eq("id", codeId).single();
   if (!code || !code.is_active) return bot.sendMessage(chatId, "Code not found or already revoked.");
 
@@ -693,11 +694,11 @@ async function handleRevokeCallback(chatId: number, codeId: number) {
     lockWarning = formatLockWarning(lockResults);
   } catch (err) {
     console.error("[Revoke] Failed to clear lock code:", err);
-    // Still revoke in DB even if locks are unreachable — admin can re-sync later
-    lockWarning = "⚠️ Couldn't reach the door locks — code may still work on the physical locks until they reconnect.";
+    return bot.sendMessage(chatId, "⚠️ Clear incomplete; slot quarantined. Retry clear in admin Lock Sync.");
   }
 
-  await db.from("day_codes").update({ is_active: false, revoked_at: new Date().toISOString() }).eq("id", codeId);
+  const { error } = await db.from("day_codes").update({ is_active: false, revoked_at: new Date().toISOString() }).eq("id", codeId);
+  if (error) return bot.sendMessage(chatId, "Door code cleared, but database update failed. Contact an admin.");
   let reply = `Code ${code.code} revoked.`;
   if (lockWarning) reply += `\n\n${lockWarning}`;
   return bot.sendMessage(chatId, reply);
@@ -798,7 +799,7 @@ async function handleMessage(msg: TelegramBot.Message) {
   }
 }
 
-async function handleNewCodeFlow(chatId: number, text: string, p: PendingAction) {
+async function handleNewCodeFlowImpl(chatId: number, text: string, p: PendingAction) {
   const code = text.toLowerCase() === "random"
     ? generateRandomCode()
     : /^\d{4,6}$/.test(text) ? text : null;
@@ -807,13 +808,17 @@ async function handleNewCodeFlow(chatId: number, text: string, p: PendingAction)
 
   await bot.sendMessage(chatId, "⏳ Programming door locks...");
   try {
-    const { data: member } = await db.from("members").select("id")
+    const { data: member } = await db.from("members").select("id, pin_code_slot")
       .eq("id", p.data.userId as number).eq("disabled", false).maybeSingle();
     if (!member) {
       clearPending(chatId);
       return bot.sendMessage(chatId, "Member not found or disabled.");
     }
-    const lockResults = await setUserCode(p.data.slot as number, code);
+    if (!member.pin_code_slot) {
+      clearPending(chatId);
+      return bot.sendMessage(chatId, "No slot assigned. Contact an admin.");
+    }
+    const lockResults = await setUserCode(member.pin_code_slot, code);
     await db.from("members").update({ pin_code: code }).eq("id", p.data.userId as number);
     clearPending(chatId);
     const status = formatLockStatus(lockResults);
@@ -877,7 +882,7 @@ async function handleAddMemberFlow(chatId: number, text: string, p: PendingActio
   }
 }
 
-async function createMember(chatId: number, d: Record<string, unknown>) {
+async function createMemberImpl(chatId: number, d: Record<string, unknown>) {
   const isFull = d.memberType !== "day_pass";
   const passCount = !isFull ? ((d.passes as number | undefined) ?? 10) : 0;
   const baseInsert = {
@@ -931,7 +936,7 @@ async function createMember(chatId: number, d: Record<string, unknown>) {
     memberLockStatus = formatLockStatus(lockResults);
   } catch (err) {
     console.error("[CreateMember] Failed to program lock:", err);
-    // Roll back: delete the member row so the slot frees up.
+    // Unknown SET is durably quarantined before this compensation.
     await db.from("members").delete().eq("id", allocation.data.id);
     return bot.sendMessage(chatId, `⚠️ Member not created. ${LOCK_FAILURE_MSG}`);
   }
@@ -1028,22 +1033,22 @@ async function handleChangeTypeFlow(chatId: number, text: string, p: PendingActi
   });
 }
 
-async function handleChangeToCallback(chatId: number, userId: number, data: string) {
+async function handleChangeToCallbackImpl(chatId: number, userId: number, data: string) {
   const p = getPending(chatId, userId);
   if (!p || p.type !== "changetype") return;
 
   const newType = data.replace("changeto_", "") as "cold_desk" | "hot_desk" | "hub_friend" | "day_pass";
   const memberId = p.data.memberId as number;
   const memberName = p.data.memberName as string;
-  const currentType = p.data.currentType as string;
-  const currentSlot = p.data.currentSlot as number | null;
-  const { data: eligible } = await db.from("members").select("id")
+  const { data: eligible } = await db.from("members").select("id, member_type, pin_code_slot")
     .eq("id", memberId).eq("disabled", false).maybeSingle();
   if (!eligible) {
     clearPending(chatId);
     return bot.sendMessage(chatId, "Member not found or disabled.");
   }
 
+  const currentType = eligible.member_type;
+  const currentSlot = eligible.pin_code_slot;
   clearPending(chatId);
 
   if (newType === currentType) {
@@ -1090,7 +1095,7 @@ async function handleChangeToCallback(chatId: number, userId: number, data: stri
       lockStatus = formatLockStatus(lockResults);
     } catch (err) {
       console.error("[ChangeType] Failed to program lock:", err);
-      // Roll back the slot claim so the member returns to their previous type.
+      // Unknown SET remains quarantined even after compensating this claim.
       await db.from("members")
         .update({ member_type: currentType, pin_code_slot: null, pin_code: null })
         .eq("id", memberId);
@@ -1104,7 +1109,7 @@ async function handleChangeToCallback(chatId: number, userId: number, data: stri
       lockStatus = formatLockStatus(lockResults);
     } catch (err) {
       console.error("[ChangeType] Failed to clear lock:", err);
-      lockStatus = "⚠️ Lock code could not be cleared — run Lock Sync";
+      return bot.sendMessage(chatId, "⚠️ Type unchanged: PIN slot quarantined. Retry clear in admin Lock Sync.");
     }
     update.pin_code_slot = null;
     update.pin_code = null;
@@ -1238,4 +1243,33 @@ export function startBot() {
   };
   process.on("SIGTERM", () => shutdown("SIGTERM"));
   process.on("SIGINT", () => shutdown("SIGINT"));
+}
+
+const handleNewCode = (...args: Parameters<typeof handleNewCodeImpl>) =>
+  runBotLockWriter(args[0].chat.id, () => handleNewCodeImpl(...args));
+
+const handleDayPass = (...args: Parameters<typeof handleDayPassImpl>) =>
+  runBotLockWriter(args[0].chat.id, () => handleDayPassImpl(...args));
+
+const createQuickCode = (...args: Parameters<typeof createQuickCodeImpl>) =>
+  runBotLockWriter(args[0], () => createQuickCodeImpl(...args));
+
+const handleRevokeCallback = (...args: Parameters<typeof handleRevokeCallbackImpl>) =>
+  runBotLockWriter(args[0], () => handleRevokeCallbackImpl(...args));
+
+const handleNewCodeFlow = (...args: Parameters<typeof handleNewCodeFlowImpl>) =>
+  runBotLockWriter(args[0], () => handleNewCodeFlowImpl(...args));
+
+const createMember = (...args: Parameters<typeof createMemberImpl>) =>
+  runBotLockWriter(args[0], () => createMemberImpl(...args));
+
+const handleChangeToCallback = (...args: Parameters<typeof handleChangeToCallbackImpl>) =>
+  runBotLockWriter(args[0], () => handleChangeToCallbackImpl(...args));
+
+async function runBotLockWriter<T>(chatId: number, work: () => Promise<T>) {
+  try { return await withLockWriter(db, work, "Bot PIN writer"); }
+  catch (error) {
+    console.error("[LockWriter] Bot PIN operation unavailable:", error);
+    return bot.sendMessage(chatId, "Door-code operation unavailable. Retry later or contact an admin.");
+  }
 }

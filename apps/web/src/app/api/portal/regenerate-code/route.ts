@@ -1,3 +1,4 @@
+import { withWebLockWriter } from "@/lib/lockWriter";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
@@ -18,50 +19,52 @@ export async function POST(req: Request) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { data: member } = await supabase
-      .from("members")
-      .select("id, pin_code_slot, member_type, disabled")
-      .eq("supabase_user_id", user.id)
-      .single();
+    return await withWebLockWriter(async () => {
+      const { data: member } = await supabase
+        .from("members")
+        .select("id, pin_code_slot, member_type, disabled")
+        .eq("supabase_user_id", user.id)
+        .single();
 
-    if (!member || member.disabled || member.member_type === "day_pass") {
-      return NextResponse.json({ error: "Not eligible" }, { status: 403 });
-    }
+      if (!member || member.disabled || member.member_type === "day_pass") {
+        return NextResponse.json({ error: "Not eligible" }, { status: 403 });
+      }
 
-    if (!member.pin_code_slot) {
-      return NextResponse.json({ error: "No slot assigned — contact an admin" }, { status: 400 });
-    }
+      if (!member.pin_code_slot) {
+        return NextResponse.json({ error: "No slot assigned — contact an admin" }, { status: 400 });
+      }
 
-    const newCode = customCode ?? generateRandomCode();
+      const newCode = customCode ?? generateRandomCode();
 
-    let lockStatus: string;
-    try {
-      const lockResults = await setUserCode(member.pin_code_slot, newCode);
-      lockStatus = formatLockStatus(lockResults);
-    } catch (err) {
-      console.error("[Lock] Failed to set code:", err);
-      return NextResponse.json(
-        { error: LOCK_FAILURE_MSG },
-        { status: 502 }
-      );
-    }
+      let lockStatus: string;
+      try {
+        const lockResults = await setUserCode(member.pin_code_slot, newCode);
+        lockStatus = formatLockStatus(lockResults);
+      } catch (err) {
+        console.error("[Lock] Failed to set code:", err);
+        return NextResponse.json(
+          { error: LOCK_FAILURE_MSG },
+          { status: 502 }
+        );
+      }
 
-    // Service client because direct UPDATE on members is REVOKE'd from
-    // authenticated (migration 031). We've already confirmed the caller owns
-    // this member row via the SELECT above, so the .eq("id", member.id)
-    // scopes the write to their own row.
-    const admin = createServiceClient();
-    const { error } = await admin
-      .from("members")
-      .update({ pin_code: newCode })
-      .eq("id", member.id);
+      // Service client because direct UPDATE on members is REVOKE'd from
+      // authenticated (migration 031). We've already confirmed the caller owns
+      // this member row via the SELECT above, so the .eq("id", member.id)
+      // scopes the write to their own row.
+      const admin = createServiceClient();
+      const { error } = await admin
+        .from("members")
+        .update({ pin_code: newCode })
+        .eq("id", member.id);
 
-    if (error) {
-      console.error("[DB] Failed to save new code:", error);
-      return NextResponse.json({ error: "Lock updated but DB save failed" }, { status: 500 });
-    }
+      if (error) {
+        console.error("[DB] Failed to save new code:", error);
+        return NextResponse.json({ error: "Lock updated but DB save failed" }, { status: 500 });
+      }
 
-    return NextResponse.json({ code: newCode, lock_status: lockStatus });
+      return NextResponse.json({ code: newCode, lock_status: lockStatus });
+    });
   } catch (err) {
     console.error("[regenerate-code] Unhandled error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
