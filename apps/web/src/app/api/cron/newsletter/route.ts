@@ -1,38 +1,10 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { sendEmail } from "@/lib/email";
-import { logAction } from "@/lib/auditLog";
-import {
-  compileIssue,
-  compileAudience,
-  renderNewsletterHtml,
-  renderNewsletterText,
-  isoWeek,
-} from "@/lib/newsletter";
+import { prepareIssue, sendBatch } from "@/lib/newsletterSend";
+import { compileIssue, renderNewsletterText, isoWeek } from "@/lib/newsletter";
 
-/**
- * POST /api/cron/newsletter
- *
- * Biweekly newsletter to members + the interests list. Scheduled WEEKLY in
- * Coolify (Tuesdays); the route itself only proceeds on ODD ISO weeks, which
- * yields a true every-other-week cadence without cron gymnastics. (Odd chosen
- * so the first issue lands Tuesday 2026-06-16, ISO week 25.)
- *
- * Body { force: true } skips the parity check (for manual off-cycle sends).
- *
- * Issue contents: human note (digest_notes, consumed on send) + upcoming
- * Luma events (3-week lookahead, gracefully absent if LUMA_API_KEY is gone)
- * + last-14-days hub stats. Unsubscribe link per recipient.
- *
- * Idempotency: newsletter:<ISO-year>-W<week> claimed in admin_actions before
- * sending; a second fire in the same week no-ops.
- *
- * Auth: Authorization: Bearer ${CRON_SECRET}
- */
-
-const SEND_DELAY_MS = 300;
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
+/** Biweekly cron. Both cron and the studio send the same frozen issue through
+ * the leased ledger. `force` bypasses cadence only, never the autosend switch. */
 export async function POST(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret) return NextResponse.json({ error: "CRON_SECRET not set" }, { status: 503 });
@@ -64,54 +36,32 @@ export async function POST(req: Request) {
 
   const issue = await compileIssue(admin);
 
-  // Claim the issue before sending — double-fire safe.
-  const claim = await logAction(
-    {
-      action: "newsletter_sent",
-      actorMemberId: null,
-      idempotencyKey: `newsletter:${issue.issueKey}`,
-      payload: { issue_key: issue.issueKey },
-    },
-    admin,
-  );
-  if (!claim.ok) {
-    return NextResponse.json({ skipped: true, reason: claim.reason ?? "already sent", issue_key: issue.issueKey });
+  // Existing admin drafts win. Cron never owns a separate provider send path.
+  const { error: insertError } = await admin.from("newsletter_issues").upsert({
+    issue_key: issue.issueKey, subject: issue.subject, status: "draft",
+    note: issue.note?.text ?? null, events_count: issue.events.length,
+    markdown_body: renderNewsletterText(issue, "archive@regenhub.xyz", siteUrl).split("\nUnsubscribe:")[0],
+  }, { onConflict: "issue_key", ignoreDuplicates: true });
+  if (insertError) throw insertError;
+  const { data: stored, error } = await admin.from("newsletter_issues")
+    .select("id, status, markdown_body, subject, delivery_snapshot, note").eq("issue_key", issue.issueKey).single();
+  if (error) throw error;
+  if (stored.status === "sent") return NextResponse.json({ skipped: true, reason: "already sent" });
+  if (!stored.delivery_snapshot) await prepareIssue(admin, stored.id);
+  let result = await sendBatch(admin, stored.id, {
+    markdown: stored.markdown_body, subject: stored.subject, siteUrl, issueKey: issue.issueKey,
+  });
+  while (!result.progress.done && !result.quotaReached && result.processed > 0 && result.rateLimited === 0 && result.progress.sending === 0 && result.progress.unknown === 0) {
+    const next = await sendBatch(admin, stored.id, {
+      markdown: stored.markdown_body, subject: stored.subject, siteUrl, issueKey: issue.issueKey,
+    });
+    result = { ...next, processed: result.processed + next.processed,
+      sent: result.sent + next.sent, failed: result.failed + next.failed,
+      rateLimited: result.rateLimited + next.rateLimited };
+    if (next.processed === 0) break;
   }
-
-  const audience = await compileAudience(admin);
-
-  let sent = 0;
-  let failed = 0;
-  for (const r of audience) {
-    const html = renderNewsletterHtml(issue, r.email, siteUrl);
-    const text = renderNewsletterText(issue, r.email, siteUrl);
-    const ok = await sendEmail({ to: r.email, subject: issue.subject, html, text });
-    if (ok) sent++;
-    else failed++;
-    await sleep(SEND_DELAY_MS);
-  }
-
-  // Consume the note + archive the issue.
-  if (issue.note) {
+  if (result.progress.done && issue.note && stored.note === issue.note.text) {
     await admin.from("digest_notes").update({ consumed_at: new Date().toISOString() }).eq("id", issue.note.id);
   }
-  await admin.from("newsletter_issues").insert({
-    issue_key: issue.issueKey,
-    subject: issue.subject,
-    html_snapshot: renderNewsletterHtml(issue, "archive@regenhub.xyz", siteUrl),
-    note: issue.note?.text ?? null,
-    events_count: issue.events.length,
-    recipients_count: audience.length,
-    sent_count: sent,
-  });
-
-  return NextResponse.json({
-    issue_key: issue.issueKey,
-    subject: issue.subject,
-    events: issue.events.length,
-    note_included: !!issue.note,
-    recipients: audience.length,
-    sent,
-    failed,
-  });
+  return NextResponse.json(result);
 }

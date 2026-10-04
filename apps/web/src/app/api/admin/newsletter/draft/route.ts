@@ -31,11 +31,11 @@ export async function POST(request: Request) {
   const admin = createServiceClient();
   const { data: existing } = await admin
     .from("newsletter_issues")
-    .select("id, status")
+    .select("id, status, delivery_snapshot")
     .eq("issue_key", issueKey)
     .maybeSingle();
-  if (existing?.status === "sent") {
-    return NextResponse.json({ error: `Issue ${issueKey} has already been sent` }, { status: 409 });
+  if (existing && (existing.status !== "draft" || existing.delivery_snapshot)) {
+    return NextResponse.json({ error: `Issue ${issueKey} is frozen for delivery` }, { status: 409 });
   }
 
   const { data, error } = await admin
@@ -47,6 +47,7 @@ export async function POST(request: Request) {
     .select("id, issue_key, subject, markdown_body, status")
     .single();
   if (error) {
+    if (error.code === "55000") return NextResponse.json({ error: "Issue is frozen for delivery" }, { status: 409 });
     console.error("[Newsletter] draft save failed:", error);
     return NextResponse.json({ error: "Could not save draft" }, { status: 500 });
   }

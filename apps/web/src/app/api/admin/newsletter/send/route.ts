@@ -6,8 +6,8 @@ import { sendBatch, retryFailed } from "@/lib/newsletterSend";
 /**
  * POST { issue_id, retry_failed?, limit? } — send the next batch of recipients.
  * The studio calls this repeatedly until progress.done. Resumable + rate-limit
- * aware; never double-sends (ledger status guards it). When the ledger is fully
- * drained, the issue is finalized to status='sent'.
+ * aware. The shared engine acquires issue/recipient claims and finalizes the
+ * issue under its run token.
  */
 export async function POST(request: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   }
 
   if (isRetry) await retryFailed(admin, issueId);
-  await admin.from("newsletter_issues").update({ status: "sending" }).eq("id", issueId);
+
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
   const result = await sendBatch(admin, issueId, {
@@ -49,17 +49,6 @@ export async function POST(request: Request) {
     issueKey: issue.issue_key,
     limit: Number(body.limit) || 20,
   });
-
-  if (result.progress.done) {
-    await admin
-      .from("newsletter_issues")
-      .update({
-        status: "sent",
-        recipients_count: result.progress.total,
-        sent_count: result.progress.sent,
-      })
-      .eq("id", issueId);
-  }
 
   return NextResponse.json(result);
 }
