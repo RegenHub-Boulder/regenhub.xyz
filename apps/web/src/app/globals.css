@@ -1,5 +1,28 @@
 @import "tailwindcss";
 
+@theme inline {
+  --color-forest: var(--forest);
+  --color-sage: var(--sage);
+  --color-gold: var(--gold);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  /* Shared UI tokens are paired with existing palette colours in :root.
+     Destructive tokens stay unmapped (no palette colour yet), preserving prior behaviour. */
+  --color-input: var(--input);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted-foreground);
+}
+
 /* =====================================================
    RegenHub Design System — Forest Through Glass
    ===================================================== */
@@ -29,6 +52,11 @@
   --card: rgba(30, 55, 36, 0.6);
   --border: rgba(168, 192, 154, 0.2);
   --ring: var(--sage);
+  /* Foregrounds for the light accent/secondary fills: dark text, from the existing palette. */
+  --accent-foreground: var(--forest-deep);
+  --secondary-foreground: var(--forest-deep);
+  --card-foreground: var(--foreground);
+  --input: var(--border);
 
   /* Glass effect values */
   --glass-bg: rgba(30, 55, 36, 0.45);
@@ -121,9 +149,6 @@ body {
 
 /* ---- Utility ---- */
 .text-forest { color: var(--heading); }
-.text-sage   { color: var(--sage); }
-.text-gold   { color: var(--gold); }
-.text-muted  { color: var(--muted-foreground); }
 
 .hover-lift {
   transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -161,3 +186,15 @@ body {
 .animate-sway       { animation: sway 3s ease-in-out infinite; }
 .animate-fade-in-up { animation: fade-in-up 0.6s ease forwards; }
 .animate-hop        { animation: hop 0.6s ease-in-out infinite; }
+
+/* Keyboard focus also covers custom controls and overrides input resets. */
+:is(a[href], button, input, select, textarea, summary, [tabindex], [contenteditable="true"]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+  }
+}

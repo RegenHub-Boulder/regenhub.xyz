@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/carousel";
 import { Card } from "@/components/ui/card";
 
+import { galleryPhotoAlt, type GalleryPhoto } from "./galleryPhotos";
+
 const MAX_PHOTOS = 12;
 const AUTOPLAY_DELAY_MS = 4000;
 
@@ -26,24 +28,34 @@ function shuffle<T>(arr: T[]): T[] {
   return out;
 }
 
-export default function CommunityGalleryClient({ photos }: { photos: string[] }) {
+export default function CommunityGalleryClient({ photos }: { photos: GalleryPhoto[] }) {
   // Shuffle on the client after mount — running shuffle() during SSR would
   // produce a different ordering than the client first paint and trip a
   // hydration mismatch. The gallery is below-the-fold so the brief empty
   // render is invisible.
-  const [shuffled, setShuffled] = useState<string[]>([]);
+  const [shuffled, setShuffled] = useState<(GalleryPhoto & { alt: string })[]>([]);
   const [api, setApi] = useState<CarouselApi>();
   const [current, setCurrent] = useState(0);
-  const plugin = useRef(Autoplay({ delay: AUTOPLAY_DELAY_MS, stopOnInteraction: true }));
+  const plugin = useRef(Autoplay({ delay: AUTOPLAY_DELAY_MS, stopOnInteraction: true, playOnInit: false }));
 
   useEffect(() => {
-    setShuffled(shuffle(photos).slice(0, MAX_PHOTOS));
+    setShuffled(shuffle(photos.map((photo, index) => ({ ...photo, alt: galleryPhotoAlt(photo, index, photos.length) }))).slice(0, MAX_PHOTOS));
   }, [photos]);
 
   useEffect(() => {
     if (!api) return;
     setCurrent(api.selectedScrollSnap());
     api.on("select", () => setCurrent(api.selectedScrollSnap()));
+  }, [api]);
+
+  useEffect(() => {
+    if (!api) return;
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const autoplay = plugin.current;
+    const update = () => { if (media.matches) autoplay.stop(); else autoplay.play(); };
+    update();
+    media.addEventListener("change", update);
+    return () => { media.removeEventListener("change", update); autoplay.stop(); };
   }, [api]);
 
   if (shuffled.length === 0) return null;
@@ -66,19 +78,19 @@ export default function CommunityGalleryClient({ photos }: { photos: string[] })
           setApi={setApi}
           className="w-full"
           onMouseEnter={plugin.current.stop}
-          onMouseLeave={plugin.current.reset}
+          onMouseLeave={() => { if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) plugin.current.reset(); }}
         >
           <CarouselContent className="-ml-2 md:-ml-4">
             {shuffled.map((photo) => (
               <CarouselItem
-                key={photo}
+                key={photo.src}
                 className="pl-2 md:pl-4 basis-full md:basis-1/2 lg:basis-1/3"
               >
                 <Card className="glass-panel hover-lift overflow-hidden">
                   <div className="aspect-square relative">
                     <Image
-                      src={photo}
-                      alt="Community moment"
+                      src={photo.src}
+                      alt={photo.alt}
                       fill
                       sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
                       className="object-cover"
@@ -95,7 +107,7 @@ export default function CommunityGalleryClient({ photos }: { photos: string[] })
         <div className="flex justify-center mt-6 gap-2">
           {shuffled.map((photo, index) => (
             <button
-              key={photo}
+              key={photo.src}
               className={`transition-all ${
                 index === current
                   ? "w-8 h-2 rounded-full bg-sage"
