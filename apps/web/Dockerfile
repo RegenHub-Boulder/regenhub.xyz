@@ -53,6 +53,15 @@ COPY --from=builder /app/apps/web/public           ./apps/web/public
 # cwd/../../supabase/migrations and finds it either way. MIGRATIONS_DIR overrides.
 COPY supabase/migrations ./supabase/migrations
 
+# server.js runs from /app/apps/web/apps/web. Keep the entire build root-owned
+# and non-writable, including directory entries, so nextjs cannot replace JS.
+# Only Next's cache directory (e.g. image optimization) is writable; ISR and
+# fetch regeneration stay in memory via experimental.isrFlushToDisk: false.
+RUN chmod -R a-w /app && \
+    mkdir -p /app/apps/web/apps/web/.next/cache && \
+    chown -R 1001:1001 /app/apps/web/apps/web/.next/cache && \
+    chmod -R u+rwX /app/apps/web/apps/web/.next/cache
+
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000
