@@ -19,6 +19,8 @@ export function ManageSubscriptionButton() {
         return;
       }
       window.location.href = data.url as string;
+    } catch {
+      setError("Couldn't reach the server. Check your connection and try again.");
     } finally {
       setBusy(false);
     }

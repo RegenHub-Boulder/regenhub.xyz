@@ -1,5 +1,6 @@
 import { LoginForm } from "@/components/auth/LoginForm";
 import { RegenosLoginPanel } from "@/components/auth/RegenosLoginPanel";
+import { safeNextPath } from "@/lib/safeNext";
 import { isRegenosLoginEnabled } from "@/lib/regenos/config";
 
 export const metadata = { title: "Sign In — RegenHub" };
@@ -18,8 +19,8 @@ interface PageProps {
 export default async function LoginPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const banner = params.error ? (ERROR_MESSAGES[params.error] ?? null) : null;
-  // Only honor next params that look like internal paths to avoid open redirects.
-  const safeNext = params.next && /^\/[a-zA-Z0-9_\-/?=&]*$/.test(params.next) ? params.next : undefined;
+  // Only honor same-origin relative paths (no open redirects).
+  const safeNext = safeNextPath(params.next);
 
   // Phase 2 one-login, default OFF. When off this page is byte-identical to
   // what it has always been: the Supabase one-time-link form and nothing else.
