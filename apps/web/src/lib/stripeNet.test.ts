@@ -3,7 +3,7 @@ import { effectiveMonthlyCents, netMonthlyFromDiscounts, type DiscountLike } fro
 
 const now = 1_700_000_000;
 
-function coupon(partial: Partial<DiscountLike["source"] extends { coupon?: infer C } ? never : never> | {
+function coupon(partial: {
   amount_off?: number | null;
   percent_off?: number | null;
   duration?: string;

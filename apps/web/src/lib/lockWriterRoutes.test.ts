@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeSupabaseMock } from "../../test/mockSupabase";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
@@ -22,6 +22,12 @@ const routes = [
   { name: "portal regenerate", load: () => import("../app/api/portal/regenerate-code/route"), admin: false },
   { name: "free day activate", load: () => import("../app/api/freeday/activate/route"), admin: false },
 ];
+
+// Cold-importing the route graph (viem, Stripe, onchain invoicing) can take 5-8s on a slow box,
+// which used to time out whichever test ran first. Warm every route once so tests time behaviour, not imports.
+beforeAll(async () => {
+  await Promise.all(routes.map((r) => r.load()));
+}, 60_000);
 
 beforeEach(() => vi.clearAllMocks());
 describe.each(routes)("$name authorization before reservation", ({ load, admin }) => {
