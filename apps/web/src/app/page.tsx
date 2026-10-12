@@ -25,7 +25,15 @@ export const metadata: Metadata = {
   },
 };
 
+// Homepage v2 prototype ("Co-op broadsheet"). Default OFF; NEXT_PUBLIC_HOME_V2=true
+// is baked at build time like every NEXT_PUBLIC_* var.
+const HOME_V2 = ["true", "1", "yes"].includes((process.env.NEXT_PUBLIC_HOME_V2 ?? "").toLowerCase());
+
 export default async function Home() {
+  if (HOME_V2) {
+    const { default: HomeV2 } = await import("@/components/landing/v2/HomeV2");
+    return <HomeV2 />;
+  }
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
