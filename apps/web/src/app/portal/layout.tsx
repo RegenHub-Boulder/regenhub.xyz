@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
+import { loginUrlFor } from "@/lib/safeNext";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { MobileNav, type NavLink } from "@/components/nav/MobileNav";
@@ -10,7 +12,7 @@ export default async function PortalLayout({ children }: { children: React.React
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  if (!user) redirect("/auth/login");
+  if (!user) redirect(loginUrlFor((await headers()).get("x-pathname")));
 
   const { data: member } = await supabase
     .from("members")

@@ -52,6 +52,9 @@ export function ChangePlanButton({ currentPlanKey, currentMonthlyCents, hasDisco
       }
       setOpen(false);
       router.refresh();
+    } catch {
+      setError("Couldn't reach the server. Check your connection and try again.");
+      setTarget(null);
     } finally {
       setBusy(false);
     }
