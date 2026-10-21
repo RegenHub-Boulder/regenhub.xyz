@@ -76,6 +76,8 @@ export async function generateUpcomingOnchainInvoices(
     .select("id, member_id, monthly_cents, current_period_end")
     .eq("payment_rail", "onchain")
     .in("status", ["active", "trialing", "past_due"])
+    // Set to end at period end (admin cancel): no renewal for the next period.
+    .eq("cancel_at_period_end", false)
     .not("current_period_end", "is", null)
     .lte("current_period_end", reminderCutoff);
   if (error) throw error;

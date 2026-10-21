@@ -6,6 +6,7 @@ import { isGaslessRelayConfigured } from "@/lib/onchain/config";
 import { processGaslessRelayQueue } from "@/lib/onchain/gaslessRelay";
 import { onchainRenewalReminderEmail, sendEmail } from "@/lib/email";
 import { planLabel } from "@/lib/plans";
+import { endOnchainSubscriptionsAtPeriodEnd } from "@/lib/membershipCancel";
 
 export async function POST(req: Request) {
   const secret = process.env.CRON_SECRET;
@@ -30,6 +31,8 @@ export async function POST(req: Request) {
       }
     }
   }
+  // End admin "cancel at period end" subscriptions before issuing renewals.
+  const endedAtPeriodEnd = await endOnchainSubscriptionsAtPeriodEnd(admin);
   const created = await generateUpcomingOnchainInvoices(admin);
   const { data: unsentReminders, error: reminderQueryError } = await admin
     .from("onchain_invoices")
@@ -71,5 +74,5 @@ export async function POST(req: Request) {
   }
   const effectsFailures = await retryPendingOnchainEffects(admin);
   const finalized = await advanceFinalizedOnchainPayments(admin);
-  return NextResponse.json({ gaslessRelays, invoicesCreated: created.length, remindersSent, pastDue, confirmations, effectsFailures, finalized });
+  return NextResponse.json({ gaslessRelays, endedAtPeriodEnd, invoicesCreated: created.length, remindersSent, pastDue, confirmations, effectsFailures, finalized });
 }
