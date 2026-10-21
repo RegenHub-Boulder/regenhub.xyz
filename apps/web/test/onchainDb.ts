@@ -95,10 +95,8 @@ export async function linkWallet(pg: PGlite, memberId: number, address: string) 
   return Number(bound.id);
 }
 
-let subSeed = 0;
 /** A live (or other-status) on-chain subscription paying from the member's active wallet. */
 export async function addOnchainSubscription(pg: PGlite, memberId: number, walletId: number, status = "active") {
-  subSeed += 1;
   const sub = await one(pg,
     `insert into subscriptions(member_id, payment_rail, wallet_id, plan_key, monthly_cents, status, current_period_end)
      values ($1, 'onchain', $2, 'hub_friend', 10000, $3, now() + interval '20 days') returning id`,

@@ -7,7 +7,7 @@ import { createWalletChallenge } from "@/lib/onchain/walletChallenge";
 export async function POST(request: Request) {
   const session = await requirePortalMember();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const body = await request.json().catch(() => null) as { address?: string } | null;
+  const body = await request.json().catch(() => null) as { address?: string; move?: boolean } | null;
   if (!body?.address || !isAddress(body.address)) {
     return NextResponse.json({ error: "Valid EVM address required" }, { status: 400 });
   }
@@ -38,11 +38,28 @@ export async function POST(request: Request) {
   }
 
   const address = getAddress(body.address);
+  // A move names the exact wallet row it takes over, so a move that races
+  // another one (or a removal) fails instead of taking a later owner's link.
+  let moveFromWalletId: number | null = null;
+  if (body.move === true) {
+    const { data: holder, error: holderError } = await admin
+      .from("member_wallets")
+      .select("id, member_id")
+      .eq("address_normalized", address.toLowerCase())
+      .is("revoked_at", null)
+      .maybeSingle();
+    if (holderError) {
+      return NextResponse.json({ error: "Could not check this wallet" }, { status: 500 });
+    }
+    if (holder && holder.member_id !== session.member.id) moveFromWalletId = holder.id;
+  }
+  const purpose = moveFromWalletId ? "move" : "link";
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
   const challenge = createWalletChallenge({
     address,
     memberId: session.member.id,
     siteUrl,
+    purpose,
   });
   const { data, error } = await admin
     .from("wallet_verification_challenges")
@@ -52,8 +69,10 @@ export async function POST(request: Request) {
       nonce_hash: challenge.nonceHash,
       message: challenge.message,
       expires_at: challenge.expiresAt.toISOString(),
+      purpose,
+      move_from_wallet_id: moveFromWalletId,
     })
-    .select("id, message, expires_at")
+    .select("id, message, expires_at, purpose")
     .single();
   if (error || !data) {
     console.error("[OnchainWallet] challenge insert failed:", error);

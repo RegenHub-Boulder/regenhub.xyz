@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAddress, isAddress, verifyMessage, type Hex } from "viem";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { requirePortalMember } from "@/lib/onchain/portalMember";
+import { WALLET_LINKED_ELSEWHERE, walletInUse, walletRpcErrorResponse } from "@/lib/onchain/walletMove";
 
 export async function POST(request: Request) {
   const session = await requirePortalMember();
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
   const admin = createServiceClient();
   const { data: challenge } = await admin
     .from("wallet_verification_challenges")
-    .select("id, message, expires_at, consumed_at")
+    .select("id, message, expires_at, consumed_at, purpose, move_from_wallet_id")
     .eq("id", body.challenge_id)
     .eq("member_id", session.member.id)
     .eq("address_normalized", address.toLowerCase())
@@ -48,15 +49,41 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Wallet challenge was already consumed" }, { status: 409 });
   }
 
+  if (challenge.purpose === "move") {
+    // The wallet's own signature on a move challenge is the consent to move it.
+    if (!challenge.move_from_wallet_id) {
+      return walletRpcErrorResponse({ message: "wallet changed accounts" }, "other", "wallet move");
+    }
+    const { data: walletId, error: moveError } = await admin.rpc("move_member_wallet", {
+      p_member_id: session.member.id,
+      p_address: address,
+      p_from_wallet_id: challenge.move_from_wallet_id,
+    });
+    if (moveError) return walletRpcErrorResponse(moveError, "other", "wallet move");
+    return NextResponse.json({ wallet_id: walletId, address, verified_at: consumedAt, moved: true });
+  }
+
   const { data: walletId, error: bindError } = await admin.rpc("bind_member_wallet", {
     p_member_id: session.member.id,
     p_address: address,
     p_verification_method: "signature",
     p_verified_by: null,
   });
-  if (bindError) {
-    console.error("[OnchainWallet] wallet bind failed:", bindError);
-    return NextResponse.json({ error: bindError.message }, { status: 409 });
+  if (bindError?.message === "wallet already belongs to another member") {
+    // The signer has just proven they hold this wallet, so it's safe to tell
+    // them whether it can move here before asking for a second signature.
+    const { data: holder } = await admin
+      .from("member_wallets")
+      .select("id")
+      .eq("address_normalized", address.toLowerCase())
+      .is("revoked_at", null)
+      .maybeSingle();
+    const { data: blocker } = holder
+      ? await admin.rpc("wallet_release_blocker", { p_wallet_id: holder.id })
+      : { data: null };
+    if (blocker) return walletInUse(blocker as string, "other");
+    return NextResponse.json({ code: "wallet_linked_elsewhere", error: WALLET_LINKED_ELSEWHERE }, { status: 409 });
   }
+  if (bindError) return walletRpcErrorResponse(bindError, "other", "wallet bind");
   return NextResponse.json({ wallet_id: walletId, address, verified_at: consumedAt });
 }
