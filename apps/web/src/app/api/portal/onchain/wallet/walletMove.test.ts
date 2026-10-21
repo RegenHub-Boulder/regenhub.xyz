@@ -129,6 +129,27 @@ describe("moving a wallet between accounts", () => {
     expect((await one(pg, "select revoked_at is not null revoked from member_wallets where id = $1", [fromWalletId])).revoked).toBe(true);
   });
 
+  it("doesn't reveal before a signature whether an address is linked elsewhere", async () => {
+    const holder = await account("Holder");
+    const asker = await account("Asker");
+    const held = privateKeyToAccount(generatePrivateKey());
+    const free = privateKeyToAccount(generatePrivateKey());
+    await link(holder, held);
+
+    const [forHeld, forFree] = [await challenge(asker, held, true), await challenge(asker, free, true)];
+    const shape = (c: typeof forHeld) => ({
+      status: c.status,
+      keys: Object.keys(c.body).sort(),
+      text: c.body.message.replace(/0x[0-9a-fA-F]{40}/, "ADDR").replace(/(Nonce|Issued At|Expiration Time): .*/g, "$1"),
+    });
+    expect(shape(forHeld)).toEqual(shape(forFree));
+
+    // A move request for a wallet nobody holds simply links it.
+    expect((await verify(asker, free, forFree.body)).status).toBe(200);
+    expect(await holderOf(free)).toEqual([asker.memberId]);
+    expect(await rows(pg, "select * from admin_actions")).toEqual([]);
+  });
+
   it("rejects a signature from a different key, an expired challenge and a reused one", async () => {
     const holder = await account("Holder");
     const mover = await account("Mover");

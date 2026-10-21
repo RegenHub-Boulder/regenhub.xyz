@@ -49,11 +49,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Wallet challenge was already consumed" }, { status: 409 });
   }
 
-  if (challenge.purpose === "move") {
-    // The wallet's own signature on a move challenge is the consent to move it.
-    if (!challenge.move_from_wallet_id) {
-      return walletRpcErrorResponse({ message: "wallet changed accounts" }, "other", "wallet move");
-    }
+  // The wallet's own signature on a move challenge is the consent to move it.
+  // A move challenge with no other holder recorded just links the wallet.
+  if (challenge.purpose === "move" && challenge.move_from_wallet_id) {
     const { data: walletId, error: moveError } = await admin.rpc("move_member_wallet", {
       p_member_id: session.member.id,
       p_address: address,

@@ -40,6 +40,8 @@ export async function POST(request: Request) {
   const address = getAddress(body.address);
   // A move names the exact wallet row it takes over, so a move that races
   // another one (or a removal) fails instead of taking a later owner's link.
+  // The response and wording are the same whether or not someone holds the
+  // wallet: nothing about other accounts is revealed before a signature.
   let moveFromWalletId: number | null = null;
   if (body.move === true) {
     const { data: holder, error: holderError } = await admin
@@ -53,7 +55,7 @@ export async function POST(request: Request) {
     }
     if (holder && holder.member_id !== session.member.id) moveFromWalletId = holder.id;
   }
-  const purpose = moveFromWalletId ? "move" : "link";
+  const purpose = body.move === true ? "move" : "link";
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
   const challenge = createWalletChallenge({
     address,
@@ -72,7 +74,7 @@ export async function POST(request: Request) {
       purpose,
       move_from_wallet_id: moveFromWalletId,
     })
-    .select("id, message, expires_at, purpose")
+    .select("id, message, expires_at")
     .single();
   if (error || !data) {
     console.error("[OnchainWallet] challenge insert failed:", error);
