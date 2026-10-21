@@ -1,9 +1,16 @@
+-- Apply the whole file in one transaction. DDL needs ACCESS EXCLUSIVE locks
+-- on subscriptions/invoices until commit, including the constraint scan.
+-- NOT VALID separates declaration/validation but does not release those locks.
+-- Inspect table size before scheduling application; retry if the timeout fires.
+set local lock_timeout = '5s';
 -- Additive: no migration-time rewrites. Existing invoices remain payable unchanged.
 alter table subscriptions add column onchain_coupon jsonb;
 alter table subscriptions add column onchain_coupon_start timestamptz;
 alter table onchain_invoices add column plan_key text;
 alter table onchain_invoices add column coupon_code text;
-alter table onchain_invoices add column coupon_discount_cents integer not null default 0 check (coupon_discount_cents >= 0);
+alter table onchain_invoices add column coupon_discount_cents integer not null default 0;
+alter table onchain_invoices add constraint onchain_invoice_coupon_discount_nonnegative check (coupon_discount_cents >= 0) not valid;
+alter table onchain_invoices validate constraint onchain_invoice_coupon_discount_nonnegative;
 
 -- Minimum payable invoice: $1 (100 cents); cap the code reduction before applying the rail discount.
 -- Serialize pricing with subscription edits and freeze the plan for payment effects.
@@ -49,7 +56,7 @@ begin
   if old.payment_rail = 'onchain' and new.plan_key is distinct from old.plan_key then
     update onchain_invoices set plan_key = old.plan_key where subscription_id = old.id and plan_key is null;
   end if;
-  if new.onchain_coupon is distinct from old.onchain_coupon then new.onchain_coupon_start := null; end if;
+  if (new.onchain_coupon - 'stripe_redemptions') is distinct from (old.onchain_coupon - 'stripe_redemptions') then new.onchain_coupon_start := null; end if;
   return new;
 end;
 $$;

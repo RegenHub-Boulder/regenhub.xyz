@@ -32,3 +32,9 @@ it("rejects non-USD amounts", async () => {
   Object.assign(coupon, { amount_off: 1000, currency: "eur" });
   await expect(resolveOnchainCoupon("SAVE", "member_basic")).rejects.toThrow("USD");
 });
+
+it("keeps attachment identity stable when Stripe redemption counts change", async () => {
+  const first = await resolveOnchainCoupon("SAVE", "member_basic");
+  promo.times_redeemed = 9;
+  expect(await resolveOnchainCoupon("SAVE", "member_basic")).toEqual(first);
+});

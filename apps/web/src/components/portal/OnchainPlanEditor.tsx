@@ -7,12 +7,12 @@ export function OnchainPlanEditor({ memberId }: { memberId?: number }) {
   const [code, setCode] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  async function save() {
+  async function save(removeDiscount = false) {
     setBusy(true);
     try {
       const response = await fetch(memberId ? `/api/admin/members/${memberId}/onchain-subscription` : "/api/portal/change-plan", {
         method: memberId ? "PATCH" : "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...(plan ? { plan_key: plan } : {}), ...(memberId && code ? { discount_code: code } : {}) }),
+        body: JSON.stringify({ ...(plan ? { plan_key: plan } : {}), ...(memberId && (code || removeDiscount) ? { discount_code: removeDiscount ? "" : code } : {}) }),
       });
       const data = await response.json();
       setMessage(response.ok ? data.message : data.error);
@@ -27,7 +27,8 @@ export function OnchainPlanEditor({ memberId }: { memberId?: number }) {
     </select></label>
     {memberId && <label className="block">Discount code<input aria-label="Subscription discount code" className="block w-full rounded border border-white/20 bg-transparent p-2" value={code} onChange={event => setCode(event.target.value)} /></label>}
     <p className="text-xs text-muted">Applies to the next invoice issued. Existing invoices keep their price. Access changes when the new invoice is paid.</p>
-    <button type="button" className="btn-glass rounded px-3 py-2" disabled={busy || (!plan && !code)} onClick={save}>{busy ? "Saving…" : "Save changes"}</button>
+    <button type="button" className="btn-glass rounded px-3 py-2" disabled={busy || (!plan && !code)} onClick={() => save()}>{busy ? "Saving…" : "Save changes"}</button>
+    {memberId && <button type="button" className="btn-glass rounded px-3 py-2" disabled={busy} onClick={() => { setCode(""); void save(true); }}>Remove discount</button>}
     {message && <p role="status" className="text-xs">{message}</p>}
   </div>;
 }

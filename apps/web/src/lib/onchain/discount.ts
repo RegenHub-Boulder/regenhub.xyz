@@ -6,7 +6,7 @@ export type OnchainCoupon = {
   code: string; promotion_code_id: string; coupon_id: string;
   percent_off: number | null; amount_off: number | null;
   duration: "once" | "repeating" | "forever"; duration_in_months: number | null;
-  plan_keys: string[]; max_redemptions: number | null; stripe_redemptions: number;
+  plan_keys: string[]; max_redemptions: number | null; stripe_redemptions?: number;
 };
 
 /** Resolve the very same admin-created Stripe promotion code; never trust client prices. */
@@ -32,5 +32,5 @@ export async function resolveOnchainCoupon(code: string, planKey: string): Promi
   return { code: promo.code, promotion_code_id: promo.id, coupon_id: coupon.id,
     percent_off: coupon.percent_off, amount_off: coupon.amount_off, duration: coupon.duration,
     duration_in_months: coupon.duration_in_months, plan_keys: planKeys,
-    max_redemptions: null, stripe_redemptions: promo.times_redeemed };
+    max_redemptions: null };
 }

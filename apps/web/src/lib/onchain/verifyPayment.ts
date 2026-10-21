@@ -1,3 +1,4 @@
+import { withLockWriter } from "@regenhub/shared";
 import {
   decodeEventLog,
   getAddress,
@@ -113,28 +114,41 @@ async function completePaymentEffects(
   if (!claimed) return;
 
   try {
-    const [{ data: member }, plan] = await Promise.all([
-      admin
-        .from("members")
-        .select("id, pin_code_slot")
-        .eq("id", args.memberId)
-        .single(),
-      Promise.resolve(getPlan(args.planKey)),
-    ]);
-    if (!member || !plan) throw new Error("credited payment has no member or plan");
+    await withLockWriter(admin, async () => {
+      // Read entitlement only after acquiring the shared, non-expiring reservation.
+      // Period order, rather than arrival/retry order, governs door access.
+      const { data: latest, error: latestError } = await admin.from("onchain_invoices")
+        .select("plan_key, subscriptions(plan_key)")
+        .eq("member_id", args.memberId).eq("status", "paid")
+        .order("period_start", { ascending: false }).order("id", { ascending: false })
+        .limit(1).maybeSingle();
+      if (latestError) throw latestError;
+      const subscription = latest?.subscriptions as unknown as { plan_key: string } | null;
+      const planKey = latest?.plan_key ?? subscription?.plan_key;
+      if (!planKey) throw new Error("credited payment has no authoritative paid invoice");
+      const [{ data: member }, plan] = await Promise.all([
+        admin
+          .from("members")
+          .select("id, pin_code_slot")
+          .eq("id", args.memberId)
+          .single(),
+        Promise.resolve(getPlan(planKey)),
+      ]);
+      if (!member || !plan) throw new Error("credited payment has no member or plan");
 
-    if (plan.grantsMemberType === "day_pass" && member.pin_code_slot) {
-      const revoked = await downgradeMembershipAccess(admin, { memberId: member.id, currentPinSlot: member.pin_code_slot, revokePermanentPin: true });
-      if (revoked.lockRevokeFailed || revoked.memberUpdateError) throw new Error("Could not revoke permanent door access");
-    }
-    const activation = await activateMembershipAccess(admin, {
-      memberId: member.id,
-      currentPinSlot: member.pin_code_slot,
-      grantsMemberType: plan.grantsMemberType,
-    });
-    if (activation.autoAllocationFailure) throw new Error(activation.autoAllocationFailure);
+      if (plan.grantsMemberType === "day_pass" && member.pin_code_slot) {
+        const revoked = await downgradeMembershipAccess(admin, { memberId: member.id, currentPinSlot: member.pin_code_slot, revokePermanentPin: true });
+        if (revoked.lockRevokeFailed || revoked.memberUpdateError) throw new Error("Could not revoke permanent door access");
+      }
+      const activation = await activateMembershipAccess(admin, {
+        memberId: member.id,
+        currentPinSlot: member.pin_code_slot,
+        grantsMemberType: plan.grantsMemberType,
+      });
+      if (activation.autoAllocationFailure) throw new Error(activation.autoAllocationFailure);
+    }, "On-chain access reconciliation");
     await grantSubscriptionPasses(admin, {
-      memberId: member.id,
+      memberId: args.memberId,
       subscriptionId: args.subscriptionId,
       planKey: args.planKey,
       billingEventKey: `onchain:${args.invoiceId}`,

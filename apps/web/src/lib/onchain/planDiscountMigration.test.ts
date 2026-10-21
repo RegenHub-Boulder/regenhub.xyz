@@ -30,10 +30,15 @@ it("freezes invoice prices/plans, coupon durations and idempotent generation in 
     await apply("once"); await issue("2026-11-01", 290); await issue("2026-11-01", 290);
     expect(await row("select plan_key, base_amount_cents, amount_cents, coupon_code, coupon_discount_cents from onchain_invoices where period_start='2026-11-01'"))
       .toEqual({ plan_key: "member_2day", base_amount_cents: 5000, amount_cents: 3884, coupon_code: "SAVE", coupon_discount_cents: 1000 });
+    await db.exec("update subscriptions set onchain_coupon = onchain_coupon || '{\"stripe_redemptions\":9}'::jsonb where id=1");
+    expect((await row("select onchain_coupon_start from subscriptions where id=1")).onchain_coupon_start).toBeTruthy();
     await issue("2026-12-01");
     expect((await row("select amount_cents from onchain_invoices where period_start='2026-12-01'")).amount_cents).toBe(5000);
     await apply("repeating");
-    for (const date of ["2027-01-01", "2027-02-01", "2027-03-01"]) await issue(date);
+    for (const [index, date] of ["2027-01-01", "2027-02-01", "2027-03-01"].entries()) {
+      await db.exec(`update subscriptions set onchain_coupon = onchain_coupon || '{"stripe_redemptions":${12 + index}}'::jsonb where id=1`);
+      await issue(date);
+    }
     expect((await row("select array_agg(amount_cents order by period_start) amounts from onchain_invoices where period_start >= '2027-01-01'")).amounts).toEqual([4000,4000,5000]);
     await db.exec(`update subscriptions set onchain_coupon='{"code":"FLAT","duration":"forever","amount_off":2000,"plan_keys":["member_2day"]}' where id=1`);
     await issue("2027-04-01");
