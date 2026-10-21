@@ -12,6 +12,8 @@
 - Tests: PGlite migration suite (22), route flow suite against PGlite via a PostgREST-subset fetch (12),
   opt-in two-connection race suite on real Postgres (4, `WALLET_MOVE_PG_URL`).
 - Gates, /code-review, walkthrough video (outside the repo).
+- Resume (uebnp53t): re-ran vitest, lint, tsc, bot build, video checks; merged with main (057) and
+  re-ran the suites with 049+057 applied before 058. All as reported. REPORT.md updated.
 
 ## Next
 - Uni: independent review, push, PR. Aaron: decisions listed in REPORT.md.
