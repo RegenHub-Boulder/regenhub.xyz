@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { CheckCircle2, Loader2, Wallet } from "lucide-react";
 import { RegenHubWalletProvider } from "@/components/web3/RegenHubWalletProvider";
 import { GaslessPaymentReview } from "@/components/web3/GaslessPaymentReview";
-import { RemoveWalletButton } from "@/components/portal/RemoveWalletButton";
 import { pollOnchainPayment } from "@/lib/onchain/clientConfirmation";
 import { linkWalletWithSignature, WalletLinkError } from "@/lib/onchain/walletLink";
 import {
@@ -27,7 +26,6 @@ import {
 } from "@/lib/onchain/walletAuthorization";
 
 type Props = {
-  walletId: number | null;
   walletAddress: string | null;
   walletVerifiedBySignature: boolean;
   invoice: {
@@ -336,7 +334,6 @@ function OnchainBillingCardInner(props: Props) {
         />
       )}
       {props.walletAddress && <p className="text-[11px] text-muted font-mono break-all">Verified wallet: {props.walletAddress}</p>}
-      {props.walletAddress && props.walletId && <RemoveWalletButton walletId={props.walletId} address={props.walletAddress} />}
       {props.invoice?.txHash && <a className="text-xs text-sage underline" href={`https://optimistic.etherscan.io/tx/${props.invoice.txHash}`} target="_blank" rel="noreferrer">View transaction</a>}
       {submittedTxHash && !props.invoice?.txHash && <a className="text-xs text-sage underline" href={`https://optimistic.etherscan.io/tx/${submittedTxHash}`} target="_blank" rel="noreferrer">View submitted transaction</a>}
       {message && <p className="text-xs text-emerald-400">{message}</p>}

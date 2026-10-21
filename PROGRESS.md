@@ -1,24 +1,23 @@
 # T-241b wallet move — progress
 
 ## Done
-- Read brief, schema (046/048), wallet routes, portal UI.
-
-## Design (decided)
-- 058: address unique only among active rows; `bind_member_wallet` ignores other members' revoked rows
-  and reuses the member's own row for an address; `move_member_wallet` / `unlink_member_wallet` /
-  `wallet_release_blocker` do guard + move atomically; per-address advisory xact lock serialises all
-  writers of one address; audit row written in the same transaction.
-- Trigger: a subscription / relay job may only point at an active wallet of its own member (closes the
-  race where a subscription is created while its wallet is being moved off).
-- Challenge row gets `purpose` ('link'|'move') and `move_from_wallet_id`; a move only succeeds if that
-  exact wallet row is still active (so two concurrent moves: one wins).
+- 058_wallet_move.sql: address unique among active rows only; `bind_member_wallet` ignores other members'
+  revoked rows and reuses the member's own row; `move_member_wallet` / `unlink_member_wallet` guarded by
+  `wallet_release_blocker`; per-address advisory lock; audit row in the same transaction; trigger keeps new
+  subscriptions / relay jobs on an active wallet of their own member.
+- Routes: challenge (`move: true`, wording identical whether or not the address is held), verify
+  (move + `wallet_linked_elsewhere` / `wallet_in_use` / `wallet_changed` codes), remove.
+- UI: move offer in the portal billing card and /membership crypto checkout; "Crypto wallet" card with
+  Remove wallet when no on-chain membership uses the wallet.
+- Tests: PGlite migration suite (22), route flow suite against PGlite via a PostgREST-subset fetch (12),
+  opt-in two-connection race suite on real Postgres (4, `WALLET_MOVE_PG_URL`).
+- Gates, /code-review, walkthrough video (outside the repo).
 
 ## Next
-- SQL tests (PGlite) red → 058 → green.
-- PGlite-backed PostgREST fetch for route integration tests.
-- Routes: challenge (move), verify (move + codes), remove.
-- UI: move offer (OnchainBillingCard, CryptoPayment), Remove wallet.
-- Gates, real-Postgres concurrency check, walkthrough video, report.
+- Uni: independent review, push, PR. Aaron: decisions listed in REPORT.md.
 
 ## Open questions
-- Canceled on-chain subs can leave an `open` invoice behind (nothing voids them) → would block remove/move.
+- Nothing voids an `open` invoice when an on-chain subscription is canceled, so such an invoice blocks
+  remove/move until an admin closes it (brief lists open invoices as a blocker; kept).
+- `incomplete` (never-paid) setups count as live, so a test account that started a crypto checkout still
+  needs an admin. Per brief; Aaron may want self-serve cancel for those.

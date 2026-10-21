@@ -9,15 +9,17 @@ import { NextResponse } from "next/server";
 
 export type WalletReleaseBlocker = "live_subscription" | "open_invoice" | "relay_in_flight";
 
+// wallet_release_blocker checks in this order, so an unpaid invoice or an
+// in-flight relay is only reported once no live membership is left.
 const OTHER_ACCOUNT: Record<WalletReleaseBlocker, string> = {
   live_subscription: "This wallet is linked to another account that has a live crypto membership. Cancel that membership first, or ask an admin.",
-  open_invoice: "This wallet is linked to another account that has an unpaid crypto invoice. Cancel that membership first, or ask an admin.",
+  open_invoice: "This wallet is linked to another account that still has an unpaid crypto invoice. Ask an admin to close it first.",
   relay_in_flight: "This wallet is linked to another account that has a crypto payment in progress. Wait for it to finish, or ask an admin.",
 };
 
 const OWN_ACCOUNT: Record<WalletReleaseBlocker, string> = {
   live_subscription: "This wallet pays for your live crypto membership. Cancel that membership first, or ask an admin.",
-  open_invoice: "You have an unpaid crypto invoice on this wallet. Cancel that membership first, or ask an admin.",
+  open_invoice: "Your account still has an unpaid crypto invoice. Ask an admin to close it first.",
   relay_in_flight: "A crypto payment from this wallet is still in progress. Wait for it to finish, or ask an admin.",
 };
 

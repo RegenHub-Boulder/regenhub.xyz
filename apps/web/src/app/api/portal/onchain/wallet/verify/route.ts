@@ -70,15 +70,19 @@ export async function POST(request: Request) {
   if (bindError?.message === "wallet already belongs to another member") {
     // The signer has just proven they hold this wallet, so it's safe to tell
     // them whether it can move here before asking for a second signature.
-    const { data: holder } = await admin
+    const { data: holder, error: holderError } = await admin
       .from("member_wallets")
       .select("id")
       .eq("address_normalized", address.toLowerCase())
       .is("revoked_at", null)
       .maybeSingle();
-    const { data: blocker } = holder
+    const { data: blocker, error: blockerError } = holder
       ? await admin.rpc("wallet_release_blocker", { p_wallet_id: holder.id })
-      : { data: null };
+      : { data: null, error: null };
+    if (holderError || blockerError) {
+      console.error("[OnchainWallet] could not check the wallet's other account:", holderError ?? blockerError);
+      return NextResponse.json({ error: "Could not check this wallet. Try again." }, { status: 500 });
+    }
     if (blocker) return walletInUse(blocker as string, "other");
     return NextResponse.json({ code: "wallet_linked_elsewhere", error: WALLET_LINKED_ELSEWHERE }, { status: 409 });
   }

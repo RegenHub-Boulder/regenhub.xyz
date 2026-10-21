@@ -171,7 +171,7 @@ describe("moving a wallet between accounts", () => {
 
   it.each([
     ["a live crypto membership", "live_subscription", "has a live crypto membership"],
-    ["an unpaid crypto invoice", "open_invoice", "has an unpaid crypto invoice"],
+    ["an unpaid crypto invoice", "open_invoice", "still has an unpaid crypto invoice"],
     ["a crypto payment in flight", "relay_in_flight", "has a crypto payment in progress"],
   ])("refuses to move a wallet whose account has %s", async (_label, blocker, phrase) => {
     const holder = await account("Holder");
@@ -192,7 +192,7 @@ describe("moving a wallet between accounts", () => {
     expect(refused.status).toBe(409);
     expect(refused.body.code).toBe("wallet_in_use");
     expect(refused.body.error).toContain(phrase);
-    expect(refused.body.error).toMatch(/or ask an admin\.$/);
+    expect(refused.body.error).toMatch(/ask an admin/i);
     expect(await holderOf(wallet)).toEqual([holder.memberId]);
 
     // The plain link attempt says so up front instead of offering a move that would fail.
