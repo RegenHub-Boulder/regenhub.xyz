@@ -264,6 +264,11 @@ export interface Database {
           discount_duration: DiscountDuration | null;
           discount_months: number | null;
           discount_note: string | null;
+          admin_canceled_at?: string | null;
+          admin_canceled_by?: number | null;
+          admin_cancel_reason?: string | null;
+          admin_cancel_mode?: "now" | "period_end" | null;
+          admin_cancel_ends_at?: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -289,6 +294,11 @@ export interface Database {
           discount_duration?: DiscountDuration | null;
           discount_months?: number | null;
           discount_note?: string | null;
+          admin_canceled_at?: string | null;
+          admin_canceled_by?: number | null;
+          admin_cancel_reason?: string | null;
+          admin_cancel_mode?: "now" | "period_end" | null;
+          admin_cancel_ends_at?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["subscriptions"]["Insert"]>;
         Relationships: [];
@@ -694,7 +704,24 @@ export interface Database {
           plan_key: string;
           period_end: string;
           was_new: boolean;
+          /** "exception": paid after an admin cancel; recorded, not credited (migration 059). */
+          match_status: "credited" | "exception";
         }>;
+      };
+      admin_cancel_subscription: {
+        Args: {
+          p_subscription_id: number;
+          p_mode: "now" | "period_end";
+          p_actor: number | null;
+          p_reason: string | null;
+          p_void_open: boolean;
+          p_stripe?: { voided_invoice_ids: string[]; already_canceled: boolean } | null;
+        };
+        Returns: unknown;
+      };
+      finish_admin_cancel: {
+        Args: { p_subscription_id: number };
+        Returns: boolean;
       };
       find_stale_member_links: {
         Args: Record<string, never>;

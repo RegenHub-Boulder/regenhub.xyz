@@ -140,6 +140,18 @@ webhook): welcome on first activation, payment-reminder on past_due transition, 
 subscription end. The free-day email templates are **duplicated** in `apps/bot/src/email.ts` —
 edit both or they drift.
 
+### Admin "Cancel membership" (both rails)
+`/admin/members/[id]` → Billing → Cancel membership (`lib/membershipCancel.ts`). One SQL function,
+`admin_cancel_subscription` (migration 059), records the cancel under `FOR UPDATE` on the subscription:
+the `admin_cancel_*` marker, on-chain invoice voids and the `admin_actions` row commit together; repeats
+are no-ops. While the marker is set nothing makes the subscription payable or entitled again: no invoice
+insert (trigger), no credit (`credit_onchain_invoice` records a late transfer as an `exception` payment
+for an admin to reconcile), no payment effects or Stripe activation (both re-read the row under the PIN
+writer), and an ended row can't go live (trigger). Card cancels call Stripe first; the webhook uses
+Stripe's *current* subscription for marked rows, and only a renewal Stripe reports lifts the marker.
+Cancel-now stays "marked + live" until the door step finishes; the on-chain billing cron finishes any
+left pending and ends period-end cancels.
+
 ### Add a new member via bot
 Use `/admin → Add member` as an admin in the Telegram bot.
 

@@ -10,6 +10,7 @@ import {
 import { activateMembershipAccess, downgradeMembershipAccess } from "@/lib/membershipLifecycle";
 import { getPlan } from "@/lib/plans";
 import { grantSubscriptionPasses } from "@/lib/subscriptionPasses";
+import { isLiveSubscription } from "@/lib/subscriptionStatus";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { assertOpPublicClient, getOpPublicClient } from "./config";
 
@@ -114,8 +115,14 @@ async function completePaymentEffects(
   if (!claimed) return;
 
   try {
-    await withLockWriter(admin, async () => {
+    const entitled = await withLockWriter(admin, async () => {
       // Read entitlement only after acquiring the shared, non-expiring reservation.
+      // A subscription canceled since the payment was credited (an admin
+      // cancel ends access under this same reservation) grants nothing.
+      const { data: current, error: currentError } = await admin.from("subscriptions")
+        .select("status, admin_cancel_mode").eq("id", args.subscriptionId).single();
+      if (currentError) throw currentError;
+      if (!isLiveSubscription(current.status) || current.admin_cancel_mode === "now") return false;
       // Period order, rather than arrival/retry order, governs door access.
       const { data: latest, error: latestError } = await admin.from("onchain_invoices")
         .select("plan_key, subscriptions(plan_key)")
@@ -146,14 +153,17 @@ async function completePaymentEffects(
         grantsMemberType: plan.grantsMemberType,
       });
       if (activation.autoAllocationFailure) throw new Error(activation.autoAllocationFailure);
+      return true;
     }, "On-chain access reconciliation");
-    await grantSubscriptionPasses(admin, {
-      memberId: args.memberId,
-      subscriptionId: args.subscriptionId,
-      planKey: args.planKey,
-      billingEventKey: `onchain:${args.invoiceId}`,
-      notifyMember: true,
-    });
+    if (entitled) {
+      await grantSubscriptionPasses(admin, {
+        memberId: args.memberId,
+        subscriptionId: args.subscriptionId,
+        planKey: args.planKey,
+        billingEventKey: `onchain:${args.invoiceId}`,
+        notifyMember: true,
+      });
+    }
     const { error: completeError } = await admin
       .from("onchain_payments")
       .update({ effects_claimed_at: null, effects_completed_at: new Date().toISOString() })
@@ -310,6 +320,10 @@ export async function processOnchainInvoice(
   if (creditError) throw creditError;
   const credit = creditRows?.[0];
   if (!credit) throw new Error("credit RPC returned no payment");
+  if (credit.match_status === "exception") {
+    // Paid after an admin canceled: recorded for reconciliation, not credited.
+    return { status: "exception", txHash, reason: "membership was canceled; payment recorded for an admin to reconcile" };
+  }
 
   await completePaymentEffects(admin, {
     paymentId: credit.payment_id,

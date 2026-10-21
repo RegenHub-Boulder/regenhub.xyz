@@ -3,8 +3,7 @@ import type { PaymentRail } from "@/lib/supabase/types";
 import { getPlan } from "@/lib/plans";
 import { getStripe } from "@/lib/stripe";
 import { downgradeMembershipAccess, type DowngradeResult } from "@/lib/membershipLifecycle";
-import { AuditAction, logAction } from "@/lib/auditLog";
-import { LIVE_SUBSCRIPTION_STATUSES, isLiveSubscription } from "@/lib/subscriptionStatus";
+import { isLiveSubscription } from "@/lib/subscriptionStatus";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -20,7 +19,6 @@ export interface CancelMembershipInput {
   reason: string | null;
   /** Void the subscription's open unpaid invoices (offered for past_due members). */
   voidOpenInvoices: boolean;
-  now?: Date;
 }
 
 export interface CancelMembershipResult {
@@ -51,38 +49,40 @@ type SubscriptionRow = {
   plan_key: string;
   status: string;
   current_period_end: string | null;
-  cancel_at_period_end: boolean;
-  canceled_at: string | null;
   stripe_subscription_id: string | null;
+  admin_cancel_mode: CancelMode | null;
+};
+
+/** What admin_cancel_subscription() (migration 059) returns. */
+type Recorded = {
+  outcome: CancelMembershipResult["outcome"];
+  subscription_id: number;
+  member_id: number;
+  rail: PaymentRail;
+  mode: CancelMode;
+  access_ends_at: string | null;
+  /** Access ends now and hasn't been ended yet (also true on a repeat of a half-finished cancel). */
+  end_access: boolean;
+  voided_invoice_ids: string[];
+  in_flight_invoice_ids: string[];
 };
 
 const SUBSCRIPTION_COLUMNS =
-  "id, member_id, payment_rail, plan_key, status, current_period_end, cancel_at_period_end, canceled_at, stripe_subscription_id";
-
-/** Relay jobs past this point may already carry a signed transfer. */
-const RELAY_IN_FLIGHT = ["signed", "submitting", "submitted"];
-/** Invoice states a member can still pay (an `exception` can be resubmitted). */
-const PAYABLE = ["open", "exception", "submitted", "detected"];
-const VOIDABLE = ["open", "exception"];
+  "id, member_id, payment_rail, plan_key, status, current_period_end, stripe_subscription_id, admin_cancel_mode";
 
 function isDeskPlan(planKey: string): boolean {
   const type = getPlan(planKey)?.grantsMemberType;
   return type === "cold_desk" || type === "hot_desk";
 }
 
-function periodEndOf(sub: SubscriptionRow, now: Date): string {
-  const end = sub.current_period_end ? Date.parse(sub.current_period_end) : now.getTime();
-  return new Date(Math.max(now.getTime(), end)).toISOString();
-}
-
 /**
- * End the member's permanent door access through the shared lifecycle, the
- * same path the Stripe webhook and past-due sweep use. A failed lock clear
- * leaves the slot on the member and quarantined, so Lock Sync can retry it.
- * A failed member update throws, so callers can leave the subscription live
- * and the whole cancel stays retryable.
+ * End the member's door access through the shared lifecycle, then close the
+ * cancellation. A failed lock clear leaves the slot on the member and
+ * quarantined, so Lock Sync can retry it. A failed member update throws and
+ * leaves the cancellation pending (marked, still live): repeating the cancel
+ * or the next on-chain billing cron run finishes it.
  */
-async function endAccess(admin: ServiceClient, sub: SubscriptionRow) {
+async function endAccessAndFinish(admin: ServiceClient, sub: Pick<SubscriptionRow, "id" | "member_id" | "plan_key">) {
   const downgrade = await downgradeMembershipAccess(admin, {
     memberId: sub.member_id,
     currentPinSlot: null,
@@ -92,110 +92,42 @@ async function endAccess(admin: ServiceClient, sub: SubscriptionRow) {
     const { message } = downgrade.memberUpdateError as { message?: string };
     throw new Error(`Member downgrade failed: ${message ?? "unknown error"}`);
   }
+  const { error } = await admin.rpc("finish_admin_cancel", { p_subscription_id: sub.id });
+  if (error) throw error;
   return downgrade;
 }
 
-type PayableInvoice = { id: number; period_start: string; status: string; inFlight: boolean };
-
-/**
- * The subscription's payable invoices, flagging those with a payment already
- * on its way (a submitted transaction, or a signed gasless transfer).
- * `credit_onchain_invoice` reactivates the subscription when any of them is
- * paid, so an ended subscription must keep none: in-flight ones block an
- * immediate cancel, the rest are voided before access ends.
- */
-async function payableOnchainInvoices(admin: ServiceClient, subscriptionId: number): Promise<PayableInvoice[]> {
-  const { data: invoices, error } = await admin
-    .from("onchain_invoices")
-    .select("id, period_start, status")
-    .eq("subscription_id", subscriptionId)
-    .in("status", PAYABLE);
-  if (error) throw error;
-  if (!invoices?.length) return [];
-  const { data: relays, error: relayError } = await admin
-    .from("onchain_relay_jobs")
-    .select("invoice_id")
-    .in("invoice_id", invoices.map((invoice) => invoice.id))
-    .in("status", RELAY_IN_FLIGHT);
-  if (relayError) throw relayError;
-  const relaying = new Set((relays ?? []).map((relay) => Number(relay.invoice_id)));
-  return invoices.map((invoice) => ({
-    ...invoice,
-    inFlight: !VOIDABLE.includes(invoice.status) || relaying.has(Number(invoice.id)),
-  }));
-}
-
-/**
- * Void on-chain invoices. Invoices for a period starting at or after
- * `accessEndsAt` are always voided (nobody should pay for time they won't
- * get); `includeEarlier` also voids the overdue ones. Invoices with a payment
- * in flight are left alone and reported. The update is conditional on the
- * status; when a payment got there first it is skipped and `raced` is set, so
- * callers stop before ending access.
- */
-async function voidOnchainInvoices(
-  admin: ServiceClient,
-  sub: SubscriptionRow,
-  accessEndsAt: string,
-  includeEarlier: boolean,
-  invoices?: PayableInvoice[],
-) {
-  const voided: string[] = [];
-  const warnings: string[] = [];
-  let raced = false;
-  const endsAt = Date.parse(accessEndsAt);
-  for (const invoice of invoices ?? await payableOnchainInvoices(admin, sub.id)) {
-    if (!includeEarlier && Date.parse(invoice.period_start) < endsAt) continue;
-    if (invoice.inFlight) {
-      warnings.push(`Invoice #${invoice.id} has a payment in flight; left for the confirmation cron.`);
-      continue;
-    }
-    const { data: updated, error } = await admin
-      .from("onchain_invoices")
-      .update({ status: "void" })
-      .eq("id", invoice.id)
-      .in("status", VOIDABLE)
-      .select("id");
-    if (error) throw error;
-    if (!updated?.length) {
-      raced = true;
-      warnings.push(`Invoice #${invoice.id} changed while canceling; check it before retrying.`);
-      continue;
-    }
-    voided.push(String(invoice.id));
-    if (invoice.status === "exception") {
-      warnings.push(`Invoice #${invoice.id} was in exception; voided. Check its payments for anything to refund.`);
-    }
-  }
-  return { voided, warnings, raced };
-}
-
-async function voidStripeInvoices(sub: SubscriptionRow) {
+async function voidStripeInvoices(subscriptionId: string) {
   const voided: string[] = [];
   const warnings: string[] = [];
   const stripe = getStripe();
-  const { data: invoices } = await stripe.invoices.list({
-    subscription: sub.stripe_subscription_id!,
-    status: "open",
-    limit: 100,
-  });
-  for (const invoice of invoices) {
-    if (!invoice.id) continue;
-    try {
-      await stripe.invoices.voidInvoice(invoice.id);
-      voided.push(invoice.id);
-    } catch (error) {
-      console.error(`[CancelMembership] Void failed for Stripe invoice ${invoice.id}:`, error);
-      warnings.push(`Could not void Stripe invoice ${invoice.id}; void it in the Stripe dashboard.`);
+  let startingAfter: string | undefined;
+  for (;;) {
+    const page = await stripe.invoices.list({
+      subscription: subscriptionId,
+      status: "open",
+      limit: 100,
+      ...(startingAfter ? { starting_after: startingAfter } : {}),
+    });
+    for (const invoice of page.data) {
+      if (!invoice.id) continue;
+      try {
+        await stripe.invoices.voidInvoice(invoice.id);
+        voided.push(invoice.id);
+      } catch (error) {
+        console.error(`[CancelMembership] Void failed for Stripe invoice ${invoice.id}:`, error);
+        warnings.push(`Could not void Stripe invoice ${invoice.id}; void it in the Stripe dashboard.`);
+      }
     }
+    if (!page.has_more || !page.data.length) break;
+    startingAfter = page.data[page.data.length - 1].id;
   }
   return { voided, warnings };
 }
 
 /** Returns "already_canceled" when Stripe had ended it before we asked. */
-async function cancelAtStripe(sub: SubscriptionRow, mode: CancelMode, reason: string | null) {
+async function cancelAtStripe(id: string, mode: CancelMode, reason: string | null) {
   const stripe = getStripe();
-  const id = sub.stripe_subscription_id!;
   const details = reason ? { cancellation_details: { comment: reason.slice(0, 500) } } : {};
   try {
     if (mode === "now") {
@@ -220,29 +152,26 @@ async function cancelAtStripe(sub: SubscriptionRow, mode: CancelMode, reason: st
 /**
  * Admin-initiated cancel for either payment rail.
  *
- * - "now": the subscription ends immediately (Stripe cancel / on-chain row to
- *   canceled) and the door code is cleared through the membership lifecycle.
- *   Callers should hold the PIN-writer reservation (the route does) so a busy
- *   writer fails before any billing change. A crypto cancel also voids every
- *   open invoice, because paying one would reactivate the subscription.
- * - "period_end": Stripe gets `cancel_at_period_end`; the on-chain row gets
- *   the same flag, which stops invoice generation, and the on-chain billing
- *   cron ends it via `endOnchainSubscriptionsAtPeriodEnd`.
+ * The cancellation itself is recorded by one SQL function,
+ * `admin_cancel_subscription` (migration 059), under a lock on the
+ * subscription row: the marker (who, why, now or at period end), the on-chain
+ * invoice voids and the admin_actions row commit together. While the marker is
+ * set, every path that could make the subscription payable or entitled again
+ * (invoice generation, payment credit, payment effects, Stripe webhooks)
+ * refuses. Card cancels call Stripe first and record the result.
  *
- * An unpaid checkout (`incomplete`) is simply marked canceled, in either mode:
- * it never granted access, so none is taken away.
+ * - "now": access ends through the membership lifecycle (the route holds the
+ *   PIN-writer reservation), then `finish_admin_cancel` marks it canceled.
+ * - "period_end": Stripe gets `cancel_at_period_end`; an on-chain row stops
+ *   renewing and the on-chain billing cron ends it after the paid period.
  *
- * Nothing is deleted. Order: crypto invoices are voided, then access ends,
- * then the subscription is marked canceled, so a failure part-way leaves it
- * live and the same call can be repeated; repeats after success change nothing.
+ * Nothing is deleted. Repeating a cancel is safe: one that finished changes
+ * nothing; one that failed part-way finishes.
  */
 export async function cancelMembership(
   admin: ServiceClient,
   input: CancelMembershipInput,
 ): Promise<CancelMembershipResult> {
-  const now = input.now ?? new Date();
-  const nowIso = now.toISOString();
-
   const { data: subs, error } = await admin
     .from("subscriptions")
     .select(SUBSCRIPTION_COLUMNS)
@@ -258,123 +187,60 @@ export async function cancelMembership(
       ?? rows[0];
   if (!sub) throw new CancelMembershipError("This member has no such subscription to cancel", 404);
 
-  let outcome: CancelMembershipResult["outcome"];
-  // An unpaid checkout has no period to run out and never granted access.
-  const neverPaid = sub.status === "incomplete";
-  let endsNow = input.mode === "now" || neverPaid;
-  let door: CancelMembershipResult["door"] = null;
-  let voidedInvoiceIds: string[] = [];
-  let voidedEarly = false;
-  let stripeAlreadyCanceled = false;
   const warnings: string[] = [];
-
-  if (!isLiveSubscription(sub.status)) {
-    outcome = "already_canceled";
-    endsNow = true;
-  } else if (input.mode === "period_end" && sub.cancel_at_period_end) {
-    outcome = "already_scheduled";
-  } else {
-    if (sub.payment_rail === "onchain" && endsNow) {
-      const invoices = await payableOnchainInvoices(admin, sub.id);
-      const inFlight = invoices.filter((invoice) => invoice.inFlight);
-      if (inFlight.length) {
-        throw new CancelMembershipError(
-          `A payment for invoice #${inFlight.map((invoice) => invoice.id).join(", #")} is still being confirmed. Wait for it to settle, or cancel at period end.`,
-          409,
-        );
-      }
-      // Void before access ends, so nothing payable is left to reactivate the row.
-      const voids = await voidOnchainInvoices(admin, sub, nowIso, true, invoices);
-      if (voids.raced) {
-        throw new CancelMembershipError(
-          "A payment started on one of this member's invoices while canceling. Wait for it to settle, then try again.",
-          409,
-        );
-      }
-      voidedInvoiceIds = voids.voided;
-      warnings.push(...voids.warnings);
-      voidedEarly = true;
-    }
-    if (sub.payment_rail === "stripe" && await cancelAtStripe(sub, endsNow ? "now" : "period_end", input.reason) === "already_canceled") {
-      stripeAlreadyCanceled = true;
-      endsNow = true;
+  let mode = input.mode;
+  let stripe: { voided_invoice_ids: string[]; already_canceled: boolean } | null = null;
+  const alreadyRecorded = sub.admin_cancel_mode === "now" || (sub.admin_cancel_mode != null && mode === "period_end");
+  if (sub.payment_rail === "stripe" && isLiveSubscription(sub.status) && !alreadyRecorded) {
+    const stripeMode = mode === "now" || sub.status === "incomplete" ? "now" : "period_end";
+    const done = await cancelAtStripe(sub.stripe_subscription_id!, stripeMode, input.reason);
+    if (done === "already_canceled") {
+      mode = "now";
       warnings.push("Stripe had already canceled this subscription (a missed webhook); it is now ended here too.");
     }
+    const voids = input.voidOpenInvoices
+      ? await voidStripeInvoices(sub.stripe_subscription_id!)
+      : { voided: [], warnings: [] };
+    warnings.push(...voids.warnings);
+    stripe = { voided_invoice_ids: voids.voided, already_canceled: done === "already_canceled" };
+  }
 
-    if (endsNow && !neverPaid) {
-      const downgrade = await endAccess(admin, sub);
-      door = {
-        revokedSlot: downgrade.revokedSlot,
-        lockStatus: downgrade.lockStatus,
-        lockRevokeFailed: downgrade.lockRevokeFailed,
-      };
-      if (downgrade.lockRevokeFailed) {
-        warnings.push("The door code could not be cleared on every lock. The slot is quarantined; run Lock Sync from /admin/access.");
-      }
+  const { data, error: recordError } = await admin.rpc("admin_cancel_subscription", {
+    p_subscription_id: sub.id,
+    p_mode: mode,
+    p_actor: input.actorMemberId,
+    p_reason: input.reason,
+    p_void_open: input.voidOpenInvoices,
+    p_stripe: stripe,
+  });
+  if (recordError) throw recordError;
+  const recorded = data as Recorded;
+
+  let door: CancelMembershipResult["door"] = null;
+  if (recorded.end_access) {
+    const downgrade = await endAccessAndFinish(admin, sub);
+    door = { revokedSlot: downgrade.revokedSlot, lockStatus: downgrade.lockStatus, lockRevokeFailed: downgrade.lockRevokeFailed };
+    if (downgrade.lockRevokeFailed) {
+      warnings.push("The door code could not be cleared on every lock. The slot is quarantined; run Lock Sync from /admin/access.");
     }
-    const { data: changed, error: updateError } = await admin
-      .from("subscriptions")
-      .update(endsNow
-        ? { status: "canceled" as const, canceled_at: nowIso, cancel_at_period_end: false }
-        : { cancel_at_period_end: true })
-      .eq("id", sub.id)
-      .in("status", [...LIVE_SUBSCRIPTION_STATUSES])
-      .select("id");
-    if (updateError) throw updateError;
-    // Stripe was changed by this call even if its webhook beat us to the row.
-    const ours = (sub.payment_rail === "stripe" && !stripeAlreadyCanceled) || !!changed?.length;
-    outcome = !ours ? "already_canceled" : endsNow ? "canceled" : "scheduled";
   }
-
-  const accessEndsAt = !endsNow
-    ? periodEndOf(sub, now)
-    : outcome === "already_canceled" ? sub.canceled_at ?? nowIso : nowIso;
-
-  if (sub.payment_rail === "onchain" && !voidedEarly) {
-    // Once a crypto subscription has ended, any open invoice is a way back in.
-    const voids = await voidOnchainInvoices(admin, sub, accessEndsAt, input.voidOpenInvoices || endsNow);
-    voidedInvoiceIds = voids.voided;
-    warnings.push(...voids.warnings);
-  } else if (sub.payment_rail === "stripe" && input.voidOpenInvoices) {
-    const voids = await voidStripeInvoices(sub);
-    voidedInvoiceIds = voids.voided;
-    warnings.push(...voids.warnings);
-  }
-
-  // Repeats that changed nothing leave no audit row.
-  if (outcome === "canceled" || outcome === "scheduled" || voidedInvoiceIds.length) {
-    await logAction({
-      action: AuditAction.SUBSCRIPTION_CANCELED_BY_ADMIN,
-      actorMemberId: input.actorMemberId,
-      target: { table: "members", id: input.memberId },
-      payload: {
-        subscription_id: sub.id,
-        rail: sub.payment_rail,
-        mode: input.mode,
-        outcome,
-        reason: input.reason,
-        access_ends_at: accessEndsAt,
-        voided_invoice_ids: voidedInvoiceIds,
-        door_slot_cleared: door?.revokedSlot ?? null,
-        door_clear_failed: door?.lockRevokeFailed ?? false,
-        ...(stripeAlreadyCanceled ? { stripe_already_canceled: true } : {}),
-      },
-    }, admin);
+  if (recorded.in_flight_invoice_ids.length) {
+    warnings.push(`A payment for invoice #${recorded.in_flight_invoice_ids.join(", #")} is on its way. If it lands it is recorded for you to reconcile (refund or reinstate), not credited.`);
   }
 
   return {
-    outcome,
+    outcome: recorded.outcome,
     subscriptionId: sub.id,
     rail: sub.payment_rail,
-    mode: input.mode,
-    accessEndsAt,
-    voidedInvoiceIds,
+    mode: recorded.mode,
+    accessEndsAt: new Date(recorded.access_ends_at ?? Date.now()).toISOString(),
+    voidedInvoiceIds: recorded.voided_invoice_ids,
     door,
     warnings,
   };
 }
 
-export type PeriodEndResult = {
+export type FinishResult = {
   subscriptionId: number;
   memberId: number;
   revokedSlot: number | null;
@@ -383,52 +249,36 @@ export type PeriodEndResult = {
 };
 
 /**
- * On-chain counterpart of Stripe's `customer.subscription.deleted` for
- * subscriptions an admin set to cancel at period end: once the paid period is
- * over, end access through the shared lifecycle and mark them canceled.
- * Called from the on-chain billing cron. Each subscription stays live until
- * its access has ended, so a failure is retried on the next run.
+ * On-chain counterpart of Stripe's `customer.subscription.deleted` for admin
+ * cancellations: ends access and closes subscriptions set to end at period
+ * end once the paid period is over, and finishes any cancel-now whose door
+ * step failed part-way. Called from the on-chain billing cron; a failure is
+ * retried on the next run.
  */
-export async function endOnchainSubscriptionsAtPeriodEnd(
+export async function finishOnchainAdminCancels(
   admin: ServiceClient,
   now = new Date(),
-): Promise<PeriodEndResult[]> {
-  const nowIso = now.toISOString();
-  const { data: due, error } = await admin
+): Promise<FinishResult[]> {
+  const { data: marked, error } = await admin
     .from("subscriptions")
     .select(SUBSCRIPTION_COLUMNS)
     .eq("payment_rail", "onchain")
-    .eq("cancel_at_period_end", true)
-    .in("status", [...LIVE_SUBSCRIPTION_STATUSES])
-    .lte("current_period_end", nowIso);
+    .not("admin_cancel_mode", "is", null)
+    .in("status", ["active", "trialing", "past_due", "incomplete"]);
   if (error) throw error;
+  const due = ((marked ?? []) as SubscriptionRow[]).filter((sub) =>
+    sub.admin_cancel_mode === "now" || !sub.current_period_end || Date.parse(sub.current_period_end) <= now.getTime());
 
-  const results: PeriodEndResult[] = [];
-  for (const sub of (due ?? []) as SubscriptionRow[]) {
+  const results: FinishResult[] = [];
+  for (const sub of due) {
     try {
-      // A payment on its way would reactivate the row when credited; let it settle first.
-      const invoices = await payableOnchainInvoices(admin, sub.id);
-      if (invoices.some((invoice) => invoice.inFlight)) continue;
-      const voids = await voidOnchainInvoices(admin, sub, nowIso, true, invoices);
-      if (voids.raced) continue; // a payment started underneath; next run
-      const downgrade = await endAccess(admin, sub);
-      const { error: updateError } = await admin
-        .from("subscriptions")
-        .update({ status: "canceled", canceled_at: nowIso })
-        .eq("id", sub.id)
-        .in("status", [...LIVE_SUBSCRIPTION_STATUSES]);
-      if (updateError) throw updateError;
+      const downgrade = await endAccessAndFinish(admin, sub);
       if (downgrade.lockRevokeFailed) {
-        console.error(`[CancelMembership] Period-end door clear failed for member ${sub.member_id}; slot quarantined for Lock Sync.`);
+        console.error(`[CancelMembership] Door clear failed for member ${sub.member_id}; slot quarantined for Lock Sync.`);
       }
-      results.push({
-        subscriptionId: sub.id,
-        memberId: sub.member_id,
-        revokedSlot: downgrade.revokedSlot,
-        lockRevokeFailed: downgrade.lockRevokeFailed,
-      });
+      results.push({ subscriptionId: sub.id, memberId: sub.member_id, revokedSlot: downgrade.revokedSlot, lockRevokeFailed: downgrade.lockRevokeFailed });
     } catch (cause) {
-      console.error(`[CancelMembership] Period-end cancel failed for subscription ${sub.id}:`, cause);
+      console.error(`[CancelMembership] Finishing admin cancel failed for subscription ${sub.id}:`, cause);
       results.push({
         subscriptionId: sub.id,
         memberId: sub.member_id,

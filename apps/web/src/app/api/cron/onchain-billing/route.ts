@@ -6,7 +6,7 @@ import { isGaslessRelayConfigured } from "@/lib/onchain/config";
 import { processGaslessRelayQueue } from "@/lib/onchain/gaslessRelay";
 import { onchainRenewalReminderEmail, sendEmail } from "@/lib/email";
 import { planLabel } from "@/lib/plans";
-import { endOnchainSubscriptionsAtPeriodEnd } from "@/lib/membershipCancel";
+import { finishOnchainAdminCancels } from "@/lib/membershipCancel";
 
 export async function POST(req: Request) {
   const secret = process.env.CRON_SECRET;
@@ -31,10 +31,10 @@ export async function POST(req: Request) {
       }
     }
   }
-  // End admin "cancel at period end" subscriptions before issuing renewals.
-  // A failure here must not stall everyone else's billing.
-  const endedAtPeriodEnd = await endOnchainSubscriptionsAtPeriodEnd(admin).catch((cause) => {
-    console.error("[OnchainBilling] Period-end cancel sweep failed:", cause);
+  // Finish admin cancellations (period over, or a cancel-now whose door step
+  // failed). A failure here must not stall everyone else's billing.
+  const adminCancels = await finishOnchainAdminCancels(admin).catch((cause) => {
+    console.error("[OnchainBilling] Admin cancel sweep failed:", cause);
     return { error: cause instanceof Error ? cause.message : "unknown" };
   });
   const created = await generateUpcomingOnchainInvoices(admin);
@@ -78,5 +78,5 @@ export async function POST(req: Request) {
   }
   const effectsFailures = await retryPendingOnchainEffects(admin);
   const finalized = await advanceFinalizedOnchainPayments(admin);
-  return NextResponse.json({ gaslessRelays, endedAtPeriodEnd, invoicesCreated: created.length, remindersSent, pastDue, confirmations, effectsFailures, finalized });
+  return NextResponse.json({ gaslessRelays, adminCancels, invoicesCreated: created.length, remindersSent, pastDue, confirmations, effectsFailures, finalized });
 }

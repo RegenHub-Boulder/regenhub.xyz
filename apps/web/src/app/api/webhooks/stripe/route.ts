@@ -16,6 +16,7 @@ import {
   downgradeMembershipAccess,
 } from "@/lib/membershipLifecycle";
 import { grantSubscriptionPasses } from "@/lib/subscriptionPasses";
+import { withLockWriter } from "@regenhub/shared";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -207,14 +208,44 @@ async function handleCheckoutCompleted(
   return result.member_id ?? null;
 }
 
+/**
+ * For a subscription an admin canceled, an event can be older than the cancel
+ * (Stripe doesn't guarantee delivery order), so use Stripe's current state of
+ * the subscription instead of the event's. A canceled Stripe subscription
+ * never comes back, so a cancel-now can't be undone this way. If Stripe now
+ * says a period-end cancel is off, the member renewed after the admin's
+ * cancel (e.g. in the billing portal): that's an explicit re-subscribe, and
+ * the marker is lifted.
+ */
+async function currentIfAdminCanceled(admin: ServiceClient, sub: Stripe.Subscription): Promise<Stripe.Subscription> {
+  const { data: row, error } = await admin
+    .from("subscriptions")
+    .select("admin_cancel_mode")
+    .eq("stripe_subscription_id", sub.id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!row?.admin_cancel_mode) return sub;
+  const current = await getStripe().subscriptions.retrieve(sub.id);
+  if (current.status !== "canceled" && !current.cancel_at_period_end) {
+    const { error: liftError } = await admin
+      .from("subscriptions")
+      .update({ admin_canceled_at: null, admin_canceled_by: null, admin_cancel_reason: null, admin_cancel_mode: null, admin_cancel_ends_at: null })
+      .eq("stripe_subscription_id", sub.id)
+      .eq("admin_cancel_mode", "period_end");
+    if (liftError) throw liftError;
+  }
+  return current;
+}
+
 async function handleSubscriptionCreated(
   admin: ServiceClient,
   sub: Stripe.Subscription,
 ): Promise<number | null> {
-  return upsertSubscription(admin, sub, { isNew: true });
+  return upsertSubscription(admin, await currentIfAdminCanceled(admin, sub), { isNew: true });
 }
 
-async function handleSubscriptionUpdated(admin: ServiceClient, sub: Stripe.Subscription): Promise<number | null> {
+async function handleSubscriptionUpdated(admin: ServiceClient, event: Stripe.Subscription): Promise<number | null> {
+  const sub = await currentIfAdminCanceled(admin, event);
   // Capture previous state to detect transitions
   const { data: prev } = await admin
     .from("subscriptions")
@@ -599,12 +630,26 @@ async function upsertSubscription(
   // Side effects: only grant access when status flips to active/trialing
   let autoAllocatedSlot: number | null = null;
   let autoAllocationFailure: string | null = null;
-  if (isActiveStatus(status)) {
-    const activation = await activateMembershipAccess(admin, {
-      memberId: member.id,
-      currentPinSlot: member.pin_code_slot,
-      grantsMemberType: plan.grantsMemberType,
-    });
+  // Re-read the row under the PIN-writer reservation: an admin cancel that
+  // committed after this event was read must win (it ends access under the
+  // same reservation, and its marker keeps the row ended).
+  const activation = isActiveStatus(status)
+    ? await withLockWriter(admin, async () => {
+      const { data: current, error: currentError } = await admin
+        .from("subscriptions")
+        .select("status, admin_cancel_mode")
+        .eq("stripe_subscription_id", sub.id)
+        .single();
+      if (currentError) throw currentError;
+      if (!isActiveStatus(current.status) || current.admin_cancel_mode === "now") return null;
+      return activateMembershipAccess(admin, {
+        memberId: member.id,
+        currentPinSlot: member.pin_code_slot,
+        grantsMemberType: plan.grantsMemberType,
+      });
+    })
+    : null;
+  if (activation) {
     autoAllocatedSlot = activation.autoAllocatedSlot;
     autoAllocationFailure = activation.autoAllocationFailure;
 

@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invoice already has a different transaction" }, { status: 409 });
   }
 
-  const { error: updateError } = await admin
+  const { data: submitted, error: updateError } = await admin
     .from("onchain_invoices")
     .update({
       status: "submitted",
@@ -42,8 +42,16 @@ export async function POST(request: Request) {
       submitted_at: new Date().toISOString(),
       exception_reason: null,
     })
-    .eq("id", invoice.id);
-  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 409 });
+    .eq("id", invoice.id)
+    // Only while still payable: it may have been paid or voided since it was read.
+    .in("status", ["open", "submitted", "detected", "exception"])
+    .select("id")
+    .maybeSingle();
+  if (updateError || !submitted) {
+    return NextResponse.json({
+      error: "This invoice can no longer be paid. If you already sent the payment, contact the hub.",
+    }, { status: 409 });
+  }
 
   try {
     return NextResponse.json(await processOnchainInvoice(admin, invoice.id));

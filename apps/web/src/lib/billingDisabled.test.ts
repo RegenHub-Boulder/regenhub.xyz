@@ -37,7 +37,7 @@ function database(disabled = true) {
   const writes: { table: string; values: Row }[] = [];
   const rows: Record<string, Row[]> = {
     members: [member], onchain_payments: [payment(3, 7)], webhook_events: [],
-    subscriptions: [{ id: 1, member_id: 7, wallet_id: 1, plan_key: "hot_desk", payment_rail: "onchain" }],
+    subscriptions: [{ id: 1, member_id: 7, wallet_id: 1, plan_key: "hot_desk", payment_rail: "onchain", status: "active" }],
     onchain_invoices: [{ id: 2, subscription_id: 1, status: "submitted", submitted_tx_hash: txHash, token_contract: token, treasury_address: treasury, amount_usdc_micros: 100 }],
     member_wallets: [{ id: 1, address: sender, revoked_at: null }], onchain_relay_jobs: [],
   };
