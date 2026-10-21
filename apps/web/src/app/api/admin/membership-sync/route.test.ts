@@ -13,7 +13,7 @@ vi.mock("@/lib/regenos/auth", () => ({
   fetchRegenosSceneStanding: vi.fn(),
 }));
 vi.mock("next/headers", () => ({
-  cookies: vi.fn(async () => ({ toString: () => "__Host-rs_session=opaque" })),
+  cookies: vi.fn(async () => ({ toString: (): string => "__Host-rs_session=opaque" })),
 }));
 
 import { POST } from "./route";

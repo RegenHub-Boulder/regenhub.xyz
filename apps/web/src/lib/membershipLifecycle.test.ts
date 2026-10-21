@@ -30,7 +30,7 @@ beforeEach(() => {
 function memberUpdates(sb: ReturnType<typeof makeSupabaseMock>) {
   return vi.mocked(sb.from).mock.results
     .filter((result) => result.type === "return")
-    .map((result) => result.value as { update: ReturnType<typeof vi.fn> })
+    .map((result) => result.value as unknown as { update: ReturnType<typeof vi.fn> })
     .flatMap((builder) => vi.mocked(builder.update).mock.calls.map(([value]) => value));
 }
 
@@ -69,10 +69,10 @@ describe("membership lifecycle", () => {
 
   it("allocates and pushes a permanent PIN for a new desk member", async () => {
     const sb = makeSupabaseMock({ selects: { members: { data: { id: 41, disabled: false } } } });
-    vi.mocked(allocateSlotWithRetry).mockImplementation(async (options: never) => {
-      const { tryInsert } = options as { tryInsert: (slot: number) => Promise<unknown> };
+    vi.mocked(allocateSlotWithRetry).mockImplementation(async (options) => {
+      const { tryInsert } = options;
       await tryInsert(22);
-      return { ok: true, slot: 22, value: { id: 41, pin_code_slot: 22 } };
+      return { ok: true, slot: 22, data: { id: 41, pin_code_slot: 22 } };
     });
     vi.mocked(setUserCode).mockResolvedValue([{ entity: "lock.front", ok: true }]);
 
