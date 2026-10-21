@@ -48,6 +48,7 @@ type Props = {
   planKey: string;
   className?: string;
   autoStart?: boolean;
+  discountCode?: string;
 };
 
 const PHASE_LABELS: Record<Exclude<Phase, "idle" | "complete">, string> = {
@@ -62,7 +63,7 @@ const PHASE_LABELS: Record<Exclude<Phase, "idle" | "complete">, string> = {
   received: "Payment received",
 };
 
-function CryptoSubscribeButtonInner({ planKey, className, autoStart = false }: Props) {
+function CryptoSubscribeButtonInner({ planKey, className, discountCode, autoStart = false }: Props) {
   const { address, chainId, connector, isConnected } = useAccount();
   const { openConnectModal, connectModalOpen } = useConnectModal();
   const { signMessageAsync } = useSignMessage();
@@ -225,7 +226,7 @@ function CryptoSubscribeButtonInner({ planKey, className, autoStart = false }: P
       const setupRes = await fetch("/api/membership/onchain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan_key: planKey }),
+        body: JSON.stringify({ plan_key: planKey, discount_code: discountCode }),
       });
       const nextSetup = await setupRes.json() as Setup & { error?: string };
       if (!setupRes.ok) throw new Error(nextSetup.error ?? "Could not start crypto membership");
@@ -248,7 +249,7 @@ function CryptoSubscribeButtonInner({ planKey, className, autoStart = false }: P
       setError(cause instanceof Error ? cause.message : "Could not start crypto membership");
       setPhase("idle");
     }
-  }, [address, confirmSubmittedPayment, planKey, preparePayment, signMessageAsync]);
+  }, [address, confirmSubmittedPayment, discountCode, planKey, preparePayment, signMessageAsync]);
 
   useEffect(() => {
     if (!connectIntent || !isConnected || !address) return;

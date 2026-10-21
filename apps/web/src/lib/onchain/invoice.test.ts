@@ -77,3 +77,9 @@ describe("on-chain invoice math", () => {
     expect(subscriptions.in).toHaveBeenCalledWith("status", ["active", "trialing", "past_due"]);
   });
 });
+
+it("applies a coupon before the rail discount and records its amount", () => {
+  expect(invoiceValues({ subscriptionId: 1, memberId: 2, periodStart: "2026-10-01T00:00:00Z", baseAmountCents: 5000,
+    coupon: { code: "SAVE", percent_off: 20, amount_off: null },
+  } as Parameters<typeof invoiceValues>[0])).toMatchObject({ amount_cents: 4000, coupon_code: "SAVE", coupon_discount_cents: 1000 });
+});

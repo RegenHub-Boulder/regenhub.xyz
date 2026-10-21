@@ -27,6 +27,7 @@ export const AuditAction = {
   // Stripe
   CHECKOUT_LINK_GENERATED: "checkout_link_generated",
   SUBSCRIPTION_CANCELED_BY_ADMIN: "subscription_canceled_by_admin",
+  ONCHAIN_SUBSCRIPTION_CHANGED: "onchain_subscription_changed",
   ONCHAIN_SUBSCRIPTION_CREATED: "onchain_subscription_created",
   // Comms
   EMAIL_SENT:             "email_sent",

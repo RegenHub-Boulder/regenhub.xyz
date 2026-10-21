@@ -43,3 +43,12 @@ it("loses the conditional write safely when admin disables after the read", asyn
   expect(member.disabled).toBe(true);
   expect(getStripe).not.toHaveBeenCalled();
 });
+
+it("changes an onchain plan without calling Stripe", async () => {
+  vi.mocked(createClient).mockResolvedValue(makeSupabaseMock({ auth: { user: { id: "u", email: "synthetic@example.invalid" } }, selects: { members: { data: { id: 7, disabled: false } } } }) as never);
+  const admin = makeSupabaseMock({ selects: { subscriptions: { data: { id: 1, payment_rail: "onchain", plan_key: "old" } }, members: { data: { id: 7 } } } });
+  vi.mocked(createServiceClient).mockReturnValue(admin as never);
+  const response = await POST(request());
+  expect(response.status).toBe(200);
+  expect(getStripe).not.toHaveBeenCalled();
+});

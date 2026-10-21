@@ -9,10 +9,10 @@ async function requireAdmin() {
   if (!user) return { error: "Unauthorized" as const, status: 401 };
   const { data: adminMember } = await supabase
     .from("members")
-    .select("is_admin")
+    .select("is_admin, disabled")
     .eq("supabase_user_id", user.id)
     .single();
-  if (!adminMember?.is_admin) return { error: "Forbidden" as const, status: 403 };
+  if (!adminMember?.is_admin || adminMember.disabled) return { error: "Forbidden" as const, status: 403 };
   return { ok: true as const };
 }
 

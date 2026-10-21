@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { getStripe, getPlan, isStripeConfigured, PLANS } from "@/lib/stripe";
+import { AuditAction, logAction } from "@/lib/auditLog";
 import type { PlanKey } from "@/lib/supabase/types";
 
 interface ChangePlanBody {
@@ -17,17 +18,14 @@ interface ChangePlanBody {
  * automatically: Stripe keeps the coupon on the subscription across item
  * changes.
  *
- * Switching FROM a desk tier IS blocked here — downgrading off a desk
+ * On-chain plans are prospective: issued invoices retain their prices and access
+ * follows the paid invoice snapshot. Stripe switching FROM a desk tier IS blocked here — downgrading off a desk
  * needs an admin touch to revoke the door code and free the PIN slot.
  *
  * Uses create_prorations so members aren't surprised by an immediate
  * charge; the difference shows up on their next renewal invoice.
  */
 export async function POST(req: Request) {
-  if (!isStripeConfigured()) {
-    return NextResponse.json({ error: "Stripe is not configured" }, { status: 503 });
-  }
-
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -65,7 +63,7 @@ export async function POST(req: Request) {
   const admin = createServiceClient();
   const { data: sub } = await admin
     .from("subscriptions")
-    .select("id, stripe_subscription_id, plan_key, status")
+    .select("id, stripe_subscription_id, payment_rail, plan_key, status")
     .eq("member_id", member.id)
     .in("status", ["active", "trialing", "past_due"])
     .order("created_at", { ascending: false })
@@ -83,7 +81,7 @@ export async function POST(req: Request) {
   const current = getPlan(sub.plan_key);
   const onDesk =
     current?.grantsMemberType === "cold_desk" || current?.grantsMemberType === "hot_desk";
-  if (onDesk) {
+  if (onDesk && sub.payment_rail !== "onchain") {
     return NextResponse.json(
       {
         error:
@@ -112,6 +110,16 @@ export async function POST(req: Request) {
   if (!eligible) {
     return NextResponse.json({ error: "Member is disabled" }, { status: 403 });
   }
+
+  if (sub.payment_rail === "onchain") {
+    const { error } = await admin.from("subscriptions").update({ plan_key: targetKey, monthly_cents: target.defaultMonthlyCents })
+      .eq("id", sub.id).eq("payment_rail", "onchain");
+    if (error) return NextResponse.json({ error: "Could not change plan" }, { status: 500 });
+    await logAction({ action: AuditAction.ONCHAIN_SUBSCRIPTION_CHANGED, actorMemberId: member.id,
+      target: { table: "subscriptions", id: sub.id }, payload: { from: sub.plan_key, to: targetKey, source: "self_serve" } }, admin);
+    return NextResponse.json({ ok: true, message: "Plan saved for the next invoice. Issued invoices keep their price; access changes when the new invoice is paid." });
+  }
+  if (!isStripeConfigured()) return NextResponse.json({ error: "Stripe is not configured" }, { status: 503 });
 
   // Fetch the Stripe subscription to get the current item id (need it to swap)
   const stripe = getStripe();

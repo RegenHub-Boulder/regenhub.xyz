@@ -118,7 +118,7 @@ export default async function PortalPage() {
   let onchainWallet: { address: string; verification_method: string } | null = null;
   let onchainInvoice: {
     id: number; amount_cents: number; amount_usdc_micros: number; due_at: string;
-    status: string; submitted_tx_hash: string | null;
+    status: string; submitted_tx_hash: string | null; coupon_code?: string | null; coupon_discount_cents?: number;
   } | null = null;
   if (activeSubscription?.payment_rail === "onchain") {
     const admin = createServiceClient();
@@ -127,7 +127,7 @@ export default async function PortalPage() {
         ? admin.from("member_wallets").select("address, verification_method").eq("id", activeSubscription.wallet_id).is("revoked_at", null).maybeSingle()
         : Promise.resolve({ data: null }),
       admin.from("onchain_invoices")
-        .select("id, amount_cents, amount_usdc_micros, due_at, status, submitted_tx_hash")
+        .select("id, amount_cents, amount_usdc_micros, due_at, status, submitted_tx_hash, coupon_code, coupon_discount_cents")
         .eq("subscription_id", activeSubscription.id)
         .in("status", ["open", "submitted", "detected", "exception"])
         .order("due_at", { ascending: true }).limit(1).maybeSingle(),
@@ -536,6 +536,8 @@ export default async function PortalPage() {
                   invoice={onchainInvoice ? {
                     id: onchainInvoice.id,
                     amountCents: onchainInvoice.amount_cents,
+                    couponCode: onchainInvoice.coupon_code,
+                    couponDiscountCents: onchainInvoice.coupon_discount_cents,
                     amountMicros: onchainInvoice.amount_usdc_micros,
                     dueAt: onchainInvoice.due_at,
                     status: onchainInvoice.status,

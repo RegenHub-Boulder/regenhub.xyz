@@ -1,5 +1,6 @@
 "use client";
 
+import { OnchainPlanEditor } from "@/components/portal/OnchainPlanEditor";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
@@ -207,6 +208,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
           </div>
         </div>
 
+        {activeSubscription?.payment_rail === "onchain" && <OnchainPlanEditor memberId={memberId} />}
         {activeSubscription ? (
           <div className="space-y-2 text-sm">
             <div className="flex items-center gap-2 flex-wrap">

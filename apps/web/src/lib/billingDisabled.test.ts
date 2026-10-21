@@ -13,7 +13,7 @@ import { POST } from "@/app/api/webhooks/stripe/route";
 import { processOnchainInvoice, retryPendingOnchainEffects } from "./onchain/verifyPayment";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe";
-import { setUserCode } from "@regenhub/shared";
+import { setUserCode, clearUserCode } from "@regenhub/shared";
 
 vi.mock("./onchain/config", () => ({ getOpPublicClient: vi.fn(), assertOpPublicClient: vi.fn(), isGaslessRelayConfigured: () => false }));
 vi.mock("./onchain/invoice", () => ({ generateUpcomingOnchainInvoices: async () => [], markDueOnchainSubscriptionsPastDue: async () => 0, isRenewalInvoice: () => false }));
@@ -177,4 +177,27 @@ it("records a disabled member's payment and replay does not credit or grant twic
   expect(member.disabled).toBe(true);
   expect(member.pin_code_slot).toBeNull();
   expect(setUserCode).not.toHaveBeenCalled();
+});
+
+it("uses the paid invoice plan on retry and revokes a desk PIN through the lifecycle", async () => {
+  const { db, rows, writes } = database(false);
+  rows.members[0].pin_code_slot = 22;
+  rows.onchain_payments[0].onchain_invoices = { subscription_id: 1, plan_key: "member_2day", subscriptions: { plan_key: "cold_desk" } };
+  vi.mocked(clearUserCode).mockResolvedValue([{ entity: "lock.front", ok: true }]);
+  expect(await retryPendingOnchainEffects(db as never)).toEqual([]);
+  expect(clearUserCode).toHaveBeenCalledWith(22);
+  expect(rows.members[0]).toMatchObject({ pin_code_slot: null, member_type: "day_pass", disabled: false });
+  expect(grantSubscriptionPasses).toHaveBeenCalledWith(db, expect.objectContaining({ planKey: "member_2day" }));
+  expect(writes.some(w => w.values.effects_completed_at)).toBe(true);
+});
+
+it("keeps payment effects retryable if the physical PIN revoke fails", async () => {
+  const { db, rows } = database(false);
+  rows.members[0].pin_code_slot = 22;
+  rows.onchain_payments[0].onchain_invoices = { subscription_id: 1, plan_key: "member_basic", subscriptions: { plan_key: "cold_desk" } };
+  vi.mocked(clearUserCode).mockRejectedValue(new Error("door offline"));
+  expect(await retryPendingOnchainEffects(db as never)).toEqual([{ paymentId: 3, error: "Could not revoke permanent door access" }]);
+  expect(rows.members[0].pin_code_slot).toBe(22);
+  expect(rows.onchain_payments[0].effects_completed_at).toBeNull();
+  expect(grantSubscriptionPasses).not.toHaveBeenCalled();
 });

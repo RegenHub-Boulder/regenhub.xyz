@@ -6,7 +6,7 @@ import {
   type Hash,
   type Log,
 } from "viem";
-import { activateMembershipAccess } from "@/lib/membershipLifecycle";
+import { activateMembershipAccess, downgradeMembershipAccess } from "@/lib/membershipLifecycle";
 import { getPlan } from "@/lib/plans";
 import { grantSubscriptionPasses } from "@/lib/subscriptionPasses";
 import { createServiceClient } from "@/lib/supabase/admin";
@@ -123,6 +123,10 @@ async function completePaymentEffects(
     ]);
     if (!member || !plan) throw new Error("credited payment has no member or plan");
 
+    if (plan.grantsMemberType === "day_pass" && member.pin_code_slot) {
+      const revoked = await downgradeMembershipAccess(admin, { memberId: member.id, currentPinSlot: member.pin_code_slot, revokePermanentPin: true });
+      if (revoked.lockRevokeFailed || revoked.memberUpdateError) throw new Error("Could not revoke permanent door access");
+    }
     const activation = await activateMembershipAccess(admin, {
       memberId: member.id,
       currentPinSlot: member.pin_code_slot,
@@ -307,7 +311,7 @@ export async function processOnchainInvoice(
 export async function retryPendingOnchainEffects(admin: ServiceClient) {
   const { data: pending, error } = await admin
     .from("onchain_payments")
-    .select("id, invoice_id, member_id, onchain_invoices(subscription_id, subscriptions(plan_key))")
+    .select("id, invoice_id, member_id, onchain_invoices(subscription_id, plan_key, subscriptions(plan_key))")
     .eq("match_status", "credited")
     .is("effects_completed_at", null)
     .order("effects_claimed_at", { ascending: true, nullsFirst: true })
@@ -318,6 +322,7 @@ export async function retryPendingOnchainEffects(admin: ServiceClient) {
   for (const payment of pending ?? []) {
     const invoice = payment.onchain_invoices as unknown as {
       subscription_id: number;
+      plan_key?: string | null;
       subscriptions: { plan_key: string } | null;
     } | null;
     if (!invoice?.subscriptions) continue;
@@ -327,7 +332,7 @@ export async function retryPendingOnchainEffects(admin: ServiceClient) {
         invoiceId: payment.invoice_id,
         memberId: payment.member_id,
         subscriptionId: invoice.subscription_id,
-        planKey: invoice.subscriptions.plan_key,
+        planKey: invoice.plan_key ?? invoice.subscriptions.plan_key,
       });
     } catch (cause) {
       const error = cause instanceof Error ? cause.message : String(cause);
