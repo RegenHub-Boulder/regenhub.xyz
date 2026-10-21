@@ -14,6 +14,7 @@ import { CheckCircle2, Loader2, Wallet } from "lucide-react";
 import { RegenHubWalletProvider } from "@/components/web3/RegenHubWalletProvider";
 import { GaslessPaymentReview } from "@/components/web3/GaslessPaymentReview";
 import { pollOnchainPayment } from "@/lib/onchain/clientConfirmation";
+import { linkWalletWithSignature, WalletLinkError } from "@/lib/onchain/walletLink";
 import {
   assertExpectedAuthorization,
   relayAuthorizationRequest,
@@ -76,6 +77,8 @@ function CryptoSubscribeButtonInner({ planKey, className, discountCode, autoStar
   const [authorization, setAuthorization] = useState<RelayAuthorization | null>(null);
   const [txHash, setTxHash] = useState<Hash | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Set when the wallet just proven is linked to another account that can let it go.
+  const [moveOffer, setMoveOffer] = useState<string | null>(null);
 
   const confirmSubmittedPayment = useCallback(async (invoiceId: number, hash: Hash) => {
     setTxHash(hash);
@@ -197,30 +200,17 @@ function CryptoSubscribeButtonInner({ planKey, className, discountCode, autoStar
     await submitPayment(nextSetup);
   }, [address, chainId, confirmSubmittedPayment, submitPayment, switchChainAsync]);
 
-  const verifyAndPay = useCallback(async () => {
+  const verifyAndPay = useCallback(async (move = false) => {
     if (!address) return;
     setError(null);
+    setMoveOffer(null);
     try {
       setPhase("verifying");
-      const challengeRes = await fetch("/api/portal/onchain/wallet/challenge", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address }),
+      await linkWalletWithSignature({
+        address,
+        signMessage: (message) => signMessageAsync({ account: address, message }),
+        move,
       });
-      const challenge = await challengeRes.json();
-      if (!challengeRes.ok) throw new Error(challenge.error ?? "Could not create wallet challenge");
-
-      const signature = await withWalletTimeout(
-        signMessageAsync({ account: address, message: challenge.message }),
-        "MetaMask did not respond to the ownership check. Open MetaMask and cancel any request still waiting there before trying again.",
-      );
-      const verifyRes = await fetch("/api/portal/onchain/wallet/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ challenge_id: challenge.id, address, signature }),
-      });
-      const verified = await verifyRes.json();
-      if (!verifyRes.ok) throw new Error(verified.error ?? "Wallet verification failed");
 
       setPhase("preparing");
       const setupRes = await fetch("/api/membership/onchain", {
@@ -246,7 +236,11 @@ function CryptoSubscribeButtonInner({ planKey, className, discountCode, autoStar
       }
       await preparePayment(nextSetup);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not start crypto membership");
+      if (cause instanceof WalletLinkError && cause.code === "wallet_linked_elsewhere") {
+        setMoveOffer(cause.message);
+      } else {
+        setError(cause instanceof Error ? cause.message : "Could not start crypto membership");
+      }
       setPhase("idle");
     }
   }, [address, confirmSubmittedPayment, discountCode, planKey, preparePayment, signMessageAsync]);
@@ -342,6 +336,15 @@ function CryptoSubscribeButtonInner({ planKey, className, discountCode, autoStar
           <p className="text-xs font-medium">${(amountCents / 100).toFixed(2)} USDC · OP Mainnet</p>
           <p className="text-[11px] text-muted">Direct to the RegenHub treasury. Access begins only after server verification.</p>
           {txHash && <a href={`https://optimistic.etherscan.io/tx/${txHash}`} target="_blank" rel="noreferrer" className="text-[11px] text-sage underline">View submitted transaction</a>}
+        </div>
+      )}
+      {moveOffer && phase === "idle" && (
+        <div className="rounded-lg border border-amber-400/30 bg-amber-400/5 p-3 text-left space-y-2">
+          <p className="text-xs">{moveOffer}</p>
+          <div className="flex gap-2 flex-wrap">
+            <Button type="button" onClick={() => void verifyAndPay(true)} className="btn-glass text-xs">Sign to move it here</Button>
+            <Button type="button" variant="ghost" onClick={() => setMoveOffer(null)} className="text-xs">Not now</Button>
+          </div>
         </div>
       )}
       {phase === "complete" && <p className="text-xs text-emerald-400">Payment confirmed. Opening your member portal…</p>}

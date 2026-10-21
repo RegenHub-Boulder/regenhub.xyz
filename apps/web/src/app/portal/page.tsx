@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import Link from "next/link";
-import { Key, Ticket, User, ClipboardList, CheckCircle, Clock, MessageCircle, Zap, Calendar, CalendarDays, ArrowRight, AlertCircle } from "lucide-react";
+import { Key, Ticket, User, ClipboardList, CheckCircle, Clock, MessageCircle, Zap, Calendar, CalendarDays, ArrowRight, AlertCircle, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import HubEssentials from "@/components/portal/HubEssentials";
 import InviteCard from "@/components/portal/InviteCard";
@@ -19,6 +19,7 @@ import { isRegenosLoginEnabled } from "@/lib/regenos/config";
 import { isSyntheticEmail } from "@/lib/regenos/syntheticEmail";
 import { LinkRegenOSCard } from "@/components/portal/LinkRegenOSCard";
 import { OnchainBillingCard } from "@/components/portal/OnchainBillingCard";
+import { RemoveWalletButton } from "@/components/portal/RemoveWalletButton";
 import { isOnchainBillingConfigured, NATIVE_USDC_ADDRESS, TREASURY_ADDRESS } from "@/lib/onchain/config";
 
 export default async function PortalPage() {
@@ -115,7 +116,7 @@ export default async function PortalPage() {
     activeSubscription = data;
   }
 
-  let onchainWallet: { address: string; verification_method: string } | null = null;
+  let onchainWallet: { id: number; address: string; verification_method: string } | null = null;
   let onchainInvoice: {
     id: number; amount_cents: number; amount_usdc_micros: number; due_at: string;
     status: string; submitted_tx_hash: string | null; coupon_code?: string | null; coupon_discount_cents?: number;
@@ -124,7 +125,7 @@ export default async function PortalPage() {
     const admin = createServiceClient();
     const [walletResult, invoiceResult] = await Promise.all([
       activeSubscription.wallet_id
-        ? admin.from("member_wallets").select("address, verification_method").eq("id", activeSubscription.wallet_id).is("revoked_at", null).maybeSingle()
+        ? admin.from("member_wallets").select("id, address, verification_method").eq("id", activeSubscription.wallet_id).is("revoked_at", null).maybeSingle()
         : Promise.resolve({ data: null }),
       admin.from("onchain_invoices")
         .select("id, amount_cents, amount_usdc_micros, due_at, status, submitted_tx_hash, coupon_code, coupon_discount_cents")
@@ -134,6 +135,19 @@ export default async function PortalPage() {
     ]);
     onchainWallet = walletResult.data;
     onchainInvoice = invoiceResult.data;
+  }
+
+  // A wallet can stay linked with no crypto membership behind it (a canceled
+  // membership, a card member, a test account). Show it so it can be removed.
+  let idleWallet: { id: number; address: string } | null = null;
+  if (member && activeSubscription?.payment_rail !== "onchain") {
+    const { data } = await supabase
+      .from("member_wallets")
+      .select("id, address")
+      .eq("member_id", member.id)
+      .is("revoked_at", null)
+      .maybeSingle();
+    idleWallet = data;
   }
 
   // Hub activity counts for the "what's happening today" card. When the HA
@@ -531,6 +545,7 @@ export default async function PortalPage() {
             {activeSubscription.payment_rail === "onchain" && (
               <div className="mt-4">
                 <OnchainBillingCard
+                  walletId={onchainWallet?.id ?? null}
                   walletAddress={onchainWallet?.address ?? null}
                   walletVerifiedBySignature={onchainWallet?.verification_method === "signature"}
                   invoice={onchainInvoice ? {
@@ -549,6 +564,20 @@ export default async function PortalPage() {
                 />
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {idleWallet && (
+        <Card className="glass-panel border border-sage/20">
+          <CardContent className="p-6 space-y-2">
+            <div className="flex items-center gap-2">
+              <Wallet className="w-4 h-4 text-sage" />
+              <h3 className="font-semibold">Crypto wallet</h3>
+            </div>
+            <p className="text-sm text-muted">Linked to this account. No crypto membership uses it right now.</p>
+            <p className="text-[11px] text-muted font-mono break-all">Linked wallet: {idleWallet.address}</p>
+            <RemoveWalletButton walletId={idleWallet.id} address={idleWallet.address} />
           </CardContent>
         </Card>
       )}
