@@ -10,6 +10,8 @@ interface CancelBody {
   mode?: CancelMode;
   reason?: string;
   void_open_invoices?: boolean;
+  /** The subscription shown to the admin, so we cancel exactly that one. */
+  subscription_id?: number;
 }
 
 /**
@@ -38,6 +40,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     try {
       const result = await cancelMembership(admin, {
         memberId,
+        subscriptionId: Number.isInteger(body.subscription_id) ? body.subscription_id : undefined,
         actorMemberId: await actorIdFromAuthUid(user.id, admin),
         mode,
         reason,

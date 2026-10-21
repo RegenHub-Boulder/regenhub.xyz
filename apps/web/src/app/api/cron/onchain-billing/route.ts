@@ -32,7 +32,11 @@ export async function POST(req: Request) {
     }
   }
   // End admin "cancel at period end" subscriptions before issuing renewals.
-  const endedAtPeriodEnd = await endOnchainSubscriptionsAtPeriodEnd(admin);
+  // A failure here must not stall everyone else's billing.
+  const endedAtPeriodEnd = await endOnchainSubscriptionsAtPeriodEnd(admin).catch((cause) => {
+    console.error("[OnchainBilling] Period-end cancel sweep failed:", cause);
+    return { error: cause instanceof Error ? cause.message : "unknown" };
+  });
   const created = await generateUpcomingOnchainInvoices(admin);
   const { data: unsentReminders, error: reminderQueryError } = await admin
     .from("onchain_invoices")

@@ -9,6 +9,7 @@ import { Loader2, XCircle } from "lucide-react";
 import type { OnchainInvoice, Subscription } from "@/lib/supabase/types";
 import type { CancelMembershipResult, CancelMode } from "@/lib/membershipCancel";
 import { planLabel } from "@/lib/plans";
+import { isLiveSubscription } from "@/lib/subscriptionStatus";
 
 type InvoiceRow = Pick<OnchainInvoice, "id" | "period_start" | "period_end" | "amount_cents" | "status">;
 
@@ -20,8 +21,6 @@ interface Props {
   /** Recent on-chain invoices for this member, newest first. */
   invoices: InvoiceRow[];
 }
-
-const LIVE = ["active", "trialing", "past_due", "incomplete"];
 
 const invoiceStyle: Record<string, string> = {
   open: "bg-amber-500/20 text-amber-400 border-amber-500/30",
@@ -65,11 +64,14 @@ export function CancelMembershipCard({ memberId, memberName, subscription, invoi
 
   if (!subscription) return null;
 
-  const isLive = LIVE.includes(subscription.status);
+  const subscriptionId = subscription.id;
+  const isLive = isLiveSubscription(subscription.status);
   const isCrypto = subscription.payment_rail === "onchain";
   const isPastDue = subscription.status === "past_due";
   const periodEnd = subscription.current_period_end;
   const periodOver = !periodEnd || new Date(periodEnd).getTime() <= Date.now();
+  // A canceled crypto subscription can't keep payable invoices: paying one reactivates it.
+  const voidForced = isCrypto && mode === "now";
 
   function open() {
     setMode("now");
@@ -88,8 +90,9 @@ export function CancelMembershipCard({ memberId, memberName, subscription, invoi
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode,
+          subscription_id: subscriptionId,
           reason: reason.trim() || undefined,
-          void_open_invoices: isPastDue && voidInvoices,
+          void_open_invoices: isPastDue && (voidForced || voidInvoices),
         }),
       });
       const data = await res.json().catch(() => null);
@@ -202,7 +205,7 @@ export function CancelMembershipCard({ memberId, memberName, subscription, invoi
                   <span className="font-medium">Cancel now</span>
                   <span className="block text-xs text-muted">
                     {isCrypto
-                      ? "Marks the crypto membership canceled. No new invoices; renewals not yet started are voided."
+                      ? "Marks the crypto membership canceled and voids its open invoices. No new invoices."
                       : "Stripe cancels the subscription today, with no refund and no final invoice."}{" "}
                     Door code is cleared now.
                   </span>
@@ -223,11 +226,21 @@ export function CancelMembershipCard({ memberId, memberName, subscription, invoi
 
             {isPastDue && (
               <label className="flex items-start gap-2 cursor-pointer">
-                <input type="checkbox" className="mt-1" checked={voidInvoices} onChange={(e) => setVoidInvoices(e.target.checked)} />
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={voidForced || voidInvoices}
+                  disabled={voidForced}
+                  onChange={(e) => setVoidInvoices(e.target.checked)}
+                />
                 <span>
                   Void open unpaid invoices
                   <span className="block text-xs text-muted">
-                    {isCrypto ? "Open on-chain invoices are marked void and can no longer be paid." : "Open Stripe invoices are voided through Stripe."}
+                    {voidForced
+                      ? "Always on when a crypto membership ends now: paying a left-open invoice would reactivate it."
+                      : isCrypto
+                        ? "Open on-chain invoices are marked void and can no longer be paid."
+                        : "Open Stripe invoices are voided through Stripe."}
                   </span>
                 </span>
               </label>

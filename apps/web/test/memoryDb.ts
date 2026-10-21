@@ -37,6 +37,8 @@ export function makeMemoryDb(seed: Record<string, Row[]> = {}, opts: MemoryDbOpt
     nextId[name] = Math.max(0, ...rows.map((row) => Number(row.id) || 0)) + 1;
   }
   const table = (name: string) => (tables[name] ??= []);
+  /** Make the next N writes (insert/update/upsert/delete) to a table fail. */
+  const failWrites: Record<string, number> = {};
 
   function builder(name: string) {
     const filters: Filter[] = [];
@@ -49,6 +51,10 @@ export function makeMemoryDb(seed: Record<string, Row[]> = {}, opts: MemoryDbOpt
 
     function run(): Row[] {
       const rows = table(name);
+      if (op !== "select" && failWrites[name] > 0) {
+        failWrites[name] -= 1;
+        throw Object.assign(new Error(`injected ${op} failure on ${name}`), { code: "XX000" });
+      }
       if (op === "insert" || op === "upsert") {
         const out: Row[] = [];
         for (const value of Array.isArray(payload) ? payload : [payload]) {
@@ -146,6 +152,7 @@ export function makeMemoryDb(seed: Record<string, Row[]> = {}, opts: MemoryDbOpt
 
   return {
     tables,
+    failWrites,
     rpcCalls,
     from: vi.fn((name: string) => builder(name)),
     rpc,
