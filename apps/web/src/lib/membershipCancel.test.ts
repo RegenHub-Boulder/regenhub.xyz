@@ -151,6 +151,20 @@ describe("card (Stripe) cancel", () => {
     expect(db.tables.admin_actions[0].payload).toMatchObject({ stripe_already_canceled: true });
   });
 
+  it("does not claim the cancel when Stripe had already ended it and its webhook synced the row", async () => {
+    const db = seed({ rail: "stripe" });
+    stripe.subscriptions.cancel.mockRejectedValueOnce(new Error("already canceled"));
+    stripe.subscriptions.retrieve.mockImplementationOnce(async (id: string) => {
+      Object.assign(sub(db), { status: "canceled", canceled_at: "2026-10-20T00:00:00.000Z" }); // webhook arrived
+      return { id, status: "canceled" };
+    });
+    const result = await cancelMembership(db as never, {
+      memberId: 7, actorMemberId: 1, mode: "now", reason: null, voidOpenInvoices: false, now: NOW,
+    });
+    expect(result.outcome).toBe("already_canceled");
+    expect(db.tables.admin_actions).toHaveLength(0);
+  });
+
   it("at period end on a subscription Stripe already ended (lost webhook) ends it now instead of leaving it live", async () => {
     const db = seed({ rail: "stripe" });
     stripe.subscriptions.update.mockRejectedValueOnce(new Error("subscription is canceled"));
@@ -328,6 +342,13 @@ describe("overdue members: voiding open invoices", () => {
     });
     expect(result.voidedInvoiceIds).toEqual([]);
     expect(db.tables.onchain_invoices[0].status).toBe("open");
+
+    // When the billing cron ends it, the leftover invoice is voided so paying it can't reactivate the row.
+    expect(await endOnchainSubscriptionsAtPeriodEnd(db as never, new Date(NOW.getTime() + 60_000))).toEqual([
+      expect.objectContaining({ subscriptionId: 50 }),
+    ]);
+    expect(db.tables.onchain_invoices[0].status).toBe("void");
+    expect(sub(db).status).toBe("canceled");
   });
 
   it("crypto cancel now voids the overdue invoice even unticked: paying it would reactivate the subscription", async () => {
