@@ -146,7 +146,9 @@ describe("card (Stripe) cancel", () => {
       memberId: 7, actorMemberId: 1, mode: "now", reason: null, voidOpenInvoices: false, now: NOW,
     });
     expect(result.outcome).toBe("canceled");
+    expect(result.warnings.join(" ")).toMatch(/already canceled/);
     expect(sub(db).status).toBe("canceled");
+    expect(db.tables.admin_actions[0].payload).toMatchObject({ stripe_already_canceled: true });
   });
 
   it("at period end on a subscription Stripe already ended (lost webhook) ends it now instead of leaving it live", async () => {
@@ -190,6 +192,20 @@ describe("card (Stripe) cancel", () => {
     expect(result).toMatchObject({ subscriptionId: 50, rail: "stripe" });
     expect(stripe.subscriptions.cancel).toHaveBeenCalledWith("sub_test_50", expect.anything());
     expect(db.tables.subscriptions.find((s) => s.id === 60)!.status).toBe("incomplete");
+  });
+
+  it("by default cancels the paying subscription, not a newer abandoned checkout", async () => {
+    const db = seed({ rail: "stripe" });
+    db.tables.subscriptions.push({
+      id: 61, member_id: 7, payment_rail: "onchain", plan_key: "hot_desk", status: "incomplete",
+      current_period_end: null, cancel_at_period_end: false, canceled_at: null, stripe_subscription_id: null,
+      created_at: "2026-10-20T00:00:00.000Z",
+    });
+    sub(db).created_at = "2026-01-01T00:00:00.000Z";
+    const result = await cancelMembership(db as never, {
+      memberId: 7, actorMemberId: 1, mode: "period_end", reason: null, voidOpenInvoices: false, now: NOW,
+    });
+    expect(result.subscriptionId).toBe(50);
   });
 
   it("refuses to touch the local row when Stripe rejects the cancel", async () => {
@@ -268,7 +284,7 @@ describe("crypto (on-chain) cancel", () => {
     expect(await endOnchainSubscriptionsAtPeriodEnd(db as never, after)).toEqual([]);
     expect(sub(db).status).toBe("active");
 
-    db.tables.onchain_invoices[0].status = "exception";
+    db.tables.onchain_invoices[0].status = "paid";
     expect(await endOnchainSubscriptionsAtPeriodEnd(db as never, after)).toEqual([
       expect.objectContaining({ subscriptionId: 50, lockRevokeFailed: false }),
     ]);
@@ -324,6 +340,34 @@ describe("overdue members: voiding open invoices", () => {
     });
     expect(result.voidedInvoiceIds).toEqual(["801"]);
     expect(db.tables.onchain_invoices[0].status).toBe("void");
+  });
+
+  it("crypto cancel now also voids an invoice in exception, which could otherwise be resubmitted", async () => {
+    const db = seed({
+      rail: "onchain", status: "past_due", periodEnd: overdueStart, pastDueSince: overdueStart,
+      invoices: [invoice(801, overdueStart, "exception")],
+    });
+    const result = await cancelMembership(db as never, {
+      memberId: 7, actorMemberId: 1, mode: "now", reason: null, voidOpenInvoices: false, now: NOW,
+    });
+    expect(result.voidedInvoiceIds).toEqual(["801"]);
+    expect(result.warnings.join(" ")).toMatch(/exception/);
+  });
+
+  it("crypto cancel now voids before ending access, so a payment can't slip in during the lock clear", async () => {
+    const db = seed({
+      rail: "onchain", status: "past_due", periodEnd: overdueStart, pastDueSince: overdueStart,
+      invoices: [invoice(801, overdueStart, "open")],
+    });
+    let statusDuringClear: unknown;
+    vi.mocked(clearUserCode).mockImplementationOnce(async () => {
+      statusDuringClear = db.tables.onchain_invoices[0].status;
+      return [{ entity: "lock.front_door_lock", ok: true }];
+    });
+    await cancelMembership(db as never, {
+      memberId: 7, actorMemberId: 1, mode: "now", reason: null, voidOpenInvoices: false, now: NOW,
+    });
+    expect(statusDuringClear).toBe("void");
   });
 
   it.each([

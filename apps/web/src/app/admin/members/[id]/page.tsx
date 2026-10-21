@@ -235,7 +235,7 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
               <CancelMembershipCard
                 memberId={member.id}
                 memberName={member.name}
-                subscription={subscriptions?.find((s) => isLiveSubscription(s.status)) ?? subscriptions?.[0] ?? null}
+                subscription={activeSubscription ?? subscriptions?.find((s) => isLiveSubscription(s.status)) ?? subscriptions?.[0] ?? null}
                 invoices={onchainInvoices ?? []}
               />
             </>
