@@ -10,9 +10,8 @@ import { readFile } from "node:fs/promises";
 export const migration = (name: string) =>
   readFile(new URL(`../../../supabase/migrations/${name}`, import.meta.url), "utf8");
 
-export async function createOnchainDb(opts: { stopBefore058?: boolean } = {}) {
-  const pg = new PGlite();
-  await pg.exec(`
+/** Stand-ins for the pre-046 tables and Supabase roles the migrations build on. */
+export const ONCHAIN_PRELUDE = `
     create role anon; create role authenticated; create role service_role bypassrls;
     create schema auth;
     create function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
@@ -55,7 +54,11 @@ export async function createOnchainDb(opts: { stopBefore058?: boolean } = {}) {
       payload jsonb not null default '{}'::jsonb,
       created_at timestamptz not null default now()
     );
-  `);
+`;
+
+export async function createOnchainDb(opts: { stopBefore058?: boolean } = {}) {
+  const pg = new PGlite();
+  await pg.exec(ONCHAIN_PRELUDE);
   await pg.exec(await migration("046_onchain_memberships.sql"));
   await pg.exec(await migration("048_gasless_usdc_relay.sql"));
   if (!opts.stopBefore058) await pg.exec(await migration("058_wallet_move.sql"));
