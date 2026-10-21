@@ -105,7 +105,7 @@ export function makeMemoryDb(seed: Record<string, Row[]> = {}, opts: MemoryDbOpt
     }
 
     const b = {
-      select: (_cols?: string) => { if (op !== "select") returning = true; return b; },
+      select: () => { if (op !== "select") returning = true; return b; },
       insert: (value: Row | Row[]) => { op = "insert"; payload = value; return b; },
       upsert: (value: Row | Row[], o: typeof upsertOpts = {}) => { op = "upsert"; payload = value; upsertOpts = o; return b; },
       update: (value: Row) => { op = "update"; payload = value; return b; },

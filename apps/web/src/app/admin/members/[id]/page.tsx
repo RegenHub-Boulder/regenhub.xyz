@@ -5,6 +5,7 @@ import { redirect, notFound } from "next/navigation";
 import { MemberForm } from "@/components/admin/MemberForm";
 import { AddPassesCard } from "@/components/admin/AddPassesCard";
 import { SubscriptionCard } from "@/components/admin/SubscriptionCard";
+import { CancelMembershipCard } from "@/components/admin/CancelMembershipCard";
 import { MembershipApprovalCard } from "@/components/admin/MembershipApprovalCard";
 import { AdminRevokeCodeButton } from "@/components/admin/AdminRevokeCodeButton";
 import { MemberDetailTabs } from "@/components/admin/MemberDetailTabs";
@@ -97,6 +98,12 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
     const { data: actors } = await adminClient.from("members").select("id, name").in("id", actorIds);
     for (const a of actors ?? []) actorNameMap.set(a.id, a.name);
   }
+  const { data: onchainInvoices } = await adminClient
+    .from("onchain_invoices")
+    .select("id, period_start, period_end, amount_cents, status")
+    .eq("member_id", member.id)
+    .order("period_start", { ascending: false })
+    .limit(6);
   const activityRows = (rawActions ?? []).map((r) => ({
     id: r.id,
     action: r.action,
@@ -215,12 +222,20 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
             </>
           ),
           billing: (
-            <SubscriptionCard
-              memberId={member.id}
-              memberName={member.name}
-              activeSubscription={activeSubscription ?? null}
-              recentPurchases={purchases ?? []}
-            />
+            <>
+              <SubscriptionCard
+                memberId={member.id}
+                memberName={member.name}
+                activeSubscription={activeSubscription ?? null}
+                recentPurchases={purchases ?? []}
+              />
+              <CancelMembershipCard
+                memberId={member.id}
+                memberName={member.name}
+                subscription={activeSubscription ?? subscriptions?.[0] ?? null}
+                invoices={onchainInvoices ?? []}
+              />
+            </>
           ),
           access: (
             <>

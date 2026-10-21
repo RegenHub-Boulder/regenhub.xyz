@@ -48,6 +48,14 @@ function summary(row: ActionRow): string | null {
       return p.implies_membership ? "Implies Daily approval" : null;
     case "batch_email_sent":
       return typeof p.subject === "string" ? p.subject : null;
+    case "subscription_canceled_by_admin":
+      if (!p.rail) return null;
+      return [
+        p.rail === "onchain" ? "Crypto" : "Card",
+        p.mode === "period_end" ? "at period end" : "now",
+        Array.isArray(p.voided_invoice_ids) && p.voided_invoice_ids.length ? `voided ${p.voided_invoice_ids.join(", ")}` : null,
+        typeof p.reason === "string" ? p.reason : null,
+      ].filter(Boolean).join(" · ");
     default:
       return null;
   }
