@@ -68,6 +68,7 @@ export function CancelMembershipCard({ memberId, memberName, subscription, invoi
   const isLive = isLiveSubscription(subscription.status);
   const isCrypto = subscription.payment_rail === "onchain";
   const isPastDue = subscription.status === "past_due";
+  const neverPaid = subscription.status === "incomplete";
   const periodEnd = subscription.current_period_end;
   const periodOver = !periodEnd || new Date(periodEnd).getTime() <= Date.now();
   // A canceled crypto subscription can't keep payable invoices: paying one reactivates it.
@@ -197,6 +198,12 @@ export function CancelMembershipCard({ memberId, memberName, subscription, invoi
               History is kept; nothing is deleted.
             </p>
 
+            {neverPaid ? (
+              <p className="text-xs">
+                This checkout was never paid. Canceling it closes the checkout; the member&apos;s access
+                and door code are left as they are.
+              </p>
+            ) : (
             <fieldset className="space-y-2">
               <legend className="text-xs text-muted mb-1 font-medium">When should it end?</legend>
               <label className="flex items-start gap-2 cursor-pointer">
@@ -223,6 +230,7 @@ export function CancelMembershipCard({ memberId, memberName, subscription, invoi
                 </span>
               </label>
             </fieldset>
+            )}
 
             {isPastDue && (
               <label className="flex items-start gap-2 cursor-pointer">

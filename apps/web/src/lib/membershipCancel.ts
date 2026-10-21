@@ -130,8 +130,8 @@ async function payableOnchainInvoices(admin: ServiceClient, subscriptionId: numb
  * `accessEndsAt` are always voided (nobody should pay for time they won't
  * get); `includeEarlier` also voids the overdue ones. Invoices with a payment
  * in flight are left alone and reported. The update is conditional on the
- * status, so a payment that starts concurrently either wins (and is skipped)
- * or finds the invoice void.
+ * status; when a payment got there first it is skipped and `raced` is set, so
+ * callers stop before ending access.
  */
 async function voidOnchainInvoices(
   admin: ServiceClient,
@@ -229,6 +229,9 @@ async function cancelAtStripe(sub: SubscriptionRow, mode: CancelMode, reason: st
  *   the same flag, which stops invoice generation, and the on-chain billing
  *   cron ends it via `endOnchainSubscriptionsAtPeriodEnd`.
  *
+ * An unpaid checkout (`incomplete`) is simply marked canceled, in either mode:
+ * it never granted access, so none is taken away.
+ *
  * Nothing is deleted. Order: crypto invoices are voided, then access ends,
  * then the subscription is marked canceled, so a failure part-way leaves it
  * live and the same call can be repeated; repeats after success change nothing.
@@ -256,7 +259,9 @@ export async function cancelMembership(
   if (!sub) throw new CancelMembershipError("This member has no such subscription to cancel", 404);
 
   let outcome: CancelMembershipResult["outcome"];
-  let endsNow = input.mode === "now";
+  // An unpaid checkout has no period to run out and never granted access.
+  const neverPaid = sub.status === "incomplete";
+  let endsNow = input.mode === "now" || neverPaid;
   let door: CancelMembershipResult["door"] = null;
   let voidedInvoiceIds: string[] = [];
   let voidedEarly = false;
@@ -280,17 +285,23 @@ export async function cancelMembership(
       }
       // Void before access ends, so nothing payable is left to reactivate the row.
       const voids = await voidOnchainInvoices(admin, sub, nowIso, true, invoices);
+      if (voids.raced) {
+        throw new CancelMembershipError(
+          "A payment started on one of this member's invoices while canceling. Wait for it to settle, then try again.",
+          409,
+        );
+      }
       voidedInvoiceIds = voids.voided;
       warnings.push(...voids.warnings);
       voidedEarly = true;
     }
-    if (sub.payment_rail === "stripe" && await cancelAtStripe(sub, input.mode, input.reason) === "already_canceled") {
+    if (sub.payment_rail === "stripe" && await cancelAtStripe(sub, endsNow ? "now" : "period_end", input.reason) === "already_canceled") {
       stripeAlreadyCanceled = true;
       endsNow = true;
       warnings.push("Stripe had already canceled this subscription (a missed webhook); it is now ended here too.");
     }
 
-    if (endsNow) {
+    if (endsNow && !neverPaid) {
       const downgrade = await endAccess(admin, sub);
       door = {
         revokedSlot: downgrade.revokedSlot,

@@ -208,6 +208,18 @@ describe("card (Stripe) cancel", () => {
     expect(db.tables.subscriptions.find((s) => s.id === 60)!.status).toBe("incomplete");
   });
 
+  it.each(["now", "period_end"] as const)("canceling an unpaid checkout (%s) ends it without touching access it never granted", async (mode) => {
+    const db = seed({ rail: "onchain", status: "incomplete" });
+    sub(db).current_period_end = null;
+    const result = await cancelMembership(db as never, {
+      memberId: 7, actorMemberId: 1, mode, reason: null, voidOpenInvoices: false, now: NOW,
+    });
+    expect(result).toMatchObject({ outcome: "canceled", door: null });
+    expect(sub(db).status).toBe("canceled");
+    expect(member(db)).toMatchObject({ member_type: "hot_desk", pin_code_slot: 12 });
+    expect(clearUserCode).not.toHaveBeenCalled();
+  });
+
   it("by default cancels the paying subscription, not a newer abandoned checkout", async () => {
     const db = seed({ rail: "stripe" });
     db.tables.subscriptions.push({
@@ -361,6 +373,25 @@ describe("overdue members: voiding open invoices", () => {
     });
     expect(result.voidedInvoiceIds).toEqual(["801"]);
     expect(db.tables.onchain_invoices[0].status).toBe("void");
+  });
+
+  it("crypto cancel now stops before ending access when a payment starts while it voids", async () => {
+    const db = seed({
+      rail: "onchain", status: "past_due", periodEnd: overdueStart, pastDueSince: overdueStart,
+      invoices: [invoice(801, overdueStart, "open")],
+    });
+    const from = db.from.bind(db);
+    db.from = ((name: string) => {
+      // The member submits a transaction between our read and our void.
+      if (name === "onchain_relay_jobs") db.tables.onchain_invoices[0].status = "submitted";
+      return from(name);
+    }) as typeof db.from;
+    await expect(cancelMembership(db as never, {
+      memberId: 7, actorMemberId: 1, mode: "now", reason: null, voidOpenInvoices: true, now: NOW,
+    })).rejects.toMatchObject({ status: 409 });
+    expect(sub(db).status).toBe("past_due");
+    expect(member(db).pin_code_slot).toBe(12);
+    expect(clearUserCode).not.toHaveBeenCalled();
   });
 
   it("crypto cancel now also voids an invoice in exception, which could otherwise be resubmitted", async () => {
