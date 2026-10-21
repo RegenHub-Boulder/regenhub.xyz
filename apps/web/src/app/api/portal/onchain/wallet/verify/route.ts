@@ -43,6 +43,7 @@ export async function POST(request: Request) {
     .update({ consumed_at: consumedAt })
     .eq("id", challenge.id)
     .is("consumed_at", null)
+    .gt("expires_at", consumedAt)
     .select("id")
     .maybeSingle();
   if (consumeError || !consumed) {
