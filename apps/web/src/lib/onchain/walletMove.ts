@@ -23,6 +23,14 @@ const OWN_ACCOUNT: Record<WalletReleaseBlocker, string> = {
   relay_in_flight: "A crypto payment from this wallet is still in progress. Wait for it to finish, or ask an admin.",
 };
 
+// bind_member_wallet won't replace an account's current wallet while a
+// payment it made is unsettled: that payment still expects the old sender.
+type PaymentBlocker = Exclude<WalletReleaseBlocker, "live_subscription">;
+const REPLACING: Record<PaymentBlocker, string> = {
+  open_invoice: "Your account has a crypto payment that isn't settled yet. Finish it, or ask an admin to close it, before you switch wallets.",
+  relay_in_flight: "A crypto payment from your current wallet is still in progress. Wait for it to finish, or ask an admin, before you switch wallets.",
+};
+
 export const WALLET_LINKED_ELSEWHERE =
   "This wallet is linked to another account. Sign a message to move it here.";
 
@@ -40,6 +48,11 @@ export function walletRpcErrorResponse(
 ) {
   const inUse = error.message.match(/^wallet in use: (\w+)$/);
   if (inUse) return walletInUse(inUse[1], whose);
+  const replacing = error.message.match(/^current wallet in use: (\w+)$/);
+  if (replacing) {
+    const message = REPLACING[replacing[1] as PaymentBlocker] ?? REPLACING.open_invoice;
+    return NextResponse.json({ code: "wallet_in_use", error: message }, { status: 409 });
+  }
   switch (error.message) {
     case "wallet already belongs to another member":
       return NextResponse.json({ code: "wallet_linked_elsewhere", error: WALLET_LINKED_ELSEWHERE }, { status: 409 });

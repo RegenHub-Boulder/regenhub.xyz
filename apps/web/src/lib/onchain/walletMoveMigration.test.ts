@@ -269,6 +269,142 @@ describe("058_wallet_move.sql", () => {
     await expect(addOnchainSubscription(db_, member, wallet)).rejects.toThrow("not an active wallet of this member");
   });
 
+  it.each(["open", "submitted", "detected", "exception"])(
+    "refuses to move a wallet INTO an account whose own payment is %s, and leaves its payer alone", async (status) => {
+      const db_ = await db();
+      const from = await addMember(db_, "Idle Holder");
+      const to = await addMember(db_, "Paying Receiver");
+      const address = syntheticAddress();
+      const fromWallet = await linkWallet(db_, from, address);
+      const current = await linkWallet(db_, to, syntheticAddress());
+      const sub = await addOnchainSubscription(db_, to, current, "active");
+      await addInvoice(db_, sub, to, status);
+
+      await expect(move(db_, to, address, fromWallet)).rejects.toThrow("current wallet in use: open_invoice");
+      expect(await activeHolder(db_, address)).toEqual([from]);
+      // The receiving account's payment still expects its own wallet as sender.
+      expect(Number((await one(db_, "select wallet_id from subscriptions where id = $1", [sub])).wallet_id)).toBe(current);
+      expect((await one(db_, "select revoked_at from member_wallets where id = $1", [current])).revoked_at).toBeNull();
+      expect(await rows(db_, "select * from admin_actions")).toEqual([]);
+    });
+
+  it("refuses to move a wallet into an account with a gasless payment in flight", async () => {
+    const db_ = await db();
+    const from = await addMember(db_, "Idle Holder");
+    const to = await addMember(db_, "Relaying Receiver");
+    const address = syntheticAddress();
+    const fromWallet = await linkWallet(db_, from, address);
+    const currentAddress = syntheticAddress();
+    const current = await linkWallet(db_, to, currentAddress);
+    const sub = await addOnchainSubscription(db_, to, current, "active");
+    const invoice = await addInvoice(db_, sub, to, "open");
+    await addRelayJob(db_, invoice, to, current, currentAddress, "submitting");
+    await db_.query("update onchain_invoices set status = 'void' where id = $1", [invoice]);
+
+    await expect(move(db_, to, address, fromWallet)).rejects.toThrow("current wallet in use: relay_in_flight");
+    expect(await activeHolder(db_, address)).toEqual([from]);
+  });
+
+  it("refuses to switch an account's wallet while it has an unsettled payment, but re-verifying the same wallet is fine", async () => {
+    const db_ = await db();
+    const member = await addMember(db_, "Payer");
+    const address = syntheticAddress();
+    const current = await linkWallet(db_, member, address);
+    const sub = await addOnchainSubscription(db_, member, current, "active");
+    await addInvoice(db_, sub, member, "submitted");
+
+    await expect(linkWallet(db_, member, syntheticAddress())).rejects.toThrow("current wallet in use: open_invoice");
+    expect(await linkWallet(db_, member, address)).toBe(current);
+    expect(Number((await one(db_, "select wallet_id from subscriptions where id = $1", [sub])).wallet_id)).toBe(current);
+  });
+
+  it("moves into an account whose live membership is fully paid, and repoints that membership", async () => {
+    const db_ = await db();
+    const from = await addMember(db_, "Idle Holder");
+    const to = await addMember(db_, "Paid-up Receiver");
+    const address = syntheticAddress();
+    const fromWallet = await linkWallet(db_, from, address);
+    const current = await linkWallet(db_, to, syntheticAddress());
+    const sub = await addOnchainSubscription(db_, to, current, "active");
+    await addInvoice(db_, sub, to, "paid");
+
+    const moved = await move(db_, to, address, fromWallet);
+    expect(Number((await one(db_, "select wallet_id from subscriptions where id = $1", [sub])).wallet_id)).toBe(moved);
+  });
+
+  it("refuses to link a wallet to a disabled member", async () => {
+    const db_ = await db();
+    const disabled = await addMember(db_, "Disabled Member", { disabled: true });
+    await expect(linkWallet(db_, disabled, syntheticAddress())).rejects.toThrow("member is disabled");
+    await expect(one(db_, "select bind_member_wallet($1, $2, 'admin_prior_payment') id", [disabled, syntheticAddress()]))
+      .rejects.toThrow("member is disabled");
+  });
+
+  it("refuses to remove a wallet while a failed payment could still be resubmitted", async () => {
+    const db_ = await db();
+    const member = await addMember(db_, "Exception Payer");
+    const wallet = await linkWallet(db_, member, syntheticAddress());
+    const sub = await addOnchainSubscription(db_, member, wallet, "active");
+    await addInvoice(db_, sub, member, "exception");
+    await db_.query("update subscriptions set status = 'canceled' where id = $1", [sub]);
+
+    await expect(unlink(db_, member, wallet)).rejects.toThrow("wallet in use: open_invoice");
+  });
+
+  it("an invoice can't be created or made payable once its wallet has left the account", async () => {
+    const db_ = await db();
+    const member = await addMember(db_, "Former Payer");
+    const wallet = await linkWallet(db_, member, syntheticAddress());
+    const sub = await addOnchainSubscription(db_, member, wallet, "active");
+    const failed = await addInvoice(db_, sub, member, "exception");
+    await db_.query("update onchain_invoices set status = 'void' where id = $1", [failed]);
+    await db_.query("update subscriptions set status = 'canceled' where id = $1", [sub]);
+    await unlink(db_, member, wallet);
+
+    // The renewal generator read the subscription before it was canceled.
+    await expect(addInvoice(db_, sub, member, "open")).rejects.toThrow("not an active wallet of this member");
+    // A voided, failed payment can't be revived either.
+    await expect(db_.query("update onchain_invoices set status = 'submitted' where id = $1", [failed]))
+      .rejects.toThrow("not an active wallet of this member");
+    // History still settles: an invoice can still be closed or recorded as paid.
+    await addInvoice(db_, sub, member, "expired");
+    await db_.query("update onchain_invoices set status = 'expired', exception_reason = 'closed' where id = $1", [failed]);
+  });
+
+  it("a canceled subscription can't come back to life on a wallet that left, and its history still updates", async () => {
+    const db_ = await db();
+    const member = await addMember(db_, "Lapsed Member");
+    const wallet = await linkWallet(db_, member, syntheticAddress());
+    const sub = await addOnchainSubscription(db_, member, wallet, "active");
+    await db_.query("update subscriptions set status = 'canceled' where id = $1", [sub]);
+    await unlink(db_, member, wallet);
+
+    for (const status of ["active", "trialing", "past_due", "incomplete"]) {
+      await expect(db_.query("update subscriptions set status = $2 where id = $1", [sub, status]))
+        .rejects.toThrow("not an active wallet of this member");
+    }
+    await db_.query("update subscriptions set cancel_at_period_end = true, status = 'canceled' where id = $1", [sub]);
+  });
+
+  it("a relay job can't go in flight from a wallet that left the account", async () => {
+    const db_ = await db();
+    const member = await addMember(db_, "Relay Member");
+    const address = syntheticAddress();
+    const wallet = await linkWallet(db_, member, address);
+    const sub = await addOnchainSubscription(db_, member, wallet, "active");
+    const invoice = await addInvoice(db_, sub, member, "open");
+    await addRelayJob(db_, invoice, member, wallet, address, "prepared");
+    await db_.query("update onchain_invoices set status = 'void' where id = $1", [invoice]);
+    await db_.query("update subscriptions set status = 'canceled' where id = $1", [sub]);
+    await unlink(db_, member, wallet);
+
+    for (const status of ["signed", "submitting"]) {
+      await expect(db_.query("update onchain_relay_jobs set status = $2 where invoice_id = $1", [invoice, status]))
+        .rejects.toThrow("not an active wallet of this member");
+    }
+    await db_.query("update onchain_relay_jobs set status = 'expired' where invoice_id = $1", [invoice]);
+  });
+
   it("keeps the wallet functions service-role only", async () => {
     const db_ = await db();
     await db_.exec("set role authenticated");

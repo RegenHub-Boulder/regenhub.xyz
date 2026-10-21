@@ -201,6 +201,30 @@ describe("moving a wallet between accounts", () => {
     expect(await rows(pg, "select * from admin_actions")).toEqual([]);
   });
 
+  it("refuses to move a wallet into an account whose current wallet has a payment being confirmed", async () => {
+    const holder = await account("Holder");
+    const mover = await account("Mover");
+    const wallet = privateKeyToAccount(generatePrivateKey());
+    const current = privateKeyToAccount(generatePrivateKey());
+    await link(holder, wallet);
+    await link(mover, current);
+    const offer = await challenge(mover, wallet, true);
+    // The mover paid an invoice from their current wallet; it is still being confirmed.
+    const sub = await addOnchainSubscription(pg, mover.memberId, await walletIdOf(current), "active");
+    await addInvoice(pg, sub, mover.memberId, "submitted");
+
+    const refused = await verify(mover, wallet, offer.body);
+    expect(refused).toEqual({ status: 409, body: {
+      code: "wallet_in_use",
+      error: "Your account has a crypto payment that isn't settled yet. Finish it, or ask an admin to close it, before you switch wallets.",
+    } });
+    expect(await holderOf(wallet)).toEqual([holder.memberId]);
+    expect(await holderOf(current)).toEqual([mover.memberId]);
+    // The plain link attempt says so up front instead of offering a move that would fail.
+    expect((await link(mover, wallet)).body.code).toBe("wallet_in_use");
+    expect(await rows(pg, "select * from admin_actions")).toEqual([]);
+  });
+
   it("lets only one of two concurrent moves of the same wallet win", async () => {
     const holder = await account("Holder");
     const first = await account("First");

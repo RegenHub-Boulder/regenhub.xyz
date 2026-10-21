@@ -2,8 +2,8 @@ import { PGlite } from "@electric-sql/pglite";
 import { readFile } from "node:fs/promises";
 
 /**
- * In-memory Postgres with the real on-chain billing migrations (046, 048 and,
- * unless `stopBefore058`, 058) applied over a minimal stand-in for the older
+ * In-memory Postgres with the real on-chain billing migrations (046, 048, 049,
+ * 057 and, unless `stopBefore058`, 058) applied, in production order, over a minimal stand-in for the older
  * tables they build on. Used by the wallet-move migration tests and by the
  * wallet route tests through `pglitePostgrestFetch`.
  */
@@ -61,6 +61,8 @@ export async function createOnchainDb(opts: { stopBefore058?: boolean } = {}) {
   await pg.exec(ONCHAIN_PRELUDE);
   await pg.exec(await migration("046_onchain_memberships.sql"));
   await pg.exec(await migration("048_gasless_usdc_relay.sql"));
+  await pg.exec(await migration("049_credit_included_onchain_payments.sql"));
+  await pg.exec(await migration("057_onchain_plan_discounts.sql"));
   if (!opts.stopBefore058) await pg.exec(await migration("058_wallet_move.sql"));
   return pg;
 }
