@@ -183,7 +183,7 @@ export function CancelMembershipCard({ memberId, memberName, subscription, invoi
         <dialog
           ref={dialogRef}
           aria-labelledby={`cancel-title-${memberId}`}
-          className="glass-panel-strong rounded-xl p-0 max-w-lg w-[calc(100%-2rem)] text-foreground backdrop:bg-black/60 backdrop:backdrop-blur-sm"
+          className="glass-panel-strong rounded-xl p-0 m-auto max-w-lg w-[calc(100%-2rem)] text-foreground backdrop:bg-black/60 backdrop:backdrop-blur-sm"
         >
           <div className="p-6 space-y-4 text-sm">
             <h2 id={`cancel-title-${memberId}`} className="text-lg font-semibold">
