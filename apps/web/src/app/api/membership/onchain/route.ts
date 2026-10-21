@@ -11,7 +11,9 @@ import { getPlan } from "@/lib/plans";
 import type { PlanKey } from "@/lib/supabase/types";
 import { AuditAction, logAction } from "@/lib/auditLog";
 
-type Body = { plan_key?: PlanKey };
+import { resolveOnchainCoupon } from "@/lib/onchain/discount";
+
+type Body = { plan_key?: PlanKey; discount_code?: string };
 
 function setupResponse(subscriptionId: number, invoice: {
   id: number;
@@ -118,6 +120,12 @@ export async function POST(request: Request) {
     return NextResponse.json(setupResponse(existing.id, invoice));
   }
 
+  let coupon = null;
+  if (body.discount_code) {
+    try { coupon = await resolveOnchainCoupon(body.discount_code, body.plan_key); }
+    catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid code" }, { status: 400 }); }
+  }
+
   // Self-serve prices must come from server-owned catalog data. Application
   // rows contain admin workflow fields and must never be a billing authority.
   const monthlyCents = plan.defaultMonthlyCents;
@@ -126,6 +134,7 @@ export async function POST(request: Request) {
   const { data: subscription, error: subscriptionError } = await admin
     .from("subscriptions")
     .insert({
+      onchain_coupon: coupon,
       member_id: member.id,
       payment_rail: "onchain",
       wallet_id: wallet.id,

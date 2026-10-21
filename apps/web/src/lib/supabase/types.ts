@@ -244,6 +244,8 @@ export interface Database {
         Row: {
           id: number;
           member_id: number;
+          onchain_coupon?: import("../onchain/discount").OnchainCoupon | null;
+          onchain_coupon_start?: string | null;
           payment_rail: PaymentRail;
           wallet_id: number | null;
           stripe_subscription_id: string | null;
@@ -267,6 +269,8 @@ export interface Database {
         };
         Insert: {
           member_id: number;
+          onchain_coupon?: import("../onchain/discount").OnchainCoupon | null;
+          onchain_coupon_start?: string | null;
           payment_rail?: PaymentRail;
           wallet_id?: number | null;
           stripe_subscription_id?: string | null;
@@ -344,6 +348,9 @@ export interface Database {
           period_start: string;
           period_end: string;
           due_at: string;
+          plan_key?: string | null;
+          coupon_code?: string | null;
+          coupon_discount_cents?: number;
           base_amount_cents: number;
           discount_bps: number;
           amount_cents: number;
@@ -367,6 +374,9 @@ export interface Database {
           period_start: string;
           period_end: string;
           due_at: string;
+          plan_key?: string | null;
+          coupon_code?: string | null;
+          coupon_discount_cents?: number;
           base_amount_cents: number;
           discount_bps?: number;
           amount_cents: number;

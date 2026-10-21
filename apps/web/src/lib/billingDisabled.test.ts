@@ -13,7 +13,7 @@ import { POST } from "@/app/api/webhooks/stripe/route";
 import { processOnchainInvoice, retryPendingOnchainEffects } from "./onchain/verifyPayment";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe";
-import { setUserCode } from "@regenhub/shared";
+import { setUserCode, clearUserCode } from "@regenhub/shared";
 
 vi.mock("./onchain/config", () => ({ getOpPublicClient: vi.fn(), assertOpPublicClient: vi.fn(), isGaslessRelayConfigured: () => false }));
 vi.mock("./onchain/invoice", () => ({ generateUpcomingOnchainInvoices: async () => [], markDueOnchainSubscriptionsPastDue: async () => 0, isRenewalInvoice: () => false }));
@@ -42,19 +42,28 @@ function database(disabled = true) {
     member_wallets: [{ id: 1, address: sender, revoked_at: null }], onchain_relay_jobs: [],
   };
   let credits = 0;
+  let writerHeld = false;
   const db = { from: (table: string) => {
     const filters: ((row: Row) => boolean)[] = [];
-    const orders: { key: string; nullsFirst: boolean }[] = [];
+    const orders: { key: string; nullsFirst: boolean; ascending: boolean }[] = [];
     let limit = Infinity;
     let mutation: { kind: string; values: Row } | null = null;
     const builder = {
-      select: () => builder,
+      select: (columns?: string) => {
+        if (table === "onchain_invoices" && columns === "plan_key, subscriptions(plan_key)") {
+          expect(writerHeld).toBe(true);
+          for (const paid of rows.onchain_payments) {
+            if (!rows.onchain_invoices.some(i => i.id === paid.invoice_id)) rows.onchain_invoices.push({ id: paid.invoice_id, member_id: paid.member_id, status: "paid", period_start: "2026-10-01", ...(paid.onchain_invoices as Row) });
+          }
+        }
+        return builder;
+      },
       eq: (key: string, value: unknown) => { filters.push(r => r[key] === value); return builder; },
       is: (key: string, value: unknown) => { filters.push(r => (r[key] ?? null) === value); return builder; },
       not: (key: string, _op: string, value: unknown) => { filters.push(r => (r[key] ?? null) !== value); return builder; },
       in: (key: string, values: unknown[]) => { filters.push(r => values.includes(r[key])); return builder; },
       lte: (key: string, value: number) => { filters.push(r => Number(r[key]) <= value); return builder; },
-      order: (key: string, opts: { nullsFirst?: boolean }) => { orders.push({ key, nullsFirst: opts.nullsFirst ?? false }); return builder; },
+      order: (key: string, opts: { nullsFirst?: boolean; ascending?: boolean }) => { orders.push({ key, nullsFirst: opts.nullsFirst ?? false, ascending: opts.ascending ?? true }); return builder; },
       limit: (value: number) => { limit = value; return builder; },
       update: (values: Row) => { mutation = { kind: "update", values }; return builder; },
       insert: (values: Row) => { mutation = { kind: "insert", values }; return builder; },
@@ -73,11 +82,11 @@ function database(disabled = true) {
         else { const row = { ...values }; rows[table].push(row); selected = [row]; }
       }
       selected = [...selected].sort((a, b) => {
-        for (const { key, nullsFirst } of orders) {
+        for (const { key, nullsFirst, ascending } of orders) {
           if (a[key] === b[key]) continue;
           if (a[key] == null) return nullsFirst ? -1 : 1;
           if (b[key] == null) return nullsFirst ? 1 : -1;
-          return a[key]! < b[key]! ? -1 : 1;
+          return (a[key]! < b[key]! ? -1 : 1) * (ascending ? 1 : -1);
         }
         return 0;
       }).slice(0, limit);
@@ -85,13 +94,15 @@ function database(disabled = true) {
     }
     return builder;
   }, rpc: async (name: string, args: Row) => {
+    if (name === "acquire_lock_writer") writerHeld = true;
+    if (name === "release_lock_writer") writerHeld = false;
     if (["acquire_lock_writer", "release_lock_writer", "check_lock_writer"].includes(name)) return { data: true, error: null };
     if (name === "list_lock_quarantines") return { data: [], error: null };
     expect(name).toBe("credit_onchain_invoice");
     const invoice = rows.onchain_invoices.find(r => r.id === args.p_invoice_id)!;
     let paid = rows.onchain_payments.find(r => r.invoice_id === invoice.id);
     const wasNew = !paid;
-    if (!paid) { paid = payment(4, 7); paid.invoice_id = Number(invoice.id); rows.onchain_payments.push(paid); credits++; invoice.status = "paid"; }
+    if (!paid) { paid = payment(4, 7); paid.invoice_id = Number(invoice.id); rows.onchain_payments.push(paid); credits++; invoice.status = "paid"; invoice.member_id = 7; invoice.plan_key = "hot_desk"; }
     return { data: [{ payment_id: paid.id, member_id: 7, subscription_id: 1, plan_key: "hot_desk", was_new: wasNew }], error: null };
   } };
   return { db, member, writes, rows, credits: () => credits };
@@ -158,6 +169,8 @@ it("failed attempts yield the bounded queue to unattempted payments", async () =
   expect(rows.onchain_payments[50].effects_claimed_at).toBeNull();
   rows.members.push({ id: 8, disabled: true, pin_code_slot: null });
   rows.onchain_payments[50].member_id = 8;
+  const lastInvoice = rows.onchain_invoices.find(i => i.id === 51);
+  if (lastInvoice) lastInvoice.member_id = 8;
   await retryPendingOnchainEffects(db as never);
   expect(rows.onchain_payments[50].effects_completed_at).toBeTruthy();
 });
@@ -177,4 +190,47 @@ it("records a disabled member's payment and replay does not credit or grant twic
   expect(member.disabled).toBe(true);
   expect(member.pin_code_slot).toBeNull();
   expect(setUserCode).not.toHaveBeenCalled();
+});
+
+it("uses the paid invoice plan on retry and revokes a desk PIN through the lifecycle", async () => {
+  const { db, rows, writes } = database(false);
+  rows.members[0].pin_code_slot = 22;
+  rows.onchain_payments[0].onchain_invoices = { subscription_id: 1, plan_key: "member_2day", subscriptions: { plan_key: "cold_desk" } };
+  vi.mocked(clearUserCode).mockResolvedValue([{ entity: "lock.front", ok: true }]);
+  expect(await retryPendingOnchainEffects(db as never)).toEqual([]);
+  expect(clearUserCode).toHaveBeenCalledWith(22);
+  expect(rows.members[0]).toMatchObject({ pin_code_slot: null, member_type: "day_pass", disabled: false });
+  expect(grantSubscriptionPasses).toHaveBeenCalledWith(db, expect.objectContaining({ planKey: "member_2day" }));
+  expect(writes.some(w => w.values.effects_completed_at)).toBe(true);
+});
+
+it("keeps payment effects retryable if the physical PIN revoke fails", async () => {
+  const { db, rows } = database(false);
+  rows.members[0].pin_code_slot = 22;
+  rows.onchain_payments[0].onchain_invoices = { subscription_id: 1, plan_key: "member_basic", subscriptions: { plan_key: "cold_desk" } };
+  vi.mocked(clearUserCode).mockRejectedValue(new Error("door offline"));
+  expect(await retryPendingOnchainEffects(db as never)).toEqual([{ paymentId: 3, error: "Could not revoke permanent door access" }]);
+  expect(rows.members[0].pin_code_slot).toBe(22);
+  expect(rows.onchain_payments[0].effects_completed_at).toBeNull();
+  expect(grantSubscriptionPasses).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["cold_desk", "member_basic", null, "day_pass"],
+  ["member_basic", "cold_desk", 22, "cold_desk"],
+])("older %s retry preserves newer %s access", async (oldPlan, newPlan, slot, memberType) => {
+  const { db, rows } = database(false);
+  rows.members[0].pin_code_slot = slot;
+  rows.members[0].member_type = memberType;
+  rows.onchain_payments[0].onchain_invoices = { subscription_id: 1, plan_key: oldPlan, subscriptions: { plan_key: newPlan } };
+  rows.onchain_invoices = [
+    { id: 3, member_id: 7, status: "paid", period_start: "2026-10-01", plan_key: oldPlan },
+    { id: 4, member_id: 7, status: "paid", period_start: "2026-11-01", plan_key: newPlan },
+  ];
+  expect(await retryPendingOnchainEffects(db as never)).toEqual([]);
+  expect(rows.members[0]).toMatchObject({ pin_code_slot: slot, member_type: memberType });
+  expect(setUserCode).not.toHaveBeenCalled();
+  expect(clearUserCode).not.toHaveBeenCalled();
+  expect(grantSubscriptionPasses).toHaveBeenCalledWith(db, expect.objectContaining({ planKey: oldPlan, billingEventKey: "onchain:3" }));
+  expect(rows.onchain_payments[0].effects_completed_at).toBeTruthy();
 });

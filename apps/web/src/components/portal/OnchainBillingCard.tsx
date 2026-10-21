@@ -1,5 +1,6 @@
 "use client";
 
+import { OnchainPlanEditor } from "./OnchainPlanEditor";
 import { useCallback, useEffect, useState } from "react";
 import { ConnectButton, useConnectModal } from "@rainbow-me/rainbowkit";
 import { getAddress, type Address, type Hash, type Hex } from "viem";
@@ -29,6 +30,8 @@ type Props = {
   invoice: {
     id: number;
     amountCents: number;
+    couponCode?: string | null;
+    couponDiscountCents?: number;
     amountMicros: number;
     dueAt: string;
     status: string;
@@ -277,6 +280,7 @@ function OnchainBillingCardInner(props: Props) {
 
   return (
     <div className="glass-panel border border-sage/20 rounded-lg p-4 space-y-3">
+      <OnchainPlanEditor />
       <div className="flex items-center gap-2">
         <Wallet className="w-4 h-4 text-sage" />
         <p className="font-medium text-sm">Pay direct to the RegenHub treasury</p>
@@ -300,6 +304,7 @@ function OnchainBillingCardInner(props: Props) {
       ) : props.invoice && props.invoice.status !== "paid" ? (
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="text-sm">
+            {props.invoice.couponCode && <p className="text-xs text-sage">{props.invoice.couponCode}: ${( (props.invoice.couponDiscountCents ?? 0) / 100).toFixed(2)} off before rail discount</p>}
             <p className="font-medium">${(props.invoice.amountCents / 100).toFixed(2)} USDC</p>
             <p className="text-xs text-muted">Due {new Date(props.invoice.dueAt).toLocaleDateString()}</p>
           </div>

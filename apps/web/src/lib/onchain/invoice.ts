@@ -7,6 +7,8 @@ import {
   TREASURY_ADDRESS,
 } from "./config";
 
+import type { OnchainCoupon } from "./discount";
+
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
 export function discountedCents(baseCents: number, discountBps = ONCHAIN_DISCOUNT_BPS): number {
@@ -37,8 +39,11 @@ export function invoiceValues(args: {
   periodStart: string;
   baseAmountCents: number;
   dueAt?: string;
+  coupon?: Pick<OnchainCoupon, "code" | "percent_off" | "amount_off"> | null;
 }) {
-  const amountCents = discountedCents(args.baseAmountCents);
+  const codeDiscount = Math.min(Math.max(0, args.baseAmountCents - 100), args.coupon?.percent_off != null
+    ? Math.round(args.baseAmountCents * args.coupon.percent_off / 100) : args.coupon?.amount_off ?? 0);
+  const amountCents = Math.max(100, Math.round((args.baseAmountCents - codeDiscount) * (10_000 - ONCHAIN_DISCOUNT_BPS) / 10_000));
   return {
     subscription_id: args.subscriptionId,
     member_id: args.memberId,
@@ -46,6 +51,8 @@ export function invoiceValues(args: {
     period_end: addCalendarMonth(args.periodStart),
     due_at: args.dueAt ?? args.periodStart,
     base_amount_cents: args.baseAmountCents,
+    coupon_code: args.coupon?.code ?? null,
+    coupon_discount_cents: codeDiscount,
     discount_bps: ONCHAIN_DISCOUNT_BPS,
     amount_cents: amountCents,
     amount_usdc_micros: amountCents * 10_000,

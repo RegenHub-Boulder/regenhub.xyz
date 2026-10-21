@@ -18,9 +18,9 @@ it("mounts the deferred payment UI only after choosing crypto and preserves the 
   try {
     await act(async () => root.render(React.createElement(CryptoSubscribeButton, { planKey: "member_2day" })));
     expect(mounted).not.toHaveBeenCalled();
-    expect(host.textContent).toBe("Pay with crypto");
+    expect(host.querySelector("button")?.textContent).toBe("Pay with crypto");
     await act(async () => host.querySelector("button")!.click());
-    expect(mounted).toHaveBeenCalledWith({ planKey: "member_2day", autoStart: true });
+    expect(mounted).toHaveBeenCalledWith({ planKey: "member_2day", discountCode: "", autoStart: true });
     expect(host.textContent).toBe("Payment UI");
   } finally {
     await act(async () => root.unmount());

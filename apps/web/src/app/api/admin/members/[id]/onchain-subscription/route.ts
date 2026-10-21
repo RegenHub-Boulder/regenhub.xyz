@@ -1,3 +1,4 @@
+import { resolveOnchainCoupon } from "@/lib/onchain/discount";
 import { requireAdmin } from "@/lib/admin";
 import { NextResponse } from "next/server";
 import { getAddress, isAddress } from "viem";
@@ -111,4 +112,30 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   }, admin);
 
   return NextResponse.json({ subscription, wallet_id: walletId, invoices_created: invoices.length, access_warning: activation.autoAllocationFailure });
+}
+
+/** Prospective edits only: invoice trigger serializes and snapshots issuance. */
+export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const user = await requireAdmin();
+  if (!user) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const memberId = Number((await ctx.params).id);
+  const body = await req.json().catch(() => null) as { plan_key?: string; discount_code?: string } | null;
+  if (!Number.isInteger(memberId) || !body || (!body.plan_key && body.discount_code === undefined)) return NextResponse.json({ error: "Plan or discount code required" }, { status: 400 });
+  const admin = createServiceClient();
+  const { data: actor } = await admin.from("members").select("id").eq("supabase_user_id", user.id).single();
+  const { data: sub } = await admin.from("subscriptions").select("id, plan_key")
+    .eq("member_id", memberId).eq("payment_rail", "onchain").in("status", ["active", "trialing", "past_due"]).maybeSingle();
+  if (!sub) return NextResponse.json({ error: "Active crypto membership not found" }, { status: 404 });
+  const plan = body.plan_key ? getPlan(body.plan_key) : null;
+  if (body.plan_key && !plan) return NextResponse.json({ error: "Unknown plan" }, { status: 400 });
+  const changes: import("@/lib/supabase/types").Database["public"]["Tables"]["subscriptions"]["Update"] = {};
+  if (plan && body.plan_key) { changes.plan_key = body.plan_key; changes.monthly_cents = plan.defaultMonthlyCents; }
+  if (body.discount_code !== undefined) {
+    try { changes.onchain_coupon = body.discount_code.trim() ? await resolveOnchainCoupon(body.discount_code, body.plan_key ?? sub.plan_key) : null; }
+    catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid code" }, { status: 400 }); }
+  }
+  const { error } = await admin.from("subscriptions").update(changes).eq("id", sub.id).eq("payment_rail", "onchain").in("status", ["active", "trialing", "past_due"]);
+  if (error) return NextResponse.json({ error: "Could not update membership" }, { status: 500 });
+  await logAction({ action: AuditAction.ONCHAIN_SUBSCRIPTION_CHANGED, actorMemberId: actor?.id, target: { table: "subscriptions", id: sub.id }, payload: { member_id: memberId, from: sub.plan_key, ...changes } }, admin);
+  return NextResponse.json({ ok: true, message: "Saved for the next invoice. Issued invoices keep their price; access changes when the new invoice is paid." });
 }

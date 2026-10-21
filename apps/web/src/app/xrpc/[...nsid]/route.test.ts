@@ -224,7 +224,7 @@ describe("xrpc proxy relay filter", () => {
   it("drops upstream's access-control-* response headers", async () => {
     const res = await POST(leakyReq("POST"), ctx("social.scenius.getSession"));
     expect(res.status).toBe(200);
-    for (const [key] of res.headers.entries() as [string, string][]) {
+    for (const [key] of res.headers.entries()) {
       expect(key.toLowerCase().startsWith("access-control-")).toBe(false);
     }
   });
