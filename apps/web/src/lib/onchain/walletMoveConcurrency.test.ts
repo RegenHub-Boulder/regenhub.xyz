@@ -214,7 +214,7 @@ describe.skipIf(!adminUrl)("058 wallet move under real concurrency", () => {
     expect(await value(a, "select wallet_id from subscriptions where id = $1", [sub])).toBe(String(current));
   });
 
-  it("an invoice created while a wallet moves INTO its account waits, then is refused instead of expecting the old sender", async () => {
+  it("an invoice created while a wallet moves INTO its account waits, then follows the subscription to the new wallet", async () => {
     const holder = await member("Idle Holder");
     const receiver = await member("Receiver");
     const addr = address();
@@ -223,11 +223,12 @@ describe.skipIf(!adminUrl)("058 wallet move under real concurrency", () => {
     const sub = await subscribe(receiver, current);
 
     await a.query("begin");
-    await a.query("select move_member_wallet($1, $2, $3)", [receiver, addr, wallet]);
+    const moved = String(await value(a, "select move_member_wallet($1, $2, $3)", [receiver, addr, wallet]));
     const outcome = await blockedUntil(b.query(INSERT_INVOICE, [sub, receiver, "open"]), () => a.query("commit"));
 
-    expect(outcome.ok).toBe(false);
-    expect(String(!outcome.ok && outcome.error.message)).toMatch("not an active wallet of this member");
+    expect(outcome.ok).toBe(true);
+    // The subscription (and so the invoice's expected sender) is the moved wallet, which is active.
+    expect(await value(a, "select wallet_id from subscriptions where id = $1", [sub])).toBe(moved);
   });
 
   it("a subscription reactivated, or a relay signed, while its wallet is removed waits, then is refused", async () => {

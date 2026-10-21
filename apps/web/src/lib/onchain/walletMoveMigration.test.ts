@@ -371,6 +371,33 @@ describe("058_wallet_move.sql", () => {
     await db_.query("update onchain_invoices set status = 'expired', exception_reason = 'closed' where id = $1", [failed]);
   });
 
+  it("refuses an invoice whose member isn't its subscription's member", async () => {
+    const db_ = await db();
+    const payer = await addMember(db_, "Payer");
+    const other = await addMember(db_, "Other");
+    const sub = await addOnchainSubscription(db_, payer, await linkWallet(db_, payer, syntheticAddress()), "active");
+    await linkWallet(db_, other, syntheticAddress());
+    await expect(addInvoice(db_, sub, other, "open")).rejects.toThrow("not an active wallet of this member");
+  });
+
+  it("the renewal cron's no-op upsert of an invoice that already exists isn't re-checked", async () => {
+    const db_ = await db();
+    const member = await addMember(db_, "Settled Member");
+    const wallet = await linkWallet(db_, member, syntheticAddress());
+    const sub = await addOnchainSubscription(db_, member, wallet, "active");
+    const invoice = await addInvoice(db_, sub, member, "paid");
+    const { period_start } = await one(db_, "select period_start from onchain_invoices where id = $1", [invoice]);
+    // A wallet revoked outside the functions (rows written before 058 aren't re-validated).
+    await db_.query("update member_wallets set revoked_at = now() where id = $1", [wallet]);
+
+    await db_.query(
+      `insert into onchain_invoices(subscription_id, member_id, period_start, period_end, due_at,
+         base_amount_cents, amount_cents, amount_usdc_micros, status)
+       values ($1, $2, $3, $3::timestamptz + interval '30 days', $3, 10000, 10000, 100000000, 'open')
+       on conflict (subscription_id, period_start) do nothing`, [sub, member, period_start]);
+    expect(await rows(db_, "select status from onchain_invoices where subscription_id = $1", [sub])).toEqual([{ status: "paid" }]);
+  });
+
   it("a canceled subscription can't come back to life on a wallet that left, and its history still updates", async () => {
     const db_ = await db();
     const member = await addMember(db_, "Lapsed Member");

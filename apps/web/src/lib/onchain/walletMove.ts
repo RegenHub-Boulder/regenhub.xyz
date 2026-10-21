@@ -42,10 +42,13 @@ export function walletInUse(blocker: string, whose: "own" | "other") {
 
 /** Map an error raised by one of the wallet SQL functions to a response. */
 export function walletRpcErrorResponse(
-  error: { message: string },
+  error: { message: string; code?: string },
   whose: "own" | "other",
   context: string,
 ) {
+  // Two members swapping wallets at the same instant lock the two wallet rows
+  // in opposite order; Postgres aborts one, which is safe to retry.
+  if (error.code === "40P01") error = { message: "wallet changed accounts" };
   const inUse = error.message.match(/^wallet in use: (\w+)$/);
   if (inUse) return walletInUse(inUse[1], whose);
   const replacing = error.message.match(/^current wallet in use: (\w+)$/);

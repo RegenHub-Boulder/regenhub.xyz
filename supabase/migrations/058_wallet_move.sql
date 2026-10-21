@@ -49,7 +49,8 @@
 -- Idempotent: safe to run twice. Apply the whole file in one transaction
 -- (run_migration does): the index swap holds ACCESS EXCLUSIVE on
 -- member_wallets until commit, so give up rather than queue behind a long
--- transaction; retry if a timeout fires.
+-- transaction; retry if a timeout fires. By hand, use `psql -1 -f` so the
+-- SET LOCALs below take effect.
 
 set local lock_timeout = '5s';
 set local statement_timeout = '60s';
@@ -181,6 +182,9 @@ begin
     where member_id = p_member_id and revoked_at is null
       and address_normalized <> v_address
     for update;
+  -- The second test only matters for rows written before this migration:
+  -- from here on the triggers below keep a live subscription on an active
+  -- wallet of its own member.
   if found or exists (
     select 1 from subscriptions s
       join member_wallets mw on mw.id = s.wallet_id
@@ -414,17 +418,36 @@ set search_path = public
 as $$
 declare
   v_wallet_id bigint;
+  v_active boolean;
 begin
   if tg_op = 'UPDATE' and old.status = new.status then
     return new;
   end if;
-  select wallet_id into v_wallet_id
-    from subscriptions
-    where id = new.subscription_id and member_id = new.member_id;
-  perform 1 from member_wallets
-    where id = v_wallet_id and member_id = new.member_id and revoked_at is null
-    for share;
-  if not found then
+  -- The renewal cron's ON CONFLICT DO NOTHING upsert of an existing period
+  -- inserts nothing; don't lock or check for it (057 skips it the same way).
+  if tg_op = 'INSERT' and exists (
+    select 1 from onchain_invoices
+    where subscription_id = new.subscription_id and period_start = new.period_start
+  ) then
+    return new;
+  end if;
+  loop
+    select wallet_id into v_wallet_id
+      from subscriptions
+      where id = new.subscription_id and member_id = new.member_id;
+    perform 1 from member_wallets
+      where id = v_wallet_id and member_id = new.member_id and revoked_at is null
+      for share;
+    v_active := found;
+    -- A wallet switch that committed while we waited for the lock has
+    -- repointed the subscription: follow it to the wallet it uses now.
+    exit when not exists (
+      select 1 from subscriptions
+      where id = new.subscription_id and member_id = new.member_id
+        and wallet_id is distinct from v_wallet_id
+    );
+  end loop;
+  if not v_active then
     raise exception 'wallet % is not an active wallet of this member', v_wallet_id;
   end if;
   return new;
