@@ -8,7 +8,7 @@ import {
   type Log,
 } from "viem";
 import { activateMembershipAccess, downgradeMembershipAccess } from "@/lib/membershipLifecycle";
-import { getAllPlanKeys, getPlan, isDeskMemberType, isDeskPlan } from "@/lib/plans";
+import { getPlan, isDeskMemberType, isDeskPlan } from "@/lib/plans";
 import { endDeskAccessForSwitch } from "@/lib/planSwitch";
 import { grantSubscriptionPasses } from "@/lib/subscriptionPasses";
 import { isLiveSubscription } from "@/lib/subscriptionStatus";
@@ -166,7 +166,7 @@ export async function reconcileOnchainAccess(
   now = new Date(),
 ): Promise<boolean> {
   const { data: current, error: currentError } = await admin.from("subscriptions")
-    .select("status, admin_cancel_mode").eq("id", args.subscriptionId).single();
+    .select("status, admin_cancel_mode, pending_plan_key, pending_plan_from").eq("id", args.subscriptionId).single();
   if (currentError) throw currentError;
   if (!isLiveSubscription(current.status) || current.admin_cancel_mode === "now") return false;
   // Period order, rather than arrival/retry order, governs door access.
@@ -189,23 +189,19 @@ export async function reconcileOnchainAccess(
   ]);
   if (!member || !plan) throw new Error("credited payment has no member or plan");
 
-  if (plan.grantsMemberType === "day_pass" && member.pin_code_slot) {
-    // A daily plan paid ahead doesn't end a desk period already paid for.
-    const nowIso = now.toISOString();
-    const { data: running, error: runningError } = await admin.from("onchain_invoices")
-      .select("plan_key, subscriptions(plan_key)")
-      .eq("member_id", args.memberId).eq("status", "paid")
-      .lte("period_start", nowIso).gt("period_end", nowIso)
-      .order("period_start", { ascending: false }).limit(1).maybeSingle();
-    if (runningError) throw runningError;
-    const runningSub = running?.subscriptions as unknown as { plan_key: string } | null;
-    if (isDeskPlan(running?.plan_key ?? runningSub?.plan_key)) return true;
+  const onDesk = isDeskMemberType(member.member_type);
+  if (plan.grantsMemberType === "day_pass" && (member.pin_code_slot || onDesk)) {
+    // A daily plan paid ahead doesn't end a desk period already paid for,
+    // with or without a door code yet.
+    if (await deskPeriodRunning(admin, args.memberId, now)) return true;
     // A desk period ending for a daily plan is a plan switch landing: audited, through the same lifecycle.
-    const revoked = isDeskMemberType(member.member_type)
+    const revoked = onDesk && current.pending_plan_key
       ? await endDeskAccessForSwitch(admin, {
-        subscriptionId: args.subscriptionId, memberId: member.id, rail: "onchain", from: member.member_type, to: planKey,
+        subscriptionId: args.subscriptionId, memberId: member.id, rail: "onchain", from: current.pending_plan_from ?? member.member_type, to: planKey,
       })
-      : await downgradeMembershipAccess(admin, { memberId: member.id, currentPinSlot: member.pin_code_slot, revokePermanentPin: true });
+      : member.pin_code_slot
+        ? await downgradeMembershipAccess(admin, { memberId: member.id, currentPinSlot: member.pin_code_slot, revokePermanentPin: true })
+        : null;
     if (revoked && (revoked.lockRevokeFailed || ("memberUpdateError" in revoked && revoked.memberUpdateError))) {
       throw new Error("Could not revoke permanent door access");
     }
@@ -219,36 +215,49 @@ export async function reconcileOnchainAccess(
   return true;
 }
 
+/** Is a paid desk invoice's period running for this member now? */
+async function deskPeriodRunning(admin: ServiceClient, memberId: number, now: Date): Promise<boolean> {
+  const nowIso = now.toISOString();
+  const { data: running, error } = await admin.from("onchain_invoices")
+    .select("plan_key, subscriptions(plan_key)")
+    .eq("member_id", memberId).eq("status", "paid")
+    .lte("period_start", nowIso).gt("period_end", nowIso)
+    .order("period_start", { ascending: false }).limit(1).maybeSingle();
+  if (error) throw error;
+  const runningSub = running?.subscriptions as unknown as { plan_key: string } | null;
+  return isDeskPlan(running?.plan_key ?? runningSub?.plan_key);
+}
+
 /**
  * On-chain counterpart of the Stripe webhook landing a desk → daily switch:
- * once a paid desk period is over and a paid daily-plan period has started,
- * end the desk access of the member who switched. Only members who paid for a
- * desk on this subscription qualify, so a desk an admin granted by hand to a
- * daily subscriber is left alone. Called from the on-chain billing cron. A
- * failed member update is retried on the next run; a failed lock clear stays
- * quarantined for Lock Sync (the member is already off the desk type).
+ * for each subscription with a switch pending (subscriptions.pending_*,
+ * written by the plan change), once no paid desk period is running, end the
+ * desk and clear the pending switch, paid daily invoice or not. Only a
+ * pending switch qualifies, so a desk an admin grants by hand later is left
+ * alone. Called from the on-chain billing cron. A failed member update is
+ * retried on the next run; a failed lock clear stays quarantined for Lock
+ * Sync (the member is already off the desk type).
  */
 export async function finishOnchainPlanSwitches(admin: ServiceClient, now = new Date()) {
   const { data: subs, error } = await admin.from("subscriptions")
-    .select("id, member_id, plan_key, members(member_type)")
+    .select("id, member_id, pending_plan_key, pending_plan_from")
     .eq("payment_rail", "onchain")
     .in("status", ["active", "trialing", "past_due"])
-    .is("admin_cancel_mode", null);
+    .is("admin_cancel_mode", null)
+    .not("pending_plan_key", "is", null)
+    .lte("pending_plan_at", now.toISOString());
   if (error) throw error;
-  const deskPlans = getAllPlanKeys().filter((key) => isDeskPlan(key));
-  const results: { subscriptionId: number; memberId: number; error?: string }[] = [];
-  type Row = { id: number; member_id: number; plan_key: string; members: { member_type: string } | null };
-  for (const sub of (subs ?? []) as unknown as Row[]) {
-    if (isDeskPlan(sub.plan_key) || !isDeskMemberType(sub.members?.member_type)) continue;
+  const results: { subscriptionId: number; memberId: number; revokedSlot?: number | null; error?: string }[] = [];
+  type Row = { id: number; member_id: number; pending_plan_key: string; pending_plan_from: string };
+  for (const sub of (subs ?? []) as Row[]) {
     try {
-      const { data: paidDesk, error: deskError } = await admin.from("onchain_invoices")
-        .select("id").eq("subscription_id", sub.id).eq("status", "paid").in("plan_key", deskPlans)
-        .lte("period_end", now.toISOString()).limit(1).maybeSingle();
-      if (deskError) throw deskError;
-      if (!paidDesk) continue;
-      await withLockWriter(admin, () => reconcileOnchainAccess(admin, { memberId: sub.member_id, subscriptionId: sub.id }, now),
-        "On-chain plan switch");
-      results.push({ subscriptionId: sub.id, memberId: sub.member_id });
+      const landed = await withLockWriter(admin, async () => {
+        if (await deskPeriodRunning(admin, sub.member_id, now)) return undefined;
+        return endDeskAccessForSwitch(admin, {
+          subscriptionId: sub.id, memberId: sub.member_id, rail: "onchain", from: sub.pending_plan_from, to: sub.pending_plan_key,
+        });
+      }, "On-chain plan switch");
+      if (landed) results.push({ subscriptionId: sub.id, memberId: sub.member_id, revokedSlot: landed.revokedSlot });
     } catch (cause) {
       console.error(`[OnchainBilling] Plan switch for subscription ${sub.id} failed:`, cause);
       results.push({ subscriptionId: sub.id, memberId: sub.member_id, error: cause instanceof Error ? cause.message : "unknown" });

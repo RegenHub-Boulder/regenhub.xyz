@@ -17,7 +17,7 @@ import {
 } from "@/lib/membershipLifecycle";
 import { grantSubscriptionPasses } from "@/lib/subscriptionPasses";
 import { isDeskPlan } from "@/lib/plans";
-import { endDeskAccessForSwitch, releaseLandedSchedule, type SwitchLanded } from "@/lib/planSwitch";
+import { endDeskAccessForSwitch, releaseLandedSchedule, scheduleIdOf, type SwitchLanded } from "@/lib/planSwitch";
 import { withLockWriter } from "@regenhub/shared";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
@@ -210,10 +210,6 @@ async function handleCheckoutCompleted(
   return result.member_id ?? null;
 }
 
-function scheduleIdOf(sub: Stripe.Subscription): string | null {
-  return typeof sub.schedule === "string" ? sub.schedule : sub.schedule?.id ?? null;
-}
-
 /**
  * Stripe doesn't guarantee delivery order, so for some subscriptions an event
  * may be older than what we already know, and Stripe's current state of the
@@ -257,19 +253,12 @@ async function handleSubscriptionCreated(
   admin: ServiceClient,
   sub: Stripe.Subscription,
 ): Promise<number | null> {
-  return upsertSubscription(admin, await currentStateFor(admin, sub), { isNew: true });
+  return (await upsertSubscription(admin, sub, { isNew: true })).memberId;
 }
 
 async function handleSubscriptionUpdated(admin: ServiceClient, event: Stripe.Subscription): Promise<number | null> {
-  const sub = await currentStateFor(admin, event);
-  // Capture previous state to detect transitions
-  const { data: prev } = await admin
-    .from("subscriptions")
-    .select("status, cancel_at_period_end, past_due_since")
-    .eq("stripe_subscription_id", sub.id)
-    .maybeSingle();
-
-  const memberId = await upsertSubscription(admin, sub, { isNew: false });
+  // `prev` is the row as this delivery found it, to detect transitions.
+  const { memberId, sub, prev } = await upsertSubscription(admin, event, { isNew: false });
 
   const newStatus = sub.status;
 
@@ -522,11 +511,51 @@ async function handleInvoicePaymentFailed(
 // Sub upsert + side effects
 // =====================================================
 
+type PrevRow = { status: string; cancel_at_period_end: boolean; past_due_since: string | null } | null;
+
+/**
+ * Mirror a subscription event and apply its access effects. Deliveries can
+ * arrive out of order and at once, so everything from reading Stripe's state
+ * to granting access runs inside one PIN-writer reservation: deliveries go one
+ * at a time, each judging freshness (currentStateFor) against the row the
+ * previous one left. An older "Hot Desk" event can then never write the desk
+ * back, or its door code, after a newer daily event landed. Messages and
+ * emails go out after the reservation is released.
+ */
 async function upsertSubscription(
   admin: ServiceClient,
-  sub: Stripe.Subscription,
+  event: Stripe.Subscription,
   { isNew }: { isNew: boolean },
-): Promise<number | null> {
+): Promise<{ memberId: number; sub: Stripe.Subscription; prev: PrevRow }> {
+  const synced = await withLockWriter(admin, () => syncSubscription(admin, event), "Stripe subscription sync");
+  const { sub, member, plan, planKey, monthlyCents, local, leavingDesk, switchLanded, activation } = synced;
+
+  // Only our own schedule: one an admin made in the dashboard is theirs to manage.
+  if (leavingDesk && local) await releaseLandedSchedule(local.pending_plan_schedule_id);
+  if (switchLanded && local) {
+    const door = switchLanded.lockRevokeFailed
+      ? "\n\n⚠️ *Action needed:* the desk door code could not be cleared on every lock; the slot is quarantined. Run Lock Sync from /admin/access."
+      : switchLanded.revokedSlot
+        ? `\n\n🔒 Cleared desk PIN slot ${switchLanded.revokedSlot}${switchLanded.lockStatus ? `: ${switchLanded.lockStatus}` : ""}`
+        : "";
+    await notifyTelegram(
+      `🔁 ${member.name} moved from ${planLabel(local.plan_key)} to ${planLabel(planKey)} ($${monthlyCents / 100}/mo).${door}`,
+      { silent: !switchLanded.lockRevokeFailed },
+    );
+  }
+  if (activation && isNew) await announceNewMember(admin, sub, { member, plan, planKey, monthlyCents, activation });
+  return { memberId: member.id, sub, prev: synced.prev };
+}
+
+/** The part of upsertSubscription that runs under the reservation. */
+async function syncSubscription(admin: ServiceClient, event: Stripe.Subscription) {
+  const sub = await currentStateFor(admin, event);
+  const { data: prev } = await admin
+    .from("subscriptions")
+    .select("status, cancel_at_period_end, past_due_since")
+    .eq("stripe_subscription_id", sub.id)
+    .maybeSingle();
+
   // Plan key comes from metadata set at checkout creation. No fallback — if
   // metadata is missing, something's wrong with how the sub was created
   // (likely created manually in Stripe Dashboard, not via our admin flow).
@@ -665,114 +694,102 @@ async function upsertSubscription(
   const { error: upsertError } = await admin.from("subscriptions").upsert(row, { onConflict: "stripe_subscription_id" });
   if (upsertError) throw upsertError;
 
-  // Only our own schedule: one an admin made in the dashboard is theirs to manage.
-  if (leavingDesk && local) await releaseLandedSchedule(local.pending_plan_schedule_id);
-  if (switchLanded && local) {
-    const door = switchLanded.lockRevokeFailed
-      ? "\n\n⚠️ *Action needed:* the desk door code could not be cleared on every lock; the slot is quarantined. Run Lock Sync from /admin/access."
-      : switchLanded.revokedSlot
-        ? `\n\n🔒 Cleared desk PIN slot ${switchLanded.revokedSlot}${switchLanded.lockStatus ? `: ${switchLanded.lockStatus}` : ""}`
-        : "";
-    await notifyTelegram(
-      `🔁 ${member.name} moved from ${planLabel(local.plan_key)} to ${planLabel(planKey)} ($${monthlyCents / 100}/mo).${door}`,
-      { silent: !switchLanded.lockRevokeFailed },
-    );
-  }
-
-  // Side effects: only grant access when status flips to active/trialing
-  let autoAllocatedSlot: number | null = null;
-  let autoAllocationFailure: string | null = null;
-  // Re-read the row under the PIN-writer reservation: an admin cancel that
-  // committed after this event was read must win (it ends access under the
-  // same reservation, and its marker keeps the row ended).
-  const activation = isActiveStatus(status)
-    ? await withLockWriter(admin, async () => {
-      const { data: current, error: currentError } = await admin
-        .from("subscriptions")
-        .select("status, admin_cancel_mode")
-        .eq("stripe_subscription_id", sub.id)
-        .single();
-      if (currentError) throw currentError;
-      if (!isActiveStatus(current.status) || current.admin_cancel_mode === "now") return null;
-      return activateMembershipAccess(admin, {
+  // Side effects: only grant access when status flips to active/trialing.
+  // Re-read the row: an admin cancel that committed after this event was read
+  // must win (it ends access under the same reservation, and its marker keeps
+  // the row ended).
+  let activation: Awaited<ReturnType<typeof activateMembershipAccess>> | null = null;
+  if (isActiveStatus(status)) {
+    const { data: current, error: currentError } = await admin
+      .from("subscriptions")
+      .select("status, admin_cancel_mode")
+      .eq("stripe_subscription_id", sub.id)
+      .single();
+    if (currentError) throw currentError;
+    if (isActiveStatus(current.status) && current.admin_cancel_mode !== "now") {
+      activation = await activateMembershipAccess(admin, {
         memberId: member.id,
         currentPinSlot: member.pin_code_slot,
         grantsMemberType: plan.grantsMemberType,
       });
-    })
-    : null;
+    }
+  }
   if (activation) {
-    autoAllocatedSlot = activation.autoAllocatedSlot;
-    autoAllocationFailure = activation.autoAllocationFailure;
-
     // Clear any stale past_due_since on grant
     await admin
       .from("subscriptions")
       .update({ past_due_since: null, access_disabled_at: null })
       .eq("stripe_subscription_id", sub.id);
+  }
+  return { sub, prev: prev as PrevRow, member, plan, planKey, monthlyCents, local, leavingDesk, switchLanded, activation };
+}
 
-    // First-time activation side effects (new subscription, not a status flap)
-    if (isNew) {
-      // Mark the originating application complete (if there was one)
-      if (sub.metadata?.application_id) {
-        const appId = parseInt(sub.metadata.application_id, 10);
-        if (Number.isFinite(appId)) {
-          await admin
-            .from("applications")
-            .update({ checkout_completed_at: new Date().toISOString() })
-            .eq("id", appId);
-        }
-      }
+type Synced = Awaited<ReturnType<typeof syncSubscription>>;
 
-      // If this new subscriber has no auth account yet (self-serve signup
-      // without prior login), send a magic link so they can claim their
-      // portal. Mirrors first-time day-pass buyer flow.
-      if (!member.supabase_user_id && member.email) {
-        const baseUrl =
-          process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://regenhub.xyz";
-        const { error: otpErr } = await admin.auth.signInWithOtp({
-          email: member.email,
-          options: {
-            emailRedirectTo: `${baseUrl}/auth/callback?next=/portal`,
-            shouldCreateUser: true,
-          },
-        });
-        if (otpErr) console.error("[Webhook] OTP send failed:", otpErr);
-      }
-
-      const passesNote =
-        member.day_passes_balance > 0
-          ? ` (${member.day_passes_balance} guest passes carried forward)`
-          : "";
-      const source = sub.metadata?.source ? ` · via ${sub.metadata.source}` : "";
-      const slotNote = autoAllocatedSlot
-        ? `\n\n🔑 Auto-allocated PIN slot ${autoAllocatedSlot} + pushed to lock.`
-        : "";
-      const failNote = autoAllocationFailure
-        ? `\n\n⚠️ *Action needed:* ${autoAllocationFailure}. Run Lock Sync from /admin/access.`
-        : "";
-      await notifyTelegram(
-        `🎉 *New member!*\n\n*${member.name}* is now on ${planLabel(planKey)} ($${monthlyCents / 100}/mo)${passesNote}${source}.${slotNote}${failNote}`,
-      );
-
-      // Welcome the member themselves — the group celebrated, but until now
-      // the person who just paid heard nothing directly.
-      if (member.email) {
-        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
-        const isDeskTier =
-          plan.grantsMemberType === "cold_desk" || plan.grantsMemberType === "hot_desk";
-        const tpl = welcomeNewMemberEmail({
-          name: member.name,
-          planLabel: planLabel(planKey),
-          monthlyDollars: monthlyCents / 100,
-          isDeskTier,
-          siteUrl,
-        });
-        sendEmail({ to: member.email, subject: tpl.subject, html: tpl.html, text: tpl.text })
-          .catch((err) => console.error("[Webhook] Welcome email failed:", err));
-      }
+/** First-time activation side effects (new subscription, not a status flap). */
+async function announceNewMember(
+  admin: ServiceClient,
+  sub: Stripe.Subscription,
+  { member, plan, planKey, monthlyCents, activation }: Pick<Synced, "member" | "plan" | "planKey" | "monthlyCents"> & { activation: NonNullable<Synced["activation"]> },
+) {
+  const autoAllocatedSlot = activation.autoAllocatedSlot;
+  const autoAllocationFailure = activation.autoAllocationFailure;
+  // Mark the originating application complete (if there was one)
+  if (sub.metadata?.application_id) {
+    const appId = parseInt(sub.metadata.application_id, 10);
+    if (Number.isFinite(appId)) {
+      await admin
+        .from("applications")
+        .update({ checkout_completed_at: new Date().toISOString() })
+        .eq("id", appId);
     }
   }
 
-  return member.id;
+  // If this new subscriber has no auth account yet (self-serve signup
+  // without prior login), send a magic link so they can claim their
+  // portal. Mirrors first-time day-pass buyer flow.
+  if (!member.supabase_user_id && member.email) {
+    const baseUrl =
+      process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://regenhub.xyz";
+    const { error: otpErr } = await admin.auth.signInWithOtp({
+      email: member.email,
+      options: {
+        emailRedirectTo: `${baseUrl}/auth/callback?next=/portal`,
+        shouldCreateUser: true,
+      },
+    });
+    if (otpErr) console.error("[Webhook] OTP send failed:", otpErr);
+  }
+
+  const passesNote =
+    member.day_passes_balance > 0
+      ? ` (${member.day_passes_balance} guest passes carried forward)`
+      : "";
+  const source = sub.metadata?.source ? ` · via ${sub.metadata.source}` : "";
+  const slotNote = autoAllocatedSlot
+    ? `\n\n🔑 Auto-allocated PIN slot ${autoAllocatedSlot} + pushed to lock.`
+    : "";
+  const failNote = autoAllocationFailure
+    ? `\n\n⚠️ *Action needed:* ${autoAllocationFailure}. Run Lock Sync from /admin/access.`
+    : "";
+  await notifyTelegram(
+    `🎉 *New member!*\n\n*${member.name}* is now on ${planLabel(planKey)} ($${monthlyCents / 100}/mo)${passesNote}${source}.${slotNote}${failNote}`,
+  );
+
+  // Welcome the member themselves — the group celebrated, but until now
+  // the person who just paid heard nothing directly.
+  if (member.email) {
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
+    const isDeskTier =
+      plan.grantsMemberType === "cold_desk" || plan.grantsMemberType === "hot_desk";
+    const tpl = welcomeNewMemberEmail({
+      name: member.name,
+      planLabel: planLabel(planKey),
+      monthlyDollars: monthlyCents / 100,
+      isDeskTier,
+      siteUrl,
+    });
+    sendEmail({ to: member.email, subject: tpl.subject, html: tpl.html, text: tpl.text })
+      .catch((err) => console.error("[Webhook] Welcome email failed:", err));
+  }
 }

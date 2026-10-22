@@ -1,4 +1,5 @@
 import { resolveOnchainCoupon } from "@/lib/onchain/discount";
+import { onchainSwitchColumns } from "@/lib/planSwitch";
 import { requireAdmin } from "@/lib/admin";
 import { NextResponse } from "next/server";
 import { getAddress, isAddress } from "viem";
@@ -123,13 +124,16 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (!Number.isInteger(memberId) || !body || (!body.plan_key && body.discount_code === undefined)) return NextResponse.json({ error: "Plan or discount code required" }, { status: 400 });
   const admin = createServiceClient();
   const { data: actor } = await admin.from("members").select("id").eq("supabase_user_id", user.id).single();
-  const { data: sub } = await admin.from("subscriptions").select("id, plan_key")
+  const { data: sub } = await admin.from("subscriptions").select("id, plan_key, current_period_end, pending_plan_key, pending_plan_at, pending_plan_from")
     .eq("member_id", memberId).eq("payment_rail", "onchain").in("status", ["active", "trialing", "past_due"]).maybeSingle();
   if (!sub) return NextResponse.json({ error: "Active crypto membership not found" }, { status: 404 });
   const plan = body.plan_key ? getPlan(body.plan_key) : null;
   if (body.plan_key && !plan) return NextResponse.json({ error: "Unknown plan" }, { status: 400 });
   const changes: import("@/lib/supabase/types").Database["public"]["Tables"]["subscriptions"]["Update"] = {};
-  if (plan && body.plan_key) { changes.plan_key = body.plan_key; changes.monthly_cents = plan.defaultMonthlyCents; }
+  if (plan && body.plan_key) {
+    // Desk → daily: the member keeps the desk until its paid period ends (lib/planSwitch.ts).
+    Object.assign(changes, { plan_key: body.plan_key, monthly_cents: plan.defaultMonthlyCents }, onchainSwitchColumns(sub, body.plan_key));
+  }
   if (body.discount_code !== undefined) {
     try { changes.onchain_coupon = body.discount_code.trim() ? await resolveOnchainCoupon(body.discount_code, body.plan_key ?? sub.plan_key) : null; }
     catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid code" }, { status: 400 }); }
