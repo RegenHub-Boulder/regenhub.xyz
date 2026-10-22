@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { sendEmail, hubHealthDigestEmail, type HubDigestStats } from "@/lib/email";
 import { logAction } from "@/lib/auditLog";
 import { effectiveMonthlyCents } from "@/lib/stripeNet";
+import { hasBearerSecret } from "@/lib/secretAuth";
 
 /**
  * POST /api/cron/hub-health-digest
@@ -25,8 +26,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export async function POST(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret) return NextResponse.json({ error: "CRON_SECRET not set" }, { status: 503 });
-  const auth = req.headers.get("authorization");
-  if (auth !== `Bearer ${secret}`) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!hasBearerSecret(req, secret)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const admin = createServiceClient();
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";

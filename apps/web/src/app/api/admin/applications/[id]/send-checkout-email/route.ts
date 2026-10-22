@@ -2,6 +2,7 @@ import { requireAdmin } from "@/lib/admin";
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { sendApplicationCheckoutEmail } from "@/lib/applicationCheckout";
+import { hasBearerSecret } from "@/lib/secretAuth";
 
 /**
  * POST /api/admin/applications/[id]/send-checkout-email
@@ -18,9 +19,7 @@ export async function POST(
   // Two auth paths: an admin browser session (the panel button), or the
   // CRON_SECRET bearer used by system/ops callers (same pattern as the cron
   // routes) so this can be triggered without a browser.
-  const cronSecret = process.env.CRON_SECRET;
-  const isSystemCaller =
-    !!cronSecret && req.headers.get("authorization") === `Bearer ${cronSecret}`;
+  const isSystemCaller = hasBearerSecret(req, process.env.CRON_SECRET);
 
   if (!isSystemCaller && !await requireAdmin()) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

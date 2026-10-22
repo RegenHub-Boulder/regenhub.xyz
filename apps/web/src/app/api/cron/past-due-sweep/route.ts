@@ -4,6 +4,7 @@ import {
   BILLING_GRACE_DAYS,
   downgradeMembershipAccess,
 } from "@/lib/membershipLifecycle";
+import { hasBearerSecret } from "@/lib/secretAuth";
 
 async function notifyTelegram(text: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -41,8 +42,7 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   }
-  const auth = req.headers.get("authorization");
-  if (auth !== `Bearer ${secret}`) {
+  if (!hasBearerSecret(req, secret)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
