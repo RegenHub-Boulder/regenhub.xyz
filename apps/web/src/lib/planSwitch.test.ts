@@ -74,7 +74,7 @@ function fakeStripe() {
     subscriptions: {
       cancel: vi.fn(async (id: string) => ({ id, status: "canceled" })),
       update: vi.fn(async (id: string, params: Record<string, unknown>) => ({ id, status: "active", ...params })),
-      retrieve: vi.fn(async (_id: string) => stripeSub("hot_desk") as unknown),
+      retrieve: vi.fn(async (): Promise<unknown> => stripeSub("hot_desk")),
     },
     subscriptionSchedules: {
       create: vi.fn(async (params: { from_subscription: string }) => ({
