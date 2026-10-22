@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/admin";
 import { withWebLockWriter } from "@/lib/lockWriter";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { actorIdFromAuthUid } from "@/lib/auditLog";
+import { requireActorIdFromAuthUid } from "@/lib/auditLog";
 import { CancelMembershipError, cancelMembership, type CancelMode } from "@/lib/membershipCancel";
 
 interface CancelBody {
@@ -37,11 +37,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   const run = async () => {
     const admin = createServiceClient();
+    // Every cancel names its admin: no name, no change (and no Stripe call).
+    let actorMemberId: number;
+    try {
+      actorMemberId = await requireActorIdFromAuthUid(user.id, admin);
+    } catch (error) {
+      console.error("[CancelMembership] Could not resolve the admin:", error);
+      return NextResponse.json({ error: "Couldn't confirm which admin you are, so nothing was changed. Try again." }, { status: 500 });
+    }
     try {
       const result = await cancelMembership(admin, {
         memberId,
         subscriptionId: Number.isInteger(body.subscription_id) ? body.subscription_id : undefined,
-        actorMemberId: await actorIdFromAuthUid(user.id, admin),
+        actorMemberId,
         mode,
         reason,
         voidOpenInvoices: body.void_open_invoices === true,

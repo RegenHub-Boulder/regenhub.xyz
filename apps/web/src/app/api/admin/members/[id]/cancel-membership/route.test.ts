@@ -17,6 +17,7 @@ import { POST } from "./route";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { clearSlotSafely, clearUserCode } from "@regenhub/shared";
+import { getStripe } from "@/lib/stripe";
 
 const ACTOR = "00000000-0000-4000-8000-0000000000a1";
 const WRITER = "00000000-0000-4000-8000-000005eed000";
@@ -101,5 +102,33 @@ describe("POST /api/admin/members/[id]/cancel-membership", () => {
     expect(again.status).toBe(200);
     expect((await again.json()).outcome).toBe("already_canceled");
     expect(await db.sql("select id from admin_actions")).toHaveLength(1);
+  });
+
+  it.each(["onchain", "stripe"] as const)("refuses (500) when the admin can't be looked up, before any change (%s)", async (rail) => {
+    await world({ is_admin: true, disabled: false });
+    if (rail === "stripe") {
+      await db.sql("update subscriptions set payment_rail = 'stripe', wallet_id = null, stripe_subscription_id = 'sub_test_50', stripe_customer_id = 'cus_test_7', stripe_price_id = 'price_test' where id = 50");
+    }
+    const stripe = { subscriptions: { cancel: vi.fn(), update: vi.fn(), retrieve: vi.fn() }, invoices: { list: vi.fn(), voidInvoice: vi.fn() } };
+    vi.mocked(getStripe).mockReturnValue(stripe as never);
+    // The service client can't read members (a dropped connection); the session check already passed.
+    const broken = new Proxy(db, {
+      get: (target, key) => key !== "from" ? target[key as keyof PgDb] : (table: string) => table !== "members" ? db.from(table) : {
+        ...db.from(table),
+        select: (columns: string) => columns !== "id" ? db.from(table).select(columns)
+          : { eq: () => ({ maybeSingle: async () => ({ data: null, error: { message: "connection reset" } }) }) },
+      },
+    });
+    vi.mocked(createServiceClient).mockReturnValue(broken as never);
+
+    const res = await call({ mode: "now", reason: "Gone", void_open_invoices: true });
+    expect(res.status).toBe(500);
+    // Stopped by the route itself, before the cancel started (the database would also refuse a null admin).
+    expect((await res.json()).error).toMatch(/which admin you are.*nothing was changed/);
+    expect(stripe.subscriptions.cancel).not.toHaveBeenCalled();
+    expect(await one("select status, admin_cancel_mode from subscriptions")).toEqual({ status: "past_due", admin_cancel_mode: null });
+    expect((await one("select status from onchain_invoices")).status).toBe("open");
+    expect(await db.sql("select id from admin_actions")).toEqual([]);
+    expect(clearUserCode).not.toHaveBeenCalled();
   });
 });
