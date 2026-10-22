@@ -8,7 +8,8 @@ import {
   type Log,
 } from "viem";
 import { activateMembershipAccess, downgradeMembershipAccess } from "@/lib/membershipLifecycle";
-import { getPlan } from "@/lib/plans";
+import { getPlan, isDeskPlan } from "@/lib/plans";
+import { endDeskAccessForSwitch } from "@/lib/planSwitch";
 import { grantSubscriptionPasses } from "@/lib/subscriptionPasses";
 import { isLiveSubscription } from "@/lib/subscriptionStatus";
 import { createServiceClient } from "@/lib/supabase/admin";
@@ -115,46 +116,10 @@ async function completePaymentEffects(
   if (!claimed) return;
 
   try {
-    const entitled = await withLockWriter(admin, async () => {
-      // Read entitlement only after acquiring the shared, non-expiring reservation.
-      // A subscription canceled since the payment was credited (an admin
-      // cancel ends access under this same reservation) grants nothing.
-      const { data: current, error: currentError } = await admin.from("subscriptions")
-        .select("status, admin_cancel_mode").eq("id", args.subscriptionId).single();
-      if (currentError) throw currentError;
-      if (!isLiveSubscription(current.status) || current.admin_cancel_mode === "now") return false;
-      // Period order, rather than arrival/retry order, governs door access.
-      const { data: latest, error: latestError } = await admin.from("onchain_invoices")
-        .select("plan_key, subscriptions(plan_key)")
-        .eq("member_id", args.memberId).eq("status", "paid")
-        .order("period_start", { ascending: false }).order("id", { ascending: false })
-        .limit(1).maybeSingle();
-      if (latestError) throw latestError;
-      const subscription = latest?.subscriptions as unknown as { plan_key: string } | null;
-      const planKey = latest?.plan_key ?? subscription?.plan_key;
-      if (!planKey) throw new Error("credited payment has no authoritative paid invoice");
-      const [{ data: member }, plan] = await Promise.all([
-        admin
-          .from("members")
-          .select("id, pin_code_slot")
-          .eq("id", args.memberId)
-          .single(),
-        Promise.resolve(getPlan(planKey)),
-      ]);
-      if (!member || !plan) throw new Error("credited payment has no member or plan");
-
-      if (plan.grantsMemberType === "day_pass" && member.pin_code_slot) {
-        const revoked = await downgradeMembershipAccess(admin, { memberId: member.id, currentPinSlot: member.pin_code_slot, revokePermanentPin: true });
-        if (revoked.lockRevokeFailed || revoked.memberUpdateError) throw new Error("Could not revoke permanent door access");
-      }
-      const activation = await activateMembershipAccess(admin, {
-        memberId: member.id,
-        currentPinSlot: member.pin_code_slot,
-        grantsMemberType: plan.grantsMemberType,
-      });
-      if (activation.autoAllocationFailure) throw new Error(activation.autoAllocationFailure);
-      return true;
-    }, "On-chain access reconciliation");
+    const entitled = await withLockWriter(admin, () => reconcileOnchainAccess(admin, {
+      memberId: args.memberId,
+      subscriptionId: args.subscriptionId,
+    }), "On-chain access reconciliation");
     if (entitled) {
       await grantSubscriptionPasses(admin, {
         memberId: args.memberId,
@@ -182,6 +147,108 @@ async function completePaymentEffects(
       .is("effects_completed_at", null);
     throw error;
   }
+}
+
+/**
+ * Make the member's door access match the paid invoice for the period they're
+ * in now. Must run under the PIN-writer reservation. Returns false, touching
+ * nothing, when the subscription no longer entitles anything (an admin cancel
+ * ends access under this same reservation).
+ *
+ * The newest paid invoice decides, so an upgrade paid ahead applies at once,
+ * as before. The exception: a daily plan paid ahead doesn't end a desk period
+ * that's paid for and still running. The billing cron runs this again once
+ * that period is over (finishOnchainPlanSwitches).
+ */
+export async function reconcileOnchainAccess(
+  admin: ServiceClient,
+  args: { memberId: number; subscriptionId: number },
+  now = new Date(),
+): Promise<boolean> {
+  const { data: current, error: currentError } = await admin.from("subscriptions")
+    .select("status, admin_cancel_mode").eq("id", args.subscriptionId).single();
+  if (currentError) throw currentError;
+  if (!isLiveSubscription(current.status) || current.admin_cancel_mode === "now") return false;
+  // Period order, rather than arrival/retry order, governs door access.
+  const { data: latest, error: latestError } = await admin.from("onchain_invoices")
+    .select("plan_key, subscriptions(plan_key)")
+    .eq("member_id", args.memberId).eq("status", "paid")
+    .order("period_start", { ascending: false }).order("id", { ascending: false })
+    .limit(1).maybeSingle();
+  if (latestError) throw latestError;
+  const subscription = latest?.subscriptions as unknown as { plan_key: string } | null;
+  const planKey = latest?.plan_key ?? subscription?.plan_key;
+  if (!planKey) throw new Error("credited payment has no authoritative paid invoice");
+  const [{ data: member }, plan] = await Promise.all([
+    admin
+      .from("members")
+      .select("id, pin_code_slot, member_type")
+      .eq("id", args.memberId)
+      .single(),
+    Promise.resolve(getPlan(planKey)),
+  ]);
+  if (!member || !plan) throw new Error("credited payment has no member or plan");
+
+  if (plan.grantsMemberType === "day_pass" && member.pin_code_slot) {
+    // A daily plan paid ahead doesn't end a desk period already paid for.
+    const nowIso = now.toISOString();
+    const { data: running, error: runningError } = await admin.from("onchain_invoices")
+      .select("plan_key, subscriptions(plan_key)")
+      .eq("member_id", args.memberId).eq("status", "paid")
+      .lte("period_start", nowIso).gt("period_end", nowIso)
+      .order("period_start", { ascending: false }).limit(1).maybeSingle();
+    if (runningError) throw runningError;
+    const runningSub = running?.subscriptions as unknown as { plan_key: string } | null;
+    if (isDeskPlan(running?.plan_key ?? runningSub?.plan_key)) return true;
+    // A desk period ending for a daily plan is a plan switch landing: audited, through the same lifecycle.
+    const revoked = member.member_type === "cold_desk" || member.member_type === "hot_desk"
+      ? await endDeskAccessForSwitch(admin, {
+        subscriptionId: args.subscriptionId, memberId: member.id, rail: "onchain", from: member.member_type, to: planKey,
+      })
+      : await downgradeMembershipAccess(admin, { memberId: member.id, currentPinSlot: member.pin_code_slot, revokePermanentPin: true });
+    if (revoked.lockRevokeFailed || ("memberUpdateError" in revoked && revoked.memberUpdateError)) {
+      throw new Error("Could not revoke permanent door access");
+    }
+  }
+  const activation = await activateMembershipAccess(admin, {
+    memberId: member.id,
+    currentPinSlot: member.pin_code_slot,
+    grantsMemberType: plan.grantsMemberType,
+  });
+  if (activation.autoAllocationFailure) throw new Error(activation.autoAllocationFailure);
+  return true;
+}
+
+/**
+ * On-chain counterpart of the Stripe webhook landing a desk → daily switch:
+ * once the period of a paid daily-plan invoice starts, end the desk access of
+ * a member who switched. Called from the on-chain billing cron; a failure is
+ * retried on the next run (a failed lock clear is quarantined for Lock Sync).
+ */
+export async function finishOnchainPlanSwitches(admin: ServiceClient, now = new Date()) {
+  const { data: subs, error } = await admin.from("subscriptions")
+    .select("id, member_id, plan_key")
+    .eq("payment_rail", "onchain")
+    .in("status", ["active", "trialing", "past_due"])
+    .is("admin_cancel_mode", null);
+  if (error) throw error;
+  const results: { subscriptionId: number; memberId: number; error?: string }[] = [];
+  for (const sub of (subs ?? []) as { id: number; member_id: number; plan_key: string }[]) {
+    if (isDeskPlan(sub.plan_key)) continue;
+    const { data: member, error: memberError } = await admin.from("members")
+      .select("member_type").eq("id", sub.member_id).maybeSingle();
+    if (memberError) throw memberError;
+    if (member?.member_type !== "cold_desk" && member?.member_type !== "hot_desk") continue;
+    try {
+      await withLockWriter(admin, () => reconcileOnchainAccess(admin, { memberId: sub.member_id, subscriptionId: sub.id }, now),
+        "On-chain plan switch");
+      results.push({ subscriptionId: sub.id, memberId: sub.member_id });
+    } catch (cause) {
+      console.error(`[OnchainBilling] Plan switch for subscription ${sub.id} failed:`, cause);
+      results.push({ subscriptionId: sub.id, memberId: sub.member_id, error: cause instanceof Error ? cause.message : "unknown" });
+    }
+  }
+  return results;
 }
 
 export type ProcessInvoiceResult =

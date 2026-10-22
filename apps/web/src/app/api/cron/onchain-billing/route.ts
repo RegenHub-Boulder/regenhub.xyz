@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { generateUpcomingOnchainInvoices, isRenewalInvoice, markDueOnchainSubscriptionsPastDue } from "@/lib/onchain/invoice";
-import { advanceFinalizedOnchainPayments, processOnchainInvoice, retryPendingOnchainEffects } from "@/lib/onchain/verifyPayment";
+import { advanceFinalizedOnchainPayments, finishOnchainPlanSwitches, processOnchainInvoice, retryPendingOnchainEffects } from "@/lib/onchain/verifyPayment";
 import { isGaslessRelayConfigured } from "@/lib/onchain/config";
 import { processGaslessRelayQueue } from "@/lib/onchain/gaslessRelay";
 import { onchainRenewalReminderEmail, sendEmail } from "@/lib/email";
@@ -36,6 +36,11 @@ export async function POST(req: Request) {
   // here must not stall everyone else's billing.
   const adminCancels = await sweepAdminCancels(admin).catch((cause) => {
     console.error("[OnchainBilling] Admin cancel sweep failed:", cause);
+    return { error: cause instanceof Error ? cause.message : "unknown" };
+  });
+  // Desk → daily switches whose paid daily period has started: end desk access.
+  const planSwitches = await finishOnchainPlanSwitches(admin).catch((cause) => {
+    console.error("[OnchainBilling] Plan switch sweep failed:", cause);
     return { error: cause instanceof Error ? cause.message : "unknown" };
   });
   const created = await generateUpcomingOnchainInvoices(admin);
@@ -79,5 +84,5 @@ export async function POST(req: Request) {
   }
   const effectsFailures = await retryPendingOnchainEffects(admin);
   const finalized = await advanceFinalizedOnchainPayments(admin);
-  return NextResponse.json({ gaslessRelays, adminCancels, invoicesCreated: created.length, remindersSent, pastDue, confirmations, effectsFailures, finalized });
+  return NextResponse.json({ gaslessRelays, adminCancels, planSwitches, invoicesCreated: created.length, remindersSent, pastDue, confirmations, effectsFailures, finalized });
 }

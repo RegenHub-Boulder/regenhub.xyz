@@ -3,12 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import Link from "next/link";
-import { Key, Ticket, User, ClipboardList, CheckCircle, Clock, MessageCircle, Zap, Calendar, CalendarDays, ArrowRight, AlertCircle, Wallet } from "lucide-react";
+import { Key, Ticket, User, ClipboardList, CheckCircle, Clock, MessageCircle, Zap, Calendar, CalendarDays, ArrowRight, AlertCircle, Wallet, CalendarClock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import HubEssentials from "@/components/portal/HubEssentials";
 import InviteCard from "@/components/portal/InviteCard";
 import { ManageSubscriptionButton } from "@/components/portal/ManageSubscriptionButton";
-import { ChangePlanButton } from "@/components/portal/ChangePlanButton";
+import { CancelPlanSwitchButton, ChangePlanButton } from "@/components/portal/ChangePlanButton";
 import { OnboardingChecklist } from "@/components/portal/OnboardingChecklist";
 import { HubActivityCard } from "@/components/portal/HubActivityCard";
 import { DayPassRedemptionHero } from "@/components/portal/DayPassRedemptionHero";
@@ -99,12 +99,14 @@ export default async function PortalPage() {
         current_period_end: string | null;
         past_due_since: string | null;
         discount_cents: number | null;
+        pending_plan_key?: string | null;
+        pending_plan_at?: string | null;
       }
     | null = null;
   if (member) {
     const { data } = await supabase
       .from("subscriptions")
-      .select("id, payment_rail, wallet_id, plan_key, monthly_cents, net_cents, status, cancel_at_period_end, current_period_end, past_due_since, discount_cents")
+      .select("id, payment_rail, wallet_id, plan_key, monthly_cents, net_cents, status, cancel_at_period_end, current_period_end, past_due_since, discount_cents, pending_plan_key, pending_plan_at")
       .eq("member_id", member.id)
       // `incomplete` is the first-payment state for a self-serve on-chain
       // membership. It must render the invoice/payment card even though no
@@ -238,13 +240,14 @@ export default async function PortalPage() {
   }
 
   // Whether the member can swap plans via the in-portal change-plan flow.
-  // Source of truth is lib/plans.ts (selfServe flag). Members ON a Full Access tier
-  // are blocked at the route level since leaving a desk needs admin code revocation.
+  // Source of truth is lib/plans.ts (selfServe flag). A desk member can move to a
+  // daily plan; it takes effect when the paid period ends (lib/planSwitch.ts).
   const currentPlanDef = activeSubscription ? getPlan(activeSubscription.plan_key) : null;
-  const onDesk =
-    currentPlanDef?.grantsMemberType === "cold_desk" ||
-    currentPlanDef?.grantsMemberType === "hot_desk";
-  const canChangePlan = !!activeSubscription && activeSubscription.payment_rail === "stripe" && (currentPlanDef?.selfServe ?? false) && !onDesk;
+  const pendingSwitch = activeSubscription?.pending_plan_key && activeSubscription.pending_plan_at
+    ? { label: planLabel(activeSubscription.pending_plan_key), at: activeSubscription.pending_plan_at }
+    : null;
+  const canChangePlan = !!activeSubscription && activeSubscription.payment_rail === "stripe" &&
+    (currentPlanDef?.selfServe ?? false) && !activeSubscription.cancel_at_period_end && !pendingSwitch;
 
   if (!member) {
     if (application) {
@@ -519,7 +522,17 @@ export default async function PortalPage() {
                     Awaiting your first USDC payment — access starts after confirmation
                   </p>
                 )}
-                {!activeSubscription.cancel_at_period_end && !["past_due", "incomplete"].includes(activeSubscription.status) && (
+                {pendingSwitch && (
+                  <p className="text-sm text-amber-300 flex items-start gap-1.5 max-w-md">
+                    <CalendarClock className="w-4 h-4 mt-0.5 shrink-0" />
+                    <span>
+                      Switching to <strong className="text-foreground">{pendingSwitch.label}</strong> on{" "}
+                      {new Date(pendingSwitch.at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}.
+                      You keep {planLabel(activeSubscription.plan_key)} and your door code until then.
+                    </span>
+                  </p>
+                )}
+                {!pendingSwitch && !activeSubscription.cancel_at_period_end && !["past_due", "incomplete"].includes(activeSubscription.status) && (
                   <p className="text-sm text-muted">
                     Renews{" "}
                     {activeSubscription.current_period_end
@@ -536,8 +549,12 @@ export default async function PortalPage() {
                   <ChangePlanButton
                     currentPlanKey={activeSubscription.plan_key}
                     currentMonthlyCents={activeSubscription.monthly_cents}
+                    currentPeriodEnd={activeSubscription.current_period_end}
                     hasDiscount={(activeSubscription.discount_cents ?? 0) > 0}
                   />
+                )}
+                {pendingSwitch && activeSubscription.payment_rail === "stripe" && (
+                  <CancelPlanSwitchButton keepLabel={planLabel(activeSubscription.plan_key)} />
                 )}
                 {activeSubscription.payment_rail === "stripe" && <ManageSubscriptionButton />}
               </div>
