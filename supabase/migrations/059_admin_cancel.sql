@@ -3,8 +3,17 @@
 -- a subscription payable or entitled takes before it acts.
 --
 -- Additive: new nullable columns, new functions and triggers. No existing row
--- changes. Apply the whole file in one transaction.
+-- changes.
+--
+-- Runs once, through the transactional ledger runner (run_migration over the
+-- MCP, or psql with --single-transaction): the `set local` timeouts below only
+-- hold inside a transaction, and the file is not rerunnable on its own (the
+-- columns and functions it creates already exist the second time). A failure
+-- rolls the whole file back.
 set local lock_timeout = '5s';
+-- Bound each statement too: the constraint checks scan subscriptions while
+-- the DDL locks are held, and billing must not queue behind that for long.
+set local statement_timeout = '60s';
 
 alter table subscriptions
   add column admin_canceled_at    timestamptz,
@@ -16,7 +25,12 @@ alter table subscriptions
   add column admin_cancel_ends_at timestamptz,
   -- The cancellation's admin_actions row: a repeat reports from it, and the
   -- door outcome is added to it.
-  add column admin_cancel_audit_id bigint references admin_actions(id);
+  add column admin_cancel_audit_id bigint references admin_actions(id),
+  -- A card cancel in progress, saved before Stripe is asked:
+  -- {token, actor, reason, mode, void_open, at}. If the request dies after
+  -- Stripe accepted, Stripe's webhook, a retry or the on-chain billing cron
+  -- records it from here (see begin_admin_cancel). Cleared when recorded.
+  add column admin_cancel_intent jsonb;
 
 comment on column subscriptions.admin_cancel_mode is
   'Set by admin_cancel_subscription(). While set: no new on-chain invoice, and no payment credited for time after admin_cancel_ends_at (none at all for a cancel-now). Only a renewal Stripe itself reports lifts it.';
@@ -101,6 +115,7 @@ declare
   prior jsonb;
 begin
   if p_mode not in ('now', 'period_end') then raise exception 'mode must be now or period_end'; end if;
+  if p_actor is null then raise exception 'an admin cancel must name its admin (p_actor)'; end if;
   select * into s from subscriptions where id = p_subscription_id for update;
   if not found then raise exception 'subscription % not found', p_subscription_id using errcode = 'P0002'; end if;
   if s.admin_cancel_mode = 'now' or (s.admin_cancel_mode is not null and not subscription_is_live(s.status))
@@ -109,6 +124,7 @@ begin
     outcome := case when subscription_is_live(s.status) and s.admin_cancel_mode = 'period_end'
       then 'already_scheduled' else 'already_canceled' end;
     select payload into prior from admin_actions where id = s.admin_cancel_audit_id;
+    update subscriptions set admin_cancel_intent = null where id = s.id and admin_cancel_intent is not null;
     -- The admin can come back to void overdue invoices (e.g. scheduled earlier without voiding).
     if p_void_open then
       if s.payment_rail = 'onchain' then
@@ -149,6 +165,7 @@ begin
     admin_canceled_at = now(), admin_canceled_by = p_actor, admin_cancel_reason = p_reason,
     admin_cancel_mode = case when ends_now then 'now' else 'period_end' end,
     admin_cancel_ends_at = ends_at,
+    admin_cancel_intent = null,
     cancel_at_period_end = not ends_now,
     status = case when s.status = 'incomplete' then 'canceled' else s.status end,
     canceled_at = case when s.status = 'incomplete' then now() else s.canceled_at end
@@ -179,10 +196,45 @@ begin
   return jsonb_build_object(
     'outcome', outcome, 'subscription_id', s.id, 'member_id', s.member_id, 'rail', s.payment_rail,
     'mode', p_mode, 'access_ends_at', ends_at,
-    'end_access', ends_now and s.status <> 'incomplete',
+    'end_access', ends_now and s.status <> 'incomplete' and subscription_is_live(s.status),
     'voided_invoice_ids', to_jsonb(voided), 'in_flight_invoice_ids', to_jsonb(in_flight),
     'paid_ahead_invoice_ids', to_jsonb(paid_ahead), 'audit_id', audit_id);
 end;
+$$;
+
+-- Save a card cancel before Stripe is asked, under the subscription lock, so
+-- the request dying after Stripe accepted can't lose who asked and why. One
+-- intent per subscription: a newer request replaces it (it is about to ask
+-- Stripe itself). Recording the cancel clears it. Returns its token.
+create function begin_admin_cancel(
+  p_subscription_id integer,
+  p_mode text,
+  p_actor integer,
+  p_reason text,
+  p_void_open boolean
+) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  v_token uuid := gen_random_uuid();
+begin
+  if p_mode not in ('now', 'period_end') then raise exception 'mode must be now or period_end'; end if;
+  if p_actor is null then raise exception 'an admin cancel must name its admin (p_actor)'; end if;
+  update subscriptions set admin_cancel_intent = jsonb_build_object(
+      'token', v_token, 'actor', p_actor, 'reason', p_reason, 'mode', p_mode,
+      'void_open', coalesce(p_void_open, false), 'at', now())
+    where id = p_subscription_id and payment_rail = 'stripe';
+  if not found then raise exception 'card subscription % not found', p_subscription_id using errcode = 'P0002'; end if;
+  return v_token;
+end;
+$$;
+
+-- Drop a card cancel Stripe never acted on (it refused, or the request died
+-- before asking). Only the intent with this token: a newer one is left alone.
+create function drop_admin_cancel_intent(p_subscription_id integer, p_token uuid) returns boolean
+language sql security definer set search_path = public as $$
+  update subscriptions set admin_cancel_intent = null
+    where id = p_subscription_id and admin_cancel_intent->>'token' = p_token::text
+  returning true
 $$;
 
 -- Is this admin cancellation due to end access? A cancel-now is; a period-end
@@ -393,3 +445,7 @@ grant execute on function admin_cancel_due(integer) to service_role;
 revoke all on function finish_admin_cancel(integer, jsonb) from public, anon, authenticated;
 grant execute on function finish_admin_cancel(integer, jsonb) to service_role;
 revoke all on function void_admin_canceled_invoices(integer, timestamptz) from public, anon, authenticated;
+revoke all on function begin_admin_cancel(integer, text, integer, text, boolean) from public, anon, authenticated;
+grant execute on function begin_admin_cancel(integer, text, integer, text, boolean) to service_role;
+revoke all on function drop_admin_cancel_intent(integer, uuid) from public, anon, authenticated;
+grant execute on function drop_admin_cancel_intent(integer, uuid) to service_role;

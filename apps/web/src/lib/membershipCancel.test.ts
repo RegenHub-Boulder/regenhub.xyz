@@ -311,6 +311,97 @@ describe("card (Stripe): recording after Stripe accepted", () => {
   });
 });
 
+describe("card (Stripe): the request stops after Stripe accepted", () => {
+  /** Stripe cancels, then the request dies before recording anything (here: listing invoices to void fails). */
+  async function cancelThatDiesAfterStripe(overrides: Partial<CancelMembershipInput> = {}) {
+    stripe.invoices.list.mockRejectedValueOnce(new Error("request killed"));
+    await expect(cancel({ reason: "Moved away", voidOpenInvoices: true, ...overrides })).rejects.toThrow();
+    expect(await audits()).toEqual([]);
+    stripe.invoices.list.mockResolvedValue({ data: [{ id: "in_overdue" }], has_more: false });
+  }
+  const oneAuditNamingTheAdmin = async (payload: Record<string, unknown>) =>
+    expect(await audits()).toEqual([expect.objectContaining({
+      actor_member_id: 1, action: "subscription_canceled_by_admin",
+      payload: expect.objectContaining({ reason: "Moved away", voided_invoice_ids: ["in_overdue"], ...payload }),
+    })]);
+
+  it("cancel now: Stripe's deletion webhook records it, and a retry adds nothing", async () => {
+    await seed({ rail: "stripe" });
+    await cancelThatDiesAfterStripe();
+    expect(stripe.subscriptions.cancel).toHaveBeenCalledTimes(1);
+
+    expect((await sendStripeEvent("evt_del", "customer.subscription.deleted", stripeSub("sub_test_50", "canceled"))).status).toBe(200);
+    expect(await sub()).toMatchObject({ status: "canceled", admin_cancel_mode: "now", admin_canceled_by: 1, admin_cancel_reason: "Moved away" });
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+    await oneAuditNamingTheAdmin({ mode: "now", outcome: "canceled" });
+
+    expect((await cancel({ reason: "Moved away", voidOpenInvoices: true })).outcome).toBe("already_canceled");
+    expect(await audits()).toHaveLength(1);
+  });
+
+  it("cancel now: with the webhook lost, the admin's retry records it once", async () => {
+    await seed({ rail: "stripe" });
+    await cancelThatDiesAfterStripe();
+    stripe.subscriptions.cancel.mockRejectedValue(new Error("This subscription is already canceled"));
+    stripe.subscriptions.retrieve.mockResolvedValue(stripeSub("sub_test_50", "canceled"));
+
+    const result = await cancel({ reason: "Moved away", voidOpenInvoices: true });
+    expect(result).toMatchObject({ outcome: "canceled", door: { revokedSlot: 12 } });
+    await oneAuditNamingTheAdmin({ outcome: "canceled" });
+  });
+
+  it("cancel now: with the webhook lost and no retry, the billing cron records it and ends access", async () => {
+    await seed({ rail: "stripe" });
+    await cancelThatDiesAfterStripe();
+    stripe.subscriptions.retrieve.mockResolvedValue(stripeSub("sub_test_50", "canceled"));
+
+    expect((await runCron()).status).toBe(200);
+    expect(await sub()).toMatchObject({ status: "canceled", admin_cancel_mode: "now", admin_canceled_by: 1 });
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+    await oneAuditNamingTheAdmin({ mode: "now", outcome: "canceled" });
+    await runCron();
+    expect(await audits()).toHaveLength(1);
+  });
+
+  it("at period end: Stripe's update webhook records the scheduled cancel", async () => {
+    await seed({ rail: "stripe" });
+    await cancelThatDiesAfterStripe({ mode: "period_end" });
+    stripe.subscriptions.retrieve.mockResolvedValue(stripeSub("sub_test_50", "active", true));
+
+    expect((await sendStripeEvent("evt_upd", "customer.subscription.updated", stripeSub("sub_test_50", "active", true))).status).toBe(200);
+    expect(await sub()).toMatchObject({ status: "active", admin_cancel_mode: "period_end", admin_canceled_by: 1, cancel_at_period_end: true });
+    expect((await member()).pin_code_slot).toBe(12);
+    await oneAuditNamingTheAdmin({ mode: "period_end", outcome: "scheduled" });
+  });
+
+  it("a pending cancel Stripe never acted on records nothing and is dropped", async () => {
+    await seed({ rail: "stripe" });
+    // The request died before it reached Stripe.
+    await db.sql(`update subscriptions set admin_cancel_intent = jsonb_build_object('token', gen_random_uuid(), 'actor', 1,
+      'mode', 'now', 'void_open', false, 'at', now() - interval '2 hours') where id = 50`);
+    expect((await runCron()).status).toBe(200);
+    expect(await sub()).toMatchObject({ status: "active", admin_cancel_mode: null, admin_cancel_intent: null });
+    expect(await audits()).toEqual([]);
+    expect((await member()).pin_code_slot).toBe(12);
+  });
+});
+
+describe("the admin is always named", () => {
+  it("the database refuses a cancel with no admin, on either rail, and nothing changes", async () => {
+    for (const rail of ["stripe", "onchain"] as const) {
+      await db.close();
+      db = await makePgDb();
+      vi.mocked(createServiceClient).mockReturnValue(db as never);
+      await seed({ rail });
+      await expect(cancel({ actorMemberId: null as never })).rejects.toThrow(/admin/);
+      expect(stripe.subscriptions.cancel).not.toHaveBeenCalled();
+      expect(await sub()).toMatchObject({ status: "active", admin_cancel_mode: null });
+      expect(await audits()).toEqual([]);
+      expect((await member()).pin_code_slot).toBe(12);
+    }
+  });
+});
+
 describe("crypto (on-chain)", () => {
   it("cancel now: voids the issued renewal, ends access, and no invoice is generated afterwards", async () => {
     await seed({ rail: "onchain" });

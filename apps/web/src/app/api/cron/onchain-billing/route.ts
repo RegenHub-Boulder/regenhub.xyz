@@ -6,7 +6,7 @@ import { isGaslessRelayConfigured } from "@/lib/onchain/config";
 import { processGaslessRelayQueue } from "@/lib/onchain/gaslessRelay";
 import { onchainRenewalReminderEmail, sendEmail } from "@/lib/email";
 import { planLabel } from "@/lib/plans";
-import { finishOnchainAdminCancels } from "@/lib/membershipCancel";
+import { finishOnchainAdminCancels, settlePendingStripeCancels } from "@/lib/membershipCancel";
 
 export async function POST(req: Request) {
   const secret = process.env.CRON_SECRET;
@@ -35,6 +35,11 @@ export async function POST(req: Request) {
   // failed). A failure here must not stall everyone else's billing.
   const adminCancels = await finishOnchainAdminCancels(admin).catch((cause) => {
     console.error("[OnchainBilling] Admin cancel sweep failed:", cause);
+    return { error: cause instanceof Error ? cause.message : "unknown" };
+  });
+  // Card cancels whose request died after Stripe accepted, with the webhook lost too.
+  const pendingCardCancels = await settlePendingStripeCancels(admin).catch((cause) => {
+    console.error("[OnchainBilling] Pending card cancel sweep failed:", cause);
     return { error: cause instanceof Error ? cause.message : "unknown" };
   });
   const created = await generateUpcomingOnchainInvoices(admin);
@@ -78,5 +83,5 @@ export async function POST(req: Request) {
   }
   const effectsFailures = await retryPendingOnchainEffects(admin);
   const finalized = await advanceFinalizedOnchainPayments(admin);
-  return NextResponse.json({ gaslessRelays, adminCancels, invoicesCreated: created.length, remindersSent, pastDue, confirmations, effectsFailures, finalized });
+  return NextResponse.json({ gaslessRelays, adminCancels, pendingCardCancels, invoicesCreated: created.length, remindersSent, pastDue, confirmations, effectsFailures, finalized });
 }

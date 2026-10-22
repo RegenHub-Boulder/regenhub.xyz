@@ -1,5 +1,5 @@
 import type { createServiceClient } from "@/lib/supabase/admin";
-import type { PaymentRail } from "@/lib/supabase/types";
+import type { AdminCancelIntent, PaymentRail } from "@/lib/supabase/types";
 import { getPlan } from "@/lib/plans";
 import { getStripe } from "@/lib/stripe";
 import { downgradeMembershipAccess, type DowngradeResult } from "@/lib/membershipLifecycle";
@@ -14,8 +14,8 @@ export interface CancelMembershipInput {
   memberId: number;
   /** The subscription the admin was looking at. Defaults to the live one, else the newest. */
   subscriptionId?: number;
-  /** The admin's members.id, for the audit row. */
-  actorMemberId: number | null;
+  /** The admin's members.id, for the audit row. Required: the database refuses a cancel without it. */
+  actorMemberId: number;
   mode: CancelMode;
   reason: string | null;
   /** Void the subscription's open unpaid invoices (offered for past_due members). */
@@ -52,7 +52,11 @@ type SubscriptionRow = {
   current_period_end: string | null;
   stripe_subscription_id: string | null;
   admin_cancel_mode: CancelMode | null;
+  admin_cancel_intent: AdminCancelIntent | null;
 };
+
+/** A card cancel is abandoned if Stripe hasn't acted on it within this long. */
+const INTENT_TTL_MS = 60 * 60 * 1000;
 
 /** What admin_cancel_subscription() (migration 059) returns. */
 type Recorded = {
@@ -71,7 +75,7 @@ type Recorded = {
 };
 
 const SUBSCRIPTION_COLUMNS =
-  "id, member_id, payment_rail, plan_key, status, current_period_end, stripe_subscription_id, admin_cancel_mode";
+  "id, member_id, payment_rail, plan_key, status, current_period_end, stripe_subscription_id, admin_cancel_mode, admin_cancel_intent";
 
 function isDeskPlan(planKey: string): boolean {
   const type = getPlan(planKey)?.grantsMemberType;
@@ -146,8 +150,19 @@ async function voidStripeInvoices(subscriptionId: string) {
   return { voided, warnings };
 }
 
-/** Returns "already_canceled" when Stripe had ended it before we asked. */
-async function cancelAtStripe(id: string, mode: CancelMode, reason: string | null) {
+/** Has Stripe carried out this cancel? (Canceled, or set to end at period end when that was asked.) */
+function stripeActedOn(current: { status: string; cancel_at_period_end: boolean }, mode: CancelMode) {
+  return current.status === "canceled" || (mode === "period_end" && current.cancel_at_period_end);
+}
+
+/**
+ * Returns "already_canceled" when Stripe had ended it before we asked. On a
+ * refusal Stripe confirms (it still shows the subscription untouched) the
+ * saved intent is dropped; if Stripe can't be read back, the intent stays
+ * and the webhook or the billing cron settles it.
+ */
+async function cancelAtStripe(admin: ServiceClient, sub: SubscriptionRow, mode: CancelMode, reason: string | null, token: string) {
+  const id = sub.stripe_subscription_id!;
   const stripe = getStripe();
   const details = reason ? { cancellation_details: { comment: reason.slice(0, 500) } } : {};
   try {
@@ -159,10 +174,15 @@ async function cancelAtStripe(id: string, mode: CancelMode, reason: string | nul
     }
     return "done" as const;
   } catch (error) {
-    // Already canceled at Stripe (e.g. a lost webhook): mirror it locally.
+    // Already canceled at Stripe (e.g. a lost webhook, or an earlier attempt): mirror it locally.
     const current = await stripe.subscriptions.retrieve(id).catch(() => null);
     if (current?.status === "canceled") return "already_canceled" as const;
+    if (current && stripeActedOn(current, mode)) return "done" as const;
     console.error("[CancelMembership] Stripe cancel failed:", error);
+    if (current) {
+      const { error: dropError } = await admin.rpc("drop_admin_cancel_intent", { p_subscription_id: sub.id, p_token: token });
+      if (dropError) console.error("[CancelMembership] Dropping the refused cancel intent failed:", dropError);
+    }
     throw new CancelMembershipError(
       `Stripe refused the cancellation: ${error instanceof Error ? error.message : "unknown error"}`,
       502,
@@ -213,9 +233,23 @@ export async function cancelMembership(
   let stripe: { voided_invoice_ids: string[]; already_canceled: boolean } | null = null;
   let stripeActed = false;
   const alreadyRecorded = sub.admin_cancel_mode === "now" || (sub.admin_cancel_mode != null && mode === "period_end");
-  if (sub.payment_rail === "stripe" && isLiveSubscription(sub.status)) {
+  // A row Stripe already ended still goes to Stripe if a cancel of ours is pending on it.
+  if (sub.payment_rail === "stripe" && (isLiveSubscription(sub.status) || sub.admin_cancel_intent)) {
     const stripeMode = mode === "now" || sub.status === "incomplete" ? "now" : "period_end";
-    const done = alreadyRecorded ? "recorded" : await cancelAtStripe(sub.stripe_subscription_id!, stripeMode, input.reason);
+    let done: "recorded" | "done" | "already_canceled" = "recorded";
+    if (!alreadyRecorded) {
+      // Save who asked and why before Stripe acts: if this request dies after
+      // Stripe accepted, the webhook, a retry or the billing cron records it.
+      const { data: token, error: intentError } = await admin.rpc("begin_admin_cancel", {
+        p_subscription_id: sub.id,
+        p_mode: mode,
+        p_actor: input.actorMemberId,
+        p_reason: input.reason,
+        p_void_open: input.voidOpenInvoices,
+      });
+      if (intentError) throw intentError;
+      done = await cancelAtStripe(admin, sub, stripeMode, input.reason, token as string);
+    }
     stripeActed = done !== "recorded";
     if (done === "already_canceled") {
       mode = "now";
@@ -229,8 +263,8 @@ export async function cancelMembership(
   }
 
   // One transaction, and a repeat is a no-op. Once Stripe has acted, a passing
-  // failure is retried here: Stripe's webhook may end the row before an admin
-  // could repeat the cancel, and the record (who, why) would be lost.
+  // failure is retried here; if it keeps failing, the saved intent still
+  // gets recorded by Stripe's webhook or the billing cron.
   let recorded: Recorded | null = null;
   for (let attempt = 1; !recorded; attempt++) {
     const { data, error: recordError } = await admin.rpc("admin_cancel_subscription", {
@@ -246,7 +280,7 @@ export async function cancelMembership(
     else if (attempt >= 3) {
       console.error("[CancelMembership] Stripe accepted the cancel but recording it failed:", recordError);
       throw new CancelMembershipError(
-        "Stripe accepted the cancellation, but recording it here failed. Try again right away to record it; the reason is also saved on the Stripe subscription.",
+        "Stripe accepted the cancellation, but recording it here failed. It is saved as pending and will be recorded when Stripe's confirmation arrives; trying again also records it.",
         500,
       );
     } else await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
@@ -277,6 +311,69 @@ export async function cancelMembership(
     door,
     warnings,
   };
+}
+
+/**
+ * Record a card cancel whose request died after Stripe accepted it, from the
+ * intent saved before Stripe was asked: voids the open Stripe invoices if that
+ * was asked, then writes the marker and the one audit row naming the admin.
+ * `current` is Stripe's state of the subscription. Does nothing (returns
+ * null) if no intent is pending or Stripe hasn't carried it out.
+ */
+export async function recordPendingStripeCancel(
+  admin: ServiceClient,
+  row: Pick<SubscriptionRow, "id" | "stripe_subscription_id" | "admin_cancel_intent">,
+  current: { status: string; cancel_at_period_end: boolean },
+): Promise<Recorded | null> {
+  const intent = row.admin_cancel_intent;
+  if (!intent || !row.stripe_subscription_id || !stripeActedOn(current, intent.mode)) return null;
+  const voids = intent.void_open ? await voidStripeInvoices(row.stripe_subscription_id) : { voided: [] };
+  const { data, error } = await admin.rpc("admin_cancel_subscription", {
+    p_subscription_id: row.id,
+    p_mode: intent.mode,
+    p_actor: intent.actor,
+    p_reason: intent.reason,
+    p_void_open: intent.void_open,
+    p_stripe: { voided_invoice_ids: voids.voided, already_canceled: current.status === "canceled" },
+  });
+  if (error) throw error;
+  return data as Recorded;
+}
+
+/**
+ * Billing-cron backstop for card cancels left pending (the request died and
+ * Stripe's webhook was lost): records the ones Stripe carried out and ends
+ * access for a cancel-now; drops the ones Stripe never acted on once they're
+ * an hour old.
+ */
+export async function settlePendingStripeCancels(admin: ServiceClient, now = new Date()): Promise<FinishResult[]> {
+  const { data: pending, error } = await admin
+    .from("subscriptions")
+    .select(SUBSCRIPTION_COLUMNS)
+    .eq("payment_rail", "stripe")
+    .not("admin_cancel_intent", "is", null);
+  if (error) throw error;
+  const results: FinishResult[] = [];
+  for (const sub of (pending ?? []) as SubscriptionRow[]) {
+    const intent = sub.admin_cancel_intent!;
+    try {
+      const current = await getStripe().subscriptions.retrieve(sub.stripe_subscription_id!);
+      const recorded = await recordPendingStripeCancel(admin, sub, current);
+      if (!recorded) {
+        if (now.getTime() - Date.parse(intent.at) > INTENT_TTL_MS) {
+          const { error: dropError } = await admin.rpc("drop_admin_cancel_intent", { p_subscription_id: sub.id, p_token: intent.token });
+          if (dropError) throw dropError;
+        }
+        continue;
+      }
+      const downgrade = recorded.end_access ? await endAccessAndFinish(admin, sub) : null;
+      results.push({ subscriptionId: sub.id, memberId: sub.member_id, revokedSlot: downgrade?.revokedSlot ?? null, lockRevokeFailed: downgrade?.lockRevokeFailed ?? false });
+    } catch (cause) {
+      console.error(`[CancelMembership] Settling the pending card cancel for subscription ${sub.id} failed:`, cause);
+      results.push({ subscriptionId: sub.id, memberId: sub.member_id, revokedSlot: null, lockRevokeFailed: false, error: cause instanceof Error ? cause.message : "unknown" });
+    }
+  }
+  return results;
 }
 
 export type FinishResult = {

@@ -1,3 +1,13 @@
+/** A card cancel saved before Stripe is asked (subscriptions.admin_cancel_intent, migration 059). */
+export type AdminCancelIntent = {
+  token: string;
+  actor: number;
+  reason: string | null;
+  mode: "now" | "period_end";
+  void_open: boolean;
+  at: string;
+};
+
 export type MemberType = "cold_desk" | "hot_desk" | "hub_friend" | "day_pass";
 export type ApplicationStatus = "pending" | "approved" | "rejected" | "closed";
 export type MembershipInterest =
@@ -270,6 +280,7 @@ export interface Database {
           admin_cancel_mode?: "now" | "period_end" | null;
           admin_cancel_ends_at?: string | null;
           admin_cancel_audit_id?: number | null;
+          admin_cancel_intent?: AdminCancelIntent | null;
           created_at: string;
           updated_at: string;
         };
@@ -301,6 +312,7 @@ export interface Database {
           admin_cancel_mode?: "now" | "period_end" | null;
           admin_cancel_ends_at?: string | null;
           admin_cancel_audit_id?: number | null;
+          admin_cancel_intent?: AdminCancelIntent | null;
         };
         Update: Partial<Database["public"]["Tables"]["subscriptions"]["Insert"]>;
         Relationships: [];
