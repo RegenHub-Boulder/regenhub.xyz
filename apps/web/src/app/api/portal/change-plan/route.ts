@@ -10,8 +10,8 @@ import {
   CANCEL_IN_PROGRESS_MESSAGE,
   cancelPendingSwitch,
   isDeskToDaily,
+  changeOnchainPlan,
   onchainChangeMessage,
-  onchainSwitchColumns,
   PlanSwitchError,
   resolvePlanProduct,
   scheduleDeskToDaily,
@@ -142,14 +142,15 @@ export async function POST(req: Request) {
   }
 
   if (sub.payment_rail === "onchain") {
-    const switchColumns = onchainSwitchColumns(sub, targetKey);
-    const { data: changed, error } = await admin.from("subscriptions").update({ plan_key: targetKey, monthly_cents: target.defaultMonthlyCents, ...switchColumns })
-      .eq("id", sub.id).eq("payment_rail", "onchain").is("admin_cancel_mode", null)
-      .select("id").maybeSingle();
-    if (error) return NextResponse.json({ error: "Could not change plan" }, { status: 500 });
-    if (!changed) return NextResponse.json({ error: CANCEL_IN_PROGRESS_MESSAGE }, { status: 409 });
+    const result = await changeOnchainPlan(admin, { subscriptionId: sub.id, targetKey, refuseWhenCanceling: true }).catch((err) => {
+      console.error("[ChangePlan] On-chain plan change failed:", err);
+      return null;
+    });
+    if (!result) return NextResponse.json({ error: "Could not change plan" }, { status: 500 });
+    if (!result.changed) return NextResponse.json({ error: CANCEL_IN_PROGRESS_MESSAGE }, { status: 409 });
+    const switchColumns = result.switchColumns;
     await logAction({ action: AuditAction.ONCHAIN_SUBSCRIPTION_CHANGED, actorMemberId: member.id,
-      target: { table: "subscriptions", id: sub.id }, payload: { from: sub.plan_key, to: targetKey, source: "self_serve" } }, admin);
+      target: { table: "subscriptions", id: sub.id }, payload: { from: result.from, to: targetKey, source: "self_serve" } }, admin);
     return NextResponse.json({ ok: true, message: onchainChangeMessage(switchColumns, targetKey) });
   }
   if (!isStripeConfigured()) return NextResponse.json({ error: "Stripe is not configured" }, { status: 503 });

@@ -65,12 +65,12 @@ export async function notifyTelegram(text: string, opts?: { silent?: boolean }) 
  * - The event names a different plan from ours (a plan change, or an older
  *   event arriving after one): a pre-switch "Hot Desk" event must not bring a
  *   desk back after a desk → daily switch landed.
- * - A desk → daily switch is pending and the event doesn't carry its schedule.
+ * - A desk → daily switch is pending (its landing may be half done).
  */
 async function currentStateFor(admin: ServiceClient, sub: Stripe.Subscription): Promise<Stripe.Subscription> {
   const { data: row, error } = await admin
     .from("subscriptions")
-    .select("admin_cancel_mode, plan_key, pending_plan_schedule_id")
+    .select("admin_cancel_mode, plan_key, pending_plan_key")
     .eq("stripe_subscription_id", sub.id)
     .maybeSingle();
   if (error) throw error;
@@ -88,8 +88,11 @@ async function currentStateFor(admin: ServiceClient, sub: Stripe.Subscription): 
     return current;
   }
   const stalePlan = row.plan_key !== sub.metadata?.plan_key;
-  const staleSchedule = !!row.pending_plan_schedule_id && scheduleIdOf(sub) !== row.pending_plan_schedule_id;
-  return stalePlan || staleSchedule ? getStripe().subscriptions.retrieve(sub.id) : sub;
+  // While a switch is pending, any event may predate its landing (or a landing
+  // that ended the desk but whose record didn't commit), so ask Stripe. Few
+  // events fall in that window.
+  const switchPending = !!row.pending_plan_key;
+  return stalePlan || switchPending ? getStripe().subscriptions.retrieve(sub.id) : sub;
 }
 
 export type PrevRow = { status: string; cancel_at_period_end: boolean; past_due_since: string | null } | null;
@@ -112,10 +115,13 @@ export async function upsertSubscription(
   // only a stale event (rare) is resolved again inside it.
   const eventNet = await resolveSubscriptionNet(event, listCentsOf(event));
   const synced = await withLockWriter(admin, () => syncSubscription(admin, event, eventNet), "Stripe subscription sync");
-  const { sub, member, plan, planKey, monthlyCents, local, leavingDesk, switchLanded, activation } = synced;
+  const { sub, member, plan, planKey, monthlyCents, local, switchLanded, activation } = synced;
 
-  // Only our own schedule: one an admin made in the dashboard is theirs to manage.
-  if (leavingDesk && local) await releaseLandedSchedule(local.pending_plan_schedule_id);
+  // Only our own schedule (landed_schedule_id): one an admin made in the dashboard is theirs to manage.
+  // A failed release stays recorded; this event's retry or the billing cron releases it.
+  if (local && !await releaseLandedSchedule(admin, local.id).catch(() => false)) {
+    console.error(`[StripeWebhook] Releasing the landed schedule of subscription ${local.id} failed; it is retried.`);
+  }
   if (switchLanded && local) {
     const door = switchLanded.lockRevokeFailed
       ? "\n\n⚠️ *Action needed:* the desk door code could not be cleared on every lock; the slot is quarantined. Run Lock Sync from /admin/access."
