@@ -89,8 +89,8 @@ async function currentStateFor(admin: ServiceClient, sub: Stripe.Subscription): 
   }
   const stalePlan = row.plan_key !== sub.metadata?.plan_key;
   // While a switch is pending, any event may predate its landing (or a landing
-  // that ended the desk but whose record didn't commit), so ask Stripe. Few
-  // events fall in that window.
+  // that ended the desk but whose record didn't commit), so ask Stripe. That
+  // is every event until the paid desk period ends: one extra read each.
   const switchPending = !!row.pending_plan_key;
   return stalePlan || switchPending ? getStripe().subscriptions.retrieve(sub.id) : sub;
 }
@@ -119,8 +119,12 @@ export async function upsertSubscription(
 
   // Only our own schedule (landed_schedule_id): one an admin made in the dashboard is theirs to manage.
   // A failed release stays recorded; this event's retry or the billing cron releases it.
-  if (local && !await releaseLandedSchedule(admin, local.id).catch(() => false)) {
-    console.error(`[StripeWebhook] Releasing the landed schedule of subscription ${local.id} failed; it is retried.`);
+  if (local) {
+    const released = await releaseLandedSchedule(admin, local.id).catch((cause) => {
+      console.error(`[StripeWebhook] Releasing the landed schedule of subscription ${local.id} failed:`, cause);
+      return false;
+    });
+    if (!released) console.error(`[StripeWebhook] The landed schedule of subscription ${local.id} is still attached; the billing cron retries it.`);
   }
   if (switchLanded && local) {
     const door = switchLanded.lockRevokeFailed

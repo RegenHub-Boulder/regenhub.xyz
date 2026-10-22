@@ -143,7 +143,8 @@ begin
     landed_schedule_id = coalesce(pending_plan_schedule_id, landed_schedule_id),
     pending_plan_key = null, pending_plan_at = null, pending_plan_from = null, pending_plan_schedule_id = null,
     plan_key = case when p_rail = 'stripe' then p_to else plan_key end
-    where id = p_subscription_id;
+    -- Only a switch still pending: a repeat landing, or a desk left another way, changes nothing here.
+    where id = p_subscription_id and pending_plan_key is not null;
   insert into admin_actions (actor_member_id, action, target_table, target_id, payload)
     values (null, 'plan_switch_completed', 'members', p_member_id::text,
       jsonb_build_object('subscription_id', p_subscription_id, 'rail', p_rail, 'from', p_from, 'to', p_to)
