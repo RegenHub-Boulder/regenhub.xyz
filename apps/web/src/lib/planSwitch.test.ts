@@ -5,7 +5,8 @@ import { makePgDb, type PgDb } from "../../test/pgDb";
 // A desk member switching to a daily plan, end to end: the portal route, the
 // Stripe webhook, the on-chain billing cron and the door-code lifecycle, on a
 // fresh Postgres with every migration applied. Fakes: Stripe, the chain, the
-// lock transport. The PIN-writer reservation, quarantine and SQL are real.
+// lock transport, email, and the Supabase auth session (createClient reads the
+// same database). The PIN-writer reservation, quarantine and SQL are real.
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 120_000 });
 
 vi.mock("@/lib/supabase/admin", () => ({ createServiceClient: vi.fn() }));
@@ -15,7 +16,6 @@ vi.mock("@/lib/stripe", async (importOriginal) => ({
   getStripe: vi.fn(),
   isStripeConfigured: () => true,
 }));
-vi.mock("@/lib/stripeRetrieveNet", () => ({ resolveSubscriptionNet: async (_s: unknown, cents: number) => ({ netCents: cents, offCents: 0 }) }));
 vi.mock("@/lib/email", () => ({
   sendEmail: vi.fn(async () => true), welcomeNewMemberEmail: vi.fn(() => ({})), subscriptionEndedEmail: vi.fn(() => ({})),
   paymentReminderEmail: vi.fn(() => ({})), monthlyPassesCreditedEmail: vi.fn(() => ({})), onchainRenewalReminderEmail: vi.fn(() => ({})),
@@ -31,9 +31,6 @@ vi.mock("@/lib/onchain/config", async (importOriginal) => ({
   assertOpPublicClient: vi.fn(async () => {}),
   isOnchainBillingConfigured: () => true,
   isGaslessRelayConfigured: () => false,
-}));
-vi.mock("@/lib/onchain/portalMember", () => ({
-  requirePortalMember: async () => ({ user: { id: "00000000-0000-4000-8000-000000000007" }, member: { id: 7, name: "Pat Example", email: "pat@example.test", disabled: false } }),
 }));
 
 import { clearSlotSafely, clearUserCode, setUserCode } from "@regenhub/shared";
@@ -65,7 +62,7 @@ let stripe: ReturnType<typeof fakeStripe>;
 function stripeSub(plan: string, opts: { status?: string; periodEnd?: string; schedule?: string | null } = {}) {
   return {
     id: "sub_test_50", customer: "cus_test_7", status: opts.status ?? "active", cancel_at_period_end: false, canceled_at: null,
-    schedule: opts.schedule ?? null,
+    schedule: opts.schedule ?? null, discounts: [],
     metadata: { plan_key: plan },
     items: { data: [{ id: "si_test", price: { id: `price_${plan}`, unit_amount: CENTS[plan] },
       current_period_start: unix(periodEnd) - 30 * 86400, current_period_end: unix(opts.periodEnd ?? periodEnd) }] },
@@ -87,6 +84,7 @@ function fakeStripe() {
       })),
       update: vi.fn(async (id: string, params: Record<string, unknown>) => ({ id, status: "active", ...params })),
       release: vi.fn(async (id: string) => ({ id, status: "released" })),
+      retrieve: vi.fn(async (id: string) => ({ id, status: "active" }) as { id: string; status: string }),
     },
     products: { create: vi.fn(async (params: { name: string }) => ({ id: `prod_${params.name}` })) },
     invoices: {
@@ -375,6 +373,39 @@ describe("card (Stripe): Hot Desk → Member + 2 days/mo", () => {
   });
 });
 
+describe("card (Stripe): edges", () => {
+  it("two deliveries of the landing at once end the desk once", async () => {
+    await seed();
+    await pick("member_2day");
+    const rolled = stripeSub("member_2day", { periodEnd: iso(34 * DAY), schedule: "sub_sched_1" });
+    stripe.subscriptions.retrieve.mockResolvedValue(rolled);
+    const results = await Promise.all([
+      sendStripeEvent("evt_a", "customer.subscription.updated", rolled),
+      sendStripeEvent("evt_b", "customer.subscription.updated", { ...rolled, status: "active" }),
+    ]);
+    expect(results.map((r) => r.status)).toEqual([200, 200]);
+    expect(clearUserCode).toHaveBeenCalledTimes(1);
+    expect(await audits("plan_switch_completed")).toHaveLength(1);
+  });
+
+  it("a schedule already released at Stripe doesn't block keeping the desk", async () => {
+    await seed();
+    await pick("member_2day");
+    stripe.subscriptionSchedules.release.mockRejectedValue(new Error("already released"));
+    stripe.subscriptionSchedules.retrieve.mockResolvedValue({ id: "sub_sched_1", status: "released" });
+    expect((await keepDesk()).status).toBe(200);
+    expect(await sub()).toMatchObject({ pending_plan_key: null });
+  });
+
+  it("if Stripe refuses an admin cancel after the switch was dropped, the admin is told", async () => {
+    await seed();
+    await pick("member_2day");
+    stripe.subscriptions.update.mockRejectedValue(new Error("Stripe is down"));
+    await expect(cancelMembership(db as never, { memberId: 7, actorMemberId: 1, mode: "period_end", reason: null, voidOpenInvoices: false }))
+      .rejects.toThrow(/switch to Member \+ 2 days\/mo was dropped/);
+  });
+});
+
 describe("upgrades and daily ↔ daily are unchanged", () => {
   it("daily → daily swaps the price now, with prorations, and no schedule", async () => {
     await seed({ plan: "member_basic" });
@@ -453,6 +484,18 @@ describe("crypto (on-chain): Hot Desk → Member + 2 days/mo", () => {
     expect(await member()).toMatchObject({ member_type: "hot_desk" });
     expect((await member()).pin_code_slot).not.toBeNull();
     expect(setUserCode).toHaveBeenCalledTimes(1);
+  });
+
+  it("a desk an admin granted by hand to a daily subscriber is left alone by the cron", async () => {
+    await seed({ rail: "onchain", plan: "member_2day" });
+    await asWriter("update members set member_type = 'cold_desk', pin_code_slot = 14, pin_code = '111222' where id = 7;");
+    await db.exec("update onchain_invoices set period_start = period_start - interval '20 days', period_end = period_end - interval '20 days'");
+    await db.sql(`insert into onchain_invoices (id, subscription_id, member_id, plan_key, period_start, period_end, due_at,
+        base_amount_cents, amount_cents, amount_usdc_micros, status, paid_at)
+      values (801, 50, 7, 'member_2day', now() - interval '6 days', now() + interval '24 days', now() - interval '6 days', 5000, 5000, 50000000, 'paid', now())`);
+    expect((await runCron()).status).toBe(200);
+    expect(await member()).toMatchObject({ member_type: "cold_desk", pin_code_slot: 14 });
+    expect(clearUserCode).not.toHaveBeenCalled();
   });
 
   it("an admin cancel now after a crypto switch still clears the desk door code", async () => {
