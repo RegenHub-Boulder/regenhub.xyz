@@ -185,10 +185,10 @@ begin
     on conflict (operation_id, invoice_id) do update set outcome = excluded.outcome, updated_at = now()
     where admin_cancel_stripe_voids.outcome <> 'voided';
   if p_outcome = 'voided' and op.recorded_at is not null then
-    update admin_actions set payload = payload
+    update admin_actions set payload = (payload - 'void_failed_invoice_ids')
       || jsonb_build_object('voided_invoice_ids', coalesce(payload->'voided_invoice_ids', '[]') || to_jsonb(p_invoice_id))
-      || case when payload ? 'void_failed_invoice_ids'
-           then jsonb_build_object('void_failed_invoice_ids', (payload->'void_failed_invoice_ids') - p_invoice_id) else '{}' end
+      || jsonb_strip_nulls(jsonb_build_object('void_failed_invoice_ids',
+           nullif((payload->'void_failed_invoice_ids') - p_invoice_id, '[]'::jsonb)))
     where action = 'subscription_canceled_by_admin' and payload->>'operation_id' = op.id::text
       and not coalesce(payload->'voided_invoice_ids', '[]') ? p_invoice_id;
   end if;
@@ -266,7 +266,7 @@ begin
                  coalesce(array_agg(sv.invoice_id order by sv.invoice_id) filter (where sv.outcome <> 'voided'), '{}')
             into voided, void_failed from admin_cancel_stripe_voids sv where sv.operation_id = op.id;
         end if;
-        if cardinality(voided) > 0 then
+        if cardinality(voided) > 0 or cardinality(void_failed) > 0 then
           insert into admin_actions (actor_member_id, action, target_table, target_id, payload)
           values (op.actor_member_id, 'subscription_canceled_by_admin', 'members', s.member_id::text, jsonb_strip_nulls(jsonb_build_object(
             'subscription_id', s.id, 'operation_id', op.id, 'rail', s.payment_rail, 'mode', op.mode, 'outcome', outcome,

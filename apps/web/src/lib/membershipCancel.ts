@@ -168,10 +168,12 @@ async function voidStripeInvoices(admin: ServiceClient, operationId: number, sub
   const { data: earlier, error } = await admin.from("admin_cancel_stripe_voids")
     .select("invoice_id").eq("operation_id", operationId).in("outcome", ["pending", "failed"]);
   if (error) throw error;
+  // Stripe unreadable: null. The void is then reported as failed, never assumed.
+  const statusAtStripe = (invoiceId: string) => stripe.invoices.retrieve(invoiceId).then((invoice) => invoice.status, () => null);
   for (const { invoice_id } of (earlier ?? []) as { invoice_id: string }[]) {
-    const { status } = await stripe.invoices.retrieve(invoice_id);
+    const status = await statusAtStripe(invoice_id);
     if (status === "void") await save(invoice_id, "voided");
-    else if (status !== "open") await save(invoice_id, "failed"); // paid or written off since; an open one is voided below
+    else if (status && status !== "open") await save(invoice_id, "failed"); // paid or written off since; an open one is voided below
   }
 
   let startingAfter: string | undefined;
@@ -190,7 +192,7 @@ async function voidStripeInvoices(admin: ServiceClient, operationId: number, sub
         await stripe.invoices.voidInvoice(invoice.id);
       } catch (cause) {
         // Another runner of this operation may have voided it a moment ago.
-        voided = (await stripe.invoices.retrieve(invoice.id)).status === "void";
+        voided = await statusAtStripe(invoice.id) === "void";
         if (!voided) {
           console.error(`[CancelMembership] Void failed for Stripe invoice ${invoice.id}:`, cause);
           warnings.push(`Could not void Stripe invoice ${invoice.id}; void it in the Stripe dashboard.`);

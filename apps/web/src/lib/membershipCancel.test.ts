@@ -710,6 +710,32 @@ describe("card (Stripe): invoice voids are saved against the operation", () => {
     expect(await audits()).toEqual([expect.objectContaining({ payload: expect.objectContaining({ voided_invoice_ids: ["in_a"] }) })]);
   });
 
+  it("a void Stripe neither confirms nor lets us read back is a warning, not a stuck cancel", async () => {
+    await overdue();
+    statefulInvoices(["in_a"]);
+    stripe.invoices.voidInvoice.mockRejectedValueOnce(new Error("socket hang up"));
+    stripe.invoices.retrieve.mockRejectedValueOnce(new Error("socket hang up"));
+    const result = await cancel({ voidOpenInvoices: true });
+
+    expect(result).toMatchObject({ outcome: "canceled", door: { revokedSlot: 12 } });
+    expect(result.warnings.join(" ")).toMatch(/Could not void Stripe invoice in_a/);
+    expect((await audits())[0].payload).toMatchObject({ voided_invoice_ids: [], void_failed_invoice_ids: ["in_a"] });
+  });
+
+  it("voiding on an already-scheduled cancel audits a void that failed, so a later void has a row to land on", async () => {
+    await overdue();
+    statefulInvoices([]);
+    await cancel({ mode: "period_end" });
+    statefulInvoices(["in_a"]);
+    stripe.invoices.voidInvoice.mockRejectedValueOnce(new Error("Stripe is down"));
+    await cancel({ mode: "period_end", voidOpenInvoices: true });
+    expect((await audits())[1].payload).toMatchObject({ voided_invoice_ids: [], void_failed_invoice_ids: ["in_a"] });
+
+    const [, { id }] = await operations();
+    await db.rpc("admin_cancel_stripe_void", { p_operation_id: id, p_invoice_id: "in_a", p_outcome: "voided" });
+    expect((await audits())[1].payload).toMatchObject({ voided_invoice_ids: ["in_a"] });
+  });
+
   it("a void that fails is audited as failed; one that lands after the record is added to the audit row", async () => {
     await overdue();
     statefulInvoices(["in_a", "in_b"]);
@@ -721,7 +747,8 @@ describe("card (Stripe): invoice voids are saved against the operation", () => {
     // A second runner of the operation voids in_a after the first recorded it.
     const [{ id }] = await operations();
     expect((await db.rpc("admin_cancel_stripe_void", { p_operation_id: id, p_invoice_id: "in_a", p_outcome: "voided" })).error).toBeNull();
-    expect((await audits())[0].payload).toMatchObject({ voided_invoice_ids: ["in_b", "in_a"], void_failed_invoice_ids: [] });
+    expect((await audits())[0].payload).toMatchObject({ voided_invoice_ids: ["in_b", "in_a"] });
+    expect((await audits())[0].payload).not.toHaveProperty("void_failed_invoice_ids");
     expect(await audits()).toHaveLength(1);
   });
 });
@@ -746,6 +773,21 @@ describe("deleting a member with cancel history", () => {
     expect(asAdmin.status).toBe(409);
     expect((await asAdmin.json()).error).toMatch(/cancel.*Disable/s);
     expect(await db.sql("select id from members order by id")).toEqual([{ id: 1 }, { id: 7 }]);
+  });
+
+  it("a member with an on-chain payment is refused before the door is touched too", async () => {
+    await seed({ rail: "onchain" });
+    await invoice(900, iso(-20 * DAY), "paid");
+    await db.sql(`insert into onchain_payments (invoice_id, member_id, chain_id, tx_hash, log_index, block_number, block_hash,
+        from_address, to_address, token_contract, amount_micros, chain_status, match_status)
+      values (900, 7, 10, $1, 0, 1, $2, $3, $4, $5, 250000000, 'finalized', 'credited')`,
+    [TX, `0x${"b".repeat(64)}`, WALLET.toLowerCase(), TREASURY_ADDRESS.toLowerCase(), NATIVE_USDC_ADDRESS.toLowerCase()]);
+    vi.mocked(requireAdmin).mockResolvedValue({ id: "admin-uid" } as never);
+    vi.mocked(createClient).mockResolvedValue(db as never);
+
+    expect((await del(7)).status).toBe(409);
+    expect(clearUserCode).not.toHaveBeenCalled();
+    expect((await member()).pin_code_slot).toBe(12);
   });
 
   it("a cancel that lands after the check still gets the clear message, not a raw database error", async () => {
