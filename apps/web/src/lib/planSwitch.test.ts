@@ -403,7 +403,99 @@ describe("card (Stripe): edges", () => {
     await pick("member_2day");
     stripe.subscriptions.update.mockRejectedValue(new Error("Stripe is down"));
     await expect(cancelMembership(db as never, { memberId: 7, actorMemberId: 1, mode: "period_end", reason: null, voidOpenInvoices: false }))
-      .rejects.toThrow(/switch to Member \+ 2 days\/mo was dropped/);
+      .rejects.toThrow(/billing cron will finish it.*switch to Member \+ 2 days\/mo was dropped first\.$/);
+  });
+
+  it("if Stripe refuses an admin cancel after the switch was dropped, the admin is told the desk renews", async () => {
+    await seed();
+    await pick("member_2day");
+    stripe.subscriptions.update.mockRejectedValue(Object.assign(new Error("No such thing"), { type: "StripeInvalidRequestError" }));
+    await expect(cancelMembership(db as never, { memberId: 7, actorMemberId: 1, mode: "period_end", reason: null, voidOpenInvoices: false }))
+      .rejects.toThrow(/Stripe refused.*was dropped first; their plan stays as it is until you cancel again\./);
+    expect(await sub()).toMatchObject({ plan_key: "hot_desk", pending_plan_key: null, admin_cancel_mode: null });
+  });
+});
+
+describe("an admin cancel wins over a plan switch", () => {
+  const adminCancel = (mode: "now" | "period_end") =>
+    cancelMembership(db as never, { memberId: 7, actorMemberId: 1, mode, reason: null, voidOpenInvoices: false });
+
+  it("an admin cancel now clears a pending switch: the schedule goes first, and the admin is on the record", async () => {
+    await seed();
+    await pick("member_2day");
+    const result = await adminCancel("now");
+    expect(result.outcome).toBe("canceled");
+    expect(stripe.subscriptionSchedules.release).toHaveBeenCalledWith("sub_sched_1");
+    expect(stripe.subscriptionSchedules.release.mock.invocationCallOrder[0])
+      .toBeLessThan(stripe.subscriptions.cancel.mock.invocationCallOrder[0]);
+    expect(await sub()).toMatchObject({ pending_plan_key: null, pending_plan_at: null, pending_plan_schedule_id: null, status: "canceled" });
+    expect(await audits("plan_switch_canceled")).toEqual([
+      expect.objectContaining({ actor_member_id: 1, payload: expect.objectContaining({ reason: "admin_cancel", to: "member_2day" }) }),
+    ]);
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+  });
+
+  it("a cancel that couldn't drop the switch is saved, and the billing cron finishes both", async () => {
+    await seed();
+    await pick("member_2day");
+    stripe.subscriptionSchedules.release.mockRejectedValueOnce(new Error("Stripe is down"));
+    stripe.subscriptionSchedules.retrieve.mockRejectedValueOnce(new Error("Stripe is down"));
+    await expect(adminCancel("period_end")).rejects.toThrow(/billing cron will finish it/);
+    expect(stripe.subscriptions.update).not.toHaveBeenCalled();
+    expect(await sub()).toMatchObject({ pending_plan_key: "member_2day", admin_cancel_mode: null });
+
+    expect((await runCron()).status).toBe(200);
+    expect(await sub()).toMatchObject({ pending_plan_key: null, admin_cancel_mode: "period_end" });
+    expect(stripe.subscriptions.update).toHaveBeenCalledWith("sub_test_50", expect.objectContaining({ cancel_at_period_end: true }), expect.anything());
+    expect(await one("select count(*)::int n from admin_cancel_operations where finished_at is null")).toEqual({ n: 0 });
+  });
+
+  it("card: once an admin has canceled at period end, the member can't schedule a switch", async () => {
+    await seed();
+    await adminCancel("period_end");
+    const res = await pick("member_2day");
+    expect(res.status).toBe(409);
+    expect(stripe.subscriptionSchedules.create).not.toHaveBeenCalled();
+    expect(await sub()).toMatchObject({ plan_key: "hot_desk", pending_plan_key: null, admin_cancel_mode: "period_end" });
+  });
+
+  it("crypto: once an admin has canceled at period end, the plan can't be changed", async () => {
+    await seed({ rail: "onchain" });
+    await adminCancel("period_end");
+    expect((await pick("member_2day")).status).toBe(409);
+    expect(await sub()).toMatchObject({ plan_key: "hot_desk", admin_cancel_mode: "period_end" });
+    expect(await audits("onchain_subscription_changed")).toHaveLength(0);
+  });
+
+  it("a switch racing an admin cancel loses: the database refuses it and the schedule is released", async () => {
+    await seed();
+    // The admin's cancel begins after the route checked, just before the switch is recorded.
+    db.beforeNextWrite("subscriptions", () => db.sql("select begin_admin_cancel(50, 'period_end', 1, null, false)"));
+    const res = await pick("member_2day");
+    expect(res.status).toBe(409);
+    expect(stripe.subscriptionSchedules.release).toHaveBeenCalledWith("sub_sched_1");
+    expect(await sub()).toMatchObject({ plan_key: "hot_desk", pending_plan_key: null });
+    expect(await audits("plan_switch_scheduled")).toHaveLength(0);
+  });
+
+  it("a subscription ended some other way doesn't keep showing a switch", async () => {
+    await seed();
+    await pick("member_2day");
+    await db.sql("update subscriptions set status = 'canceled', canceled_at = now() where id = 50");
+    expect(await sub()).toMatchObject({ pending_plan_key: null, pending_plan_at: null, pending_plan_schedule_id: null });
+  });
+
+  it("after a cancel now, the switch's daily phase arriving late doesn't bring the membership back", async () => {
+    await seed();
+    await pick("member_2day");
+    await adminCancel("now");
+    // Stripe ended the subscription and its schedule; a delayed event from the daily phase lands now.
+    stripe.subscriptions.retrieve.mockResolvedValue(stripeSub("hot_desk", { status: "canceled" }));
+    const late = stripeSub("member_2day", { periodEnd: iso(34 * DAY), schedule: "sub_sched_1" });
+    expect((await sendStripeEvent("evt_late", "customer.subscription.updated", late)).status).toBe(200);
+    expect(await sub()).toMatchObject({ status: "canceled", plan_key: "hot_desk", pending_plan_key: null });
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+    expect(await audits("plan_switch_completed")).toHaveLength(0);
   });
 });
 

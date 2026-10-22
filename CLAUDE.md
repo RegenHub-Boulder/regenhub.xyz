@@ -167,6 +167,10 @@ Stripe invoice void is saved against its operation (`admin_cancel_stripe_voids`:
 happens; the audit row lists them from there, and a later run reads a pending or failed one back from Stripe. Cancel-now stays "marked + live" until the door step finishes. The
 door step asks `admin_cancel_door_due()` under the PIN writer first, and the period-end step `admin_cancel_due()`,
 so a payment that just extended the period keeps its door.
+A pending desk → daily switch (migration 060) yields to a cancel: the card Stripe step releases its schedule first
+(Stripe won't set a period-end cancel on a scheduled subscription) and audits `plan_switch_canceled` as the
+operation's admin; a trigger clears any switch left on a marked or ended row, and refuses a new one while a cancel
+is recorded or still running. `/api/portal/change-plan` refuses every plan change then, on both rails.
 
 ### Add a new member via bot
 Use `/admin → Add member` as an admin in the Telegram bot.

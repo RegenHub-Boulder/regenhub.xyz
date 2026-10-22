@@ -30,6 +30,23 @@ export type PendingSwitchRow = {
   pending_plan_schedule_id: string | null;
 };
 
+/**
+ * Is an admin cancel recorded on this subscription, or still running
+ * (admin_cancel_operations, migration 059)? Either way it must not take a
+ * plan change: the cancel wins (migration 060 refuses the write too).
+ */
+export async function adminCancelInProgress(admin: ServiceClient, subscriptionId: number): Promise<boolean> {
+  const [{ data: sub, error }, { data: open, error: openError }] = await Promise.all([
+    admin.from("subscriptions").select("admin_cancel_mode").eq("id", subscriptionId).single(),
+    admin.from("admin_cancel_operations").select("id").eq("subscription_id", subscriptionId).is("finished_at", null).limit(1).maybeSingle(),
+  ]);
+  if (error) throw error;
+  if (openError) throw openError;
+  return sub.admin_cancel_mode != null || open != null;
+}
+
+export const CANCEL_IN_PROGRESS_MESSAGE = "Your membership is set to end, so there's nothing to switch. Get in touch if that's wrong.";
+
 /** True when moving from `from` to `to` leaves a desk for a daily plan. */
 export function isDeskToDaily(from: string, to: string): boolean {
   return isDeskPlan(from) && !isDeskPlan(to) && getPlan(to)?.grantsMemberType === "day_pass";
@@ -66,8 +83,13 @@ async function releaseSchedule(stripe: Stripe, scheduleId: string): Promise<bool
     return true;
   } catch (error) {
     // Released or canceled already (from the dashboard, or a landing): nothing left to undo.
-    const current = await stripe.subscriptionSchedules.retrieve(scheduleId).catch(() => null);
-    if (current && ["released", "canceled", "completed"].includes(current.status)) return true;
+    let unknownToStripe = false;
+    const current = await stripe.subscriptionSchedules.retrieve(scheduleId).catch((cause: { code?: string }) => {
+      unknownToStripe = cause?.code === "resource_missing";
+      return null;
+    });
+    // A schedule Stripe doesn't know manages nothing either.
+    if (unknownToStripe || (current && ["released", "canceled", "completed"].includes(current.status))) return true;
     console.error(`[PlanSwitch] Could not release Stripe schedule ${scheduleId}:`, error);
     return false;
   }
@@ -99,7 +121,7 @@ export async function scheduleDeskToDaily(
     throw new PlanSwitchError("Could not load your subscription. Try again in a minute.", 502);
   }
   if (live.status === "canceled" || live.cancel_at_period_end) {
-    throw new PlanSwitchError("Your membership is already set to end, so there's nothing to switch. Get in touch if that's wrong.", 409);
+    throw new PlanSwitchError(CANCEL_IN_PROGRESS_MESSAGE, 409);
   }
   if (live.schedule) {
     throw new PlanSwitchError("Your subscription already has a scheduled change. Email boulder.regenhub@gmail.com and we'll sort it out.", 409);
@@ -170,6 +192,10 @@ export async function scheduleDeskToDaily(
   if (error || !recorded) {
     console.error("[PlanSwitch] Recording the switch failed:", error);
     const released = await releaseSchedule(stripe, schedule.id);
+    // An admin cancel that began after the route checked: the database refused the switch.
+    if (released && await adminCancelInProgress(admin, sub.id).catch(() => false)) {
+      throw new PlanSwitchError(CANCEL_IN_PROGRESS_MESSAGE, 409);
+    }
     throw new PlanSwitchError(
       released
         ? "We couldn't save the switch, so we undid it. Nothing changed; try again in a minute."
