@@ -162,7 +162,9 @@ goes live again (trigger) and a late transfer for it is never credited; a void i
 call Stripe after the operation is written. A period-end update carries one idempotency key per operation
 (`admin-cancel-<id>`); a cancel-now is a DELETE, which Stripe doesn't make idempotent, so a second runner's call fails as
 already canceled and the readback counts it as this operation's if Stripe ended it after the operation began. The
-webhook uses Stripe's *current* subscription for marked rows, and only a renewal Stripe reports lifts the marker. Cancel-now stays "marked + live" until the door step finishes. The
+webhook uses Stripe's *current* subscription for marked rows, and only a renewal Stripe reports lifts the marker. Each
+Stripe invoice void is saved against its operation (`admin_cancel_stripe_voids`: pending, then voided or failed) as it
+happens; the audit row lists them from there, and a later run reads a pending or failed one back from Stripe. Cancel-now stays "marked + live" until the door step finishes. The
 door step asks `admin_cancel_door_due()` under the PIN writer first, and the period-end step `admin_cancel_due()`,
 so a payment that just extended the period keeps its door.
 

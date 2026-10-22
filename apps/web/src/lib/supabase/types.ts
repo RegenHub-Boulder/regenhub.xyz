@@ -645,6 +645,18 @@ export interface Database {
         Update: never;
         Relationships: [];
       };
+      /** Each Stripe invoice void of a card admin cancel operation (migration 059). Written only by admin_cancel_stripe_void(). */
+      admin_cancel_stripe_voids: {
+        Row: {
+          operation_id: number;
+          invoice_id: string;
+          outcome: "pending" | "voided" | "failed";
+          updated_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       webhook_events: {
         Row: {
           id: number;
@@ -736,10 +748,14 @@ export interface Database {
         Returns: unknown;
       };
       record_admin_cancel: {
-        Args: { p_operation_id: number; p_stripe?: { voided_invoice_ids: string[]; already_canceled: boolean } | null };
+        Args: { p_operation_id: number; p_stripe?: { already_canceled: boolean } | null };
         Returns: unknown;
       };
       admin_cancel_stripe_done: { Args: { p_operation_id: number }; Returns: null };
+      admin_cancel_stripe_void: {
+        Args: { p_operation_id: number; p_invoice_id: string; p_outcome: "pending" | "voided" | "failed" };
+        Returns: null;
+      };
       abandon_admin_cancel: { Args: { p_operation_id: number }; Returns: boolean | null };
       admin_cancel_door_due: { Args: { p_operation_id: number }; Returns: boolean };
       finish_admin_cancel: {

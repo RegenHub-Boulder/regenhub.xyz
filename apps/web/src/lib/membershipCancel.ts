@@ -147,10 +147,33 @@ function endScheduledAccess(admin: ServiceClient, sub: Pick<SubscriptionRow, "id
   }, "Admin cancel");
 }
 
-async function voidStripeInvoices(subscriptionId: string) {
-  const voided: string[] = [];
+type VoidOutcome = "pending" | "voided" | "failed";
+
+/**
+ * Void the subscription's open Stripe invoices for one operation, saving each
+ * against it (admin_cancel_stripe_voids, migration 059): "pending" before
+ * Stripe is asked, then the outcome. An invoice a run left pending or failed
+ * is read back first: already void (a stopped run, or another runner of this
+ * operation) counts as voided; still open, it is voided again below.
+ * Returns warnings for the invoices this run couldn't void.
+ */
+async function voidStripeInvoices(admin: ServiceClient, operationId: number, subscriptionId: string) {
   const warnings: string[] = [];
   const stripe = getStripe();
+  const save = async (invoiceId: string, outcome: VoidOutcome) => {
+    const { error } = await admin.rpc("admin_cancel_stripe_void", { p_operation_id: operationId, p_invoice_id: invoiceId, p_outcome: outcome });
+    if (error) throw error;
+  };
+
+  const { data: earlier, error } = await admin.from("admin_cancel_stripe_voids")
+    .select("invoice_id").eq("operation_id", operationId).in("outcome", ["pending", "failed"]);
+  if (error) throw error;
+  for (const { invoice_id } of (earlier ?? []) as { invoice_id: string }[]) {
+    const { status } = await stripe.invoices.retrieve(invoice_id);
+    if (status === "void") await save(invoice_id, "voided");
+    else if (status !== "open") await save(invoice_id, "failed"); // paid or written off since; an open one is voided below
+  }
+
   let startingAfter: string | undefined;
   for (;;) {
     const page = await stripe.invoices.list({
@@ -161,18 +184,24 @@ async function voidStripeInvoices(subscriptionId: string) {
     });
     for (const invoice of page.data) {
       if (!invoice.id) continue;
+      await save(invoice.id, "pending");
+      let voided = true;
       try {
         await stripe.invoices.voidInvoice(invoice.id);
-        voided.push(invoice.id);
-      } catch (error) {
-        console.error(`[CancelMembership] Void failed for Stripe invoice ${invoice.id}:`, error);
-        warnings.push(`Could not void Stripe invoice ${invoice.id}; void it in the Stripe dashboard.`);
+      } catch (cause) {
+        // Another runner of this operation may have voided it a moment ago.
+        voided = (await stripe.invoices.retrieve(invoice.id)).status === "void";
+        if (!voided) {
+          console.error(`[CancelMembership] Void failed for Stripe invoice ${invoice.id}:`, cause);
+          warnings.push(`Could not void Stripe invoice ${invoice.id}; void it in the Stripe dashboard.`);
+        }
       }
+      await save(invoice.id, voided ? "voided" : "failed");
     }
     if (!page.has_more || !page.data.length) break;
     startingAfter = page.data[page.data.length - 1].id;
   }
-  return { voided, warnings };
+  return warnings;
 }
 
 /** Stripe never brings these back. */
@@ -273,7 +302,7 @@ async function runOperation(admin: ServiceClient, operationId: number): Promise<
   const sub = subRow as SubscriptionRow;
   const warnings: string[] = [];
 
-  let stripe: { voided_invoice_ids: string[]; already_canceled: boolean } | null = null;
+  let stripe: { already_canceled: boolean } | null = null;
   if (op.rail === "stripe" && !op.recorded_at && !op.finished_at) {
     let alreadyCanceled = false;
     // Nothing to ask Stripe when it's already ended here, or the marker already covers this request.
@@ -298,11 +327,10 @@ async function runOperation(admin: ServiceClient, operationId: number): Promise<
         if (stampError) throw stampError;
       }
     }
-    const voids = op.void_invoices && sub.stripe_subscription_id
-      ? await voidStripeInvoices(sub.stripe_subscription_id)
-      : { voided: [], warnings: [] };
-    warnings.push(...voids.warnings);
-    stripe = { voided_invoice_ids: voids.voided, already_canceled: alreadyCanceled };
+    if (op.void_invoices && sub.stripe_subscription_id) {
+      warnings.push(...await voidStripeInvoices(admin, op.id, sub.stripe_subscription_id));
+    }
+    stripe = { already_canceled: alreadyCanceled };
   }
 
   // One transaction, and a repeat is a no-op. A passing failure is retried

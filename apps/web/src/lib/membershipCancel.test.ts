@@ -68,6 +68,7 @@ function fakeStripe() {
       list: vi.fn<(params: Record<string, unknown>) => Promise<{ data: { id: string }[]; has_more: boolean }>>(
         async () => ({ data: [], has_more: false })),
       voidInvoice: vi.fn(async (id: string) => ({ id, status: "void" })),
+      retrieve: vi.fn(async (id: string): Promise<{ id: string; status: string | undefined }> => ({ id, status: "open" })),
     },
     webhooks: { constructEvent: vi.fn() },
   };
@@ -638,6 +639,85 @@ describe("card (Stripe): one operation per cancel, finished by the billing cron"
     })]);
     expect(result).toMatchObject({ resumed: true, outcome: "canceled", door: { revokedSlot: 12 }, voidedInvoiceIds: ["in_overdue"] });
     expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+  });
+});
+
+describe("card (Stripe): invoice voids are saved against the operation", () => {
+  /** Stripe's invoices as a store: a voided one leaves the open list, and voiding it again fails like Stripe does. */
+  function statefulInvoices(ids: string[]) {
+    const status = new Map(ids.map((id) => [id, "open"]));
+    stripe.invoices.list.mockImplementation(async () => ({ data: ids.filter((id) => status.get(id) === "open").map((id) => ({ id })), has_more: false }));
+    stripe.invoices.voidInvoice.mockImplementation(async (id: string) => {
+      if (status.get(id) !== "open") throw Object.assign(new Error("You can only pass in open invoices"), { type: "StripeInvalidRequestError" });
+      status.set(id, "void");
+      return { id, status: "void" };
+    });
+    stripe.invoices.retrieve.mockImplementation(async (id: string) => ({ id, status: status.get(id) }));
+    return status;
+  }
+  const overdue = () => seed({ rail: "stripe", status: "past_due", pastDueSince: iso(-10 * DAY) });
+
+  it("recording fails after Stripe voided the invoices: the billing cron's audit still lists them", async () => {
+    await overdue();
+    statefulInvoices(["in_a", "in_b"]);
+    await db.exec(`create function refuse_audit() returns trigger language plpgsql as $$ begin raise exception 'audit insert failed'; end $$;
+      create trigger refuse_audit before insert on admin_actions for each row execute function refuse_audit();`);
+    await expect(cancel({ reason: "Moved away", voidOpenInvoices: true })).rejects.toMatchObject({ status: 500 });
+    await db.exec("drop trigger refuse_audit on admin_actions");
+
+    expect((await runCron()).status).toBe(200);
+    expect(await audits()).toEqual([expect.objectContaining({
+      actor_member_id: 1, payload: expect.objectContaining({ reason: "Moved away", voided_invoice_ids: ["in_a", "in_b"] }),
+    })]);
+    expect(stripe.invoices.voidInvoice).toHaveBeenCalledTimes(2);
+  });
+
+  it("the run stops after Stripe voided an invoice but before saving that: recovery reads it back as voided", async () => {
+    await overdue();
+    statefulInvoices(["in_a"]);
+    // The first save is 'pending'; the process stops just before the second ('voided').
+    db.beforeNextWrite("rpc:admin_cancel_stripe_void", () =>
+      db.beforeNextWrite("rpc:admin_cancel_stripe_void", () => { throw new Error("process stopped"); }));
+    await expect(cancel({ voidOpenInvoices: true })).rejects.toThrow(/process stopped/);
+    expect(await db.sql("select invoice_id, outcome from admin_cancel_stripe_voids")).toEqual([{ invoice_id: "in_a", outcome: "pending" }]);
+
+    expect((await runCron()).status).toBe(200);
+    expect((await audits())[0].payload).toMatchObject({ voided_invoice_ids: ["in_a"] });
+    expect(await db.sql("select invoice_id, outcome from admin_cancel_stripe_voids")).toEqual([{ invoice_id: "in_a", outcome: "voided" }]);
+  });
+
+  it("two runners voiding the same invoice: the second reads it back as void, with no false warning", async () => {
+    await overdue();
+    const status = statefulInvoices(["in_a"]);
+    let first = true;
+    // The billing cron runs this same operation while the request's void is on its way, and voids it first.
+    stripe.invoices.voidInvoice.mockImplementation(async (id: string) => {
+      if (first) { first = false; await runCron(); }
+      if (status.get(id) !== "open") throw Object.assign(new Error("You can only pass in open invoices"), { type: "StripeInvalidRequestError" });
+      status.set(id, "void");
+      return { id, status: "void" };
+    });
+    const result = await cancel({ voidOpenInvoices: true });
+
+    expect(stripe.invoices.voidInvoice).toHaveBeenCalledTimes(2);
+    expect(result.warnings.join(" ")).not.toMatch(/Could not void/);
+    expect(result.voidedInvoiceIds).toEqual(["in_a"]);
+    expect(await audits()).toEqual([expect.objectContaining({ payload: expect.objectContaining({ voided_invoice_ids: ["in_a"] }) })]);
+  });
+
+  it("a void that fails is audited as failed; one that lands after the record is added to the audit row", async () => {
+    await overdue();
+    statefulInvoices(["in_a", "in_b"]);
+    stripe.invoices.voidInvoice.mockImplementationOnce(async () => { throw new Error("Stripe is down"); });
+    const result = await cancel({ voidOpenInvoices: true });
+    expect(result.warnings.join(" ")).toMatch(/Could not void Stripe invoice in_a/);
+    expect((await audits())[0].payload).toMatchObject({ voided_invoice_ids: ["in_b"], void_failed_invoice_ids: ["in_a"] });
+
+    // A second runner of the operation voids in_a after the first recorded it.
+    const [{ id }] = await operations();
+    expect((await db.rpc("admin_cancel_stripe_void", { p_operation_id: id, p_invoice_id: "in_a", p_outcome: "voided" })).error).toBeNull();
+    expect((await audits())[0].payload).toMatchObject({ voided_invoice_ids: ["in_b", "in_a"], void_failed_invoice_ids: [] });
+    expect(await audits()).toHaveLength(1);
   });
 });
 

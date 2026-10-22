@@ -70,6 +70,22 @@ alter table admin_cancel_operations enable row level security;
 revoke all on admin_cancel_operations from public, anon, authenticated;
 grant select on admin_cancel_operations to service_role;
 
+-- Each Stripe invoice a card operation voids, saved against the operation as
+-- the app goes: 'pending' just before it asks Stripe, then 'voided' or
+-- 'failed'. A voided invoice no longer shows as open at Stripe, so this, not
+-- a fresh listing, is what the audit row reports; a run that finds a row
+-- still pending or failed reads the invoice back from Stripe and settles it.
+create table admin_cancel_stripe_voids (
+  operation_id bigint not null references admin_cancel_operations(id),
+  invoice_id   text not null,
+  outcome      text not null check (outcome in ('pending', 'voided', 'failed')),
+  updated_at   timestamptz not null default now(),
+  primary key (operation_id, invoice_id)
+);
+alter table admin_cancel_stripe_voids enable row level security;
+revoke all on admin_cancel_stripe_voids from public, anon, authenticated;
+grant select on admin_cancel_stripe_voids to service_role;
+
 -- Void the subscription's payable invoices for periods starting at or after
 -- p_from (all of them when null). A gasless authorization not yet sent is
 -- expired first: the relayer claims a job only from the status it read, so
@@ -145,6 +161,32 @@ language sql security definer set search_path = public as $$
     where id = p_operation_id and stripe_done_at is null and finished_at is null
 $$;
 
+-- Save what happened to one Stripe invoice void of this operation. 'voided'
+-- is final. Takes the operation's lock, so it lands either before
+-- record_admin_cancel reads the voids or after it; after, a voided invoice is
+-- added to the operation's audit row (a second runner's void can finish
+-- after the first runner recorded).
+create function admin_cancel_stripe_void(p_operation_id bigint, p_invoice_id text, p_outcome text) returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  op admin_cancel_operations%rowtype;
+begin
+  select * into op from admin_cancel_operations where id = p_operation_id for update;
+  if not found then raise exception 'admin cancel operation % not found', p_operation_id using errcode = 'P0002'; end if;
+  insert into admin_cancel_stripe_voids (operation_id, invoice_id, outcome) values (op.id, p_invoice_id, p_outcome)
+    on conflict (operation_id, invoice_id) do update set outcome = excluded.outcome, updated_at = now()
+    where admin_cancel_stripe_voids.outcome <> 'voided';
+  if p_outcome = 'voided' and op.recorded_at is not null then
+    update admin_actions set payload = payload
+      || jsonb_build_object('voided_invoice_ids', coalesce(payload->'voided_invoice_ids', '[]') || to_jsonb(p_invoice_id))
+      || case when payload ? 'void_failed_invoice_ids'
+           then jsonb_build_object('void_failed_invoice_ids', (payload->'void_failed_invoice_ids') - p_invoice_id) else '{}' end
+    where action = 'subscription_canceled_by_admin' and payload->>'operation_id' = op.id::text
+      and not coalesce(payload->'voided_invoice_ids', '[]') ? p_invoice_id;
+  end if;
+end;
+$$;
+
 -- Stripe refused this operation's cancel before anything was recorded: close
 -- it so it doesn't block the next request. Only this operation.
 create function abandon_admin_cancel(p_operation_id bigint) returns boolean
@@ -168,7 +210,8 @@ $$;
 -- paid or invoiced. Any other operation is finished here.
 --
 -- Card operations need stripe_done_at first. p_stripe, for cards:
--- {"voided_invoice_ids": [...], "already_canceled": bool}.
+-- {"already_canceled": bool}. Their invoice voids are read from
+-- admin_cancel_stripe_voids.
 create function record_admin_cancel(p_operation_id bigint, p_stripe jsonb default null) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
@@ -178,6 +221,7 @@ declare
   ends_at timestamptz;
   v record;
   voided text[] := '{}';
+  void_failed text[] := '{}';
   in_flight text[] := '{}';
   paid_ahead text[] := '{}';
   outcome text;
@@ -210,13 +254,16 @@ begin
           select * into v from void_admin_canceled_invoices(s.id, null);
           select coalesce(array_agg(x::text), '{}') into voided from unnest(v.voided) x;
         else
-          select coalesce(array_agg(x), '{}') into voided from jsonb_array_elements_text(coalesce(p_stripe->'voided_invoice_ids', '[]')) x;
+          select coalesce(array_agg(sv.invoice_id order by sv.invoice_id) filter (where sv.outcome = 'voided'), '{}'),
+                 coalesce(array_agg(sv.invoice_id order by sv.invoice_id) filter (where sv.outcome <> 'voided'), '{}')
+            into voided, void_failed from admin_cancel_stripe_voids sv where sv.operation_id = op.id;
         end if;
         if cardinality(voided) > 0 then
           insert into admin_actions (actor_member_id, action, target_table, target_id, payload)
           values (op.actor_member_id, 'subscription_canceled_by_admin', 'members', s.member_id::text, jsonb_strip_nulls(jsonb_build_object(
             'subscription_id', s.id, 'operation_id', op.id, 'rail', s.payment_rail, 'mode', op.mode, 'outcome', outcome,
-            'reason', op.reason, 'access_ends_at', s.admin_cancel_ends_at, 'voided_invoice_ids', to_jsonb(voided))));
+            'reason', op.reason, 'access_ends_at', s.admin_cancel_ends_at, 'voided_invoice_ids', to_jsonb(voided),
+            'void_failed_invoice_ids', case when cardinality(void_failed) > 0 then to_jsonb(void_failed) end)));
         end if;
       end if;
       update admin_cancel_operations set recorded_at = now(),
@@ -267,7 +314,9 @@ begin
     select coalesce(array_agg(id::text order by id), '{}') into paid_ahead from onchain_invoices
       where subscription_id = s.id and status = 'paid' and period_end > ends_at;
   else
-    select coalesce(array_agg(x), '{}') into voided from jsonb_array_elements_text(coalesce(p_stripe->'voided_invoice_ids', '[]')) x;
+    select coalesce(array_agg(sv.invoice_id order by sv.invoice_id) filter (where sv.outcome = 'voided'), '{}'),
+           coalesce(array_agg(sv.invoice_id order by sv.invoice_id) filter (where sv.outcome <> 'voided'), '{}')
+      into voided, void_failed from admin_cancel_stripe_voids sv where sv.operation_id = op.id;
   end if;
 
   insert into admin_actions (actor_member_id, action, target_table, target_id, payload)
@@ -276,6 +325,7 @@ begin
     'reason', op.reason, 'access_ends_at', ends_at,
     'voided_invoice_ids', to_jsonb(voided), 'in_flight_invoice_ids', to_jsonb(in_flight),
     'paid_ahead_invoice_ids', to_jsonb(paid_ahead),
+    'void_failed_invoice_ids', case when cardinality(void_failed) > 0 then to_jsonb(void_failed) end,
     'stripe_already_canceled', case when (p_stripe->>'already_canceled')::boolean then true end)))
   returning id into audit_id;
   update subscriptions set admin_cancel_audit_id = audit_id where id = s.id;
@@ -541,6 +591,8 @@ revoke all on function begin_admin_cancel(integer, text, integer, text, boolean)
 grant execute on function begin_admin_cancel(integer, text, integer, text, boolean) to service_role;
 revoke all on function admin_cancel_stripe_done(bigint) from public, anon, authenticated;
 grant execute on function admin_cancel_stripe_done(bigint) to service_role;
+revoke all on function admin_cancel_stripe_void(bigint, text, text) from public, anon, authenticated;
+grant execute on function admin_cancel_stripe_void(bigint, text, text) to service_role;
 revoke all on function abandon_admin_cancel(bigint) from public, anon, authenticated;
 grant execute on function abandon_admin_cancel(bigint) to service_role;
 revoke all on function record_admin_cancel(bigint, jsonb) from public, anon, authenticated;
