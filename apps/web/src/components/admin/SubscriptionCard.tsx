@@ -235,6 +235,11 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
                   cancels {fmtDate(activeSubscription.current_period_end)}
                 </Badge>
               )}
+              {activeSubscription.pending_plan_key && (
+                <Badge className="text-xs bg-sky-500/15 text-sky-300 border-sky-500/30">
+                  → {planLabel(activeSubscription.pending_plan_key)} on {fmtDate(activeSubscription.pending_plan_at ?? null)}
+                </Badge>
+              )}
             </div>
             {activeSubscription.discount_cents != null && activeSubscription.discount_cents > 0 && (
               <p className="text-xs text-muted">

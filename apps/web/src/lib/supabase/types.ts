@@ -270,6 +270,10 @@ export interface Database {
           admin_cancel_mode?: "now" | "period_end" | null;
           admin_cancel_ends_at?: string | null;
           admin_cancel_audit_id?: number | null;
+          /** A desk → daily switch waiting for the paid period to end (migration 060). */
+          pending_plan_key?: PlanKey | null;
+          pending_plan_at?: string | null;
+          pending_plan_schedule_id?: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -301,6 +305,10 @@ export interface Database {
           admin_cancel_mode?: "now" | "period_end" | null;
           admin_cancel_ends_at?: string | null;
           admin_cancel_audit_id?: number | null;
+          /** A desk → daily switch waiting for the paid period to end (migration 060). */
+          pending_plan_key?: PlanKey | null;
+          pending_plan_at?: string | null;
+          pending_plan_schedule_id?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["subscriptions"]["Insert"]>;
         Relationships: [];

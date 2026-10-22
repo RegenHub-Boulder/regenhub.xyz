@@ -3,6 +3,15 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { getStripe, getPlan, isStripeConfigured, PLANS } from "@/lib/stripe";
 import { AuditAction, logAction } from "@/lib/auditLog";
+import { isDeskPlan } from "@/lib/plans";
+import {
+  cancelPendingSwitch,
+  isDeskToDaily,
+  PlanSwitchError,
+  resolvePlanProduct,
+  scheduleDeskToDaily,
+  type PendingSwitchRow,
+} from "@/lib/planSwitch";
 import type { PlanKey } from "@/lib/supabase/types";
 
 interface ChangePlanBody {
@@ -19,11 +28,15 @@ interface ChangePlanBody {
  * changes.
  *
  * On-chain plans are prospective: issued invoices retain their prices and access
- * follows the paid invoice snapshot. Stripe switching FROM a desk tier IS blocked here — downgrading off a desk
- * needs an admin touch to revoke the door code and free the PIN slot.
+ * follows the paid invoice snapshot for the period it covers.
  *
- * Uses create_prorations so members aren't surprised by an immediate
- * charge; the difference shows up on their next renewal invoice.
+ * Card, desk → daily: scheduled for the end of the paid period (lib/planSwitch.ts);
+ * the member keeps the desk and its door code until then, and the Stripe
+ * webhook ends desk access when the daily phase starts. Desk ↔ desk still needs
+ * an admin.
+ *
+ * Other card changes use create_prorations so members aren't surprised by an
+ * immediate charge; the difference shows up on their next renewal invoice.
  */
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -63,7 +76,7 @@ export async function POST(req: Request) {
   const admin = createServiceClient();
   const { data: sub } = await admin
     .from("subscriptions")
-    .select("id, stripe_subscription_id, payment_rail, plan_key, status")
+    .select("id, member_id, stripe_subscription_id, payment_rail, plan_key, status, pending_plan_key, pending_plan_at, pending_plan_schedule_id")
     .eq("member_id", member.id)
     .in("status", ["active", "trialing", "past_due"])
     .order("created_at", { ascending: false })
@@ -76,17 +89,22 @@ export async function POST(req: Request) {
     );
   }
 
-  // Block leaving a desk tier via self-serve — admins reclaim the door code
-  // and free the PIN slot, which the change-plan path doesn't do.
-  const current = getPlan(sub.plan_key);
-  const onDesk =
-    current?.grantsMemberType === "cold_desk" || current?.grantsMemberType === "hot_desk";
-  if (onDesk && sub.payment_rail !== "onchain") {
+  // A desk → daily switch is already waiting for the period to end.
+  if (sub.pending_plan_key) {
+    if (sub.pending_plan_key === targetKey) {
+      return NextResponse.json({ ok: true, scheduled: true, effectiveAt: sub.pending_plan_at, to: target.label });
+    }
     return NextResponse.json(
-      {
-        error:
-          "Switching off Full Access still needs an admin touch so we can reclaim your door code. Email boulder.regenhub@gmail.com.",
-      },
+      { error: "You already have a plan switch scheduled. Cancel it first, then pick again." },
+      { status: 409 },
+    );
+  }
+
+  const deskToDaily = sub.payment_rail !== "onchain" && isDeskToDaily(sub.plan_key, targetKey);
+  // Moving between Hot and Cold Desk keeps a door code but changes the desk; an admin does it.
+  if (sub.payment_rail !== "onchain" && isDeskPlan(sub.plan_key) && !deskToDaily) {
+    return NextResponse.json(
+      { error: "Moving between desk plans still needs an admin touch. Email boulder.regenhub@gmail.com." },
       { status: 400 },
     );
   }
@@ -121,6 +139,27 @@ export async function POST(req: Request) {
   }
   if (!isStripeConfigured()) return NextResponse.json({ error: "Stripe is not configured" }, { status: 503 });
 
+  if (deskToDaily) {
+    try {
+      const { effectiveAt } = await scheduleDeskToDaily(admin, {
+        sub: sub as PendingSwitchRow,
+        targetKey,
+        actorMemberId: member.id,
+      });
+      return NextResponse.json({
+        ok: true,
+        scheduled: true,
+        effectiveAt,
+        from: getPlan(sub.plan_key)?.label ?? sub.plan_key,
+        to: target.label,
+      });
+    } catch (err) {
+      if (err instanceof PlanSwitchError) return NextResponse.json({ error: err.message }, { status: err.status });
+      console.error("[ChangePlan] Scheduling the switch failed:", err);
+      return NextResponse.json({ error: "Plan change failed" }, { status: 500 });
+    }
+  }
+
   // Fetch the Stripe subscription to get the current item id (need it to swap)
   const stripe = getStripe();
   let liveSub;
@@ -135,23 +174,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Subscription has no items?" }, { status: 500 });
   }
 
-  const productId = target.productIdEnvKey ? process.env[target.productIdEnvKey] : undefined;
-
-  // Stripe's subscriptions.update only accepts `product` (existing ID) inside
-  // items[].price_data, not `product_data`. To swap the pricing inline without
-  // requiring pre-created Products, we resolve a product first:
-  //   1. If STRIPE_PRODUCT_<TIER> env var is set, use that
-  //   2. Otherwise create an ephemeral Stripe product on the fly
-  let productIdForUpdate: string;
-  if (productId) {
-    productIdForUpdate = productId;
-  } else {
-    const product = await stripe.products.create({
-      name: target.label,
-      metadata: { plan_key: targetKey, ephemeral: "true" },
-    });
-    productIdForUpdate = product.id;
-  }
+  const productIdForUpdate = await resolvePlanProduct(stripe, targetKey, target);
 
   try {
     await stripe.subscriptions.update(sub.stripe_subscription_id, {
@@ -188,4 +211,45 @@ export async function POST(req: Request) {
     from: PLANS[sub.plan_key as keyof typeof PLANS]?.label ?? sub.plan_key,
     to: target.label,
   });
+}
+
+/**
+ * DELETE /api/portal/change-plan
+ *
+ * Cancel a pending desk → daily switch before it takes effect. The Stripe
+ * schedule is released, so the subscription simply renews on the desk plan.
+ */
+export async function DELETE() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { data: member } = await supabase
+    .from("members")
+    .select("id, disabled")
+    .eq("supabase_user_id", user.id)
+    .single();
+  if (!member) return NextResponse.json({ error: "Member profile not found" }, { status: 404 });
+  if (member.disabled) return NextResponse.json({ error: "Member is disabled" }, { status: 403 });
+
+  const admin = createServiceClient();
+  const { data: sub, error } = await admin
+    .from("subscriptions")
+    .select("id, member_id, stripe_subscription_id, plan_key, pending_plan_key, pending_plan_at, pending_plan_schedule_id")
+    .eq("member_id", member.id)
+    .not("pending_plan_key", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) return NextResponse.json({ error: "Could not load your subscription" }, { status: 500 });
+  if (!sub) return NextResponse.json({ error: "There's no plan switch to cancel." }, { status: 404 });
+
+  try {
+    await cancelPendingSwitch(admin, { sub: sub as PendingSwitchRow, actorMemberId: member.id, reason: "member" });
+  } catch (err) {
+    if (err instanceof PlanSwitchError) return NextResponse.json({ error: err.message }, { status: err.status });
+    console.error("[ChangePlan] Cancelling the switch failed:", err);
+    return NextResponse.json({ error: "Could not cancel the switch" }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true, canceled: true, keeps: getPlan(sub.plan_key)?.label ?? sub.plan_key });
 }

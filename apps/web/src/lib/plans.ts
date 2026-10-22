@@ -115,6 +115,12 @@ export function getPlan(planKey: PlanKey): PlanDef | null {
   return (PLANS as Record<string, PlanDef | undefined>)[planKey] ?? null;
 }
 
+/** Desk plans carry a permanent door code; leaving one ends it. */
+export function isDeskPlan(planKey: PlanKey | null | undefined): boolean {
+  const type = planKey ? getPlan(planKey)?.grantsMemberType : null;
+  return type === "cold_desk" || type === "hot_desk";
+}
+
 export function planLabel(planKey: PlanKey): string {
   return getPlan(planKey)?.label ?? planKey;
 }

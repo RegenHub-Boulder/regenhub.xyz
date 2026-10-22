@@ -16,6 +16,8 @@ import {
   downgradeMembershipAccess,
 } from "@/lib/membershipLifecycle";
 import { grantSubscriptionPasses } from "@/lib/subscriptionPasses";
+import { isDeskPlan } from "@/lib/plans";
+import { endDeskAccessForSwitch, releaseLandedSchedule, type SwitchLanded } from "@/lib/planSwitch";
 import { withLockWriter } from "@regenhub/shared";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
@@ -208,44 +210,58 @@ async function handleCheckoutCompleted(
   return result.member_id ?? null;
 }
 
+function scheduleIdOf(sub: Stripe.Subscription): string | null {
+  return typeof sub.schedule === "string" ? sub.schedule : sub.schedule?.id ?? null;
+}
+
 /**
- * For a subscription an admin canceled, an event can be older than the cancel
- * (Stripe doesn't guarantee delivery order), so use Stripe's current state of
- * the subscription instead of the event's. A canceled Stripe subscription
- * never comes back, so a cancel-now can't be undone this way. If Stripe now
- * says a period-end cancel is off, the member renewed after the admin's
- * cancel (e.g. in the billing portal): that's an explicit re-subscribe, and
- * the marker is lifted.
+ * Stripe doesn't guarantee delivery order, so for some subscriptions an event
+ * may be older than what we already know, and Stripe's current state of the
+ * subscription is used instead of the event's:
+ *
+ * - An admin canceled it. A canceled Stripe subscription never comes back, so
+ *   a cancel-now can't be undone this way. If Stripe now says a period-end
+ *   cancel is off, the member renewed after the admin's cancel (e.g. in the
+ *   billing portal): that's an explicit re-subscribe, and the marker is lifted.
+ * - The event names a different plan from ours (a plan change, or an older
+ *   event arriving after one): a pre-switch "Hot Desk" event must not bring a
+ *   desk back after a desk → daily switch landed.
+ * - A desk → daily switch is pending and the event doesn't carry its schedule.
  */
-async function currentIfAdminCanceled(admin: ServiceClient, sub: Stripe.Subscription): Promise<Stripe.Subscription> {
+async function currentStateFor(admin: ServiceClient, sub: Stripe.Subscription): Promise<Stripe.Subscription> {
   const { data: row, error } = await admin
     .from("subscriptions")
-    .select("admin_cancel_mode")
+    .select("admin_cancel_mode, plan_key, pending_plan_schedule_id")
     .eq("stripe_subscription_id", sub.id)
     .maybeSingle();
   if (error) throw error;
-  if (!row?.admin_cancel_mode) return sub;
-  const current = await getStripe().subscriptions.retrieve(sub.id);
-  if (current.status !== "canceled" && !current.cancel_at_period_end) {
-    const { error: liftError } = await admin
-      .from("subscriptions")
-      .update({ admin_canceled_at: null, admin_canceled_by: null, admin_cancel_reason: null, admin_cancel_mode: null, admin_cancel_ends_at: null, admin_cancel_audit_id: null })
-      .eq("stripe_subscription_id", sub.id)
-      .eq("admin_cancel_mode", "period_end");
-    if (liftError) throw liftError;
+  if (!row) return sub;
+  if (row.admin_cancel_mode) {
+    const current = await getStripe().subscriptions.retrieve(sub.id);
+    if (current.status !== "canceled" && !current.cancel_at_period_end) {
+      const { error: liftError } = await admin
+        .from("subscriptions")
+        .update({ admin_canceled_at: null, admin_canceled_by: null, admin_cancel_reason: null, admin_cancel_mode: null, admin_cancel_ends_at: null, admin_cancel_audit_id: null })
+        .eq("stripe_subscription_id", sub.id)
+        .eq("admin_cancel_mode", "period_end");
+      if (liftError) throw liftError;
+    }
+    return current;
   }
-  return current;
+  const stalePlan = row.plan_key !== sub.metadata?.plan_key;
+  const staleSchedule = !!row.pending_plan_schedule_id && scheduleIdOf(sub) !== row.pending_plan_schedule_id;
+  return stalePlan || staleSchedule ? getStripe().subscriptions.retrieve(sub.id) : sub;
 }
 
 async function handleSubscriptionCreated(
   admin: ServiceClient,
   sub: Stripe.Subscription,
 ): Promise<number | null> {
-  return upsertSubscription(admin, await currentIfAdminCanceled(admin, sub), { isNew: true });
+  return upsertSubscription(admin, await currentStateFor(admin, sub), { isNew: true });
 }
 
 async function handleSubscriptionUpdated(admin: ServiceClient, event: Stripe.Subscription): Promise<number | null> {
-  const sub = await currentIfAdminCanceled(admin, event);
+  const sub = await currentStateFor(admin, event);
   // Capture previous state to detect transitions
   const { data: prev } = await admin
     .from("subscriptions")
@@ -336,6 +352,10 @@ async function handleSubscriptionDeleted(admin: ServiceClient, sub: Stripe.Subsc
       status: sub.status,
       canceled_at: new Date().toISOString(),
       cancel_at_period_end: sub.cancel_at_period_end,
+      // A desk → daily switch still pending dies with the subscription.
+      pending_plan_key: null,
+      pending_plan_at: null,
+      pending_plan_schedule_id: null,
     })
     .eq("stripe_subscription_id", sub.id);
 
@@ -602,6 +622,25 @@ async function upsertSubscription(
     }
   }
 
+  // Leaving a desk (a desk → daily switch landing at the period boundary, or a
+  // change made at Stripe): end desk access before recording the new plan, so
+  // a failure here fails the event and Stripe's redelivery runs it again.
+  const { data: local, error: localError } = await admin
+    .from("subscriptions")
+    .select("id, plan_key, pending_plan_key, pending_plan_schedule_id")
+    .eq("stripe_subscription_id", sub.id)
+    .maybeSingle();
+  if (localError) throw localError;
+  let switchLanded: SwitchLanded | null = null;
+  if (local && isDeskPlan(local.plan_key) && !isDeskPlan(planKey)) {
+    switchLanded = await endDeskAccessForSwitch(admin, {
+      subscriptionId: local.id, memberId: member.id, rail: "stripe", from: local.plan_key, to: planKey,
+    });
+  }
+  // The pending switch is done (landed), or gone (its schedule was released at Stripe).
+  const clearPending = !!local?.pending_plan_key &&
+    (switchLanded != null || local.pending_plan_key === planKey || scheduleIdOf(sub) !== local.pending_plan_schedule_id);
+
   const status = sub.status as StripeSubscriptionStatus;
   // Stripe v20 moved current_period_end to the SubscriptionItem (per-item billing periods)
   const periodEndUnix = sub.items.data[0]?.current_period_end;
@@ -623,9 +662,25 @@ async function upsertSubscription(
     discount_duration: discountSnapshot.duration,
     discount_months: discountSnapshot.months,
     discount_note: discountSnapshot.note,
+    ...(clearPending ? { pending_plan_key: null, pending_plan_at: null, pending_plan_schedule_id: null } : {}),
   };
 
-  await admin.from("subscriptions").upsert(row, { onConflict: "stripe_subscription_id" });
+  const { error: upsertError } = await admin.from("subscriptions").upsert(row, { onConflict: "stripe_subscription_id" });
+  if (upsertError) throw upsertError;
+
+  if (switchLanded && local) {
+    // Only our own schedule: one an admin made in the dashboard is theirs to manage.
+    await releaseLandedSchedule(local.pending_plan_schedule_id);
+    const door = switchLanded.lockRevokeFailed
+      ? "\n\n⚠️ *Action needed:* the desk door code could not be cleared on every lock; the slot is quarantined. Run Lock Sync from /admin/access."
+      : switchLanded.revokedSlot
+        ? `\n\n🔒 Cleared desk PIN slot ${switchLanded.revokedSlot}${switchLanded.lockStatus ? `: ${switchLanded.lockStatus}` : ""}`
+        : "";
+    await notifyTelegram(
+      `🔁 ${member.name} moved from ${planLabel(local.plan_key)} to ${planLabel(planKey)} ($${monthlyCents / 100}/mo).${door}`,
+      { silent: !switchLanded.lockRevokeFailed },
+    );
+  }
 
   // Side effects: only grant access when status flips to active/trialing
   let autoAllocatedSlot: number | null = null;
