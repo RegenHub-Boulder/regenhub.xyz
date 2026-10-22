@@ -5,6 +5,8 @@ import { getStripe, getPlan, isStripeConfigured, PLANS } from "@/lib/stripe";
 import { AuditAction, logAction } from "@/lib/auditLog";
 import { isDeskPlan } from "@/lib/plans";
 import {
+  adminCancelInProgress,
+  CANCEL_IN_PROGRESS_MESSAGE,
   cancelPendingSwitch,
   isDeskToDaily,
   PlanSwitchError,
@@ -89,6 +91,11 @@ export async function POST(req: Request) {
     );
   }
 
+  // An admin cancel wins over any plan change, on both rails.
+  const canceling = await adminCancelInProgress(admin, sub.id).catch(() => null);
+  if (canceling == null) return NextResponse.json({ error: "Could not load your subscription" }, { status: 500 });
+  if (canceling) return NextResponse.json({ error: CANCEL_IN_PROGRESS_MESSAGE }, { status: 409 });
+
   // A desk → daily switch is already waiting for the period to end.
   if (sub.pending_plan_key) {
     if (sub.pending_plan_key === targetKey) {
@@ -130,9 +137,11 @@ export async function POST(req: Request) {
   }
 
   if (sub.payment_rail === "onchain") {
-    const { error } = await admin.from("subscriptions").update({ plan_key: targetKey, monthly_cents: target.defaultMonthlyCents })
-      .eq("id", sub.id).eq("payment_rail", "onchain");
+    const { data: changed, error } = await admin.from("subscriptions").update({ plan_key: targetKey, monthly_cents: target.defaultMonthlyCents })
+      .eq("id", sub.id).eq("payment_rail", "onchain").is("admin_cancel_mode", null)
+      .select("id").maybeSingle();
     if (error) return NextResponse.json({ error: "Could not change plan" }, { status: 500 });
+    if (!changed) return NextResponse.json({ error: CANCEL_IN_PROGRESS_MESSAGE }, { status: 409 });
     await logAction({ action: AuditAction.ONCHAIN_SUBSCRIPTION_CHANGED, actorMemberId: member.id,
       target: { table: "subscriptions", id: sub.id }, payload: { from: sub.plan_key, to: targetKey, source: "self_serve" } }, admin);
     return NextResponse.json({ ok: true, message: "Plan saved for the next invoice. Issued invoices keep their price; access changes when the new invoice is paid." });

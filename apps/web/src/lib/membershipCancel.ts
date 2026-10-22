@@ -330,12 +330,15 @@ async function runOperation(admin: ServiceClient, operationId: number): Promise<
         }
       }
       const stripeMode = op.mode === "now" || sub.status === "incomplete" ? "now" : "period_end";
-      alreadyCanceled = await cancelAtStripe(admin, op, sub, stripeMode).catch((error: unknown) => {
-        // The switch is already dropped; say so, since the member now renews on the desk until a cancel lands.
-        if (error instanceof CancelMembershipError && sub.pending_plan_schedule_id) {
-          throw new CancelMembershipError(`${error.message} The member's scheduled switch to ${planLabel(sub.pending_plan_key ?? "")} was dropped first; their plan stays as it is until you cancel.`, error.status);
-        }
-        throw error;
+      alreadyCanceled = await cancelAtStripe(admin, op, sub, stripeMode).catch(async (error: unknown) => {
+        if (!(error instanceof CancelMembershipError) || !sub.pending_plan_schedule_id) throw error;
+        // The switch is already dropped; say so. If Stripe refused (the
+        // operation is closed), the member now renews on the desk until a cancel lands.
+        const { data: after } = await admin.from("admin_cancel_operations").select("finished_at").eq("id", op.id).single();
+        const dropped = `The member's scheduled switch to ${planLabel(sub.pending_plan_key ?? "")} was dropped first`;
+        throw new CancelMembershipError(after?.finished_at
+          ? `${error.message} ${dropped}; their plan stays as it is until you cancel again.`
+          : `${error.message} ${dropped}.`, error.status);
       }) === "already_canceled";
       if (alreadyCanceled) warnings.push("Stripe had already canceled this subscription (a missed webhook); it is now ended here too.");
       const { error: stampError } = await admin.rpc("admin_cancel_stripe_done", { p_operation_id: op.id });
