@@ -182,13 +182,19 @@ subscription schedule (idempotency key `plan-switch-<id>`; a schedule whose id w
 subscription), sets its phases (phase 0 re-sends an archived inline price as `price_data`), then
 `record_plan_switch` writes `subscriptions.pending_*` and the audit row in one transaction. A definite refusal
 releases what was made; an unclear outcome stays open for the billing cron (`sweepPlanSwitches`), and the member can
-drop it. The Stripe webhook lands the switch (ends desk access) when the daily phase starts. Every
+drop it. The runner claims the create first (`plan_switch_create_started`, refused once the request is decided), so
+cleanup of a decided request knows whether a create can still land: if one was claimed, cleanup settles it through
+the same idempotency key, releases the schedule, and sets a period-end cancellation again if the schedule took it.
+The Stripe webhook lands the switch (ends desk access) when the daily phase starts. Every
 `customer.subscription.created/updated` delivery runs from freshness check to access grant under one PIN-writer
-reservation, so out-of-order deliveries can't put a desk back. "Keep desk" reads Stripe back after the release and
-lands the switch if the daily phase already began. **Crypto:** `plan_key` changes at once (it prices the next
+reservation (`lib/stripeSubscriptionSync.ts`), so out-of-order deliveries can't put a desk back. "Keep desk" reads
+Stripe back after the release; if the daily phase already began, it settles the row through that same sync.
+A landing clears the switch and writes its `plan_switch_completed` audit in one transaction
+(`complete_plan_switch`), so a retry still finds it pending if the audit didn't commit. **Crypto:** `plan_key` changes at once (it prices the next
 invoice) and `pending_plan_*` (no schedule) marks the desk still held; the billing cron
-(`finishOnchainPlanSwitches`) ends only that desk once no paid desk period runs, and a desk given by hand later is
-left alone.
+(`finishOnchainPlanSwitches`) ends only that desk once no paid desk period runs, re-checking under the reservation
+that the switch is still pending and due, so a desk given by hand later is left alone even by a sweep that read the
+row earlier.
 
 ### Add a new member via bot
 Use `/admin → Add member` as an admin in the Telegram bot.

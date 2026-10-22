@@ -265,8 +265,9 @@ export async function finishOnchainPlanSwitches(admin: ServiceClient, now = new 
     try {
       const landed = await withLockWriter(admin, async () => {
         if (await deskPeriodRunning(admin, sub.member_id, now)) return undefined;
+        // dueBy: re-checked under the reservation, since this row was read before it.
         return endDeskAccessForSwitch(admin, {
-          subscriptionId: sub.id, memberId: sub.member_id, rail: "onchain", from: sub.pending_plan_from, to: sub.pending_plan_key,
+          subscriptionId: sub.id, memberId: sub.member_id, rail: "onchain", from: sub.pending_plan_from, to: sub.pending_plan_key, dueBy: now,
         });
       }, "On-chain plan switch");
       if (landed) results.push({ subscriptionId: sub.id, memberId: sub.member_id, revokedSlot: landed.revokedSlot });

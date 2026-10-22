@@ -15,9 +15,11 @@ import {
   PlanSwitchError,
   resolvePlanProduct,
   scheduleDeskToDaily,
+  SwitchAlreadyLandedError,
   type PendingSwitchRow,
 } from "@/lib/planSwitch";
 import type { PlanKey } from "@/lib/supabase/types";
+import { upsertSubscription } from "@/lib/stripeSubscriptionSync";
 
 interface ChangePlanBody {
   plan_key: PlanKey;
@@ -266,6 +268,16 @@ export async function DELETE() {
     }
     await cancelPendingSwitch(admin, { sub: sub as PendingSwitchRow, actorMemberId: member.id, reason: "member" });
   } catch (err) {
+    if (err instanceof SwitchAlreadyLandedError) {
+      // Settle the row as the webhook would: plan, pending switch and door access together.
+      try {
+        await upsertSubscription(admin, err.live, { isNew: false });
+      } catch (cause) {
+        // Stripe's own event for the new phase settles it.
+        console.error("[ChangePlan] Settling the landed switch failed:", cause);
+      }
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     if (err instanceof PlanSwitchError) return NextResponse.json({ error: err.message }, { status: err.status });
     console.error("[ChangePlan] Cancelling the switch failed:", err);
     return NextResponse.json({ error: "Could not cancel the switch" }, { status: 500 });
