@@ -15,6 +15,7 @@ import { CheckCircle2, Loader2, Wallet } from "lucide-react";
 import { RegenHubWalletProvider } from "@/components/web3/RegenHubWalletProvider";
 import { GaslessPaymentReview } from "@/components/web3/GaslessPaymentReview";
 import { pollOnchainPayment } from "@/lib/onchain/clientConfirmation";
+import { linkWalletWithSignature, WalletLinkError } from "@/lib/onchain/walletLink";
 import {
   assertExpectedAuthorization,
   relayAuthorizationRequest,
@@ -58,31 +59,29 @@ function OnchainBillingCardInner(props: Props) {
   const [paymentDetected, setPaymentDetected] = useState(props.invoice?.status === "detected");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Set when the wallet just proven is linked to another account that can let it go.
+  const [moveOffer, setMoveOffer] = useState<string | null>(null);
 
-  const connectAndVerify = useCallback(async () => {
+  const connectAndVerify = useCallback(async (move = false) => {
     if (!address) return;
-    setBusy(true); setError(null); setMessage("Confirm wallet ownership in your wallet…");
+    setBusy(true); setError(null); setMoveOffer(null);
+    setMessage(move ? "Sign the move request in your wallet…" : "Confirm wallet ownership in your wallet…");
     try {
       const checksummed = getAddress(address);
-      const challengeRes = await fetch("/api/portal/onchain/wallet/challenge", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address: checksummed }),
+      const verified = await linkWalletWithSignature({
+        address: checksummed,
+        signMessage: (message) => signMessageAsync({ account: checksummed, message }),
+        move,
       });
-      const challenge = await challengeRes.json();
-      if (!challengeRes.ok) throw new Error(challenge.error ?? "Could not create wallet challenge");
-      const signature = await withWalletTimeout(
-        signMessageAsync({ account: checksummed, message: challenge.message }),
-        "MetaMask did not respond to the ownership check. Open MetaMask and cancel any request still waiting there before trying again.",
-      );
-      const verifyRes = await fetch("/api/portal/onchain/wallet/verify", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ challenge_id: challenge.id, address: checksummed, signature }),
-      });
-      const verified = await verifyRes.json();
-      if (!verifyRes.ok) throw new Error(verified.error ?? "Wallet verification failed");
-      setMessage(`Verified ${checksummed.slice(0, 6)}…${checksummed.slice(-4)}. Refreshing…`);
+      const short = `${checksummed.slice(0, 6)}…${checksummed.slice(-4)}`;
+      setMessage(verified.moved ? `Moved ${short} to this account. Refreshing…` : `Verified ${short}. Refreshing…`);
       window.location.reload();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Wallet verification failed");
+      if (cause instanceof WalletLinkError && cause.code === "wallet_linked_elsewhere") {
+        setMoveOffer(cause.message);
+      } else {
+        setError(cause instanceof Error ? cause.message : "Wallet verification failed");
+      }
       setMessage(null);
     } finally { setBusy(false); }
   }, [address, signMessageAsync]);
@@ -297,7 +296,17 @@ function OnchainBillingCardInner(props: Props) {
         </ConnectButton.Custom>
       )}
 
-      {!props.walletVerifiedBySignature ? (
+      {moveOffer ? (
+        <div className="rounded-lg border border-amber-400/30 bg-amber-400/5 p-3 space-y-2">
+          <p className="text-xs">{moveOffer}</p>
+          <div className="flex gap-2 flex-wrap">
+            <Button disabled={busy} onClick={() => void connectAndVerify(true)} className="btn-glass text-xs gap-2">
+              {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Sign to move it here
+            </Button>
+            <Button variant="ghost" disabled={busy} onClick={() => setMoveOffer(null)} className="text-xs">Not now</Button>
+          </div>
+        </div>
+      ) : !props.walletVerifiedBySignature ? (
         <Button disabled={busy} onClick={() => begin("verify")} className="btn-glass text-xs gap-2">
           {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Connect & verify wallet
         </Button>

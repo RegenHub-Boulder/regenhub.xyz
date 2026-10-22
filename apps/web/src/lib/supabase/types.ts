@@ -327,6 +327,8 @@ export interface Database {
           message: string;
           expires_at: string;
           consumed_at: string | null;
+          purpose: "link" | "move";
+          move_from_wallet_id: number | null;
           created_at: string;
         };
         Insert: {
@@ -336,6 +338,8 @@ export interface Database {
           message: string;
           expires_at: string;
           consumed_at?: string | null;
+          purpose?: "link" | "move";
+          move_from_wallet_id?: number | null;
         };
         Update: Partial<Database["public"]["Tables"]["wallet_verification_challenges"]["Insert"]>;
         Relationships: [];
@@ -656,6 +660,18 @@ export interface Database {
           p_verified_by?: number | null;
         };
         Returns: number;
+      };
+      move_member_wallet: {
+        Args: { p_member_id: number; p_address: string; p_from_wallet_id: number };
+        Returns: number;
+      };
+      unlink_member_wallet: {
+        Args: { p_member_id: number; p_wallet_id: number };
+        Returns: number;
+      };
+      wallet_release_blocker: {
+        Args: { p_wallet_id: number };
+        Returns: "live_subscription" | "open_invoice" | "relay_in_flight" | null;
       };
       credit_onchain_invoice: {
         Args: {

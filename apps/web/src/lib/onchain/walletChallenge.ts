@@ -8,6 +8,8 @@ export function createWalletChallenge(args: {
   address: string;
   memberId: number;
   siteUrl: string;
+  /** "move" takes the wallet over from the account it is linked to now. */
+  purpose?: "link" | "move";
   now?: Date;
 }) {
   const now = args.now ?? new Date();
@@ -18,7 +20,9 @@ export function createWalletChallenge(args: {
     `${origin.host} wants you to verify this wallet for RegenHub billing:`,
     args.address,
     "",
-    "This signature proves wallet ownership. It does not authorize a payment.",
+    args.purpose === "move"
+      ? "This signature moves this wallet to your RegenHub account and removes it from the account it is linked to now. It does not authorize a payment."
+      : "This signature proves wallet ownership. It does not authorize a payment.",
     "",
     `URI: ${origin.origin}/portal`,
     "Version: 1",
