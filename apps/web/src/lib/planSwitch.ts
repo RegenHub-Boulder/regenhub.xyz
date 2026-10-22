@@ -54,6 +54,7 @@ type SwitchOperation = {
   to_plan: string;
   created_at: string;
   create_started_at: string | null;
+  cancel_at_period_end_before: boolean | null;
   schedule_id: string | null;
   effective_at: string | null;
   recorded_at: string | null;
@@ -194,41 +195,56 @@ async function decide(admin: ServiceClient, operationId: number, outcome: "refus
  * release, or a create may still be in flight; the request stays open and
  * the billing cron tries again.
  *
- * A request whose runner claimed the create (create_started_at) may still get
- * a schedule even though no id was saved: the runner may have stopped after
- * Stripe made it, or be about to ask. The same idempotency key settles that:
- * Stripe answers with the schedule that create made, or makes it now (and the
- * runner's own call then gets this answer back), and it is released here. A
- * request that never claimed the create can't get a schedule, so nothing is
- * asked of Stripe for it.
+ * A request whose runner claimed the create (create_started_at) may have a
+ * schedule even though no id was saved: the runner may have stopped after
+ * Stripe made it, or still be about to ask. One attached to the subscription
+ * and made by this request is taken as its own. Otherwise the same
+ * idempotency key settles it: Stripe answers with the schedule that create
+ * made, or makes it now (the runner's own call then gets this answer back),
+ * and it is released here. A request that never claimed the create can't get
+ * a schedule, so nothing is asked of Stripe for it.
  */
 async function cleanUp(admin: ServiceClient, operationId: number): Promise<boolean> {
   const op = await loadOperation(admin, operationId);
   if (op.finished_at) return true;
   const stripe = getStripe();
-  const { data: sub, error: subError } = await admin.from("subscriptions").select("stripe_subscription_id").eq("id", op.subscription_id).single();
+  const { data: sub, error: subError } = await admin.from("subscriptions")
+    .select("stripe_subscription_id, admin_cancel_mode").eq("id", op.subscription_id).single();
   if (subError) throw subError;
   const subId = sub.stripe_subscription_id;
   let scheduleId = op.schedule_id;
-  let cancelAtEnd = false;
+  let hadCancelAtEnd = op.cancel_at_period_end_before ?? false;
   if (!scheduleId && op.create_started_at && subId) {
-    const before = await stripe.subscriptions.retrieve(subId).catch(() => null);
-    if (!before) return false;
-    cancelAtEnd = before.cancel_at_period_end;
-    try {
-      const settled = await stripe.subscriptionSchedules.create({ from_subscription: subId }, { idempotencyKey: `plan-switch-${op.id}` });
-      scheduleId = (await scheduleMade(admin, op.id, settled.id)).schedule_id ?? settled.id;
-    } catch (cause) {
-      // Still being made by the runner (a concurrent request with the key), or Stripe unreachable: settle it next time.
-      if (!isRefusal(cause)) return false;
-      // Refused: this subscription can't take a schedule from the key, so none of ours can attach.
+    const live = await stripe.subscriptions.retrieve(subId).catch(() => null);
+    if (!live) return false;
+    // Noted once, before anything below can change it, so a retry still knows.
+    const { data: noted, error: noteError } = await admin.rpc("plan_switch_note_cancel", {
+      p_operation_id: op.id, p_cancel_at_period_end: live.cancel_at_period_end,
+    });
+    if (noteError) throw noteError;
+    hadCancelAtEnd = noted === true;
+    const attached = scheduleIdOf(live);
+    if (attached && await madeBy(stripe, op, attached)) {
+      scheduleId = attached; // the runner's create landed
+    } else {
+      try {
+        scheduleId = (await stripe.subscriptionSchedules.create({ from_subscription: subId }, { idempotencyKey: `plan-switch-${op.id}` })).id;
+      } catch (cause) {
+        // Still being made by the runner (a concurrent request with the key), or Stripe unreachable: settle it next time.
+        if (!isRefusal(cause)) return false;
+        // Refused, and none of ours is attached: none can attach from the key.
+      }
     }
+    if (scheduleId) await scheduleMade(admin, op.id, scheduleId);
   }
   if (scheduleId) {
     const id = scheduleId;
-    // Under the reservation the webhook syncs under, so it reads Stripe after both steps.
-    const done = await withLockWriter(admin, async () =>
-      await releaseSchedule(stripe, id) && (!subId || await keepPeriodEndCancel(admin, op, subId, cancelAtEnd)), "Plan switch cleanup");
+    const keepCancel = hadCancelAtEnd || sub.admin_cancel_mode === "period_end";
+    const release = async () => await releaseSchedule(stripe, id) && (!subId || !keepCancel || await keepPeriodEndCancel(subId));
+    // An admin's marked cancel: hold the reservation the webhook syncs under,
+    // so it can't read Stripe between the release and the cancel being set
+    // again, and take that for a renewal that lifts the marker.
+    const done = sub.admin_cancel_mode === "period_end" ? await withLockWriter(admin, release, "Plan switch cleanup") : await release();
     if (!done) return false;
   }
   const { error } = await admin.rpc("finish_plan_switch", { p_operation_id: op.id });
@@ -241,17 +257,15 @@ async function cleanUp(admin: ServiceClient, operationId: number): Promise<boole
  * period-end cancellation the subscription had before (the member's own, or
  * an admin's marked cancel) is set again if the schedule took it away.
  * Stripe's exact behaviour here isn't verified; this keeps the cancellation
- * either way.
+ * either way. Setting it is idempotent, so no key: a refusal replayed from a
+ * key could block every retry.
  */
-async function keepPeriodEndCancel(admin: ServiceClient, op: SwitchOperation, subId: string, hadCancelAtEnd: boolean): Promise<boolean> {
-  const { data: row, error } = await admin.from("subscriptions").select("admin_cancel_mode").eq("id", op.subscription_id).single();
-  if (error) throw error;
-  if (!hadCancelAtEnd && row.admin_cancel_mode !== "period_end") return true;
+async function keepPeriodEndCancel(subId: string): Promise<boolean> {
   const stripe = getStripe();
   const live = await stripe.subscriptions.retrieve(subId).catch(() => null);
   if (!live) return false;
   if (live.status === "canceled" || live.cancel_at_period_end) return true;
-  await stripe.subscriptions.update(subId, { cancel_at_period_end: true }, { idempotencyKey: `plan-switch-${op.id}-keep-cancel` });
+  await stripe.subscriptions.update(subId, { cancel_at_period_end: true });
   return true;
 }
 

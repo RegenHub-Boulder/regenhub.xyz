@@ -273,8 +273,11 @@ export async function DELETE() {
       try {
         await upsertSubscription(admin, err.live, { isNew: false });
       } catch (cause) {
-        // Stripe's own event for the new phase settles it.
+        // Stripe's own event for the new phase settles it; say so rather than claim it's done.
         console.error("[ChangePlan] Settling the landed switch failed:", cause);
+        return NextResponse.json({
+          error: `${err.message} Your account is still catching up; refresh in a few minutes.`,
+        }, { status: 502 });
       }
       return NextResponse.json({ error: err.message }, { status: err.status });
     }

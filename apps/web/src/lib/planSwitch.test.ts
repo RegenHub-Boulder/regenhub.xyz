@@ -766,9 +766,52 @@ describe("card (Stripe): the third review's findings", () => {
 
     await db.exec("drop trigger fail_completed_audit on admin_actions");
     expect((await periodRolls("evt_roll_again")).status).toBe(200);
-    expect(await audits("plan_switch_completed")).toHaveLength(1);
+    // The audit says this run ended no desk (the first one did).
+    expect(await audits("plan_switch_completed")).toEqual([expect.objectContaining({ payload: expect.objectContaining({ door_ended_here: false }) })]);
     expect(await sub()).toMatchObject({ plan_key: "member_2day", pending_plan_key: null });
     expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+  });
+
+  it("a period-end cancellation is still set again when the first try at it failed", async () => {
+    await seed();
+    stripe.subscriptionSchedules.create.mockRejectedValueOnce(networkError());
+    expect((await pick("member_2day")).status).toBe(502);
+    stripe.state.cancelAtPeriodEnd = true;
+    stripe.subscriptions.update.mockRejectedValueOnce(networkError());
+    expect((await runCron()).status).toBe(200);
+    expect(stripe.state.cancelAtPeriodEnd).toBe(false); // the schedule took it; setting it again failed
+    expect((await runCron()).status).toBe(200);
+    expect(stripe.state.cancelAtPeriodEnd).toBe(true);
+    // Setting it is idempotent: no key, so a refusal can't be replayed on every retry.
+    expect(stripe.subscriptions.update).toHaveBeenLastCalledWith("sub_test_50", { cancel_at_period_end: true });
+    expect(await one("select count(*)::int n from plan_switch_operations where finished_at is null")).toEqual({ n: 0 });
+  });
+
+  it("a schedule the runner's create attached is found and released even if Stripe won't replay the create", async () => {
+    await seed();
+    stripe.subscriptionSchedules.create.mockImplementationOnce(async (_params, options) => {
+      stripe.makeSchedule(options?.idempotencyKey);
+      throw networkError();
+    });
+    expect((await pick("member_2day")).status).toBe(502);
+    // The key has expired at Stripe: a new create would be refused (the subscription already has a schedule).
+    stripe.subscriptionSchedules.create.mockRejectedValue(Object.assign(new Error("already has a schedule"), { type: "StripeInvalidRequestError" }));
+    expect((await keepDesk()).status).toBe(200);
+    expect(stripe.state.attached).toBeNull();
+    // Found on the subscription, so cleanup didn't make another one to settle it.
+    expect(stripe.subscriptionSchedules.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("'Keep desk' after the boundary says the account is catching up when settling it failed", async () => {
+    await seed();
+    await pick("member_2day");
+    stripe.subscriptions.retrieve.mockResolvedValue(stripeSub("member_2day", { periodEnd: iso(34 * DAY) }));
+    await db.exec(`create function fail_member_update() returns trigger language plpgsql as $$
+      begin raise exception 'injected member update failure'; end $$;
+      create trigger fail_member_update before update on members for each row execute function fail_member_update();`);
+    const response = await keepDesk();
+    expect(response.status).toBe(502);
+    expect((await response.json()).error).toMatch(/took effect.*catching up/);
   });
 });
 

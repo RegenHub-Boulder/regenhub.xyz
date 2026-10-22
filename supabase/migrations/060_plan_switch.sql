@@ -54,6 +54,7 @@ create table plan_switch_operations (
   to_plan         text not null,
   created_at      timestamptz not null default now(),
   create_started_at timestamptz,
+  cancel_at_period_end_before boolean,
   schedule_id     text,
   effective_at    timestamptz,
   recorded_at     timestamptz,
@@ -110,6 +111,19 @@ begin
 end;
 $$;
 
+-- Cleanup noted whether the subscription was set to cancel at period end
+-- before it settled the create, so a retry can still set that again after the
+-- schedule is released. Noted once; returns the noted value.
+create function plan_switch_note_cancel(p_operation_id bigint, p_cancel_at_period_end boolean) returns boolean
+language plpgsql security definer set search_path = public as $$
+declare v boolean;
+begin
+  update plan_switch_operations set cancel_at_period_end_before = coalesce(cancel_at_period_end_before, p_cancel_at_period_end)
+    where id = p_operation_id returning cancel_at_period_end_before into v;
+  return coalesce(v, false);
+end;
+$$;
+
 -- A switch landed: clear it and audit it in one transaction, so a retry that
 -- finds it still pending writes the audit it couldn't. p_door is the door
 -- outcome when this run ended the desk (null when an earlier run did).
@@ -123,7 +137,8 @@ begin
   insert into admin_actions (actor_member_id, action, target_table, target_id, payload)
     values (null, 'plan_switch_completed', 'members', p_member_id::text,
       jsonb_build_object('subscription_id', p_subscription_id, 'rail', p_rail, 'from', p_from, 'to', p_to)
-        || coalesce(p_door, '{}'::jsonb));
+        -- No door outcome: this run ended no desk (an earlier run did, or the member was already off it).
+        || coalesce(p_door, '{"door_ended_here": false}'::jsonb));
 end;
 $$;
 
@@ -196,11 +211,13 @@ $$;
 
 revoke all on function begin_plan_switch(integer, integer, text, text), plan_switch_schedule_made(bigint, text),
   record_plan_switch(bigint, timestamptz), decide_plan_switch(bigint, text), finish_plan_switch(bigint),
-  plan_switch_create_started(bigint), complete_plan_switch(integer, integer, text, text, text, jsonb)
+  plan_switch_create_started(bigint), complete_plan_switch(integer, integer, text, text, text, jsonb),
+  plan_switch_note_cancel(bigint, boolean)
   from public, anon, authenticated;
 grant execute on function begin_plan_switch(integer, integer, text, text), plan_switch_schedule_made(bigint, text),
   record_plan_switch(bigint, timestamptz), decide_plan_switch(bigint, text), finish_plan_switch(bigint),
-  plan_switch_create_started(bigint), complete_plan_switch(integer, integer, text, text, text, jsonb)
+  plan_switch_create_started(bigint), complete_plan_switch(integer, integer, text, text, text, jsonb),
+  plan_switch_note_cancel(bigint, boolean)
   to service_role;
 
 -- An admin cancel wins over a plan switch (migration 059), in both orders:
