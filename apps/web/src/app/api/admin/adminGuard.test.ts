@@ -121,10 +121,12 @@ describe.each(ADMIN_ROUTES)("%s", (file) => {
 });
 
 it("no API route checks members.is_admin by hand", () => {
-  // `!x?.is_admin` is the shape of a hand-rolled guard; reading is_admin as
-  // data (filters, selects, the members editor) is fine.
+  // Any `x.is_admin` / `x?.is_admin` property read is a hand-rolled guard in
+  // waiting (`!m?.is_admin`, `m?.is_admin !== true`, `!(m && m.is_admin)` …).
+  // Naming the column as data — selects, filters, the members editor's
+  // field list — is fine.
   const offenders = routeFiles(API)
-    .filter((f) => /!\s*\w+\??\.is_admin/.test(readFileSync(f, "utf8")))
+    .filter((f) => /\??\.is_admin\b/.test(readFileSync(f, "utf8")))
     .map((f) => relative(API, f));
   expect(offenders).toEqual([]);
 });

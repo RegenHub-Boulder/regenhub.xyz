@@ -158,11 +158,34 @@ function routeFiles(dir: string): string[] {
   });
 }
 
+const root = __dirname;
+const checkedRoutes = () => routeFiles(root).filter((f) => !SIBLING_OWNED.has(relative(root, f)));
+
 it("no API route compares a bearer secret with === or !==", () => {
-  const root = __dirname;
-  const offenders = routeFiles(root)
-    .filter((f) => !SIBLING_OWNED.has(relative(root, f)))
-    .filter((f) => /[!=]==\s*`Bearer/.test(readFileSync(f, "utf8")))
+  // Either operand order, template or string literal.
+  const compare = /[!=]==\s*[`"']Bearer|[`"']Bearer [^\n]*[`"'+]\s*[!=]==/;
+  const offenders = checkedRoutes()
+    .filter((f) => compare.test(readFileSync(f, "utf8")))
     .map((f) => relative(root, f));
   expect(offenders).toEqual([]);
+});
+
+it("every route that reads a *_SECRET env checks it with hasBearerSecret", () => {
+  // Stripe's webhook secret is verified by the Stripe SDK's signature check.
+  const ownVerifier = new Set(["webhooks/stripe/route.ts"]);
+  const offenders = checkedRoutes()
+    .filter((f) => !ownVerifier.has(relative(root, f)))
+    .filter((f) => {
+      const src = readFileSync(f, "utf8");
+      return /process\.env\.\w*SECRET\b/.test(src) && !src.includes("hasBearerSecret(");
+    })
+    .map((f) => relative(root, f));
+  expect(offenders).toEqual([]);
+  // The behavioural matrix above must cover each of them too.
+  const secretRoutes = checkedRoutes()
+    .filter((f) => !ownVerifier.has(relative(root, f)))
+    .filter((f) => /process\.env\.\w*SECRET\b/.test(readFileSync(f, "utf8")))
+    .map((f) => relative(root, f).replace(/\/route\.ts$/, ""))
+    .sort();
+  expect(secretRoutes).toEqual(ROUTES.map((r) => r.name).sort());
 });
