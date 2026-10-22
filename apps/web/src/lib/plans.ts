@@ -143,10 +143,6 @@ export function getSelfServePlans(): { key: KnownPlanKey; def: PlanDef }[] {
     .map(([key, def]) => ({ key, def }));
 }
 
-export function getAllPlanKeys(): KnownPlanKey[] {
-  return Object.keys(PLANS) as KnownPlanKey[];
-}
-
 /** All plans, sorted by price ascending. */
 export function getAllPlansSorted(): { key: KnownPlanKey; def: PlanDef }[] {
   return (Object.entries(PLANS) as Array<[KnownPlanKey, PlanDef]>)

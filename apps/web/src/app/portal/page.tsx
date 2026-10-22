@@ -533,7 +533,7 @@ export default async function PortalPage() {
                     <CalendarClock className="w-4 h-4 mt-0.5 shrink-0" />
                     <span>
                       Switching to <strong className="text-foreground">{pendingSwitch.label}</strong> on{" "}
-                      {new Date(pendingSwitch.at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}.
+                      {new Date(pendingSwitch.at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Denver" })}.
                       You keep {pendingSwitch.keeps} and your door code until then.
                     </span>
                   </p>

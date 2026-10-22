@@ -224,7 +224,19 @@ export async function scheduleDeskToDaily(
     if ((error as { code?: string }).code === "P0001") throw new PlanSwitchError(CANCEL_IN_PROGRESS_MESSAGE, 409);
     throw error;
   }
-  const op = data as SwitchOperation & { resumed: boolean };
+  let op = data as SwitchOperation & { resumed: boolean };
+  // An earlier request already decided (the member dropped it, Stripe refused)
+  // whose Stripe cleanup was still pending: finish it, then start this one.
+  if (op.resumed && op.outcome && await cleanUp(admin, op.id)) {
+    const { data: fresh, error: freshError } = await admin.rpc("begin_plan_switch", {
+      p_subscription_id: sub.id, p_actor: args.actorMemberId, p_from: sub.plan_key, p_to: targetKey,
+    });
+    if (freshError) {
+      if ((freshError as { code?: string }).code === "P0001") throw new PlanSwitchError(CANCEL_IN_PROGRESS_MESSAGE, 409);
+      throw freshError;
+    }
+    op = fresh as SwitchOperation & { resumed: boolean };
+  }
   if (op.resumed && op.to_plan !== targetKey) {
     throw new PlanSwitchError(`Your switch to ${planLabel(op.to_plan)} is still being set up. Check back in a few minutes.`, 409);
   }
@@ -249,7 +261,7 @@ export async function runPlanSwitch(admin: ServiceClient, operationId: number): 
   };
   if (op.outcome) {
     await cleanUp(admin, op.id);
-    throw new PlanSwitchError(op.outcome === "abandoned" ? CANCEL_IN_PROGRESS_MESSAGE : NOTHING_CHANGED, 409);
+    throw new PlanSwitchError(op.outcome === "abandoned" ? await droppedMessage(admin, op.subscription_id) : NOTHING_CHANGED, 409);
   }
   const { data: sub, error } = await admin.from("subscriptions").select("id, stripe_subscription_id").eq("id", op.subscription_id).single();
   if (error) throw error;
@@ -287,10 +299,10 @@ export async function runPlanSwitch(admin: ServiceClient, operationId: number): 
     }
     op = await scheduleMade(admin, op.id, schedule.id);
     if (op.outcome) {
-      // An admin cancel dropped this request while Stripe was making the schedule.
+      // An admin cancel, or the member, dropped this request while Stripe was making the schedule.
       await releaseSchedule(stripe, schedule.id);
       await cleanUp(admin, op.id).catch(() => undefined);
-      throw new PlanSwitchError(CANCEL_IN_PROGRESS_MESSAGE, 409);
+      throw new PlanSwitchError(await droppedMessage(admin, op.subscription_id), 409);
     }
   }
 
@@ -352,6 +364,13 @@ export async function runPlanSwitch(admin: ServiceClient, operationId: number): 
     throw new PlanSwitchError(SAVED_MESSAGE, 500);
   }
   return { effectiveAt, scheduleId: schedule.id };
+}
+
+/** Why a dropped request won't go ahead: an admin cancel, or the member cancelled it. */
+async function droppedMessage(admin: ServiceClient, subscriptionId: number): Promise<string> {
+  return await adminCancelInProgress(admin, subscriptionId).catch(() => false)
+    ? CANCEL_IN_PROGRESS_MESSAGE
+    : "That switch was cancelled, so nothing changed. Pick a plan again if you still want to switch.";
 }
 
 async function scheduleMade(admin: ServiceClient, operationId: number, scheduleId: string): Promise<SwitchOperation> {
@@ -419,12 +438,20 @@ export async function cancelPendingSwitch(
       throw new PlanSwitchError(`Your switch to ${planLabel(runningPlan)} took effect before it could be stopped, so you're on it now.`, 409);
     }
   }
-  const { error } = await admin
+  const { data: cleared, error } = await admin
     .from("subscriptions")
     .update({ pending_plan_key: null, pending_plan_at: null, pending_plan_from: null, pending_plan_schedule_id: null })
     .eq("id", sub.id)
-    .eq("pending_plan_schedule_id", sub.pending_plan_schedule_id);
+    .eq("pending_plan_schedule_id", sub.pending_plan_schedule_id)
+    .select("id");
   if (error) throw error;
+  // Already cleared, by the landing webhook or another cancel: this one did nothing, so it isn't audited.
+  if (!cleared?.length) {
+    if (args.reason === "member") {
+      throw new PlanSwitchError("That switch was already stopped or has taken effect. Refresh to see your plan.", 409);
+    }
+    return;
+  }
   await logAction({
     action: AuditAction.PLAN_SWITCH_CANCELED,
     actorMemberId: args.actorMemberId,
@@ -511,12 +538,11 @@ export function onchainSwitchColumns(
 ) {
   if (isDeskPlan(targetKey)) return { pending_plan_key: null, pending_plan_at: null, pending_plan_from: null };
   const desk = isDeskPlan(sub.plan_key) ? sub.plan_key : sub.pending_plan_key ? sub.pending_plan_from : null;
-  if (!desk) return {};
-  return {
-    pending_plan_key: targetKey,
-    pending_plan_from: desk,
-    pending_plan_at: sub.pending_plan_key && sub.pending_plan_at ? sub.pending_plan_at : sub.current_period_end ?? new Date().toISOString(),
-  };
+  const until = sub.pending_plan_key && sub.pending_plan_at ? sub.pending_plan_at : sub.current_period_end;
+  // No paid period to keep (no period end recorded): nothing is pending, and
+  // a paid desk invoice still running is found when the daily one is paid.
+  if (!desk || !until) return {};
+  return { pending_plan_key: targetKey, pending_plan_from: desk, pending_plan_at: until };
 }
 
 /**

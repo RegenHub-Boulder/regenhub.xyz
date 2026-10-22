@@ -662,6 +662,48 @@ describe("card (Stripe): ordering, recovery and Stripe's rules", () => {
   });
 });
 
+describe("card (Stripe): the second review's findings", () => {
+  const networkError = () => Object.assign(new Error("socket hang up"), { type: "StripeConnectionError" });
+
+  it("a switch whose schedule was released in Stripe's dashboard is cleared by the next event, not stuck failing", async () => {
+    await seed();
+    await pick("member_2day");
+    await stripe.subscriptionSchedules.release("sub_sched_1"); // by hand, at Stripe
+    const response = await sendStripeEvent("evt_after_release", "customer.subscription.updated", stripeSub("hot_desk"));
+    expect(response.status).toBe(200);
+    expect(await sub()).toMatchObject({
+      plan_key: "hot_desk", pending_plan_key: null, pending_plan_at: null, pending_plan_from: null, pending_plan_schedule_id: null,
+    });
+    expect(await member()).toMatchObject({ member_type: "hot_desk", pin_code_slot: 12 });
+  });
+
+  it("after the member dropped a request Stripe couldn't release yet, picking again starts a new switch", async () => {
+    await seed();
+    stripe.subscriptionSchedules.update.mockRejectedValueOnce(networkError());
+    expect((await pick("member_2day")).status).toBe(502);
+    stripe.subscriptionSchedules.release.mockRejectedValueOnce(networkError());
+    stripe.subscriptionSchedules.retrieve.mockRejectedValueOnce(networkError());
+    expect((await keepDesk()).status).toBe(502);
+
+    const again = await pick("member_2day");
+    expect(again.status).toBe(200);
+    expect((await again.json()).error).toBeUndefined();
+    expect(await sub()).toMatchObject({ pending_plan_key: "member_2day" });
+    expect(await one("select count(*)::int n from plan_switch_operations where finished_at is null")).toEqual({ n: 0 });
+  });
+
+  it("'Keep desk' racing the landing webhook isn't audited as kept when the switch was already cleared", async () => {
+    await seed();
+    await pick("member_2day");
+    db.beforeNextWrite("subscriptions", () => db.sql(
+      "update subscriptions set pending_plan_key = null, pending_plan_at = null, pending_plan_from = null, pending_plan_schedule_id = null where id = 50"));
+    const response = await keepDesk();
+    expect(response.status).toBe(409);
+    expect((await response.json()).error).toMatch(/already stopped or has taken effect/);
+    expect(await audits("plan_switch_canceled")).toHaveLength(0);
+  });
+});
+
 describe("upgrades and daily ↔ daily are unchanged", () => {
   it("daily → daily swaps the price now, with prorations, and no schedule", async () => {
     await seed({ plan: "member_basic" });
@@ -786,6 +828,35 @@ describe("crypto (on-chain): Hot Desk → Member + 2 days/mo", () => {
     expect((await runCron()).status).toBe(200);
     expect(await member()).toMatchObject({ member_type: "cold_desk", pin_code_slot: 14 });
     expect(clearUserCode).not.toHaveBeenCalled();
+  });
+
+  it("a switch made before migration 060 (no pending record) still ends the desk when its paid period does", async () => {
+    await seed({ rail: "onchain" });
+    // The plan was changed the old way: plan_key only.
+    await db.sql("update subscriptions set plan_key = 'member_2day', monthly_cents = 5000 where id = 50");
+    const [invoice] = await generateUpcomingOnchainInvoices(db as never) as { id: number; amount_usdc_micros: number }[];
+    chainPays(BigInt(invoice.amount_usdc_micros));
+    const paid = await submitPayment(new Request("http://localhost/api/portal/onchain/submit", {
+      method: "POST", body: JSON.stringify({ invoice_id: invoice.id, tx_hash: TX }),
+    }));
+    expect((await paid.json()).status).toBe("paid");
+    expect(await member()).toMatchObject({ member_type: "hot_desk", pin_code_slot: 12 });
+    expect(await sub()).toMatchObject({ pending_plan_key: "member_2day", pending_plan_from: "hot_desk" });
+
+    await db.exec(`update onchain_invoices set period_start = period_start - interval '5 days', period_end = period_end - interval '5 days';
+      update subscriptions set current_period_end = current_period_end - interval '5 days',
+        pending_plan_at = pending_plan_at - interval '5 days' where id = 50`);
+    expect((await runCron()).status).toBe(200);
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+  });
+
+  it("with no paid period end recorded, a desk → daily change records no pending switch to end the desk early", async () => {
+    await seed({ rail: "onchain" });
+    await db.sql("update subscriptions set current_period_end = null where id = 50");
+    expect((await pick("member_2day")).status).toBe(200);
+    expect(await sub()).toMatchObject({ plan_key: "member_2day", pending_plan_key: null });
+    expect((await runCron()).status).toBe(200);
+    expect(await member()).toMatchObject({ member_type: "hot_desk", pin_code_slot: 12 });
   });
 
   it("a desk member still waiting for a door code keeps the desk when a daily invoice is paid ahead", async () => {
