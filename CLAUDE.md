@@ -167,10 +167,28 @@ Stripe invoice void is saved against its operation (`admin_cancel_stripe_voids`:
 happens; the audit row lists them from there, and a later run reads a pending or failed one back from Stripe. Cancel-now stays "marked + live" until the door step finishes. The
 door step asks `admin_cancel_door_due()` under the PIN writer first, and the period-end step `admin_cancel_due()`,
 so a payment that just extended the period keeps its door.
-A pending desk → daily switch (migration 060) yields to a cancel: the card Stripe step releases its schedule first
-(Stripe won't set a period-end cancel on a scheduled subscription) and audits `plan_switch_canceled` as the
-operation's admin; a trigger clears any switch left on a marked or ended row, and refuses a new one while a cancel
-is recorded or still running. `/api/portal/change-plan` refuses every plan change then, on both rails.
+A desk → daily switch (migration 060) yields to a cancel: the card Stripe step drops it first, recorded or still
+being set up (Stripe won't set a period-end cancel on a scheduled subscription), audited `plan_switch_canceled` as
+the operation's admin. If Stripe still refuses because a switch's schedule attached meanwhile, the step releases it
+and asks once more. A trigger clears any switch left on a marked or ended row; `begin_plan_switch`,
+`record_plan_switch` and the trigger refuse a new one while a cancel is recorded or running, and
+`/api/portal/change-plan` refuses every plan change then, on both rails.
+
+### Desk → daily switch (`lib/planSwitch.ts`, migration 060)
+Card or crypto Hot/Cold Desk members can move themselves to a daily plan; it takes effect when the paid desk period
+ends, with no proration, and they keep the desk and door code until then. **Card:** each request is a
+`plan_switch_operations` row written before Stripe is asked (`begin_plan_switch`). `runPlanSwitch` makes a Stripe
+subscription schedule (idempotency key `plan-switch-<id>`; a schedule whose id was lost is found again on the
+subscription), sets its phases (phase 0 re-sends an archived inline price as `price_data`), then
+`record_plan_switch` writes `subscriptions.pending_*` and the audit row in one transaction. A definite refusal
+releases what was made; an unclear outcome stays open for the billing cron (`sweepPlanSwitches`), and the member can
+drop it. The Stripe webhook lands the switch (ends desk access) when the daily phase starts. Every
+`customer.subscription.created/updated` delivery runs from freshness check to access grant under one PIN-writer
+reservation, so out-of-order deliveries can't put a desk back. "Keep desk" reads Stripe back after the release and
+lands the switch if the daily phase already began. **Crypto:** `plan_key` changes at once (it prices the next
+invoice) and `pending_plan_*` (no schedule) marks the desk still held; the billing cron
+(`finishOnchainPlanSwitches`) ends only that desk once no paid desk period runs, and a desk given by hand later is
+left alone.
 
 ### Add a new member via bot
 Use `/admin → Add member` as an admin in the Telegram bot.
