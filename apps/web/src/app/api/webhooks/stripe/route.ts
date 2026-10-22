@@ -528,7 +528,10 @@ async function upsertSubscription(
   event: Stripe.Subscription,
   { isNew }: { isNew: boolean },
 ): Promise<{ memberId: number; sub: Stripe.Subscription; prev: PrevRow }> {
-  const synced = await withLockWriter(admin, () => syncSubscription(admin, event), "Stripe subscription sync");
+  // Stripe I/O for the event's own discounts happens before the reservation;
+  // only a stale event (rare) is resolved again inside it.
+  const eventNet = await resolveSubscriptionNet(event, listCentsOf(event));
+  const synced = await withLockWriter(admin, () => syncSubscription(admin, event, eventNet), "Stripe subscription sync");
   const { sub, member, plan, planKey, monthlyCents, local, leavingDesk, switchLanded, activation } = synced;
 
   // Only our own schedule: one an admin made in the dashboard is theirs to manage.
@@ -548,8 +551,13 @@ async function upsertSubscription(
   return { memberId: member.id, sub, prev: synced.prev };
 }
 
+/** Stripe v20 reports the actual recurring amount on the SubscriptionItem's price. */
+function listCentsOf(sub: Stripe.Subscription): number {
+  return sub.items.data[0]?.price?.unit_amount ?? parseInt(sub.metadata?.monthly_cents ?? "0", 10);
+}
+
 /** The part of upsertSubscription that runs under the reservation. */
-async function syncSubscription(admin: ServiceClient, event: Stripe.Subscription) {
+async function syncSubscription(admin: ServiceClient, event: Stripe.Subscription, eventNet: Awaited<ReturnType<typeof resolveSubscriptionNet>>) {
   const sub = await currentStateFor(admin, event);
   const { data: prev } = await admin
     .from("subscriptions")
@@ -571,8 +579,7 @@ async function syncSubscription(admin: ServiceClient, event: Stripe.Subscription
 
   const item = sub.items.data[0];
   const priceId = item?.price?.id ?? "";
-  // Stripe v20 reports the actual recurring amount on the SubscriptionItem's price
-  const monthlyCents = item?.price?.unit_amount ?? parseInt(sub.metadata?.monthly_cents ?? "0", 10);
+  const monthlyCents = listCentsOf(sub);
 
   // Resolve member by Stripe customer ID
   const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
@@ -612,7 +619,7 @@ async function syncSubscription(admin: ServiceClient, event: Stripe.Subscription
   // promo codes live on sub.discounts; webhook payloads usually send IDs
   // so we retrieve+expand). Application snapshot is the fallback for the
   // note/duration columns when Stripe has no currently-active coupon.
-  const net = await resolveSubscriptionNet(sub, monthlyCents);
+  const net = sub === event ? eventNet : await resolveSubscriptionNet(sub, monthlyCents);
 
   let discountSnapshot: {
     cents: number | null;
@@ -689,7 +696,7 @@ async function syncSubscription(admin: ServiceClient, event: Stripe.Subscription
     discount_duration: discountSnapshot.duration,
     discount_months: discountSnapshot.months,
     discount_note: discountSnapshot.note,
-    ...(clearPending ? { pending_plan_key: null, pending_plan_at: null, pending_plan_schedule_id: null } : {}),
+    ...(clearPending ? { pending_plan_key: null, pending_plan_at: null, pending_plan_from: null, pending_plan_schedule_id: null } : {}),
   };
 
   const { error: upsertError } = await admin.from("subscriptions").upsert(row, { onConflict: "stripe_subscription_id" });

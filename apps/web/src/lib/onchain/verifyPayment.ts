@@ -193,7 +193,18 @@ export async function reconcileOnchainAccess(
   if (plan.grantsMemberType === "day_pass" && (member.pin_code_slot || onDesk)) {
     // A daily plan paid ahead doesn't end a desk period already paid for,
     // with or without a door code yet.
-    if (await deskPeriodRunning(admin, args.memberId, now)) return true;
+    const runningDesk = await deskPeriodRunning(admin, args.memberId, now);
+    if (runningDesk) {
+      // A switch made before migration 060 has no pending record: write one,
+      // so the billing cron ends the desk when this period does.
+      if (onDesk && !current.pending_plan_key && !current.admin_cancel_mode) {
+        const { error: pendingError } = await admin.from("subscriptions")
+          .update({ pending_plan_key: planKey, pending_plan_from: runningDesk.planKey, pending_plan_at: runningDesk.periodEnd })
+          .eq("id", args.subscriptionId).is("pending_plan_key", null);
+        if (pendingError) throw pendingError;
+      }
+      return true;
+    }
     // A desk period ending for a daily plan is a plan switch landing: audited, through the same lifecycle.
     const revoked = onDesk && current.pending_plan_key
       ? await endDeskAccessForSwitch(admin, {
@@ -215,17 +226,18 @@ export async function reconcileOnchainAccess(
   return true;
 }
 
-/** Is a paid desk invoice's period running for this member now? */
-async function deskPeriodRunning(admin: ServiceClient, memberId: number, now: Date): Promise<boolean> {
+/** The paid desk invoice whose period is running for this member now, if any. */
+async function deskPeriodRunning(admin: ServiceClient, memberId: number, now: Date): Promise<{ planKey: string; periodEnd: string } | null> {
   const nowIso = now.toISOString();
   const { data: running, error } = await admin.from("onchain_invoices")
-    .select("plan_key, subscriptions(plan_key)")
+    .select("plan_key, period_end, subscriptions(plan_key)")
     .eq("member_id", memberId).eq("status", "paid")
     .lte("period_start", nowIso).gt("period_end", nowIso)
     .order("period_start", { ascending: false }).limit(1).maybeSingle();
   if (error) throw error;
   const runningSub = running?.subscriptions as unknown as { plan_key: string } | null;
-  return isDeskPlan(running?.plan_key ?? runningSub?.plan_key);
+  const planKey = running?.plan_key ?? runningSub?.plan_key;
+  return running && planKey && isDeskPlan(planKey) ? { planKey, periodEnd: running.period_end } : null;
 }
 
 /**
