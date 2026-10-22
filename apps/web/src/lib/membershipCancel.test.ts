@@ -125,6 +125,7 @@ const sub = () => one("select * from subscriptions where id = 50");
 const member = () => one("select member_type, pin_code_slot, pin_code, disabled from members where id = 7");
 const invoices = () => db.sql("select id, status, period_start from onchain_invoices order by id");
 const audits = () => db.sql("select actor_member_id, action, target_table, target_id, payload from admin_actions order by id");
+const operations = () => db.sql("select * from admin_cancel_operations order by id");
 
 const cancel = (overrides: Partial<CancelMembershipInput> = {}) => cancelMembership(db as never, {
   memberId: 7, actorMemberId: 1, mode: "now", reason: null, voidOpenInvoices: false, ...overrides,
@@ -271,13 +272,38 @@ describe("card (Stripe)", () => {
     expect((await audits())[0].payload).toMatchObject({ voided_invoice_ids: open.map((inv) => inv.id) });
   });
 
-  it("changes nothing locally when Stripe refuses the cancel", async () => {
+  it("changes nothing locally when Stripe refuses the cancel, and the next request starts fresh", async () => {
     await seed({ rail: "stripe" });
-    stripe.subscriptions.cancel.mockRejectedValue(new Error("Stripe is down"));
-    await expect(cancel()).rejects.toMatchObject({ status: 502 });
+    stripe.subscriptions.cancel.mockRejectedValueOnce(new Error("Card declined"));
+    await expect(cancel({ reason: "First try" })).rejects.toMatchObject({ status: 502 });
     expect(await sub()).toMatchObject({ status: "active", admin_canceled_at: null });
     expect(await audits()).toEqual([]);
     expect((await member()).pin_code_slot).toBe(12);
+    // The refused request is closed, not left for the billing cron to retry.
+    expect(await operations()).toEqual([expect.objectContaining({ recorded_at: null, finished_at: expect.any(String) })]);
+    await runCron();
+    expect(stripe.subscriptions.cancel).toHaveBeenCalledTimes(1);
+
+    const again = await cancel({ reason: "Second try" });
+    expect(again).toMatchObject({ resumed: false, outcome: "canceled" });
+    expect(await audits()).toEqual([expect.objectContaining({ payload: expect.objectContaining({ reason: "Second try" }) })]);
+  });
+
+  it("when Stripe can't be reached, the cancel is saved and the billing cron carries it out", async () => {
+    await seed({ rail: "stripe" });
+    stripe.subscriptions.cancel.mockRejectedValueOnce(new Error("socket hang up"));
+    stripe.subscriptions.retrieve.mockRejectedValueOnce(new Error("socket hang up"));
+    await expect(cancel({ reason: "Moved away" })).rejects.toMatchObject({ status: 502, message: expect.stringMatching(/saved/) });
+    expect(await sub()).toMatchObject({ status: "active", admin_canceled_at: null });
+
+    expect((await runCron()).status).toBe(200);
+    expect(stripe.subscriptions.cancel).toHaveBeenCalledTimes(2);
+    expect(await sub()).toMatchObject({ status: "canceled", admin_cancel_mode: "now", admin_canceled_by: 1 });
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+    expect(await audits()).toEqual([expect.objectContaining({ actor_member_id: 1, payload: expect.objectContaining({ reason: "Moved away" }) })]);
+    expect(await operations()).toEqual([expect.objectContaining({
+      stripe_done_at: expect.any(String), recorded_at: expect.any(String), door_done_at: expect.any(String), finished_at: expect.any(String),
+    })]);
   });
 
   it("mirrors a cancel Stripe had already made (a lost webhook) and records it", async () => {
@@ -298,7 +324,7 @@ describe("card (Stripe): recording after Stripe accepted", () => {
     await seed({ rail: "stripe" });
     // Stripe has canceled it; the first attempt to record that fails (a dropped connection).
     // (A sequence, because the failure rolls back everything else.)
-    db.beforeNextWrite("rpc:admin_cancel_subscription", () => db.exec(`
+    db.beforeNextWrite("rpc:record_admin_cancel", () => db.exec(`
       create sequence fail_once_seq;
       create function fail_once() returns trigger language plpgsql as $$
         begin if nextval('fail_once_seq') = 1 then raise exception 'injected record failure'; end if; return new; end $$;
@@ -325,17 +351,20 @@ describe("card (Stripe): the request stops after Stripe accepted", () => {
       payload: expect.objectContaining({ reason: "Moved away", voided_invoice_ids: ["in_overdue"], ...payload }),
     })]);
 
-  it("cancel now: Stripe's deletion webhook records it, and a retry adds nothing", async () => {
+  it("cancel now: Stripe's deletion webhook ends access, the billing cron records it, and a retry adds nothing", async () => {
     await seed({ rail: "stripe" });
     await cancelThatDiesAfterStripe();
     expect(stripe.subscriptions.cancel).toHaveBeenCalledTimes(1);
 
     expect((await sendStripeEvent("evt_del", "customer.subscription.deleted", stripeSub("sub_test_50", "canceled"))).status).toBe(200);
-    expect(await sub()).toMatchObject({ status: "canceled", admin_cancel_mode: "now", admin_canceled_by: 1, admin_cancel_reason: "Moved away" });
     expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+
+    expect((await runCron()).status).toBe(200);
+    expect(await sub()).toMatchObject({ status: "canceled", admin_cancel_mode: "now", admin_canceled_by: 1, admin_cancel_reason: "Moved away" });
     await oneAuditNamingTheAdmin({ mode: "now", outcome: "canceled" });
 
-    expect((await cancel({ reason: "Moved away", voidOpenInvoices: true })).outcome).toBe("already_canceled");
+    expect((await cancel({ reason: "Moved away" })).outcome).toBe("already_canceled");
+    expect(stripe.subscriptions.cancel).toHaveBeenCalledTimes(1);
     expect(await audits()).toHaveLength(1);
   });
 
@@ -363,26 +392,142 @@ describe("card (Stripe): the request stops after Stripe accepted", () => {
     expect(await audits()).toHaveLength(1);
   });
 
-  it("at period end: Stripe's update webhook records the scheduled cancel", async () => {
+  it("at period end: Stripe's update webhook is mirrored as usual, and the billing cron records the scheduled cancel", async () => {
     await seed({ rail: "stripe" });
     await cancelThatDiesAfterStripe({ mode: "period_end" });
     stripe.subscriptions.retrieve.mockResolvedValue(stripeSub("sub_test_50", "active", true));
 
     expect((await sendStripeEvent("evt_upd", "customer.subscription.updated", stripeSub("sub_test_50", "active", true))).status).toBe(200);
+    expect(await sub()).toMatchObject({ status: "active", cancel_at_period_end: true });
+    expect((await runCron()).status).toBe(200);
     expect(await sub()).toMatchObject({ status: "active", admin_cancel_mode: "period_end", admin_canceled_by: 1, cancel_at_period_end: true });
     expect((await member()).pin_code_slot).toBe(12);
     await oneAuditNamingTheAdmin({ mode: "period_end", outcome: "scheduled" });
   });
 
-  it("a pending cancel Stripe never acted on records nothing and is dropped", async () => {
+});
+
+describe("card (Stripe): one operation per cancel, finished by the billing cron", () => {
+  /** Stripe as a store: cancel and update change what retrieve returns, and cancelling twice fails like Stripe does. */
+  function statefulStripe() {
+    const state = stripeSub("sub_test_50", "active");
+    stripe.subscriptions.cancel.mockImplementation(async () => {
+      if (state.status === "canceled") throw new Error("This subscription is already canceled");
+      state.status = "canceled";
+      return { ...state };
+    });
+    stripe.subscriptions.update.mockImplementation(async (_id: string, params: Record<string, unknown>) => {
+      if (state.status === "canceled") throw new Error("A canceled subscription can't be updated");
+      Object.assign(state, params);
+      return { ...state };
+    });
+    stripe.subscriptions.retrieve.mockImplementation(async () => ({ ...state }));
+    return state;
+  }
+  const secondAdmin = () => db.sql("insert into members (id, name, email, is_admin, member_type) values (2, 'Bo Admin', 'bo@example.test', true, 'hot_desk')");
+  /** The admin's request dies after Stripe accepted, before anything is recorded (listing invoices to void fails). */
+  async function diesAfterStripe(overrides: Partial<CancelMembershipInput>) {
+    stripe.invoices.list.mockRejectedValueOnce(new Error("request killed"));
+    await expect(cancel({ voidOpenInvoices: true, ...overrides })).rejects.toThrow();
+  }
+
+  it("interrupted after recording, before the door: the billing cron ends access (webhook lost)", async () => {
     await seed({ rail: "stripe" });
-    // The request died before it reached Stripe.
-    await db.sql(`update subscriptions set admin_cancel_intent = jsonb_build_object('token', gen_random_uuid(), 'actor', 1,
-      'mode', 'now', 'void_open', false, 'at', now() - interval '2 hours') where id = 50`);
-    expect((await runCron()).status).toBe(200);
-    expect(await sub()).toMatchObject({ status: "active", admin_cancel_mode: null, admin_cancel_intent: null });
-    expect(await audits()).toEqual([]);
+    statefulStripe();
+    // The process stops just as the door step starts.
+    db.beforeNextWrite("rpc:acquire_lock_writer", () => { throw new Error("process stopped"); });
+    await expect(cancel({ reason: "Moved away" })).rejects.toThrow(/process stopped/);
+    expect(await audits()).toHaveLength(1);
     expect((await member()).pin_code_slot).toBe(12);
+
+    expect((await runCron()).status).toBe(200);
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+    expect(await sub()).toMatchObject({ status: "canceled", admin_cancel_mode: "now" });
+    expect(await audits()).toEqual([expect.objectContaining({
+      actor_member_id: 1, payload: expect.objectContaining({ reason: "Moved away", door_slot_cleared: 12, door_clear_failed: false }),
+    })]);
+    expect(stripe.subscriptions.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("the door step throws: the billing cron finishes it (webhook lost)", async () => {
+    await seed({ rail: "stripe" });
+    statefulStripe();
+    await db.exec(`create function fail_member_update() returns trigger language plpgsql as $$
+      begin raise exception 'injected member update failure'; end $$;
+      create trigger fail_member_update before update on members for each row execute function fail_member_update();`);
+    await expect(cancel({ reason: "Gone" })).rejects.toThrow(/injected/);
+    await db.exec("drop trigger fail_member_update on members");
+    expect(await sub()).toMatchObject({ status: "active", admin_cancel_mode: "now" });
+
+    expect((await runCron()).status).toBe(200);
+    expect((await sub()).status).toBe("canceled");
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+    expect(await audits()).toEqual([expect.objectContaining({ actor_member_id: 1, payload: expect.objectContaining({ reason: "Gone", door_slot_cleared: 12 }) })]);
+  });
+
+  it("a different admin retrying while the first cancel is unfinished resumes it unchanged, and is told so", async () => {
+    await seed({ rail: "stripe" });
+    await secondAdmin();
+    statefulStripe();
+    await diesAfterStripe({ mode: "period_end", reason: "Moving" });
+    stripe.invoices.list.mockResolvedValue({ data: [{ id: "in_overdue" }], has_more: false });
+
+    const result = await cancel({ actorMemberId: 2, mode: "now", reason: "Other reason", voidOpenInvoices: false });
+    expect(await audits()).toEqual([expect.objectContaining({
+      actor_member_id: 1, payload: expect.objectContaining({ mode: "period_end", reason: "Moving", voided_invoice_ids: ["in_overdue"] }),
+    })]);
+    expect(stripe.subscriptions.cancel).not.toHaveBeenCalled();
+    expect((await member()).pin_code_slot).toBe(12);
+    expect(result).toMatchObject({ resumed: true, outcome: "scheduled", mode: "period_end" });
+    expect(result.warnings.join(" ")).toMatch(/was still finishing/);
+
+    // Once it's finished, the second admin's own request is a new operation.
+    const now = await cancel({ actorMemberId: 2, mode: "now", reason: "Other reason" });
+    expect(now).toMatchObject({ resumed: false, outcome: "canceled" });
+    expect((await audits()).map((a) => a.actor_member_id)).toEqual([1, 2]);
+  });
+
+  it("recovery racing a newer cancellation can't consume it", async () => {
+    await seed({ rail: "stripe" });
+    await secondAdmin();
+    statefulStripe();
+    await diesAfterStripe({ mode: "period_end", reason: "Moving" });
+    // The billing cron picks up admin 1's cancel. While it is between reading
+    // it and recording it, admin 1's retry finishes it, and admin 2 starts a
+    // cancel-now that dies after Stripe accepted.
+    stripe.invoices.list.mockImplementationOnce(async () => {
+      await cancel({ mode: "period_end", reason: "Moving", voidOpenInvoices: true });
+      await diesAfterStripe({ actorMemberId: 2, mode: "now", reason: "Gone for good" });
+      return { data: [], has_more: false };
+    });
+    expect((await runCron()).status).toBe(200);
+    expect((await audits()).map((a) => a.actor_member_id)).toEqual([1]);
+
+    // Admin 2's cancel is still there for the next run, which finishes it.
+    expect((await runCron()).status).toBe(200);
+    expect(await audits()).toEqual([
+      expect.objectContaining({ actor_member_id: 1, payload: expect.objectContaining({ mode: "period_end", reason: "Moving" }) }),
+      expect.objectContaining({ actor_member_id: 2, payload: expect.objectContaining({ mode: "now", reason: "Gone for good" }) }),
+    ]);
+    expect((await sub()).status).toBe("canceled");
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+  });
+
+  it("Stripe done, then the process stops before recording: a retry finishes it with the original choices", async () => {
+    await seed({ rail: "stripe" });
+    statefulStripe();
+    await diesAfterStripe({ reason: "Moved away" });
+    expect(await audits()).toEqual([]);
+    stripe.invoices.list.mockResolvedValue({ data: [{ id: "in_overdue" }], has_more: false });
+
+    // The same admin retries without a reason and without voiding.
+    const result = await cancel();
+    expect(stripe.subscriptions.cancel).toHaveBeenCalledTimes(1);
+    expect(await audits()).toEqual([expect.objectContaining({
+      actor_member_id: 1, payload: expect.objectContaining({ mode: "now", reason: "Moved away", voided_invoice_ids: ["in_overdue"] }),
+    })]);
+    expect(result).toMatchObject({ resumed: true, outcome: "canceled", door: { revokedSlot: 12 }, voidedInvoiceIds: ["in_overdue"] });
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
   });
 });
 
@@ -638,7 +783,7 @@ describe("cancel records stay whole", () => {
     await invoice(900, iso(-10 * DAY), "submitted");
     await cancel({ mode: "period_end" });
     // The door step has run; the payment for the current period is credited before finish.
-    db.beforeNextWrite("rpc:finish_admin_cancel", () => db.sql(`select * from credit_onchain_invoice(900, $1, 0, 1, $2, $3, $4, $5, 250000000, 'safe')`,
+    db.beforeNextWrite("rpc:end_admin_cancel_period", () => db.sql(`select * from credit_onchain_invoice(900, $1, 0, 1, $2, $3, $4, $5, 250000000, 'safe')`,
       [TX, `0x${"c".repeat(64)}`, WALLET, TREASURY_ADDRESS, NATIVE_USDC_ADDRESS]));
     const response = await runCron();
     expect(response.status).toBe(200);
@@ -654,7 +799,7 @@ describe("cancel records stay whole", () => {
     let lose = true;
     db.rpc = (async (name: string, args?: Record<string, unknown>) => {
       const result = await rpc(name, args);
-      if (name === "admin_cancel_subscription" && lose) { lose = false; return { data: null, error: { message: "connection reset" } }; }
+      if (name === "record_admin_cancel" && lose) { lose = false; return { data: null, error: { message: "connection reset" } }; }
       return result;
     }) as typeof db.rpc;
     await expect(cancel()).rejects.toBeTruthy();
@@ -663,7 +808,7 @@ describe("cancel records stay whole", () => {
     expect(await audits()).toHaveLength(1);
   });
 
-  it("voiding Stripe invoices on a repeat of a half-finished cancel is returned and audited", async () => {
+  it("a resumed cancel keeps its own void choice; voiding after it is a request of its own, returned and audited", async () => {
     await seed({ rail: "stripe", status: "past_due", pastDueSince: iso(-10 * DAY) });
     await db.exec(`create function fail_member_update() returns trigger language plpgsql as $$
       begin raise exception 'injected member update failure'; end $$;
@@ -672,8 +817,12 @@ describe("cancel records stay whole", () => {
     await db.exec("drop trigger fail_member_update on members");
     stripe.invoices.list.mockResolvedValue({ data: [{ id: "in_overdue" }], has_more: false });
 
+    const resumed = await cancel({ voidOpenInvoices: true });
+    expect(resumed).toMatchObject({ resumed: true, voidedInvoiceIds: [], door: { revokedSlot: 12 } });
+    expect(stripe.invoices.voidInvoice).not.toHaveBeenCalled();
+
     const again = await cancel({ voidOpenInvoices: true });
-    expect(again.voidedInvoiceIds).toEqual(["in_overdue"]);
+    expect(again).toMatchObject({ resumed: false, outcome: "already_canceled", voidedInvoiceIds: ["in_overdue"] });
     expect((await audits()).at(-1)?.payload).toMatchObject({ voided_invoice_ids: ["in_overdue"] });
   });
 
@@ -693,7 +842,7 @@ describe("cancel records stay whole", () => {
     const rpc = db.rpc;
     let calls = 0;
     db.rpc = (async (name: string, args?: Record<string, unknown>) => {
-      if (name === "admin_cancel_subscription") { calls++; return { data: null, error: { message: "boom" } }; }
+      if (name === "record_admin_cancel") { calls++; return { data: null, error: { message: "boom" } }; }
       return rpc(name, args);
     }) as typeof db.rpc;
     await expect(cancel()).rejects.toMatchObject({ message: "boom" });

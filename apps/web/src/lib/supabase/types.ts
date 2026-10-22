@@ -1,13 +1,3 @@
-/** A card cancel saved before Stripe is asked (subscriptions.admin_cancel_intent, migration 059). */
-export type AdminCancelIntent = {
-  token: string;
-  actor: number;
-  reason: string | null;
-  mode: "now" | "period_end";
-  void_open: boolean;
-  at: string;
-};
-
 export type MemberType = "cold_desk" | "hot_desk" | "hub_friend" | "day_pass";
 export type ApplicationStatus = "pending" | "approved" | "rejected" | "closed";
 export type MembershipInterest =
@@ -280,7 +270,6 @@ export interface Database {
           admin_cancel_mode?: "now" | "period_end" | null;
           admin_cancel_ends_at?: string | null;
           admin_cancel_audit_id?: number | null;
-          admin_cancel_intent?: AdminCancelIntent | null;
           created_at: string;
           updated_at: string;
         };
@@ -312,7 +301,6 @@ export interface Database {
           admin_cancel_mode?: "now" | "period_end" | null;
           admin_cancel_ends_at?: string | null;
           admin_cancel_audit_id?: number | null;
-          admin_cancel_intent?: AdminCancelIntent | null;
         };
         Update: Partial<Database["public"]["Tables"]["subscriptions"]["Insert"]>;
         Relationships: [];
@@ -637,6 +625,26 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["admin_actions"]["Insert"]>;
         Relationships: [];
       };
+      /** One per admin cancel request (migration 059). Written only by the 059 functions; never rewritten. */
+      admin_cancel_operations: {
+        Row: {
+          id: number;
+          subscription_id: number;
+          rail: PaymentRail;
+          actor_member_id: number;
+          reason: string | null;
+          mode: "now" | "period_end";
+          void_invoices: boolean;
+          created_at: string;
+          stripe_done_at: string | null;
+          recorded_at: string | null;
+          door_done_at: string | null;
+          finished_at: string | null;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       webhook_events: {
         Row: {
           id: number;
@@ -722,22 +730,27 @@ export interface Database {
           match_status: "credited" | "exception";
         }>;
       };
-      admin_cancel_subscription: {
-        Args: {
-          p_subscription_id: number;
-          p_mode: "now" | "period_end";
-          p_actor: number | null;
-          p_reason: string | null;
-          p_void_open: boolean;
-          p_stripe?: { voided_invoice_ids: string[]; already_canceled: boolean } | null;
-        };
+      begin_admin_cancel: {
+        Args: { p_subscription_id: number; p_mode: "now" | "period_end"; p_actor: number | null; p_reason: string | null; p_void_open: boolean };
+        /** The admin_cancel_operations row (new, or the unfinished one, unchanged) plus `resumed`. */
         Returns: unknown;
+      };
+      record_admin_cancel: {
+        Args: { p_operation_id: number; p_stripe?: { voided_invoice_ids: string[]; already_canceled: boolean } | null };
+        Returns: unknown;
+      };
+      admin_cancel_stripe_done: { Args: { p_operation_id: number }; Returns: null };
+      abandon_admin_cancel: { Args: { p_operation_id: number }; Returns: boolean | null };
+      admin_cancel_door_due: { Args: { p_operation_id: number }; Returns: boolean };
+      finish_admin_cancel: {
+        Args: { p_operation_id: number; p_door?: { door_slot_cleared: number | null; door_clear_failed: boolean } | null };
+        Returns: boolean;
       };
       admin_cancel_due: {
         Args: { p_subscription_id: number };
         Returns: boolean;
       };
-      finish_admin_cancel: {
+      end_admin_cancel_period: {
         Args: { p_subscription_id: number; p_door?: { door_slot_cleared: number | null; door_clear_failed: boolean } | null };
         Returns: boolean;
       };

@@ -16,7 +16,6 @@ import {
   downgradeMembershipAccess,
 } from "@/lib/membershipLifecycle";
 import { grantSubscriptionPasses } from "@/lib/subscriptionPasses";
-import { recordPendingStripeCancel } from "@/lib/membershipCancel";
 import { withLockWriter } from "@regenhub/shared";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
@@ -216,20 +215,18 @@ async function handleCheckoutCompleted(
  * never comes back, so a cancel-now can't be undone this way. If Stripe now
  * says a period-end cancel is off, the member renewed after the admin's
  * cancel (e.g. in the billing portal): that's an explicit re-subscribe, and
- * the marker is lifted. An admin cancel still pending (its request died after
- * Stripe accepted) is recorded here first.
+ * the marker is lifted.
  */
 async function currentIfAdminCanceled(admin: ServiceClient, sub: Stripe.Subscription): Promise<Stripe.Subscription> {
   const { data: row, error } = await admin
     .from("subscriptions")
-    .select("id, stripe_subscription_id, admin_cancel_mode, admin_cancel_intent")
+    .select("admin_cancel_mode")
     .eq("stripe_subscription_id", sub.id)
     .maybeSingle();
   if (error) throw error;
-  if (!row?.admin_cancel_mode && !row?.admin_cancel_intent) return sub;
+  if (!row?.admin_cancel_mode) return sub;
   const current = await getStripe().subscriptions.retrieve(sub.id);
-  if (row.admin_cancel_intent) await recordPendingStripeCancel(admin, row, current);
-  if (row.admin_cancel_mode && current.status !== "canceled" && !current.cancel_at_period_end) {
+  if (current.status !== "canceled" && !current.cancel_at_period_end) {
     const { error: liftError } = await admin
       .from("subscriptions")
       .update({ admin_canceled_at: null, admin_canceled_by: null, admin_cancel_reason: null, admin_cancel_mode: null, admin_cancel_ends_at: null, admin_cancel_audit_id: null })
@@ -332,17 +329,6 @@ async function handleSubscriptionUpdated(admin: ServiceClient, event: Stripe.Sub
 }
 
 async function handleSubscriptionDeleted(admin: ServiceClient, sub: Stripe.Subscription): Promise<number | null> {
-  // An admin cancel whose request died after Stripe accepted: record who and
-  // why before the row is ended (a failure here fails the event, so Stripe retries).
-  const { data: pending, error: pendingError } = await admin
-    .from("subscriptions")
-    .select("id, stripe_subscription_id, admin_cancel_intent")
-    .eq("stripe_subscription_id", sub.id)
-    .not("admin_cancel_intent", "is", null)
-    .maybeSingle();
-  if (pendingError) throw pendingError;
-  if (pending) await recordPendingStripeCancel(admin, pending, sub);
-
   // Mark canceled in local mirror
   await admin
     .from("subscriptions")
