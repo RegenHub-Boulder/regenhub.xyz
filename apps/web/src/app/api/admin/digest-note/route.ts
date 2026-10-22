@@ -1,6 +1,5 @@
-import { requireAdmin } from "@/lib/admin";
+import { requireAdminMember } from "@/lib/admin";
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 
 /**
@@ -12,23 +11,9 @@ import { createServiceClient } from "@/lib/supabase/admin";
  * history stays browsable in the table).
  */
 
-async function requireAdminMember() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Unauthorized" as const, status: 401 as const };
-  const { data: member } = await supabase
-    .from("members")
-    .select("id, is_admin")
-    .eq("supabase_user_id", user.id)
-    .single();
-  if (!member?.is_admin) return { error: "Forbidden" as const, status: 403 as const };
-  return { member };
-}
-
 export async function GET() {
-  if (!await requireAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const auth = await requireAdminMember();
-  if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  if (!auth) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const admin = createServiceClient();
   const { data } = await admin
@@ -43,9 +28,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  if (!await requireAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const auth = await requireAdminMember();
-  if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  if (!auth) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = (await req.json().catch(() => null)) as { note?: string } | null;
   const note = body?.note?.trim();
