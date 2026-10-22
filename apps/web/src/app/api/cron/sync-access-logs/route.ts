@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { hasBearerSecret } from "@/lib/secretAuth";
 
 /**
  * POST /api/cron/sync-access-logs
@@ -33,8 +34,7 @@ export async function POST(req: Request) {
   if (!secret) {
     return NextResponse.json({ error: "CRON_SECRET is not set" }, { status: 503 });
   }
-  const auth = req.headers.get("authorization");
-  if (auth !== `Bearer ${secret}`) {
+  if (!hasBearerSecret(req, secret)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
