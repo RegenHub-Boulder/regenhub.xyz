@@ -159,7 +159,7 @@ marker is set nothing makes the subscription payable or entitled again: no invoi
 (`credit_onchain_invoice` records a late transfer as an `exception` payment for an admin to reconcile), no payment
 effects or Stripe activation (both re-read the row under the PIN writer). A canceled row, canceled any way, never
 goes live again (trigger) and a late transfer for it is never credited; a void invoice stays void. Card cancels
-call Stripe after the operation is written; the webhook uses Stripe's *current* subscription for marked rows, and
+call Stripe after the operation is written, with one idempotency key per operation (`admin-cancel-<id>`); the webhook uses Stripe's *current* subscription for marked rows, and
 only a renewal Stripe reports lifts the marker. Cancel-now stays "marked + live" until the door step finishes. The
 door step asks `admin_cancel_door_due()` under the PIN writer first, and the period-end step `admin_cancel_due()`,
 so a payment that just extended the period keeps its door.
