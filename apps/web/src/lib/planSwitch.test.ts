@@ -192,6 +192,7 @@ beforeEach(async () => {
   vi.mocked(clearUserCode).mockImplementation((slot) =>
     clearSlotSafely(slot, async () => DOORS.map((entity) => ({ entity, ok: true })), DOORS));
   vi.mocked(setUserCode).mockImplementation(async () => DOORS.map((entity) => ({ entity, ok: true })));
+  chainPays(0n); // a chain with nothing to confirm, so each test stands alone
   vi.stubEnv("STRIPE_WEBHOOK_SECRET", "whsec_test_only");
   vi.stubEnv("TELEGRAM_BOT_TOKEN", "");
   vi.stubEnv("CRON_SECRET", "cron-test-secret");
