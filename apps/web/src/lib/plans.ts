@@ -121,6 +121,11 @@ export function isDeskPlan(planKey: PlanKey | null | undefined): boolean {
   return type === "cold_desk" || type === "hot_desk";
 }
 
+/** Member types that hold a permanent desk door code. */
+export function isDeskMemberType(type: MemberType | string | null | undefined): boolean {
+  return type === "cold_desk" || type === "hot_desk";
+}
+
 export function planLabel(planKey: PlanKey): string {
   return getPlan(planKey)?.label ?? planKey;
 }
@@ -136,6 +141,10 @@ export function getSelfServePlans(): { key: KnownPlanKey; def: PlanDef }[] {
     .filter(([, def]) => def.selfServe)
     .sort((a, b) => a[1].defaultMonthlyCents - b[1].defaultMonthlyCents)
     .map(([key, def]) => ({ key, def }));
+}
+
+export function getAllPlanKeys(): KnownPlanKey[] {
+  return Object.keys(PLANS) as KnownPlanKey[];
 }
 
 /** All plans, sorted by price ascending. */

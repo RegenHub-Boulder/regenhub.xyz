@@ -375,10 +375,7 @@ async function handleSubscriptionDeleted(admin: ServiceClient, sub: Stripe.Subsc
   if (!row?.member_id) return null;
 
   const name = row.members?.name ?? "A member";
-  const cancelledPlan = getPlan(row.plan_key);
-  const wasDeskTier =
-    cancelledPlan?.grantsMemberType === "cold_desk" ||
-    cancelledPlan?.grantsMemberType === "hot_desk";
+  const wasDeskTier = isDeskPlan(row.plan_key);
   const slot = row.members?.pin_code_slot ?? null;
 
   let lockRevokeNote = "";
@@ -631,15 +628,15 @@ async function upsertSubscription(
     .eq("stripe_subscription_id", sub.id)
     .maybeSingle();
   if (localError) throw localError;
-  let switchLanded: SwitchLanded | null = null;
-  if (local && isDeskPlan(local.plan_key) && !isDeskPlan(planKey)) {
-    switchLanded = await endDeskAccessForSwitch(admin, {
+  const leavingDesk = !!local && isDeskPlan(local.plan_key) && !isDeskPlan(planKey);
+  const switchLanded: SwitchLanded | null = leavingDesk && local
+    ? await endDeskAccessForSwitch(admin, {
       subscriptionId: local.id, memberId: member.id, rail: "stripe", from: local.plan_key, to: planKey,
-    });
-  }
+    })
+    : null;
   // The pending switch is done (landed), or gone (its schedule was released at Stripe).
   const clearPending = !!local?.pending_plan_key &&
-    (switchLanded != null || local.pending_plan_key === planKey || scheduleIdOf(sub) !== local.pending_plan_schedule_id);
+    (leavingDesk || local.pending_plan_key === planKey || scheduleIdOf(sub) !== local.pending_plan_schedule_id);
 
   const status = sub.status as StripeSubscriptionStatus;
   // Stripe v20 moved current_period_end to the SubscriptionItem (per-item billing periods)
@@ -668,9 +665,9 @@ async function upsertSubscription(
   const { error: upsertError } = await admin.from("subscriptions").upsert(row, { onConflict: "stripe_subscription_id" });
   if (upsertError) throw upsertError;
 
+  // Only our own schedule: one an admin made in the dashboard is theirs to manage.
+  if (leavingDesk && local) await releaseLandedSchedule(local.pending_plan_schedule_id);
   if (switchLanded && local) {
-    // Only our own schedule: one an admin made in the dashboard is theirs to manage.
-    await releaseLandedSchedule(local.pending_plan_schedule_id);
     const door = switchLanded.lockRevokeFailed
       ? "\n\n⚠️ *Action needed:* the desk door code could not be cleared on every lock; the slot is quarantined. Run Lock Sync from /admin/access."
       : switchLanded.revokedSlot

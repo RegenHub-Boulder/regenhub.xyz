@@ -8,7 +8,7 @@ import {
   type Log,
 } from "viem";
 import { activateMembershipAccess, downgradeMembershipAccess } from "@/lib/membershipLifecycle";
-import { getPlan, isDeskPlan } from "@/lib/plans";
+import { getAllPlanKeys, getPlan, isDeskMemberType, isDeskPlan } from "@/lib/plans";
 import { endDeskAccessForSwitch } from "@/lib/planSwitch";
 import { grantSubscriptionPasses } from "@/lib/subscriptionPasses";
 import { isLiveSubscription } from "@/lib/subscriptionStatus";
@@ -201,12 +201,12 @@ export async function reconcileOnchainAccess(
     const runningSub = running?.subscriptions as unknown as { plan_key: string } | null;
     if (isDeskPlan(running?.plan_key ?? runningSub?.plan_key)) return true;
     // A desk period ending for a daily plan is a plan switch landing: audited, through the same lifecycle.
-    const revoked = member.member_type === "cold_desk" || member.member_type === "hot_desk"
+    const revoked = isDeskMemberType(member.member_type)
       ? await endDeskAccessForSwitch(admin, {
         subscriptionId: args.subscriptionId, memberId: member.id, rail: "onchain", from: member.member_type, to: planKey,
       })
       : await downgradeMembershipAccess(admin, { memberId: member.id, currentPinSlot: member.pin_code_slot, revokePermanentPin: true });
-    if (revoked.lockRevokeFailed || ("memberUpdateError" in revoked && revoked.memberUpdateError)) {
+    if (revoked && (revoked.lockRevokeFailed || ("memberUpdateError" in revoked && revoked.memberUpdateError))) {
       throw new Error("Could not revoke permanent door access");
     }
   }
@@ -221,25 +221,31 @@ export async function reconcileOnchainAccess(
 
 /**
  * On-chain counterpart of the Stripe webhook landing a desk → daily switch:
- * once the period of a paid daily-plan invoice starts, end the desk access of
- * a member who switched. Called from the on-chain billing cron; a failure is
- * retried on the next run (a failed lock clear is quarantined for Lock Sync).
+ * once a paid desk period is over and a paid daily-plan period has started,
+ * end the desk access of the member who switched. Only members who paid for a
+ * desk on this subscription qualify, so a desk an admin granted by hand to a
+ * daily subscriber is left alone. Called from the on-chain billing cron. A
+ * failed member update is retried on the next run; a failed lock clear stays
+ * quarantined for Lock Sync (the member is already off the desk type).
  */
 export async function finishOnchainPlanSwitches(admin: ServiceClient, now = new Date()) {
   const { data: subs, error } = await admin.from("subscriptions")
-    .select("id, member_id, plan_key")
+    .select("id, member_id, plan_key, members(member_type)")
     .eq("payment_rail", "onchain")
     .in("status", ["active", "trialing", "past_due"])
     .is("admin_cancel_mode", null);
   if (error) throw error;
+  const deskPlans = getAllPlanKeys().filter((key) => isDeskPlan(key));
   const results: { subscriptionId: number; memberId: number; error?: string }[] = [];
-  for (const sub of (subs ?? []) as { id: number; member_id: number; plan_key: string }[]) {
-    if (isDeskPlan(sub.plan_key)) continue;
-    const { data: member, error: memberError } = await admin.from("members")
-      .select("member_type").eq("id", sub.member_id).maybeSingle();
-    if (memberError) throw memberError;
-    if (member?.member_type !== "cold_desk" && member?.member_type !== "hot_desk") continue;
+  type Row = { id: number; member_id: number; plan_key: string; members: { member_type: string } | null };
+  for (const sub of (subs ?? []) as unknown as Row[]) {
+    if (isDeskPlan(sub.plan_key) || !isDeskMemberType(sub.members?.member_type)) continue;
     try {
+      const { data: paidDesk, error: deskError } = await admin.from("onchain_invoices")
+        .select("id").eq("subscription_id", sub.id).eq("status", "paid").in("plan_key", deskPlans)
+        .lte("period_end", now.toISOString()).limit(1).maybeSingle();
+      if (deskError) throw deskError;
+      if (!paidDesk) continue;
       await withLockWriter(admin, () => reconcileOnchainAccess(admin, { memberId: sub.member_id, subscriptionId: sub.id }, now),
         "On-chain plan switch");
       results.push({ subscriptionId: sub.id, memberId: sub.member_id });

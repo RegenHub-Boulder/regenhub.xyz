@@ -2,7 +2,7 @@ import type Stripe from "stripe";
 import { withLockWriter } from "@regenhub/shared";
 import type { createServiceClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe";
-import { getPlan, isDeskPlan, type PlanDef } from "@/lib/plans";
+import { getPlan, isDeskMemberType, isDeskPlan, type PlanDef } from "@/lib/plans";
 import { AuditAction, logAction } from "@/lib/auditLog";
 import { downgradeMembershipAccess, type DowngradeResult } from "@/lib/membershipLifecycle";
 import type { PaymentRail } from "@/lib/supabase/types";
@@ -59,11 +59,15 @@ function phaseDiscounts(discounts: Stripe.SubscriptionSchedule.Phase.Discount[] 
   });
 }
 
+/** Release a schedule. True once it no longer manages the subscription (including if it already didn't). */
 async function releaseSchedule(stripe: Stripe, scheduleId: string): Promise<boolean> {
   try {
     await stripe.subscriptionSchedules.release(scheduleId);
     return true;
   } catch (error) {
+    // Released or canceled already (from the dashboard, or a landing): nothing left to undo.
+    const current = await stripe.subscriptionSchedules.retrieve(scheduleId).catch(() => null);
+    if (current && ["released", "canceled", "completed"].includes(current.status)) return true;
     console.error(`[PlanSwitch] Could not release Stripe schedule ${scheduleId}:`, error);
     return false;
   }
@@ -128,6 +132,7 @@ export async function scheduleDeskToDaily(
           items: current.items.map((item) => ({ price: idOf(item.price)!, quantity: item.quantity ?? 1 })),
           start_date: current.start_date,
           end_date: current.end_date,
+          ...(current.trial_end ? { trial_end: current.trial_end } : {}),
           discounts,
         },
         {
@@ -196,11 +201,7 @@ export async function cancelPendingSwitch(
   if (sub.pending_plan_at && Date.parse(sub.pending_plan_at) <= Date.now() && args.reason === "member") {
     throw new PlanSwitchError("That switch has already taken effect.", 409);
   }
-  const stripe = getStripe();
-  try {
-    await stripe.subscriptionSchedules.release(sub.pending_plan_schedule_id);
-  } catch (error) {
-    console.error("[PlanSwitch] Release failed:", error);
+  if (!await releaseSchedule(getStripe(), sub.pending_plan_schedule_id)) {
     throw new PlanSwitchError("Stripe couldn't cancel the switch. Try again in a minute.", 502);
   }
   const { error } = await admin
@@ -222,20 +223,26 @@ export type SwitchLanded = Pick<DowngradeResult, "revokedSlot" | "lockStatus" | 
 
 /**
  * The desk period is over: end desk access through the shared lifecycle under
- * the PIN-writer reservation (the path admin cancel uses), and audit it. A
- * failed lock clear leaves the slot on the member and quarantined for Lock
+ * the PIN-writer reservation (the path admin cancel uses), and audit it.
+ * Returns null, touching nothing, when the member is no longer on a desk type.
+ * A failed lock clear leaves the slot on the member and quarantined for Lock
  * Sync; a failed member update throws so the caller's retry (Stripe's
  * redelivery, the next billing cron) runs it again.
  */
 export async function endDeskAccessForSwitch(
   admin: ServiceClient,
   args: { subscriptionId: number; memberId: number; rail: PaymentRail; from: string; to: string },
-): Promise<SwitchLanded> {
-  const downgrade = await withLockWriter(admin, () => downgradeMembershipAccess(admin, {
-    memberId: args.memberId,
-    currentPinSlot: null,
-    revokePermanentPin: true,
-  }), "Plan switch");
+): Promise<SwitchLanded | null> {
+  const downgrade = await withLockWriter(admin, async () => {
+    // Under the reservation, so two deliveries of the landing event end it once.
+    // A member no longer on a desk type has had it ended already (a failed lock
+    // clear stays quarantined for Lock Sync).
+    const { data: member, error } = await admin.from("members").select("member_type").eq("id", args.memberId).single();
+    if (error) throw error;
+    if (!isDeskMemberType(member.member_type)) return null;
+    return downgradeMembershipAccess(admin, { memberId: args.memberId, currentPinSlot: null, revokePermanentPin: true });
+  }, "Plan switch");
+  if (!downgrade) return null;
   if (downgrade.memberUpdateError) {
     const { message } = downgrade.memberUpdateError as { message?: string };
     throw new Error(`Member downgrade failed: ${message ?? "unknown error"}`);

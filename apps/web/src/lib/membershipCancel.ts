@@ -1,6 +1,6 @@
 import type { createServiceClient } from "@/lib/supabase/admin";
 import type { PaymentRail } from "@/lib/supabase/types";
-import { isDeskPlan } from "@/lib/plans";
+import { isDeskMemberType, isDeskPlan, planLabel } from "@/lib/plans";
 import { cancelPendingSwitch } from "@/lib/planSwitch";
 import { getStripe } from "@/lib/stripe";
 import { downgradeMembershipAccess, type DowngradeResult } from "@/lib/membershipLifecycle";
@@ -87,7 +87,7 @@ async function endAccess(admin: ServiceClient, sub: Pick<SubscriptionRow, "membe
   const { data: current, error: memberError } = await admin
     .from("members").select("member_type").eq("id", sub.member_id).single();
   if (memberError) throw memberError;
-  const onDesk = current.member_type === "cold_desk" || current.member_type === "hot_desk";
+  const onDesk = isDeskMemberType(current.member_type);
   const downgrade = await downgradeMembershipAccess(admin, {
     memberId: sub.member_id,
     currentPinSlot: null,
@@ -330,7 +330,13 @@ async function runOperation(admin: ServiceClient, operationId: number): Promise<
         }
       }
       const stripeMode = op.mode === "now" || sub.status === "incomplete" ? "now" : "period_end";
-      alreadyCanceled = await cancelAtStripe(admin, op, sub, stripeMode) === "already_canceled";
+      alreadyCanceled = await cancelAtStripe(admin, op, sub, stripeMode).catch((error: unknown) => {
+        // The switch is already dropped; say so, since the member now renews on the desk until a cancel lands.
+        if (error instanceof CancelMembershipError && sub.pending_plan_schedule_id) {
+          throw new CancelMembershipError(`${error.message} The member's scheduled switch to ${planLabel(sub.pending_plan_key ?? "")} was dropped first; their plan stays as it is until you cancel.`, error.status);
+        }
+        throw error;
+      }) === "already_canceled";
       if (alreadyCanceled) warnings.push("Stripe had already canceled this subscription (a missed webhook); it is now ended here too.");
       const { error: stampError } = await admin.rpc("admin_cancel_stripe_done", { p_operation_id: op.id });
       if (stampError) throw stampError;
