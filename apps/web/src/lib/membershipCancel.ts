@@ -178,35 +178,47 @@ async function voidStripeInvoices(subscriptionId: string) {
 /** Stripe never brings these back. */
 const isEndedAtStripe = (status: string) => status === "canceled" || status === "incomplete_expired";
 
+/** Stripe's clock and the database's can disagree by a little. */
+const STRIPE_CLOCK_SKEW_MS = 60_000;
+
+/** Did Stripe end this subscription after the operation began (so by its own cancel, or another runner of it)? */
+const endedSince = (current: { canceled_at?: number | null; ended_at?: number | null }, op: Pick<Operation, "created_at">) =>
+  (current.canceled_at ?? current.ended_at ?? 0) * 1000 >= Date.parse(op.created_at) - STRIPE_CLOCK_SKEW_MS;
+
 /**
  * Ask Stripe. Returns "already_canceled" when Stripe had ended it before we
  * asked. On a refusal Stripe confirms (it still shows the subscription
  * untouched) the operation is abandoned; if Stripe can't be read back, the
  * operation stays and the billing cron asks again.
  */
-async function cancelAtStripe(admin: ServiceClient, operationId: number, sub: SubscriptionRow, mode: CancelMode, reason: string | null) {
+async function cancelAtStripe(admin: ServiceClient, op: Operation, sub: SubscriptionRow, mode: CancelMode) {
   const id = sub.stripe_subscription_id!;
   const stripe = getStripe();
-  const details = reason ? { cancellation_details: { comment: reason.slice(0, 500) } } : {};
-  // One key per operation: the request and the billing cron asking at once get one answer from Stripe.
-  const once = { idempotencyKey: `admin-cancel-${operationId}` };
+  const details = op.reason ? { cancellation_details: { comment: op.reason.slice(0, 500) } } : {};
   try {
     if (mode === "now") {
       // No proration credit and no final invoice: the admin is ending it, not refunding it.
-      await stripe.subscriptions.cancel(id, { prorate: false, invoice_now: false, ...details }, once);
+      // Stripe's DELETE takes no idempotency key: when the request and the
+      // billing cron ask at once, the second call fails as already canceled
+      // and the readback below counts it as this operation's cancel.
+      await stripe.subscriptions.cancel(id, { prorate: false, invoice_now: false, ...details });
     } else {
-      await stripe.subscriptions.update(id, { cancel_at_period_end: true, ...details }, once);
+      // One key per operation: the request and the billing cron asking at once get one answer.
+      await stripe.subscriptions.update(id, { cancel_at_period_end: true, ...details }, { idempotencyKey: `admin-cancel-${op.id}` });
     }
     return "done" as const;
   } catch (error) {
-    // Already canceled at Stripe (e.g. a lost webhook, or an earlier attempt): mirror it locally.
+    // Already canceled at Stripe: by another runner of this operation, or
+    // before it began (a lost webhook, an earlier attempt); mirror it locally.
     // Stripe answering that it has no such subscription is a refusal too, not an outage.
     let unknownToStripe = false;
     const current = await stripe.subscriptions.retrieve(id).catch((cause: { code?: string }) => {
       unknownToStripe = cause?.code === "resource_missing";
       return null;
     });
-    if (current && isEndedAtStripe(current.status)) return "already_canceled" as const;
+    if (current && isEndedAtStripe(current.status)) {
+      return mode === "now" && endedSince(current, op) ? "done" as const : "already_canceled" as const;
+    }
     if (current && mode === "period_end" && current.cancel_at_period_end) return "done" as const;
     console.error("[CancelMembership] Stripe cancel failed:", error);
     const message = error instanceof Error ? error.message : "unknown error";
@@ -220,7 +232,7 @@ async function cancelAtStripe(admin: ServiceClient, operationId: number, sub: Su
         502,
       );
     }
-    const { error: abandonError } = await admin.rpc("abandon_admin_cancel", { p_operation_id: operationId });
+    const { error: abandonError } = await admin.rpc("abandon_admin_cancel", { p_operation_id: op.id });
     if (abandonError) console.error("[CancelMembership] Closing the refused cancel failed:", abandonError);
     throw new CancelMembershipError(`Stripe refused the cancellation: ${message}`, 502);
   }
@@ -241,9 +253,6 @@ type Operation = {
   door_done_at: string | null;
   finished_at: string | null;
 };
-
-/** Stripe's clock and the database's can disagree by a little. */
-const STRIPE_CLOCK_SKEW_MS = 60_000;
 
 type Run = { recorded: Recorded; sub: SubscriptionRow; door: DowngradeResult | null; warnings: string[] };
 
@@ -271,7 +280,7 @@ async function runOperation(admin: ServiceClient, operationId: number): Promise<
     const repeat = sub.admin_cancel_mode === "now" || (sub.admin_cancel_mode != null && op.mode === "period_end");
     if (!op.stripe_done_at && isLiveSubscription(sub.status) && !repeat) {
       const stripeMode = op.mode === "now" || sub.status === "incomplete" ? "now" : "period_end";
-      alreadyCanceled = await cancelAtStripe(admin, op.id, sub, stripeMode, op.reason) === "already_canceled";
+      alreadyCanceled = await cancelAtStripe(admin, op, sub, stripeMode) === "already_canceled";
       if (alreadyCanceled) warnings.push("Stripe had already canceled this subscription (a missed webhook); it is now ended here too.");
       const { error: stampError } = await admin.rpc("admin_cancel_stripe_done", { p_operation_id: op.id });
       if (stampError) throw stampError;
@@ -283,8 +292,7 @@ async function runOperation(admin: ServiceClient, operationId: number): Promise<
       // have accepted our call just before the request stopped. If Stripe
       // ended it after this operation began, record it as this admin's cancel.
       const current = await getStripe().subscriptions.retrieve(sub.stripe_subscription_id!);
-      const endedAt = (current.canceled_at ?? current.ended_at ?? 0) * 1000;
-      if (isEndedAtStripe(current.status) && endedAt >= Date.parse(op.created_at) - STRIPE_CLOCK_SKEW_MS) {
+      if (isEndedAtStripe(current.status) && endedSince(current, op)) {
         alreadyCanceled = true;
         const { error: stampError } = await admin.rpc("admin_cancel_stripe_done", { p_operation_id: op.id });
         if (stampError) throw stampError;

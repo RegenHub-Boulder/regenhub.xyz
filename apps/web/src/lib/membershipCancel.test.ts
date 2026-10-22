@@ -191,8 +191,7 @@ describe("card (Stripe)", () => {
     await seed({ rail: "stripe" });
     const result = await cancel({ reason: "Moved away" });
 
-    expect(stripe.subscriptions.cancel).toHaveBeenCalledWith("sub_test_50", expect.objectContaining({ prorate: false, invoice_now: false }),
-      { idempotencyKey: expect.stringMatching(/^admin-cancel-\d+$/) });
+    expect(stripe.subscriptions.cancel).toHaveBeenCalledWith("sub_test_50", expect.objectContaining({ prorate: false, invoice_now: false }));
     expect(result).toMatchObject({ outcome: "canceled", rail: "stripe", mode: "now", door: { revokedSlot: 12, lockRevokeFailed: false } });
     expect(await sub()).toMatchObject({ status: "canceled", admin_cancel_mode: "now", admin_canceled_by: 1, admin_cancel_reason: "Moved away" });
     expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null, pin_code: null, disabled: false });
@@ -204,7 +203,8 @@ describe("card (Stripe)", () => {
     await seed({ rail: "stripe" });
     const result = await cancel({ mode: "period_end" });
 
-    expect(stripe.subscriptions.update).toHaveBeenCalledWith("sub_test_50", expect.objectContaining({ cancel_at_period_end: true }), expect.anything());
+    expect(stripe.subscriptions.update).toHaveBeenCalledWith("sub_test_50", expect.objectContaining({ cancel_at_period_end: true }),
+      { idempotencyKey: expect.stringMatching(/^admin-cancel-\d+$/) });
     expect(stripe.subscriptions.cancel).not.toHaveBeenCalled();
     expect(result).toMatchObject({ outcome: "scheduled", accessEndsAt: new Date(periodEnd).toISOString(), door: null });
     expect(await sub()).toMatchObject({ status: "active", cancel_at_period_end: true, admin_cancel_mode: "period_end" });
@@ -598,6 +598,29 @@ describe("card (Stripe): one operation per cancel, finished by the billing cron"
     expect(result).toMatchObject({ outcome: "canceled", door: { revokedSlot: 12 } });
     expect(await audits()).toEqual([expect.objectContaining({ actor_member_id: 1, payload: expect.objectContaining({ reason: "Moved away" }) })]);
     expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+  });
+
+  it("two runners cancelling the same operation at once: the loser's readback counts it as this cancel, not a missed webhook", async () => {
+    await seed({ rail: "stripe" });
+    const state = statefulStripe();
+    let first = true;
+    // Stripe's DELETE takes no idempotency key, so the second runner's call fails as already canceled.
+    stripe.subscriptions.cancel.mockImplementation(async () => {
+      if (state.status === "canceled") throw Object.assign(new Error("This subscription is already canceled"), { type: "StripeInvalidRequestError" });
+      Object.assign(state, { status: "canceled", canceled_at: Math.floor(Date.now() / 1000) });
+      if (first) { first = false; await runCron(); }
+      return { ...state };
+    });
+    const result = await cancel({ reason: "Moved away" });
+
+    expect(stripe.subscriptions.cancel).toHaveBeenCalledTimes(2);
+    expect(result.warnings.join(" ")).not.toMatch(/missed webhook/);
+    expect(await audits()).toEqual([expect.objectContaining({ actor_member_id: 1, payload: expect.objectContaining({ reason: "Moved away" }) })]);
+    expect((await audits())[0].payload).not.toHaveProperty("stripe_already_canceled");
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+    expect(await operations()).toEqual([expect.objectContaining({ finished_at: expect.any(String) })]);
+    // Sent without an idempotency key, which a DELETE would ignore.
+    expect(stripe.subscriptions.cancel).toHaveBeenLastCalledWith("sub_test_50", expect.objectContaining({ prorate: false }));
   });
 
   it("Stripe done, then the process stops before recording: a retry finishes it with the original choices", async () => {
