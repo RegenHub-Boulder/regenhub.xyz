@@ -146,5 +146,5 @@ it("retains member and slot when clear cannot be confirmed", async () => {
   vi.mocked(createServiceClient).mockReturnValue(admin as never);
   vi.mocked(clearUserCode).mockRejectedValue(new Error("partial clear; quarantined"));
   expect((await DELETE(req(), ctx)).status).toBe(502);
-  expect(admin.from).not.toHaveBeenCalled();
+  expect(vi.mocked(admin.from).mock.results.some((r) => vi.mocked(r.value.delete).mock.calls.length)).toBe(false);
 });

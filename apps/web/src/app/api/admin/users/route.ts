@@ -5,11 +5,13 @@ import { createClient } from "@/lib/supabase/server";
 import type { Application, Member } from "@/lib/supabase/types";
 
 export type AdminUserSubscription = {
+  payment_rail: string;
   plan_key: string;
   monthly_cents: number;
   net_cents: number | null;
   status: string;
   cancel_at_period_end: boolean;
+  past_due_since: string | null;
 };
 
 export type AdminUser = {
@@ -56,7 +58,7 @@ export async function GET() {
     serviceClient.from("applications").select("*").order("created_at", { ascending: false }),
     supabase
       .from("subscriptions")
-      .select("member_id, plan_key, monthly_cents, net_cents, status, cancel_at_period_end")
+      .select("member_id, payment_rail, plan_key, monthly_cents, net_cents, status, cancel_at_period_end, past_due_since")
       .in("status", ["active", "trialing", "past_due"]),
   ]);
 
@@ -75,12 +77,16 @@ export async function GET() {
   // Member ID → subscription (one per member by design — invariant from the approval flow)
   const subByMemberId = new Map<number, AdminUserSubscription>();
   for (const s of subs ?? []) {
+    // If a member somehow has two live rows, keep the past-due one visible.
+    if (subByMemberId.get(s.member_id)?.status === "past_due") continue;
     subByMemberId.set(s.member_id, {
+      payment_rail: s.payment_rail,
       plan_key: s.plan_key,
       monthly_cents: s.monthly_cents,
       net_cents: s.net_cents,
       status: s.status,
       cancel_at_period_end: s.cancel_at_period_end,
+      past_due_since: s.past_due_since,
     });
   }
 

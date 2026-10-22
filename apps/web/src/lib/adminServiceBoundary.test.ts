@@ -18,6 +18,7 @@ const handlers = [
   { name: "digest GET", load: async () => (await import("../app/api/admin/digest-note/route")).GET },
   { name: "digest POST", load: async () => (await import("../app/api/admin/digest-note/route")).POST },
   { name: "apply credit POST", load: async () => (await import("../app/api/admin/members/[id]/apply-credit/route")).POST },
+  { name: "cancel membership POST", load: async () => (await import("../app/api/admin/members/[id]/cancel-membership/route")).POST },
   { name: "approve membership PATCH", load: async () => (await import("../app/api/admin/members/[id]/approve-membership/route")).PATCH },
   { name: "newsletter preview POST", load: async () => (await import("../app/api/admin/newsletter-preview/route")).POST },
 ];

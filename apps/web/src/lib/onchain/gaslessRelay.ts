@@ -331,15 +331,20 @@ async function processRelayJob(admin: ServiceClient, job: RelayJob): Promise<Has
 
   const client = getOpPublicClient();
   await assertOpPublicClient(client);
-  const { error: submittingError } = await admin
+  const { data: claimed, error: submittingError } = await admin
     .from("onchain_relay_jobs")
     .update({
       status: "submitting",
       attempts: job.attempts + 1,
       last_error: null,
     })
-    .eq("invoice_id", job.invoice_id);
+    .eq("invoice_id", job.invoice_id)
+    // Only from the status read above: an admin cancel may have expired it.
+    .eq("status", job.status)
+    .select("invoice_id")
+    .maybeSingle();
   if (submittingError) throw submittingError;
+  if (!claimed) throw new InvalidRelayJobError("relay job changed before submission");
 
   const account = privateKeyToAccount(getOpRelayerPrivateKey());
   const walletClient = createWalletClient({
@@ -399,7 +404,9 @@ export async function processGaslessRelayQueue(
         .from("onchain_relay_jobs")
         .update(retryUpdate)
         .eq("invoice_id", job.invoice_id)
-        .neq("status", "submitted");
+        .neq("status", "submitted")
+        // Already expired elsewhere (an admin cancel): keep its reason.
+        .neq("status", "expired");
       throw error;
     }
   } finally {
