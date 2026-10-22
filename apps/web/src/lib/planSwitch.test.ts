@@ -12,6 +12,7 @@ vi.setConfig({ testTimeout: 60_000, hookTimeout: 120_000 });
 
 vi.mock("@/lib/supabase/admin", () => ({ createServiceClient: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
+vi.mock("@/lib/admin", () => ({ requireAdmin: vi.fn(async () => ({ id: "00000000-0000-4000-8000-000000000001" })) }));
 vi.mock("@/lib/stripe", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/stripe")>(),
   getStripe: vi.fn(),
@@ -46,6 +47,7 @@ import { DELETE as cancelSwitch, POST as changePlan } from "@/app/api/portal/cha
 import { POST as stripeWebhook } from "@/app/api/webhooks/stripe/route";
 import { POST as onchainCron } from "@/app/api/cron/onchain-billing/route";
 import { POST as submitPayment } from "@/app/api/portal/onchain/submit/route";
+import { PATCH as adminEditOnchain } from "@/app/api/admin/members/[id]/onchain-subscription/route";
 
 const USER_ID = "00000000-0000-4000-8000-000000000007";
 const DAY = 24 * 60 * 60 * 1000;
@@ -1025,6 +1027,26 @@ describe("crypto (on-chain): Hot Desk → Member + 2 days/mo", () => {
     const order = await db.sql("select action from admin_actions where action in ('plan_switch_completed', 'onchain_subscription_changed') order by id");
     expect(order.map((row) => row.action)).toEqual(["onchain_subscription_changed", "plan_switch_completed", "onchain_subscription_changed"]);
     expect(await sub()).toMatchObject({ plan_key: "hot_desk", pending_plan_key: null });
+  });
+
+  it("an admin's crypto plan edit on a membership that ended meanwhile changes nothing and isn't audited", async () => {
+    await seed({ rail: "onchain" });
+    // Ends between the route's read and the update.
+    db.beforeNextWrite("rpc:acquire_lock_writer", () => db.sql("update subscriptions set status = 'canceled', canceled_at = now() where id = 50"));
+    const response = await adminEditOnchain(new Request("http://localhost/api/admin/members/7/onchain-subscription", {
+      method: "PATCH", body: JSON.stringify({ plan_key: "member_2day" }),
+    }), { params: Promise.resolve({ id: "7" }) });
+    expect(response.status).toBe(409);
+    expect(await sub()).toMatchObject({ plan_key: "hot_desk", pending_plan_key: null });
+    expect(await audits("onchain_subscription_changed")).toHaveLength(0);
+  });
+
+  it("a member whose crypto membership ended meanwhile is told so, not that an admin is canceling it", async () => {
+    await seed({ rail: "onchain" });
+    db.beforeNextWrite("rpc:acquire_lock_writer", () => db.sql("update subscriptions set status = 'canceled', canceled_at = now() where id = 50"));
+    const response = await pick("member_2day");
+    expect(response.status).toBe(409);
+    expect((await response.json()).error).toMatch(/isn't active any more/);
   });
 
   it("a sweep working from a stale snapshot doesn't take a desk an admin gave by hand meanwhile", async () => {

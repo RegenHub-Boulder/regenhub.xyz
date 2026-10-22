@@ -147,7 +147,11 @@ export async function POST(req: Request) {
       return null;
     });
     if (!result) return NextResponse.json({ error: "Could not change plan" }, { status: 500 });
-    if (!result.changed) return NextResponse.json({ error: CANCEL_IN_PROGRESS_MESSAGE }, { status: 409 });
+    if (!result.changed) {
+      return NextResponse.json({
+        error: result.canceling ? CANCEL_IN_PROGRESS_MESSAGE : "Your membership isn't active any more, so the plan can't change. Get in touch if that's wrong.",
+      }, { status: 409 });
+    }
     const switchColumns = result.switchColumns;
     await logAction({ action: AuditAction.ONCHAIN_SUBSCRIPTION_CHANGED, actorMemberId: member.id,
       target: { table: "subscriptions", id: sub.id }, payload: { from: result.from, to: targetKey, source: "self_serve" } }, admin);

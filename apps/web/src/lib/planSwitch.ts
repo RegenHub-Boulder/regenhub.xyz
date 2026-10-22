@@ -465,9 +465,13 @@ export async function sweepPlanSwitches(admin: ServiceClient) {
   const { data, error } = await admin.from("plan_switch_operations").select("id, subscription_id, outcome").is("finished_at", null).order("id");
   if (error) throw error;
   const results: { operationId: number | null; subscriptionId: number; outcome: string; error?: string }[] = [];
-  // Landed switches whose schedule release didn't go through yet.
+  // Landed switches whose schedule release didn't go through yet. A failed
+  // query here is reported and doesn't hold up the requests below.
   const { data: landed, error: landedError } = await admin.from("subscriptions").select("id").not("landed_schedule_id", "is", null);
-  if (landedError) throw landedError;
+  if (landedError) {
+    console.error("[PlanSwitch] Listing landed schedules failed:", landedError);
+    results.push({ operationId: null, subscriptionId: 0, outcome: "error", error: landedError.message });
+  }
   for (const { id } of (landed ?? []) as { id: number }[]) {
     try {
       results.push({ operationId: null, subscriptionId: id, outcome: await releaseLandedSchedule(admin, id) ? "released" : "retry" });
@@ -658,7 +662,7 @@ export async function changeOnchainPlan(
     if (args.refuseWhenCanceling) update = update.is("admin_cancel_mode", null);
     const { data: changed, error: updateError } = await update.select("id").maybeSingle();
     if (updateError) throw updateError;
-    return { changed: !!changed, from: sub.plan_key, changes, switchColumns };
+    return { changed: !!changed, canceling: sub.admin_cancel_mode != null, from: sub.plan_key, changes, switchColumns };
   }, "On-chain plan change");
 }
 
