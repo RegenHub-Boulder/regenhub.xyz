@@ -464,7 +464,18 @@ async function scheduleMade(admin: ServiceClient, operationId: number, scheduleI
 export async function sweepPlanSwitches(admin: ServiceClient) {
   const { data, error } = await admin.from("plan_switch_operations").select("id, subscription_id, outcome").is("finished_at", null).order("id");
   if (error) throw error;
-  const results: { operationId: number; subscriptionId: number; outcome: string; error?: string }[] = [];
+  const results: { operationId: number | null; subscriptionId: number; outcome: string; error?: string }[] = [];
+  // Landed switches whose schedule release didn't go through yet.
+  const { data: landed, error: landedError } = await admin.from("subscriptions").select("id").not("landed_schedule_id", "is", null);
+  if (landedError) throw landedError;
+  for (const { id } of (landed ?? []) as { id: number }[]) {
+    try {
+      results.push({ operationId: null, subscriptionId: id, outcome: await releaseLandedSchedule(admin, id) ? "released" : "retry" });
+    } catch (cause) {
+      console.error(`[PlanSwitch] Releasing the landed schedule of subscription ${id} failed:`, cause);
+      results.push({ operationId: null, subscriptionId: id, outcome: "error", error: cause instanceof Error ? cause.message : "unknown" });
+    }
+  }
   for (const op of (data ?? []) as Pick<SwitchOperation, "id" | "subscription_id" | "outcome">[]) {
     try {
       if (op.outcome) {
@@ -618,6 +629,40 @@ export function onchainSwitchColumns(
 }
 
 /**
+ * Change an on-chain subscription's plan (and any `extra` columns, e.g. a
+ * coupon). Runs under the PIN-writer reservation, from a fresh read of the
+ * row, so it is ordered with the billing cron's switch landing
+ * (finishOnchainPlanSwitches): the cron never ends a desk on a transition
+ * this change has just replaced, and this change never builds its pending
+ * columns from a transition the cron has just consumed. `changed` is false
+ * when no live on-chain row matched (or an admin cancel is marked, with
+ * `refuseWhenCanceling`).
+ */
+export async function changeOnchainPlan(
+  admin: ServiceClient,
+  args: { subscriptionId: number; targetKey?: string; extra?: Record<string, unknown>; refuseWhenCanceling?: boolean },
+) {
+  return withLockWriter(admin, async () => {
+    const { data: sub, error } = await admin.from("subscriptions")
+      .select("id, plan_key, current_period_end, pending_plan_key, pending_plan_at, pending_plan_from, admin_cancel_mode")
+      .eq("id", args.subscriptionId).single();
+    if (error) throw error;
+    const target = args.targetKey ? getPlan(args.targetKey) : null;
+    const switchColumns = args.targetKey ? onchainSwitchColumns(sub, args.targetKey) : {};
+    const changes = {
+      ...(target && args.targetKey ? { plan_key: args.targetKey, monthly_cents: target.defaultMonthlyCents, ...switchColumns } : {}),
+      ...args.extra,
+    };
+    let update = admin.from("subscriptions").update(changes)
+      .eq("id", sub.id).eq("payment_rail", "onchain").in("status", ["active", "trialing", "past_due"]);
+    if (args.refuseWhenCanceling) update = update.is("admin_cancel_mode", null);
+    const { data: changed, error: updateError } = await update.select("id").maybeSingle();
+    if (updateError) throw updateError;
+    return { changed: !!changed, from: sub.plan_key, changes, switchColumns };
+  }, "On-chain plan change");
+}
+
+/**
  * What an on-chain plan change does, for the member or admin who made it.
  * Leaving a desk keeps it to the end of the period paid for; any other change
  * prices the next invoice and applies once that invoice is paid.
@@ -683,7 +728,19 @@ export async function endDeskAccessForSwitch(
   return landed;
 }
 
-/** Release our schedule once the switch has landed, so the subscription is free for later changes. */
-export async function releaseLandedSchedule(scheduleId: string | null) {
-  if (scheduleId) await releaseSchedule(getStripe(), scheduleId);
+/**
+ * Release the schedule of a switch that has landed (subscriptions.landed_schedule_id,
+ * written by complete_plan_switch), so the subscription is free for later
+ * changes. Kept until Stripe confirms; the next event or billing cron retries.
+ * True when nothing is left to release.
+ */
+export async function releaseLandedSchedule(admin: ServiceClient, subscriptionId: number): Promise<boolean> {
+  const { data: row, error } = await admin.from("subscriptions").select("landed_schedule_id").eq("id", subscriptionId).single();
+  if (error) throw error;
+  if (!row.landed_schedule_id) return true;
+  if (!await releaseSchedule(getStripe(), row.landed_schedule_id)) return false;
+  const { error: clearError } = await admin.from("subscriptions").update({ landed_schedule_id: null })
+    .eq("id", subscriptionId).eq("landed_schedule_id", row.landed_schedule_id);
+  if (clearError) throw clearError;
+  return true;
 }

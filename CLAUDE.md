@@ -189,12 +189,16 @@ The Stripe webhook lands the switch (ends desk access) when the daily phase star
 `customer.subscription.created/updated` delivery runs from freshness check to access grant under one PIN-writer
 reservation (`lib/stripeSubscriptionSync.ts`), so out-of-order deliveries can't put a desk back. "Keep desk" reads
 Stripe back after the release; if the daily phase already began, it settles the row through that same sync.
-A landing clears the switch and writes its `plan_switch_completed` audit in one transaction
-(`complete_plan_switch`), so a retry still finds it pending if the audit didn't commit. **Crypto:** `plan_key` changes at once (it prices the next
+While a switch is pending, every event's state is read back from Stripe. A landing clears the switch, writes the
+daily `plan_key` (card) and its `plan_switch_completed` audit in one transaction (`complete_plan_switch`), so a retry
+still finds it pending if the audit didn't commit, and an older desk event can't restore the desk if the rest of
+the mirror failed. The landed schedule moves to `subscriptions.landed_schedule_id` until Stripe confirms its
+release; the next event or the billing cron retries it. **Crypto:** `plan_key` changes at once (it prices the next
 invoice) and `pending_plan_*` (no schedule) marks the desk still held; the billing cron
 (`finishOnchainPlanSwitches`) ends only that desk once no paid desk period runs, re-checking under the reservation
 that the switch is still pending and due, so a desk given by hand later is left alone even by a sweep that read the
-row earlier.
+row earlier. On-chain plan edits (member and admin) go through `changeOnchainPlan`, under the same reservation, so
+they are ordered with the sweep.
 
 ### Add a new member via bot
 Use `/admin → Add member` as an admin in the Telegram bot.

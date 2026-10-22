@@ -28,12 +28,16 @@ alter table subscriptions
   add column pending_plan_at          timestamptz,
   add column pending_plan_from        text,
   add column pending_plan_schedule_id text,
+  add column landed_schedule_id       text,
   add constraint subscriptions_pending_plan_whole check (
     (pending_plan_key is null) = (pending_plan_at is null)
     and (pending_plan_key is null) = (pending_plan_from is null)
     and (pending_plan_key is not null or pending_plan_schedule_id is null)
     and (pending_plan_key is null or payment_rail <> 'stripe' or pending_plan_schedule_id is not null)
   );
+
+comment on column subscriptions.landed_schedule_id is
+  'Card: the Stripe schedule of a switch that has landed, still to be released (Stripe events and the billing cron retry it). Null once released.';
 
 comment on column subscriptions.pending_plan_key is
   'A desk → daily switch landing at pending_plan_at (end of the paid desk period, pending_plan_from). Card: via Stripe schedule pending_plan_schedule_id, plan_key stays the desk until it lands. On-chain: plan_key already names the daily plan.';
@@ -127,13 +131,19 @@ $$;
 -- A switch landed: clear it and audit it in one transaction, so a retry that
 -- finds it still pending writes the audit it couldn't. p_door is the door
 -- outcome when this run ended the desk (null when an earlier run did).
+-- Card: the daily plan is written here too, in the same transaction, so the
+-- row never says "desk, nothing pending" after the desk was ended; an older
+-- desk event then sees a plan mismatch and reads Stripe's current state. The
+-- schedule moves to landed_schedule_id until it has been released.
 create function complete_plan_switch(p_subscription_id integer, p_member_id integer, p_rail text,
   p_from text, p_to text, p_door jsonb default null) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  update subscriptions set pending_plan_key = null, pending_plan_at = null, pending_plan_from = null,
-    pending_plan_schedule_id = null
-    where id = p_subscription_id and pending_plan_key is not null;
+  update subscriptions set
+    landed_schedule_id = coalesce(pending_plan_schedule_id, landed_schedule_id),
+    pending_plan_key = null, pending_plan_at = null, pending_plan_from = null, pending_plan_schedule_id = null,
+    plan_key = case when p_rail = 'stripe' then p_to else plan_key end
+    where id = p_subscription_id;
   insert into admin_actions (actor_member_id, action, target_table, target_id, payload)
     values (null, 'plan_switch_completed', 'members', p_member_id::text,
       jsonb_build_object('subscription_id', p_subscription_id, 'rail', p_rail, 'from', p_from, 'to', p_to)

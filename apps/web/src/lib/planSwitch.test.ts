@@ -755,6 +755,36 @@ describe("card (Stripe): the third review's findings", () => {
     expect(await one("select count(*)::int n from plan_switch_operations where finished_at is null")).toEqual({ n: 0 });
   });
 
+  it("a landing whose row update failed still holds the daily plan: an older desk event can't restore the desk", async () => {
+    await seed();
+    await pick("member_2day");
+    // The landing ends the desk and records it; then mirroring the rest of Stripe's subscription fails.
+    await db.exec(`create function fail_daily_upsert() returns trigger language plpgsql as $$
+      begin if new.monthly_cents = 5000 and old.monthly_cents <> 5000 then raise exception 'injected upsert failure'; end if; return new; end $$;
+      create trigger fail_daily_upsert before update on subscriptions for each row execute function fail_daily_upsert();`);
+    expect((await periodRolls()).status).toBe(500);
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+    expect(await sub()).toMatchObject({ plan_key: "member_2day", pending_plan_key: null });
+
+    await db.exec("drop trigger fail_daily_upsert on subscriptions");
+    expect((await sendStripeEvent("evt_older_desk", "customer.subscription.updated", stripeSub("hot_desk", { schedule: "sub_sched_1" }))).status).toBe(200);
+    expect(await sub()).toMatchObject({ plan_key: "member_2day", monthly_cents: 5000 });
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+    expect(setUserCode).not.toHaveBeenCalled();
+  });
+
+  it("a landed switch's schedule is released later if Stripe didn't take the release at once", async () => {
+    await seed();
+    await pick("member_2day");
+    stripe.subscriptionSchedules.release.mockRejectedValueOnce(networkError());
+    expect((await periodRolls()).status).toBe(200);
+    expect(await sub()).toMatchObject({ plan_key: "member_2day", landed_schedule_id: "sub_sched_1" });
+
+    expect((await runCron()).status).toBe(200);
+    expect(stripe.subscriptionSchedules.release).toHaveBeenLastCalledWith("sub_sched_1");
+    expect(await sub()).toMatchObject({ landed_schedule_id: null });
+  });
+
   it("a landing whose audit didn't commit is audited on Stripe's redelivery", async () => {
     await seed();
     await pick("member_2day");
@@ -763,6 +793,12 @@ describe("card (Stripe): the third review's findings", () => {
       create trigger fail_completed_audit before insert on admin_actions for each row execute function fail_completed_audit();`);
     expect((await periodRolls()).status).toBe(500);
     expect(await sub()).toMatchObject({ pending_plan_key: "member_2day" });
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+
+    // The desk is ended but not yet recorded: an older desk event (it carries the schedule) can't restore it.
+    await sendStripeEvent("evt_older_desk", "customer.subscription.updated", stripeSub("hot_desk", { schedule: "sub_sched_1" }));
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+    expect(setUserCode).not.toHaveBeenCalled();
 
     await db.exec("drop trigger fail_completed_audit on admin_actions");
     expect((await periodRolls("evt_roll_again")).status).toBe(200);
@@ -968,6 +1004,27 @@ describe("crypto (on-chain): Hot Desk → Member + 2 days/mo", () => {
     expect(await sub()).toMatchObject({ plan_key: "member_2day", pending_plan_key: null });
     expect((await runCron()).status).toBe(200);
     expect(await member()).toMatchObject({ member_type: "hot_desk", pin_code_slot: 12 });
+  });
+
+  it("a member's plan change waits for the sweep landing the switch, so the sweep never acts on a replaced one", async () => {
+    await seed({ rail: "onchain" });
+    expect((await pick("member_2day")).status).toBe(200);
+    await db.exec(`update onchain_invoices set period_start = period_start - interval '5 days', period_end = period_end - interval '5 days';
+      update subscriptions set current_period_end = current_period_end - interval '5 days',
+        pending_plan_at = pending_plan_at - interval '5 days' where id = 50`);
+    // The sweep has checked the switch is due and is clearing the door code when the member picks Hot Desk again.
+    const pickDesk = AsyncResource.bind(() => pick("hot_desk"));
+    let change: Promise<Response> | undefined;
+    vi.mocked(clearUserCode).mockImplementationOnce(async (slot) => {
+      change = pickDesk();
+      await Promise.race([change, new Promise((resolve) => setTimeout(resolve, 1500))]);
+      return clearSlotSafely(slot, async () => DOORS.map((entity) => ({ entity, ok: true })), DOORS);
+    });
+    await finishOnchainPlanSwitches(db as never);
+    expect((await change!).status).toBe(200);
+    const order = await db.sql("select action from admin_actions where action in ('plan_switch_completed', 'onchain_subscription_changed') order by id");
+    expect(order.map((row) => row.action)).toEqual(["onchain_subscription_changed", "plan_switch_completed", "onchain_subscription_changed"]);
+    expect(await sub()).toMatchObject({ plan_key: "hot_desk", pending_plan_key: null });
   });
 
   it("a sweep working from a stale snapshot doesn't take a desk an admin gave by hand meanwhile", async () => {

@@ -275,6 +275,8 @@ export interface Database {
           pending_plan_at?: string | null;
           pending_plan_from?: PlanKey | null;
           pending_plan_schedule_id?: string | null;
+          /** Card: a landed switch's schedule still to release (migration 060). */
+          landed_schedule_id?: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -311,6 +313,7 @@ export interface Database {
           pending_plan_at?: string | null;
           pending_plan_from?: PlanKey | null;
           pending_plan_schedule_id?: string | null;
+          landed_schedule_id?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["subscriptions"]["Insert"]>;
         Relationships: [];
