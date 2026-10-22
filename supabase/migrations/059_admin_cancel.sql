@@ -49,6 +49,14 @@ $$;
 --                   recorded: access ends with its period (the billing cron on
 --                   chain, Stripe's own webhook for a card). Finished without
 --                   recorded_at: Stripe refused it and nothing was recorded.
+-- The two foreign keys are restrictive on purpose: the record outlives
+-- neither its subscription nor its admin. The app deletes those rows in three
+-- places. The admin member delete (api/admin/members/[id]) checks for these
+-- records before it clears the door and answers 409 with "disable the member
+-- instead" (and maps the database's refusal to the same message). The on-chain
+-- checkout removes only its own incomplete shell seconds after creating it; a
+-- cancel that got to the shell first blocks that delete and ends the row
+-- itself. The bot removes only a member it just created.
 create table admin_cancel_operations (
   id              bigserial primary key,
   subscription_id integer not null references subscriptions(id),

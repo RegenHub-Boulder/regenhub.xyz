@@ -34,6 +34,8 @@ vi.mock("viem", async (importOriginal) => ({
   ...await importOriginal<typeof import("viem")>(),
   createWalletClient: () => ({ writeContract: relayer.writeContract }),
 }));
+vi.mock("@/lib/admin", () => ({ requireAdmin: vi.fn() }));
+vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/onchain/portalMember", () => ({
   requirePortalMember: async () => ({ user: { id: "member-uid" }, member: { id: 7, name: "Pat Example", email: "pat@example.test", disabled: false } }),
 }));
@@ -49,6 +51,9 @@ import { cancelMembership, type CancelMembershipInput } from "./membershipCancel
 import { POST as stripeWebhook } from "@/app/api/webhooks/stripe/route";
 import { POST as onchainCron } from "@/app/api/cron/onchain-billing/route";
 import { POST as submitPayment } from "@/app/api/portal/onchain/submit/route";
+import { DELETE as deleteMember } from "@/app/api/admin/members/[id]/route";
+import { requireAdmin } from "@/lib/admin";
+import { createClient } from "@/lib/supabase/server";
 
 const DAY = 24 * 60 * 60 * 1000;
 const DOORS = ["lock.front_door_lock", "lock.back_door_lock"];
@@ -718,6 +723,41 @@ describe("card (Stripe): invoice voids are saved against the operation", () => {
     expect((await db.rpc("admin_cancel_stripe_void", { p_operation_id: id, p_invoice_id: "in_a", p_outcome: "voided" })).error).toBeNull();
     expect((await audits())[0].payload).toMatchObject({ voided_invoice_ids: ["in_b", "in_a"], void_failed_invoice_ids: [] });
     expect(await audits()).toHaveLength(1);
+  });
+});
+
+describe("deleting a member with cancel history", () => {
+  const del = (id: number) => deleteMember(new Request(`http://localhost/api/admin/members/${id}`, { method: "DELETE" }),
+    { params: Promise.resolve({ id: String(id) }) });
+
+  it("is refused with a clear message, before the door is touched, for the member and for the admin who canceled", async () => {
+    await seed({ rail: "onchain" });
+    await cancel({ mode: "period_end" }); // the member keeps the door until the period ends
+    vi.mocked(requireAdmin).mockResolvedValue({ id: "admin-uid" } as never);
+    vi.mocked(createClient).mockResolvedValue(db as never);
+
+    const asMember = await del(7);
+    expect(asMember.status).toBe(409);
+    expect((await asMember.json()).error).toMatch(/cancel.*Disable/s);
+    expect(clearUserCode).not.toHaveBeenCalled();
+    expect((await member()).pin_code_slot).toBe(12);
+
+    const asAdmin = await del(1);
+    expect(asAdmin.status).toBe(409);
+    expect((await asAdmin.json()).error).toMatch(/cancel.*Disable/s);
+    expect(await db.sql("select id from members order by id")).toEqual([{ id: 1 }, { id: 7 }]);
+  });
+
+  it("a cancel that lands after the check still gets the clear message, not a raw database error", async () => {
+    await seed({ rail: "onchain" });
+    vi.mocked(requireAdmin).mockResolvedValue({ id: "admin-uid" } as never);
+    vi.mocked(createClient).mockResolvedValue(db as never);
+    db.beforeNextWrite("members", () => cancel({ mode: "period_end" }));
+
+    const response = await del(7);
+    expect(response.status).toBe(409);
+    expect((await response.json()).error).toMatch(/Disable the member instead.*door code was already cleared/s);
+    expect((await member()).pin_code_slot).toBe(12);
   });
 });
 
