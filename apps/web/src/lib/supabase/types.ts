@@ -665,6 +665,7 @@ export interface Database {
           to_plan: string;
           created_at: string;
           create_started_at: string | null;
+          cancel_at_period_end_before: boolean | null;
           schedule_id: string | null;
           effective_at: string | null;
           recorded_at: string | null;
@@ -781,6 +782,7 @@ export interface Database {
       finish_plan_switch: { Args: { p_operation_id: number }; Returns: null };
       /** False once the request is decided: no create may start then. */
       plan_switch_create_started: { Args: { p_operation_id: number }; Returns: boolean };
+      plan_switch_note_cancel: { Args: { p_operation_id: number; p_cancel_at_period_end: boolean }; Returns: boolean };
       /** Clears a landed switch and writes its plan_switch_completed audit row, in one transaction. */
       complete_plan_switch: {
         Args: { p_subscription_id: number; p_member_id: number; p_rail: string; p_from: string; p_to: string;
