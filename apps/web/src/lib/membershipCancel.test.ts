@@ -27,6 +27,12 @@ vi.mock("@/lib/onchain/config", async (importOriginal) => ({
   assertOpPublicClient: vi.fn(async () => {}),
   isOnchainBillingConfigured: () => true,
   isGaslessRelayConfigured: () => false,
+  getOpRelayerPrivateKey: () => `0x${"11".repeat(32)}`,
+}));
+const relayer = vi.hoisted(() => ({ writeContract: vi.fn() }));
+vi.mock("viem", async (importOriginal) => ({
+  ...await importOriginal<typeof import("viem")>(),
+  createWalletClient: () => ({ writeContract: relayer.writeContract }),
 }));
 vi.mock("@/lib/onchain/portalMember", () => ({
   requirePortalMember: async () => ({ user: { id: "member-uid" }, member: { id: 7, name: "Pat Example", email: "pat@example.test", disabled: false } }),
@@ -38,6 +44,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { getOpPublicClient, NATIVE_USDC_ADDRESS, TREASURY_ADDRESS } from "@/lib/onchain/config";
 import { generateUpcomingOnchainInvoices } from "@/lib/onchain/invoice";
 import { processOnchainInvoice, retryPendingOnchainEffects } from "@/lib/onchain/verifyPayment";
+import { processGaslessRelayQueue } from "@/lib/onchain/gaslessRelay";
 import { cancelMembership, type CancelMembershipInput } from "./membershipCancel";
 import { POST as stripeWebhook } from "@/app/api/webhooks/stripe/route";
 import { POST as onchainCron } from "@/app/api/cron/onchain-billing/route";
@@ -137,7 +144,9 @@ function chainWith(receipt: "pending" | "paid", amountMicros = 250_000_000n) {
         }],
       };
     },
-    getBlock: async () => ({ number: 0n, hash: `0x${"c".repeat(64)}` }),
+    getBlock: async () => ({ number: 0n, hash: `0x${"c".repeat(64)}`, timestamp: 0n }),
+    getBlockNumber: async () => 1n,
+    readContract: async () => false, // gasless authorization not used yet
   } as never);
 }
 
@@ -284,6 +293,24 @@ describe("card (Stripe)", () => {
   });
 });
 
+describe("card (Stripe): recording after Stripe accepted", () => {
+  it("a passing failure to record the cancel is retried, so the audit row isn't lost", async () => {
+    await seed({ rail: "stripe" });
+    // Stripe has canceled it; the first attempt to record that fails (a dropped connection).
+    // (A sequence, because the failure rolls back everything else.)
+    db.beforeNextWrite("rpc:admin_cancel_subscription", () => db.exec(`
+      create sequence fail_once_seq;
+      create function fail_once() returns trigger language plpgsql as $$
+        begin if nextval('fail_once_seq') = 1 then raise exception 'injected record failure'; end if; return new; end $$;
+      create trigger fail_once before insert on admin_actions for each row execute function fail_once();`));
+    const result = await cancel({ reason: "Moved away" });
+
+    expect(stripe.subscriptions.cancel).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ outcome: "canceled", door: { revokedSlot: 12 } });
+    expect(await audits()).toEqual([expect.objectContaining({ actor_member_id: 1, payload: expect.objectContaining({ reason: "Moved away" }) })]);
+  });
+});
+
 describe("crypto (on-chain)", () => {
   it("cancel now: voids the issued renewal, ends access, and no invoice is generated afterwards", async () => {
     await seed({ rail: "onchain" });
@@ -343,6 +370,27 @@ describe("crypto (on-chain)", () => {
     expect((await sub()).status).toBe("canceled");
     expect(await db.sql("select * from onchain_payments")).toEqual([]);
     expect((await member()).pin_code_slot).toBeNull();
+    // The member may already have sent the money: the claim is kept for an admin to refund.
+    expect((await audits()).at(-1)).toMatchObject({
+      action: "onchain_payment_after_void", actor_member_id: 7, target_id: "7", payload: { invoice_id: 900, tx_hash: TX },
+    });
+  });
+
+  it("a signed gasless payment not yet sent is expired with its invoice, and the relayer can't send it after", async () => {
+    await seed({ rail: "onchain", status: "past_due", pastDueSince: iso(-10 * DAY), periodEnd: iso(-10 * DAY) });
+    await invoice(900, iso(-10 * DAY));
+    const now = Math.floor(Date.now() / 1000);
+    await db.sql(`insert into onchain_relay_jobs (invoice_id, member_id, wallet_id, from_address, token_contract, treasury_address,
+        amount_usdc_micros, authorization_nonce, valid_after, valid_before, signature, status, authorization_from_block, signed_at)
+      values (900, 7, 3, $1, $2, $3, 250000000, $4, $5, $6, $7, 'signed', 1, now())`,
+    [WALLET, NATIVE_USDC_ADDRESS, TREASURY_ADDRESS, `0x${"ab".repeat(32)}`, now - 60, now + 1800, `0x${"22".repeat(65)}`]);
+    // The relayer has checked the invoice is payable; the cancel commits before it claims the job.
+    db.beforeNextWrite("onchain_relay_jobs", () => cancel());
+    await processGaslessRelayQueue(db as never).catch(() => null);
+
+    expect(relayer.writeContract).not.toHaveBeenCalled();
+    expect(await one("select status, last_error from onchain_relay_jobs")).toEqual({ status: "expired", last_error: "membership canceled by an admin" });
+    expect(await invoices()).toEqual([expect.objectContaining({ id: 900, status: "void" })]);
   });
 
   it("a payment submission never overwrites an invoice that was paid after it was read", async () => {
@@ -375,12 +423,30 @@ describe("crypto (on-chain)", () => {
     chainWith("paid");
     expect(await processOnchainInvoice(db as never, 900)).toMatchObject({ status: "exception" });
     expect(await db.sql("select match_status, exception_reason from onchain_payments")).toEqual([
-      { match_status: "exception", exception_reason: expect.stringMatching(/admin canceled/) },
+      { match_status: "exception", exception_reason: expect.stringMatching(/canceled; not credited/) },
     ]);
     expect(await invoices()).toEqual([expect.objectContaining({ id: 900, status: "void" })]);
     expect((await sub()).status).toBe("canceled");
     expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
     expect(setUserCode).not.toHaveBeenCalled();
+  });
+
+  it("cancel now flags a period the member already paid for, so the admin can refund it", async () => {
+    await seed({ rail: "onchain" });
+    await invoice(899, iso(-26 * DAY), "paid");
+    const result = await cancel();
+    expect(result.warnings.join(" ")).toMatch(/#899 was already paid/);
+    expect((await audits())[0].payload).toMatchObject({ paid_ahead_invoice_ids: ["899"] });
+  });
+
+  it("a late payment for a subscription canceled any other way (member revoke) is recorded, not credited", async () => {
+    await seed({ rail: "onchain", status: "past_due", pastDueSince: iso(-10 * DAY), periodEnd: iso(-10 * DAY) });
+    await invoice(900, iso(-10 * DAY), "submitted");
+    await db.sql("update subscriptions set status = 'canceled', canceled_at = now() where id = 50"); // as /revoke does
+    chainWith("paid");
+    expect(await processOnchainInvoice(db as never, 900)).toMatchObject({ status: "exception" });
+    expect((await sub()).status).toBe("canceled");
+    expect(await db.sql("select match_status from onchain_payments")).toEqual([{ match_status: "exception" }]);
   });
 
   it("a credited payment whose effects were still pending grants nothing once canceled", async () => {
@@ -429,6 +495,121 @@ describe("overdue members: voiding open invoices", () => {
   });
 });
 
+describe("overdue members: paying after a period-end cancel", () => {
+  it("a payment that lands after the billing cron read the row keeps the door the member just paid for", async () => {
+    await seed({ rail: "onchain", status: "past_due", pastDueSince: iso(-10 * DAY), periodEnd: iso(-10 * DAY) });
+    await invoice(900, iso(-10 * DAY), "submitted");
+    await cancel({ mode: "period_end" });
+    chainWith("paid");
+    // The sweep has read the row as due (period over); the payment, and its
+    // effects, complete before the sweep takes the PIN-writer reservation.
+    db.beforeNextWrite("rpc:acquire_lock_writer", () => processOnchainInvoice(db as never, 900));
+    expect((await runCron()).status).toBe(200);
+
+    expect(await sub()).toMatchObject({ status: "active", admin_cancel_mode: "period_end" });
+    expect(await member()).toMatchObject({ member_type: "hot_desk", pin_code_slot: 12 });
+  });
+});
+
+describe("overdue members: voiding later", () => {
+  it("after scheduling without voiding, the admin can come back and void, on both rails", async () => {
+    for (const rail of ["onchain", "stripe"] as const) {
+      await db.close();
+      db = await makePgDb();
+      vi.mocked(createServiceClient).mockReturnValue(db as never);
+      await seed({ rail, status: "past_due", pastDueSince: iso(-10 * DAY), periodEnd: iso(-10 * DAY) });
+      if (rail === "onchain") await invoice(900, iso(-10 * DAY));
+      stripe.invoices.list.mockResolvedValue({ data: [{ id: "in_overdue" }], has_more: false });
+      await cancel({ mode: "period_end" });
+      stripe.subscriptions.update.mockClear();
+
+      const again = await cancel({ mode: "period_end", voidOpenInvoices: true });
+      expect(again).toMatchObject({ outcome: "already_scheduled", voidedInvoiceIds: [rail === "onchain" ? "900" : "in_overdue"] });
+      expect(stripe.subscriptions.update).not.toHaveBeenCalled();
+      expect(await audits()).toHaveLength(2);
+    }
+  });
+});
+
+describe("cancel records stay whole", () => {
+  it("a member reporting a payment for an invoice already voided is recorded once, marked unverified", async () => {
+    await seed({ rail: "onchain", status: "past_due", pastDueSince: iso(-10 * DAY), periodEnd: iso(-10 * DAY) });
+    await invoice(900, iso(-10 * DAY));
+    await cancel();
+    expect((await submit(900)).status).toBe(409);
+    expect((await submit(900)).status).toBe(409);
+    const reports = (await audits()).filter((row) => row.action === "onchain_payment_after_void");
+    expect(reports).toEqual([expect.objectContaining({ actor_member_id: 7, payload: { invoice_id: 900, tx_hash: TX, verified: false } })]);
+  });
+
+  it("a payment credited between the door step and finishing keeps the cancel open, and the audit doesn't claim access ended", async () => {
+    await seed({ rail: "onchain", status: "past_due", pastDueSince: iso(-10 * DAY), periodEnd: iso(-10 * DAY) });
+    await invoice(900, iso(-10 * DAY), "submitted");
+    await cancel({ mode: "period_end" });
+    // The door step has run; the payment for the current period is credited before finish.
+    db.beforeNextWrite("rpc:finish_admin_cancel", () => db.sql(`select * from credit_onchain_invoice(900, $1, 0, 1, $2, $3, $4, $5, 250000000, 'safe')`,
+      [TX, `0x${"c".repeat(64)}`, WALLET, TREASURY_ADDRESS, NATIVE_USDC_ADDRESS]));
+    const response = await runCron();
+    expect(response.status).toBe(200);
+    expect((await response.json()).adminCancels).toEqual([]);
+    expect(await sub()).toMatchObject({ status: "active", admin_cancel_mode: "period_end" });
+    expect((await audits())[0].payload).not.toHaveProperty("door_slot_cleared");
+  });
+
+  it("a repeat after a lost response still shows the refund and in-flight warnings", async () => {
+    await seed({ rail: "onchain" });
+    await invoice(899, iso(-26 * DAY), "paid");
+    const rpc = db.rpc;
+    let lose = true;
+    db.rpc = (async (name: string, args?: Record<string, unknown>) => {
+      const result = await rpc(name, args);
+      if (name === "admin_cancel_subscription" && lose) { lose = false; return { data: null, error: { message: "connection reset" } }; }
+      return result;
+    }) as typeof db.rpc;
+    await expect(cancel()).rejects.toBeTruthy();
+    const again = await cancel();
+    expect(again.warnings.join(" ")).toMatch(/#899 was already paid/);
+    expect(await audits()).toHaveLength(1);
+  });
+
+  it("voiding Stripe invoices on a repeat of a half-finished cancel is returned and audited", async () => {
+    await seed({ rail: "stripe", status: "past_due", pastDueSince: iso(-10 * DAY) });
+    await db.exec(`create function fail_member_update() returns trigger language plpgsql as $$
+      begin raise exception 'injected member update failure'; end $$;
+      create trigger fail_member_update before update on members for each row execute function fail_member_update();`);
+    await expect(cancel()).rejects.toThrow(/injected/);
+    await db.exec("drop trigger fail_member_update on members");
+    stripe.invoices.list.mockResolvedValue({ data: [{ id: "in_overdue" }], has_more: false });
+
+    const again = await cancel({ voidOpenInvoices: true });
+    expect(again.voidedInvoiceIds).toEqual(["in_overdue"]);
+    expect((await audits()).at(-1)?.payload).toMatchObject({ voided_invoice_ids: ["in_overdue"] });
+  });
+
+  it("the door outcome lands on the cancel's own audit row, not a later void-only one", async () => {
+    await seed({ rail: "onchain", status: "past_due", pastDueSince: iso(-10 * DAY), periodEnd: iso(-10 * DAY) });
+    await invoice(900, iso(-10 * DAY));
+    await cancel({ mode: "period_end" });
+    await cancel({ mode: "period_end", voidOpenInvoices: true });
+    expect((await runCron()).status).toBe(200);
+    const [cancelRow, voidRow] = await audits();
+    expect(cancelRow.payload).toMatchObject({ outcome: "scheduled", door_slot_cleared: 12, door_clear_failed: false });
+    expect(voidRow.payload).not.toHaveProperty("door_slot_cleared");
+  });
+
+  it("a record failure with no Stripe call isn't retried or blamed on Stripe", async () => {
+    await seed({ rail: "onchain" });
+    const rpc = db.rpc;
+    let calls = 0;
+    db.rpc = (async (name: string, args?: Record<string, unknown>) => {
+      if (name === "admin_cancel_subscription") { calls++; return { data: null, error: { message: "boom" } }; }
+      return rpc(name, args);
+    }) as typeof db.rpc;
+    await expect(cancel()).rejects.toMatchObject({ message: "boom" });
+    expect(calls).toBe(1);
+  });
+});
+
 describe("door code safety", () => {
   it("a failed clear keeps the slot on the member and quarantined, so Lock Sync can retry", async () => {
     await seed({ rail: "onchain" });
@@ -441,6 +622,7 @@ describe("door code safety", () => {
     expect((await sub()).status).toBe("canceled");
     expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: 12 });
     expect(await db.sql("select slot from lock_slot_quarantine")).toEqual([{ slot: 12 }]);
+    expect((await audits())[0].payload).toMatchObject({ door_clear_failed: true });
   });
 
   it("a failed member downgrade leaves the cancel pending; repeating it, or the billing cron, finishes it", async () => {
@@ -483,7 +665,10 @@ describe("audit + idempotency", () => {
     await cancel({ reason: "Moved to Denver" });
     expect(await audits()).toEqual([{
       actor_member_id: 1, action: "subscription_canceled_by_admin", target_table: "members", target_id: "7",
-      payload: expect.objectContaining({ subscription_id: 50, rail: "onchain", mode: "now", reason: "Moved to Denver", voided_invoice_ids: ["900"] }),
+      payload: expect.objectContaining({
+        subscription_id: 50, rail: "onchain", mode: "now", reason: "Moved to Denver", voided_invoice_ids: ["900"],
+        door_slot_cleared: 12, door_clear_failed: false,
+      }),
     }]);
   });
 

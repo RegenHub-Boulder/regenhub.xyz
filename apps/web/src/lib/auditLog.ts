@@ -46,6 +46,9 @@ export const AuditAction = {
   COUPON_CREATED:         "coupon_created",
   COUPON_DEACTIVATED:     "coupon_deactivated",
   COUPON_DELETED:         "coupon_deleted",
+  // On-chain payments
+  /** A member reported a transaction for an invoice already voided (unverified): check it on chain, refund by hand. */
+  ONCHAIN_PAYMENT_AFTER_VOID: "onchain_payment_after_void",
 } as const;
 
 export type AuditAction = (typeof AuditAction)[keyof typeof AuditAction];

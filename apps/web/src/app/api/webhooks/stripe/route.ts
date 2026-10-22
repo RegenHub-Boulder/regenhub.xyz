@@ -229,7 +229,7 @@ async function currentIfAdminCanceled(admin: ServiceClient, sub: Stripe.Subscrip
   if (current.status !== "canceled" && !current.cancel_at_period_end) {
     const { error: liftError } = await admin
       .from("subscriptions")
-      .update({ admin_canceled_at: null, admin_canceled_by: null, admin_cancel_reason: null, admin_cancel_mode: null, admin_cancel_ends_at: null })
+      .update({ admin_canceled_at: null, admin_canceled_by: null, admin_cancel_reason: null, admin_cancel_mode: null, admin_cancel_ends_at: null, admin_cancel_audit_id: null })
       .eq("stripe_subscription_id", sub.id)
       .eq("admin_cancel_mode", "period_end");
     if (liftError) throw liftError;

@@ -28,6 +28,7 @@ const ACTION_LABELS: Record<string, string> = {
   code_revoked:           "Door code revoked",
   checkout_link_generated: "Stripe checkout link generated",
   subscription_canceled_by_admin: "Subscription canceled by admin",
+  onchain_payment_after_void: "Member reported paying a voided invoice (unverified; check, then refund)",
   email_sent:             "Email sent",
   batch_email_sent:       "Batch email sent",
   free_day_approved:      "Free-day claim approved",
@@ -48,6 +49,8 @@ function summary(row: ActionRow): string | null {
       return p.implies_membership ? "Implies Daily approval" : null;
     case "batch_email_sent":
       return typeof p.subject === "string" ? p.subject : null;
+    case "onchain_payment_after_void":
+      return typeof p.tx_hash === "string" ? `Invoice #${String(p.invoice_id)} · tx ${p.tx_hash}` : null;
     case "subscription_canceled_by_admin":
       if (!p.rail) return null;
       return [

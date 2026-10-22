@@ -93,6 +93,13 @@ export async function makePgDb() {
   const hooks: WriteHook[] = [];
   let inHook = false;
 
+  async function runHook(key: string) {
+    const hook = inHook ? -1 : hooks.findIndex((h) => h.table === key);
+    if (hook < 0) return;
+    inHook = true;
+    try { await hooks.splice(hook, 1)[0].run(); } finally { inHook = false; }
+  }
+
   const meta = await pg.query<{ tbl: string; col: string; ref: string }>(`
     select c.conrelid::regclass::text tbl, a.attname col, c.confrelid::regclass::text ref
     from pg_constraint c join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
@@ -198,11 +205,7 @@ export async function makePgDb() {
     }
 
     async function settle(mode: "many" | "single" | "maybe"): Promise<Result> {
-      const hook = op !== "select" && !inHook ? hooks.findIndex((h) => h.table === table) : -1;
-      if (hook >= 0) {
-        inHook = true;
-        try { await hooks.splice(hook, 1)[0].run(); } finally { inHook = false; }
-      }
+      if (op !== "select") await runHook(table);
       try {
         const rows = await request((tx) => run(tx));
         if (countMode) return { data: headOnly ? null : rows, error: null, count: rows.length };
@@ -259,6 +262,7 @@ export async function makePgDb() {
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public'`)).rows.map((r) => [r.name, r]));
 
   async function rpc(name: string, args: Record<string, unknown> = {}): Promise<Result> {
+    await runHook(`rpc:${name}`);
     const proc = procs.get(name);
     if (!proc) return { data: null, error: { code: "PGRST202", message: `function ${name} not found` } };
     const values: unknown[] = [];
@@ -283,7 +287,10 @@ export async function makePgDb() {
     pg: pg as PGliteInterface,
     from: (table: string) => builder(table),
     rpc,
-    /** Run once, just before the next write to `table`: a stand-in for a request that lands in between. */
+    /**
+     * Run once, just before the next write to `table` (or the next call of
+     * `rpc:<name>`): a stand-in for a request that lands in between.
+     */
     beforeNextWrite: (table: string, run: WriteHook["run"]) => { hooks.push({ table, run }); },
     /** Direct SQL for seeding and assertions (no PIN-writer header). */
     sql: async <T extends Row = Row>(text: string, args: unknown[] = []) =>

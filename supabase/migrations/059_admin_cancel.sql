@@ -13,10 +13,13 @@ alter table subscriptions
   -- 'now': access ends as soon as the door code is cleared.
   -- 'period_end': no renewal; access ends when the paid period does.
   add column admin_cancel_mode    text check (admin_cancel_mode in ('now', 'period_end')),
-  add column admin_cancel_ends_at timestamptz;
+  add column admin_cancel_ends_at timestamptz,
+  -- The cancellation's admin_actions row: a repeat reports from it, and the
+  -- door outcome is added to it.
+  add column admin_cancel_audit_id bigint references admin_actions(id);
 
 comment on column subscriptions.admin_cancel_mode is
-  'Set by admin_cancel_subscription(). While set: no new on-chain invoice, no payment credited for time after admin_cancel_ends_at (or any, once ended), and an ended subscription cannot go live again. Only a renewal Stripe itself reports lifts it.';
+  'Set by admin_cancel_subscription(). While set: no new on-chain invoice, and no payment credited for time after admin_cancel_ends_at (none at all for a cancel-now). Only a renewal Stripe itself reports lifts it.';
 
 create function subscription_is_live(p_status text) returns boolean
 language sql immutable as $$
@@ -24,10 +27,13 @@ language sql immutable as $$
 $$;
 
 -- Void the subscription's payable invoices for periods starting at or after
--- p_from (all of them when null). An invoice with a payment already on its way
--- (submitted, detected, or a signed gasless transfer) is left for the
--- confirmation cron: if it lands, credit_onchain_invoice records it for
--- reconciliation instead of crediting it. Caller holds the subscription lock.
+-- p_from (all of them when null). A gasless authorization not yet sent is
+-- expired first: the relayer claims a job only from the status it read, so
+-- either it claimed the job already (and the invoice counts as being relayed
+-- below) or it can no longer claim it. An invoice whose payment is already on
+-- its way (submitted, detected, or being relayed) is left for the confirmation
+-- cron: if it lands, credit_onchain_invoice records it for reconciliation
+-- instead of crediting it. Caller holds the subscription lock.
 create function void_admin_canceled_invoices(p_subscription_id integer, p_from timestamptz,
   out voided bigint[], out in_flight bigint[])
 language plpgsql set search_path = public as $$
@@ -37,17 +43,20 @@ begin
   voided := '{}';
   in_flight := '{}';
   for inv in
-    select i.id, i.status, exists (
-      select 1 from onchain_relay_jobs j
-      where j.invoice_id = i.id and j.status in ('signed', 'submitting', 'submitted')) relaying
-    from onchain_invoices i
+    select i.id, i.status from onchain_invoices i
     where i.subscription_id = p_subscription_id
       and i.status in ('open', 'exception', 'submitted', 'detected')
       and (p_from is null or i.period_start >= p_from)
     order by i.id
     for update of i
   loop
-    if inv.status in ('open', 'exception') and not inv.relaying then
+    if inv.status in ('open', 'exception') then
+      update onchain_relay_jobs set status = 'expired', last_error = 'membership canceled by an admin'
+        where invoice_id = inv.id and status in ('prepared', 'signed');
+    end if;
+    if inv.status in ('open', 'exception') and not exists (
+        select 1 from onchain_relay_jobs j
+        where j.invoice_id = inv.id and j.status in ('submitting', 'submitted')) then
       update onchain_invoices set status = 'void' where id = inv.id;
       voided := voided || inv.id;
     else
@@ -86,8 +95,10 @@ declare
   v record;
   voided text[] := '{}';
   in_flight text[] := '{}';
+  paid_ahead text[] := '{}';
   outcome text;
   audit_id bigint;
+  prior jsonb;
 begin
   if p_mode not in ('now', 'period_end') then raise exception 'mode must be now or period_end'; end if;
   select * into s from subscriptions where id = p_subscription_id for update;
@@ -95,14 +106,33 @@ begin
   if s.admin_cancel_mode = 'now' or (s.admin_cancel_mode is not null and not subscription_is_live(s.status))
      or (s.admin_cancel_mode = 'period_end' and p_mode = 'period_end')
      or (s.admin_cancel_mode is null and not subscription_is_live(s.status) and p_stripe is null) then
+    outcome := case when subscription_is_live(s.status) and s.admin_cancel_mode = 'period_end'
+      then 'already_scheduled' else 'already_canceled' end;
+    select payload into prior from admin_actions where id = s.admin_cancel_audit_id;
+    -- The admin can come back to void overdue invoices (e.g. scheduled earlier without voiding).
+    if p_void_open then
+      if s.payment_rail = 'onchain' then
+        select * into v from void_admin_canceled_invoices(s.id, null);
+        select coalesce(array_agg(x::text), '{}') into voided from unnest(v.voided) x;
+      else
+        select coalesce(array_agg(x), '{}') into voided from jsonb_array_elements_text(coalesce(p_stripe->'voided_invoice_ids', '[]')) x;
+      end if;
+      if cardinality(voided) > 0 then
+        insert into admin_actions (actor_member_id, action, target_table, target_id, payload)
+        values (p_actor, 'subscription_canceled_by_admin', 'members', s.member_id::text, jsonb_strip_nulls(jsonb_build_object(
+          'subscription_id', s.id, 'rail', s.payment_rail, 'mode', p_mode, 'outcome', outcome,
+          'reason', p_reason, 'access_ends_at', s.admin_cancel_ends_at, 'voided_invoice_ids', to_jsonb(voided))));
+      end if;
+    end if;
     return jsonb_build_object(
-      'outcome', case when subscription_is_live(s.status) and s.admin_cancel_mode = 'period_end'
-        then 'already_scheduled' else 'already_canceled' end,
-      'subscription_id', s.id, 'member_id', s.member_id, 'rail', s.payment_rail,
+      'outcome', outcome, 'subscription_id', s.id, 'member_id', s.member_id, 'rail', s.payment_rail,
       'mode', coalesce(s.admin_cancel_mode, p_mode),
       'access_ends_at', coalesce(s.admin_cancel_ends_at, s.canceled_at),
       'end_access', s.admin_cancel_mode = 'now' and subscription_is_live(s.status),
-      'voided_invoice_ids', '[]'::jsonb, 'in_flight_invoice_ids', '[]'::jsonb);
+      -- What the cancellation found, so a repeat (say, after a lost response) still shows it.
+      'voided_invoice_ids', coalesce(prior->'voided_invoice_ids', '[]'::jsonb) || to_jsonb(voided),
+      'in_flight_invoice_ids', coalesce(prior->'in_flight_invoice_ids', '[]'::jsonb),
+      'paid_ahead_invoice_ids', coalesce(prior->'paid_ahead_invoice_ids', '[]'::jsonb));
   end if;
 
   if s.payment_rail = 'stripe' and p_stripe is null then
@@ -129,6 +159,9 @@ begin
     select * into v from void_admin_canceled_invoices(s.id, case when ends_now or p_void_open then null else ends_at end);
     select coalesce(array_agg(x::text), '{}') into voided from unnest(v.voided) x;
     select coalesce(array_agg(x::text), '{}') into in_flight from unnest(v.in_flight) x;
+    -- Already paid for time after access ends: the admin decides on a refund.
+    select coalesce(array_agg(id::text order by id), '{}') into paid_ahead from onchain_invoices
+      where subscription_id = s.id and status = 'paid' and period_end > ends_at;
   else
     select coalesce(array_agg(x), '{}') into voided from jsonb_array_elements_text(coalesce(p_stripe->'voided_invoice_ids', '[]')) x;
   end if;
@@ -138,31 +171,44 @@ begin
     'subscription_id', s.id, 'rail', s.payment_rail, 'mode', p_mode, 'outcome', outcome,
     'reason', p_reason, 'access_ends_at', ends_at,
     'voided_invoice_ids', to_jsonb(voided), 'in_flight_invoice_ids', to_jsonb(in_flight),
+    'paid_ahead_invoice_ids', to_jsonb(paid_ahead),
     'stripe_already_canceled', case when (p_stripe->>'already_canceled')::boolean then true end)))
   returning id into audit_id;
+  update subscriptions set admin_cancel_audit_id = audit_id where id = s.id;
 
   return jsonb_build_object(
     'outcome', outcome, 'subscription_id', s.id, 'member_id', s.member_id, 'rail', s.payment_rail,
     'mode', p_mode, 'access_ends_at', ends_at,
     'end_access', ends_now and s.status <> 'incomplete',
     'voided_invoice_ids', to_jsonb(voided), 'in_flight_invoice_ids', to_jsonb(in_flight),
-    'audit_id', audit_id);
+    'paid_ahead_invoice_ids', to_jsonb(paid_ahead), 'audit_id', audit_id);
 end;
 $$;
 
--- Close an admin cancellation once access has ended: a cancel-now right away,
--- a period-end one when its paid period is over (a payment for that period
--- may have moved current_period_end on). Returns false when it isn't due or
--- is already closed. Voids whatever is still payable.
-create function finish_admin_cancel(p_subscription_id integer) returns boolean
+-- Is this admin cancellation due to end access? A cancel-now is; a period-end
+-- one once its paid period is over (a payment for that period may have moved
+-- current_period_end on). The one definition: the app asks it under the
+-- PIN-writer reservation before touching the door, and finish re-checks it.
+create function admin_cancel_due(p_subscription_id integer) returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce((
+    select admin_cancel_mode is not null and subscription_is_live(status)
+      and (admin_cancel_mode = 'now' or coalesce(current_period_end, now()) <= now())
+    from subscriptions where id = p_subscription_id), false)
+$$;
+
+-- Close an admin cancellation once access has ended. Records the door outcome
+-- (p_door) on the cancellation's audit row. Returns false when it isn't due
+-- or is already closed. Voids whatever is still payable.
+create function finish_admin_cancel(p_subscription_id integer, p_door jsonb default null) returns boolean
 language plpgsql security definer set search_path = public as $$
 declare
   s subscriptions%rowtype;
 begin
   select * into s from subscriptions where id = p_subscription_id for update;
-  if not found or s.admin_cancel_mode is null or not subscription_is_live(s.status)
-     or (s.admin_cancel_mode = 'period_end' and coalesce(s.current_period_end, now()) > now()) then
-    return false;
+  if not found or not admin_cancel_due(s.id) then return false; end if;
+  if p_door is not null then
+    update admin_actions set payload = payload || p_door where id = s.admin_cancel_audit_id;
   end if;
   perform void_admin_canceled_invoices(s.id, null);
   update subscriptions
@@ -173,9 +219,11 @@ end;
 $$;
 
 -- No new invoice for a subscription an admin canceled. Takes the subscription
--- lock first (as price_onchain_invoice does, and it fires after this one), so
--- an invoice generator holding an older snapshot sees a cancel that committed
--- in between. Skipping the row keeps the billing cron going for everyone else.
+-- lock (as price_onchain_invoice does, and it fires after this one), so an
+-- invoice generator holding an older snapshot sees a cancel that committed in
+-- between. Named to fire after onchain_invoices_active_member_wallet (058,
+-- wallet before subscription). Skipping the row keeps the billing cron going
+-- for everyone else.
 create function skip_invoice_after_admin_cancel() returns trigger
 language plpgsql set search_path = public as $$
 declare
@@ -186,7 +234,7 @@ begin
   return new;
 end;
 $$;
-create trigger a_skip_invoice_after_admin_cancel before insert on onchain_invoices
+create trigger onchain_invoices_skip_admin_canceled before insert on onchain_invoices
   for each row execute function skip_invoice_after_admin_cancel();
 
 -- A void invoice stays void: a payment submission or relay that read it as
@@ -203,14 +251,14 @@ $$;
 create trigger keep_void_invoice_void before update of status on onchain_invoices
   for each row execute function keep_void_invoice_void();
 
--- An admin-canceled subscription that has ended stays ended. A delayed Stripe
--- event can't flip it back to live; a real renewal reported by Stripe clears
--- the marker in the same write, which this lets through.
-create function keep_admin_canceled_ended() returns trigger
+-- A canceled subscription stays canceled, however it was canceled. Stripe
+-- never revives a canceled subscription (a re-subscribe is a new one), so a
+-- live status arriving later is a delayed event; on-chain, coming back is a
+-- new subscription too.
+create function keep_canceled_subscription_canceled() returns trigger
 language plpgsql set search_path = public as $$
 begin
-  if old.admin_cancel_mode is not null and new.admin_cancel_mode is not null
-     and not subscription_is_live(old.status) and subscription_is_live(new.status) then
+  if old.status = 'canceled' and new.status <> 'canceled' then
     new.status := old.status;
     new.canceled_at := old.canceled_at;
     new.cancel_at_period_end := old.cancel_at_period_end;
@@ -218,14 +266,15 @@ begin
   return new;
 end;
 $$;
-create trigger keep_admin_canceled_ended before update on subscriptions
-  for each row execute function keep_admin_canceled_ended();
+create trigger keep_canceled_subscription_canceled before update on subscriptions
+  for each row execute function keep_canceled_subscription_canceled();
 
--- Credit, now aware of admin cancellation. Same lock order as before
--- (subscription, then invoice). A transfer for a canceled membership, or for
--- time after a scheduled end, is kept as an 'exception' payment for an admin
--- to reconcile (refund or reinstate by hand); the invoice is voided and the
--- subscription is not touched. Adds match_status to the result.
+-- Credit, now aware of cancellation. Same lock order as before (subscription,
+-- then invoice). A transfer for a canceled membership (by an admin or any
+-- other path), for an admin cancel-now still finishing, or for time after a
+-- scheduled end, is kept as an 'exception' payment for an admin to reconcile
+-- (refund or reinstate by hand); the invoice is voided and the subscription
+-- is not touched. Adds match_status to the result.
 drop function credit_onchain_invoice(bigint, text, integer, bigint, text, text, text, text, bigint, text, jsonb);
 create function credit_onchain_invoice(
   p_invoice_id bigint,
@@ -258,7 +307,7 @@ declare
   v_sub subscriptions%rowtype;
   v_payment_id bigint;
   v_match text;
-  v_late constant text := 'Paid after an admin canceled this membership; not credited. Reconcile by hand (refund or reinstate).';
+  v_late constant text := 'Paid after this membership was canceled; not credited. Reconcile by hand (refund or reinstate).';
 begin
   select * into v_sub from subscriptions where id =
     (select oi.subscription_id from onchain_invoices oi where oi.id = p_invoice_id) for update;
@@ -281,8 +330,8 @@ begin
     raise exception 'invoice is not payable (status=%)', v_invoice.status;
   end if;
 
-  if v_sub.admin_cancel_mode = 'now' or (v_sub.admin_cancel_mode is not null
-      and (not subscription_is_live(v_sub.status) or v_invoice.period_start >= v_sub.admin_cancel_ends_at)) then
+  if not subscription_is_live(v_sub.status) or v_sub.admin_cancel_mode = 'now'
+     or v_invoice.period_start >= v_sub.admin_cancel_ends_at then
     insert into onchain_payments (
       invoice_id, member_id, chain_id, tx_hash, log_index, block_number,
       block_hash, from_address, to_address, token_contract, amount_micros,
@@ -339,6 +388,8 @@ revoke all on function credit_onchain_invoice(bigint, text, integer, bigint, tex
 grant execute on function credit_onchain_invoice(bigint, text, integer, bigint, text, text, text, text, bigint, text, jsonb) to service_role;
 revoke all on function admin_cancel_subscription(integer, text, integer, text, boolean, jsonb) from public, anon, authenticated;
 grant execute on function admin_cancel_subscription(integer, text, integer, text, boolean, jsonb) to service_role;
-revoke all on function finish_admin_cancel(integer) from public, anon, authenticated;
-grant execute on function finish_admin_cancel(integer) to service_role;
+revoke all on function admin_cancel_due(integer) from public, anon, authenticated;
+grant execute on function admin_cancel_due(integer) to service_role;
+revoke all on function finish_admin_cancel(integer, jsonb) from public, anon, authenticated;
+grant execute on function finish_admin_cancel(integer, jsonb) to service_role;
 revoke all on function void_admin_canceled_invoices(integer, timestamptz) from public, anon, authenticated;

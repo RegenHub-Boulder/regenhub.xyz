@@ -269,6 +269,7 @@ export interface Database {
           admin_cancel_reason?: string | null;
           admin_cancel_mode?: "now" | "period_end" | null;
           admin_cancel_ends_at?: string | null;
+          admin_cancel_audit_id?: number | null;
           created_at: string;
           updated_at: string;
         };
@@ -299,6 +300,7 @@ export interface Database {
           admin_cancel_reason?: string | null;
           admin_cancel_mode?: "now" | "period_end" | null;
           admin_cancel_ends_at?: string | null;
+          admin_cancel_audit_id?: number | null;
         };
         Update: Partial<Database["public"]["Tables"]["subscriptions"]["Insert"]>;
         Relationships: [];
@@ -719,8 +721,12 @@ export interface Database {
         };
         Returns: unknown;
       };
-      finish_admin_cancel: {
+      admin_cancel_due: {
         Args: { p_subscription_id: number };
+        Returns: boolean;
+      };
+      finish_admin_cancel: {
+        Args: { p_subscription_id: number; p_door?: { door_slot_cleared: number | null; door_clear_failed: boolean } | null };
         Returns: boolean;
       };
       find_stale_member_links: {

@@ -147,10 +147,12 @@ the `admin_cancel_*` marker, on-chain invoice voids and the `admin_actions` row 
 are no-ops. While the marker is set nothing makes the subscription payable or entitled again: no invoice
 insert (trigger), no credit (`credit_onchain_invoice` records a late transfer as an `exception` payment
 for an admin to reconcile), no payment effects or Stripe activation (both re-read the row under the PIN
-writer), and an ended row can't go live (trigger). Card cancels call Stripe first; the webhook uses
-Stripe's *current* subscription for marked rows, and only a renewal Stripe reports lifts the marker.
+writer). A canceled row, canceled any way, never goes live again (trigger) and a late transfer for it is
+never credited; a void invoice stays void. Card cancels call Stripe first; the webhook uses Stripe's
+*current* subscription for marked rows, and only a renewal Stripe reports lifts the marker.
 Cancel-now stays "marked + live" until the door step finishes; the on-chain billing cron finishes any
-left pending and ends period-end cancels.
+left pending and ends period-end cancels. The door step asks `admin_cancel_due()` under the PIN writer
+first, so a payment that just extended the period keeps its door.
 
 ### Add a new member via bot
 Use `/admin → Add member` as an admin in the Telegram bot.
