@@ -556,6 +556,26 @@ describe("card (Stripe): one operation per cancel, finished by the billing cron"
     expect(stripe.subscriptions.cancel).toHaveBeenCalledTimes(1);
   });
 
+  it("Stripe done, then the webhook stops between ending the row and its door step: the billing cron still ends access", async () => {
+    await seed({ rail: "stripe" });
+    statefulStripe();
+    await diesAfterStripe({ reason: "Moved away" });
+    // The deletion webhook writes 'canceled', then stops before its downgrade takes the PIN writer.
+    db.beforeNextWrite("subscriptions", () => db.beforeNextWrite("rpc:acquire_lock_writer", () => { throw new Error("process stopped"); }));
+    await sendStripeEvent("evt_del", "customer.subscription.deleted", { ...stripeSub("sub_test_50", "canceled") });
+    expect((await sub()).status).toBe("canceled");
+    expect((await member()).pin_code_slot).toBe(12);
+
+    expect((await runCron()).status).toBe(200);
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+    expect(await operations()).toEqual([expect.objectContaining({
+      recorded_at: expect.any(String), door_done_at: expect.any(String), finished_at: expect.any(String),
+    })]);
+    expect(await audits()).toEqual([expect.objectContaining({
+      actor_member_id: 1, payload: expect.objectContaining({ reason: "Moved away", outcome: "canceled", door_slot_cleared: 12 }),
+    })]);
+  });
+
   it("the cron running the same operation while the request's Stripe call is in flight can't abandon it", async () => {
     await seed({ rail: "stripe" });
     const state = statefulStripe();

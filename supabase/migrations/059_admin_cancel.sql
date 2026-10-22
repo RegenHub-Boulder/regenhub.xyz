@@ -243,7 +243,11 @@ begin
     or coalesce((p_stripe->>'already_canceled')::boolean, false);
   ends_at := case when ends_now then now() else greatest(now(), coalesce(s.current_period_end, now())) end;
   outcome := case when ends_now then 'canceled' else 'scheduled' end;
-  end_access := ends_now and s.status <> 'incomplete' and subscription_is_live(s.status);
+  -- Every effective cancel-now keeps its door step, even when Stripe's
+  -- deletion webhook has already ended the row: that webhook may have stopped
+  -- before clearing the door. admin_cancel_door_due() skips it if the member
+  -- has another live subscription. An unpaid checkout never had a door.
+  end_access := ends_now and s.status not in ('incomplete', 'incomplete_expired');
 
   update subscriptions set
     admin_canceled_at = now(), admin_canceled_by = op.actor_member_id, admin_cancel_reason = op.reason,
@@ -301,9 +305,9 @@ $$;
 
 -- Does this recorded cancel-now operation still have door access to end?
 -- Yes while its subscription is live (marked). Also when something else has
--- since ended the row (Stripe's deletion webhook) and the member has no other
--- live subscription: ending access again is harmless, and it catches a row
--- that was ended without its access.
+-- ended the row (Stripe's deletion webhook, before or after recording) and the
+-- member has no other live subscription: ending access again is harmless, and
+-- it catches a row that was ended without its access.
 create function admin_cancel_door_due(p_operation_id bigint) returns boolean
 language sql stable security definer set search_path = public as $$
   select coalesce((
