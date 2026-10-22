@@ -289,6 +289,15 @@ describe("card (Stripe)", () => {
     expect(await audits()).toEqual([expect.objectContaining({ payload: expect.objectContaining({ reason: "Second try" }) })]);
   });
 
+  it("a subscription Stripe doesn't know is refused and closed, so it can't block later requests", async () => {
+    await seed({ rail: "stripe" });
+    const missing = Object.assign(new Error("No such subscription: 'sub_test_50'"), { code: "resource_missing" });
+    stripe.subscriptions.cancel.mockRejectedValue(missing);
+    stripe.subscriptions.retrieve.mockRejectedValue(missing);
+    await expect(cancel()).rejects.toMatchObject({ status: 502, message: expect.stringMatching(/refused/) });
+    expect(await operations()).toEqual([expect.objectContaining({ recorded_at: null, finished_at: expect.any(String) })]);
+  });
+
   it("when Stripe can't be reached, the cancel is saved and the billing cron carries it out", async () => {
     await seed({ rail: "stripe" });
     stripe.subscriptions.cancel.mockRejectedValueOnce(new Error("socket hang up"));

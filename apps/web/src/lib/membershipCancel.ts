@@ -195,12 +195,17 @@ async function cancelAtStripe(admin: ServiceClient, operationId: number, sub: Su
     return "done" as const;
   } catch (error) {
     // Already canceled at Stripe (e.g. a lost webhook, or an earlier attempt): mirror it locally.
-    const current = await stripe.subscriptions.retrieve(id).catch(() => null);
+    // Stripe answering that it has no such subscription is a refusal too, not an outage.
+    let unknownToStripe = false;
+    const current = await stripe.subscriptions.retrieve(id).catch((cause: { code?: string }) => {
+      unknownToStripe = cause?.code === "resource_missing";
+      return null;
+    });
     if (current?.status === "canceled") return "already_canceled" as const;
     if (current && mode === "period_end" && current.cancel_at_period_end) return "done" as const;
     console.error("[CancelMembership] Stripe cancel failed:", error);
     const message = error instanceof Error ? error.message : "unknown error";
-    if (!current) {
+    if (!current && !unknownToStripe) {
       throw new CancelMembershipError(
         `Couldn't reach Stripe (${message}). The cancellation is saved and the billing cron will finish it; trying again also finishes it.`,
         502,
