@@ -20,6 +20,20 @@ export class PlanSwitchError extends Error {
   }
 }
 
+/**
+ * "Keep desk" found the daily phase already running at Stripe (the release
+ * came after the boundary). The caller settles the row from `live` through
+ * the same sync the webhook uses (lib/stripeSubscriptionSync.ts), so the plan,
+ * the pending switch and door access change together and an older desk event
+ * can't bring the desk back.
+ */
+export class SwitchAlreadyLandedError extends PlanSwitchError {
+  constructor(readonly runningPlan: string, readonly live: Stripe.Subscription) {
+    super(`Your switch to ${planLabel(runningPlan)} took effect before it could be stopped, so you're on it now.`, 409);
+    this.name = "SwitchAlreadyLandedError";
+  }
+}
+
 export type PendingSwitchRow = {
   id: number;
   member_id: number;
@@ -39,6 +53,7 @@ type SwitchOperation = {
   from_plan: string;
   to_plan: string;
   created_at: string;
+  create_started_at: string | null;
   schedule_id: string | null;
   effective_at: string | null;
   recorded_at: string | null;
@@ -175,27 +190,68 @@ async function decide(admin: ServiceClient, operationId: number, outcome: "refus
 
 /**
  * A decided request that won't be recorded: release the schedule it made, if
- * any, then finish it. False when Stripe couldn't be asked or refused the
- * release; the request stays open and the billing cron tries again.
+ * any, then finish it. False when Stripe couldn't be asked, refused the
+ * release, or a create may still be in flight; the request stays open and
+ * the billing cron tries again.
+ *
+ * A request whose runner claimed the create (create_started_at) may still get
+ * a schedule even though no id was saved: the runner may have stopped after
+ * Stripe made it, or be about to ask. The same idempotency key settles that:
+ * Stripe answers with the schedule that create made, or makes it now (and the
+ * runner's own call then gets this answer back), and it is released here. A
+ * request that never claimed the create can't get a schedule, so nothing is
+ * asked of Stripe for it.
  */
 async function cleanUp(admin: ServiceClient, operationId: number): Promise<boolean> {
   const op = await loadOperation(admin, operationId);
   if (op.finished_at) return true;
   const stripe = getStripe();
+  const { data: sub, error: subError } = await admin.from("subscriptions").select("stripe_subscription_id").eq("id", op.subscription_id).single();
+  if (subError) throw subError;
+  const subId = sub.stripe_subscription_id;
   let scheduleId = op.schedule_id;
-  if (!scheduleId) {
-    const { data: sub, error } = await admin.from("subscriptions").select("stripe_subscription_id").eq("id", op.subscription_id).single();
-    if (error) throw error;
-    if (sub.stripe_subscription_id) {
-      const live = await stripe.subscriptions.retrieve(sub.stripe_subscription_id).catch(() => null);
-      if (!live) return false;
-      const attached = scheduleIdOf(live);
-      if (attached && await madeBy(stripe, op, attached).catch(() => false)) scheduleId = attached;
+  let cancelAtEnd = false;
+  if (!scheduleId && op.create_started_at && subId) {
+    const before = await stripe.subscriptions.retrieve(subId).catch(() => null);
+    if (!before) return false;
+    cancelAtEnd = before.cancel_at_period_end;
+    try {
+      const settled = await stripe.subscriptionSchedules.create({ from_subscription: subId }, { idempotencyKey: `plan-switch-${op.id}` });
+      scheduleId = (await scheduleMade(admin, op.id, settled.id)).schedule_id ?? settled.id;
+    } catch (cause) {
+      // Still being made by the runner (a concurrent request with the key), or Stripe unreachable: settle it next time.
+      if (!isRefusal(cause)) return false;
+      // Refused: this subscription can't take a schedule from the key, so none of ours can attach.
     }
   }
-  if (scheduleId && !await releaseSchedule(stripe, scheduleId)) return false;
+  if (scheduleId) {
+    const id = scheduleId;
+    // Under the reservation the webhook syncs under, so it reads Stripe after both steps.
+    const done = await withLockWriter(admin, async () =>
+      await releaseSchedule(stripe, id) && (!subId || await keepPeriodEndCancel(admin, op, subId, cancelAtEnd)), "Plan switch cleanup");
+    if (!done) return false;
+  }
   const { error } = await admin.rpc("finish_plan_switch", { p_operation_id: op.id });
   if (error) throw error;
+  return true;
+}
+
+/**
+ * Releasing a schedule leaves the subscription as the schedule had it. A
+ * period-end cancellation the subscription had before (the member's own, or
+ * an admin's marked cancel) is set again if the schedule took it away.
+ * Stripe's exact behaviour here isn't verified; this keeps the cancellation
+ * either way.
+ */
+async function keepPeriodEndCancel(admin: ServiceClient, op: SwitchOperation, subId: string, hadCancelAtEnd: boolean): Promise<boolean> {
+  const { data: row, error } = await admin.from("subscriptions").select("admin_cancel_mode").eq("id", op.subscription_id).single();
+  if (error) throw error;
+  if (!hadCancelAtEnd && row.admin_cancel_mode !== "period_end") return true;
+  const stripe = getStripe();
+  const live = await stripe.subscriptions.retrieve(subId).catch(() => null);
+  if (!live) return false;
+  if (live.status === "canceled" || live.cancel_at_period_end) return true;
+  await stripe.subscriptions.update(subId, { cancel_at_period_end: true }, { idempotencyKey: `plan-switch-${op.id}-keep-cancel` });
   return true;
 }
 
@@ -290,6 +346,13 @@ export async function runPlanSwitch(admin: ServiceClient, operationId: number): 
     // Ours was released or canceled before it was recorded (by an admin cancel, or at Stripe).
     return refuse(NOTHING_CHANGED, 409);
   } else {
+    // Claim the create: refused once the request is decided, so cleanup knows whether a create can still land.
+    const { data: claimed, error: claimError } = await admin.rpc("plan_switch_create_started", { p_operation_id: op.id });
+    if (claimError) throw claimError;
+    if (!claimed) {
+      await cleanUp(admin, op.id).catch((cause) => console.error("[PlanSwitch] Cleanup failed; the billing cron retries it:", cause));
+      throw new PlanSwitchError(await droppedMessage(admin, op.subscription_id), 409);
+    }
     try {
       schedule = await stripe.subscriptionSchedules.create({ from_subscription: live.id }, { idempotencyKey: `plan-switch-${op.id}` });
     } catch (cause) {
@@ -431,12 +494,7 @@ export async function cancelPendingSwitch(
     // Unreadable: the release's own webhook event brings the row in line.
     if (!live) throw new PlanSwitchError("Stripe didn't confirm whether the switch was stopped. Refresh in a minute to see your plan.", 502);
     const runningPlan = live.metadata?.plan_key;
-    if (runningPlan && runningPlan !== sub.plan_key) {
-      await endDeskAccessForSwitch(admin, {
-        subscriptionId: sub.id, memberId: sub.member_id, rail: "stripe", from: sub.plan_key, to: runningPlan,
-      });
-      throw new PlanSwitchError(`Your switch to ${planLabel(runningPlan)} took effect before it could be stopped, so you're on it now.`, 409);
-    }
+    if (runningPlan && runningPlan !== sub.plan_key) throw new SwitchAlreadyLandedError(runningPlan, live);
   }
   const { data: cleared, error } = await admin
     .from("subscriptions")
@@ -562,51 +620,53 @@ export type SwitchLanded = Pick<DowngradeResult, "revokedSlot" | "lockStatus" | 
 
 /**
  * The desk period is over: end desk access through the shared lifecycle under
- * the PIN-writer reservation (the path admin cancel uses), clear the pending
- * switch, and audit it. Returns null, touching only the pending record, when
- * the member is no longer on a desk type. A failed lock clear leaves the slot
- * on the member and quarantined for Lock Sync; a failed member update throws
- * so the caller's retry (Stripe's redelivery, the next billing cron) runs it
- * again.
+ * the PIN-writer reservation (the path admin cancel uses), then clear the
+ * pending switch and audit it in one transaction (complete_plan_switch).
+ *
+ * Everything is decided under the reservation, from fresh rows:
+ * - `dueBy` (the on-chain sweep): act only if this subscription still has a
+ *   switch pending and due. A sweep's snapshot can be stale: another run may
+ *   have finished the switch, and an admin given a desk by hand since.
+ * - A member still on a desk type has it ended. One already off it with the
+ *   switch still pending had it ended by an earlier run whose audit didn't
+ *   commit; the audit is written now. Neither: nothing to do (null).
+ * A failed lock clear leaves the slot on the member and quarantined for Lock
+ * Sync; a failed member update or audit throws so the caller's retry
+ * (Stripe's redelivery, the next billing cron) runs it again.
  */
 export async function endDeskAccessForSwitch(
   admin: ServiceClient,
-  args: { subscriptionId: number; memberId: number; rail: PaymentRail; from: string; to: string },
+  args: { subscriptionId: number; memberId: number; rail: PaymentRail; from: string; to: string; dueBy?: Date },
 ): Promise<SwitchLanded | null> {
-  const downgrade = await withLockWriter(admin, async () => {
-    // Under the reservation, so two deliveries of the landing event end it once.
-    // A member no longer on a desk type has had it ended already (a failed lock
-    // clear stays quarantined for Lock Sync).
-    const { data: member, error } = await admin.from("members").select("member_type").eq("id", args.memberId).single();
+  const landed = await withLockWriter(admin, async () => {
+    const [{ data: member, error }, { data: sub, error: subError }] = await Promise.all([
+      admin.from("members").select("member_type").eq("id", args.memberId).single(),
+      admin.from("subscriptions").select("pending_plan_key, pending_plan_at").eq("id", args.subscriptionId).single(),
+    ]);
     if (error) throw error;
-    const result = isDeskMemberType(member.member_type)
+    if (subError) throw subError;
+    const pending = sub.pending_plan_key != null;
+    if (args.dueBy && (!pending || (sub.pending_plan_at != null && Date.parse(sub.pending_plan_at) > args.dueBy.getTime()))) return null;
+    const onDesk = isDeskMemberType(member.member_type);
+    if (!onDesk && !pending) return null;
+    const downgrade = onDesk
       ? await downgradeMembershipAccess(admin, { memberId: args.memberId, currentPinSlot: null, revokePermanentPin: true })
       : null;
-    if (result?.memberUpdateError) return result;
-    const { error: clearError } = await admin.from("subscriptions")
-      .update({ pending_plan_key: null, pending_plan_at: null, pending_plan_from: null, pending_plan_schedule_id: null })
-      .eq("id", args.subscriptionId).not("pending_plan_key", "is", null);
-    if (clearError) throw clearError;
-    return result;
+    if (downgrade?.memberUpdateError) {
+      const { message } = downgrade.memberUpdateError as { message?: string };
+      throw new Error(`Member downgrade failed: ${message ?? "unknown error"}`);
+    }
+    const { error: completeError } = await admin.rpc("complete_plan_switch", {
+      p_subscription_id: args.subscriptionId, p_member_id: args.memberId, p_rail: args.rail, p_from: args.from, p_to: args.to,
+      p_door: downgrade ? { door_slot_cleared: downgrade.revokedSlot, door_clear_failed: downgrade.lockRevokeFailed } : null,
+    });
+    if (completeError) throw completeError;
+    return { revokedSlot: downgrade?.revokedSlot ?? null, lockStatus: downgrade?.lockStatus ?? null, lockRevokeFailed: downgrade?.lockRevokeFailed ?? false };
   }, "Plan switch");
-  if (!downgrade) return null;
-  if (downgrade.memberUpdateError) {
-    const { message } = downgrade.memberUpdateError as { message?: string };
-    throw new Error(`Member downgrade failed: ${message ?? "unknown error"}`);
-  }
-  if (downgrade.lockRevokeFailed) {
+  if (landed?.lockRevokeFailed) {
     console.error(`[PlanSwitch] Door clear failed for member ${args.memberId}; slot quarantined for Lock Sync.`);
   }
-  await logAction({
-    action: AuditAction.PLAN_SWITCH_COMPLETED,
-    actorMemberId: null,
-    target: { table: "members", id: args.memberId },
-    payload: {
-      subscription_id: args.subscriptionId, rail: args.rail, from: args.from, to: args.to,
-      door_slot_cleared: downgrade.revokedSlot, door_clear_failed: downgrade.lockRevokeFailed,
-    },
-  }, admin);
-  return { revokedSlot: downgrade.revokedSlot, lockStatus: downgrade.lockStatus, lockRevokeFailed: downgrade.lockRevokeFailed };
+  return landed;
 }
 
 /** Release our schedule once the switch has landed, so the subscription is free for later changes. */

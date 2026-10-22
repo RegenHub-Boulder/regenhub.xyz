@@ -664,6 +664,7 @@ export interface Database {
           from_plan: string;
           to_plan: string;
           created_at: string;
+          create_started_at: string | null;
           schedule_id: string | null;
           effective_at: string | null;
           recorded_at: string | null;
@@ -778,6 +779,14 @@ export interface Database {
       record_plan_switch: { Args: { p_operation_id: number; p_effective_at: string }; Returns: unknown };
       decide_plan_switch: { Args: { p_operation_id: number; p_outcome: "refused" | "abandoned" }; Returns: unknown };
       finish_plan_switch: { Args: { p_operation_id: number }; Returns: null };
+      /** False once the request is decided: no create may start then. */
+      plan_switch_create_started: { Args: { p_operation_id: number }; Returns: boolean };
+      /** Clears a landed switch and writes its plan_switch_completed audit row, in one transaction. */
+      complete_plan_switch: {
+        Args: { p_subscription_id: number; p_member_id: number; p_rail: string; p_from: string; p_to: string;
+          p_door?: { door_slot_cleared: number | null; door_clear_failed: boolean } | null };
+        Returns: null;
+      };
       begin_admin_cancel: {
         Args: { p_subscription_id: number; p_mode: "now" | "period_end"; p_actor: number | null; p_reason: string | null; p_void_open: boolean };
         /** The admin_cancel_operations row (new, or the unfinished one, unchanged) plus `resumed`. */

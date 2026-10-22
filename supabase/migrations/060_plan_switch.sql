@@ -38,8 +38,10 @@ alter table subscriptions
 comment on column subscriptions.pending_plan_key is
   'A desk → daily switch landing at pending_plan_at (end of the paid desk period, pending_plan_from). Card: via Stripe schedule pending_plan_schedule_id, plan_key stays the desk until it lands. On-chain: plan_key already names the daily plan.';
 
--- One row per card switch request. Steps stamp once: schedule_id (Stripe made
--- the schedule), then either recorded_at (the switch is on the subscription;
+-- One row per card switch request. Steps stamp once: create_started_at (the
+-- runner is about to ask Stripe for the schedule; refused once the request is
+-- decided, so a decided request that never stamped it can't get one),
+-- schedule_id (Stripe made the schedule), then either recorded_at (the switch is on the subscription;
 -- finished at once) or a refusal. outcome is set when the request is decided;
 -- finished_at when nothing is left to do at Stripe. A decided but unfinished
 -- row still has a schedule to release. Not a long-lived record (the audit
@@ -51,6 +53,7 @@ create table plan_switch_operations (
   from_plan       text not null,
   to_plan         text not null,
   created_at      timestamptz not null default now(),
+  create_started_at timestamptz,
   schedule_id     text,
   effective_at    timestamptz,
   recorded_at     timestamptz,
@@ -91,6 +94,36 @@ begin
   insert into plan_switch_operations (subscription_id, actor_member_id, from_plan, to_plan)
     values (s.id, p_actor, p_from, p_to) returning * into op;
   return to_jsonb(op) || '{"resumed": false}';
+end;
+$$;
+
+-- The runner is about to ask Stripe to make the schedule. False, touching
+-- nothing, once the request is decided: the decision and this claim lock the
+-- same row, so cleanup knows whether a create can still land (and settles it
+-- through the same idempotency key) or never will.
+create function plan_switch_create_started(p_operation_id bigint) returns boolean
+language plpgsql security definer set search_path = public as $$
+begin
+  update plan_switch_operations set create_started_at = coalesce(create_started_at, now())
+    where id = p_operation_id and outcome is null;
+  return found;
+end;
+$$;
+
+-- A switch landed: clear it and audit it in one transaction, so a retry that
+-- finds it still pending writes the audit it couldn't. p_door is the door
+-- outcome when this run ended the desk (null when an earlier run did).
+create function complete_plan_switch(p_subscription_id integer, p_member_id integer, p_rail text,
+  p_from text, p_to text, p_door jsonb default null) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  update subscriptions set pending_plan_key = null, pending_plan_at = null, pending_plan_from = null,
+    pending_plan_schedule_id = null
+    where id = p_subscription_id and pending_plan_key is not null;
+  insert into admin_actions (actor_member_id, action, target_table, target_id, payload)
+    values (null, 'plan_switch_completed', 'members', p_member_id::text,
+      jsonb_build_object('subscription_id', p_subscription_id, 'rail', p_rail, 'from', p_from, 'to', p_to)
+        || coalesce(p_door, '{}'::jsonb));
 end;
 $$;
 
@@ -162,10 +195,12 @@ language sql security definer set search_path = public as $$
 $$;
 
 revoke all on function begin_plan_switch(integer, integer, text, text), plan_switch_schedule_made(bigint, text),
-  record_plan_switch(bigint, timestamptz), decide_plan_switch(bigint, text), finish_plan_switch(bigint)
+  record_plan_switch(bigint, timestamptz), decide_plan_switch(bigint, text), finish_plan_switch(bigint),
+  plan_switch_create_started(bigint), complete_plan_switch(integer, integer, text, text, text, jsonb)
   from public, anon, authenticated;
 grant execute on function begin_plan_switch(integer, integer, text, text), plan_switch_schedule_made(bigint, text),
-  record_plan_switch(bigint, timestamptz), decide_plan_switch(bigint, text), finish_plan_switch(bigint)
+  record_plan_switch(bigint, timestamptz), decide_plan_switch(bigint, text), finish_plan_switch(bigint),
+  plan_switch_create_started(bigint), complete_plan_switch(integer, integer, text, text, text, jsonb)
   to service_role;
 
 -- An admin cancel wins over a plan switch (migration 059), in both orders:

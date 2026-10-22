@@ -40,6 +40,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getOpPublicClient, NATIVE_USDC_ADDRESS, TREASURY_ADDRESS } from "@/lib/onchain/config";
 import { generateUpcomingOnchainInvoices } from "@/lib/onchain/invoice";
+import { finishOnchainPlanSwitches } from "@/lib/onchain/verifyPayment";
 import { cancelMembership } from "./membershipCancel";
 import { DELETE as cancelSwitch, POST as changePlan } from "@/app/api/portal/change-plan/route";
 import { POST as stripeWebhook } from "@/app/api/webhooks/stripe/route";
@@ -82,7 +83,7 @@ type Schedule = { id: string; status: string; created: number; metadata: Record<
 function fakeStripe() {
   const schedules = new Map<string, Schedule>();
   const byKey = new Map<string, Schedule>();
-  const state = { attached: null as string | null, deskPrice: {} as Partial<Price> };
+  const state = { attached: null as string | null, deskPrice: {} as Partial<Price>, cancelAtPeriodEnd: false };
   const makeSchedule = (key?: string) => {
     if (key && byKey.has(key)) return byKey.get(key)!;
     const schedule: Schedule = {
@@ -93,6 +94,8 @@ function fakeStripe() {
     schedules.set(schedule.id, schedule);
     if (key) byKey.set(key, schedule);
     state.attached = schedule.id;
+    // Not verified against Stripe; assume the worst: the schedule takes a period-end cancellation over.
+    state.cancelAtPeriodEnd = false;
     return schedule;
   };
   return {
@@ -100,8 +103,13 @@ function fakeStripe() {
     makeSchedule,
     subscriptions: {
       cancel: vi.fn(async (id: string) => ({ id, status: "canceled" })),
-      update: vi.fn(async (id: string, params: Record<string, unknown>) => ({ id, status: "active", ...params })),
-      retrieve: vi.fn(async (): Promise<unknown> => stripeSub("hot_desk", { schedule: state.attached, price: state.deskPrice })),
+      update: vi.fn(async (id: string, params: Record<string, unknown>) => {
+        if (typeof params.cancel_at_period_end === "boolean") state.cancelAtPeriodEnd = params.cancel_at_period_end;
+        return { id, status: "active", ...params };
+      }),
+      retrieve: vi.fn(async (): Promise<unknown> => ({
+        ...stripeSub("hot_desk", { schedule: state.attached, price: state.deskPrice }), cancel_at_period_end: state.cancelAtPeriodEnd,
+      })),
     },
     subscriptionSchedules: {
       create: vi.fn(async (_params: { from_subscription: string }, options?: { idempotencyKey?: string }) =>
@@ -654,6 +662,15 @@ describe("card (Stripe): ordering, recovery and Stripe's rules", () => {
     expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
     expect(await audits("plan_switch_canceled")).toHaveLength(0);
     expect(await audits("plan_switch_completed")).toHaveLength(1);
+    // The row was settled like the webhook settles it: the plan is the daily one now.
+    expect(await sub()).toMatchObject({ plan_key: "member_2day", pending_plan_key: null });
+
+    // An older "Hot Desk" event delivered now can't bring the desk back.
+    const older = stripeSub("hot_desk", { schedule: "sub_sched_1" });
+    expect((await sendStripeEvent("evt_older_desk", "customer.subscription.updated", older)).status).toBe(200);
+    expect(await sub()).toMatchObject({ plan_key: "member_2day" });
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+    expect(setUserCode).not.toHaveBeenCalled();
 
     // Stripe's event for the new phase brings the row in line, without clearing the door twice.
     expect((await sendStripeEvent("evt_roll", "customer.subscription.updated", rolled)).status).toBe(200);
@@ -701,6 +718,57 @@ describe("card (Stripe): the second review's findings", () => {
     expect(response.status).toBe(409);
     expect((await response.json()).error).toMatch(/already stopped or has taken effect/);
     expect(await audits("plan_switch_canceled")).toHaveLength(0);
+  });
+});
+
+describe("card (Stripe): the third review's findings", () => {
+  const networkError = () => Object.assign(new Error("socket hang up"), { type: "StripeConnectionError" });
+  const adminCancel = AsyncResource.bind(() =>
+    cancelMembership(db as never, { memberId: 7, actorMemberId: 1, mode: "period_end", reason: null, voidOpenInvoices: false }));
+
+  it("a schedule Stripe makes after an admin cancel dropped the request is settled, not left attached", async () => {
+    await seed();
+    // The member's runner has claimed the create; the admin's cancel drops the request before Stripe gets the
+    // runner's call; then Stripe makes the schedule and the runner stops before saving its id.
+    stripe.subscriptionSchedules.create.mockImplementationOnce(async (_params, options) => {
+      await adminCancel();
+      stripe.makeSchedule(options?.idempotencyKey);
+      throw networkError();
+    });
+    expect((await pick("member_2day")).status).toBe(502);
+    expect((await runCron()).status).toBe(200);
+    expect(stripe.state.attached).toBeNull();
+    expect(await sub()).toMatchObject({ admin_cancel_mode: "period_end", pending_plan_key: null });
+    expect(await one("select count(*)::int n from plan_switch_operations where finished_at is null")).toEqual({ n: 0 });
+  });
+
+  it("a period-end cancellation the settled schedule took over is set again after the release", async () => {
+    await seed();
+    // The runner claimed the create; Stripe's answer was lost (it made nothing).
+    stripe.subscriptionSchedules.create.mockRejectedValueOnce(networkError());
+    expect((await pick("member_2day")).status).toBe(502);
+    // The member then cancels at period end in Stripe's billing portal.
+    stripe.state.cancelAtPeriodEnd = true;
+    expect((await runCron()).status).toBe(200);
+    expect(stripe.state.attached).toBeNull();
+    expect(stripe.state.cancelAtPeriodEnd).toBe(true);
+    expect(await one("select count(*)::int n from plan_switch_operations where finished_at is null")).toEqual({ n: 0 });
+  });
+
+  it("a landing whose audit didn't commit is audited on Stripe's redelivery", async () => {
+    await seed();
+    await pick("member_2day");
+    await db.exec(`create function fail_completed_audit() returns trigger language plpgsql as $$
+      begin if new.action = 'plan_switch_completed' then raise exception 'injected audit failure'; end if; return new; end $$;
+      create trigger fail_completed_audit before insert on admin_actions for each row execute function fail_completed_audit();`);
+    expect((await periodRolls()).status).toBe(500);
+    expect(await sub()).toMatchObject({ pending_plan_key: "member_2day" });
+
+    await db.exec("drop trigger fail_completed_audit on admin_actions");
+    expect((await periodRolls("evt_roll_again")).status).toBe(200);
+    expect(await audits("plan_switch_completed")).toHaveLength(1);
+    expect(await sub()).toMatchObject({ plan_key: "member_2day", pending_plan_key: null });
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
   });
 });
 
@@ -857,6 +925,26 @@ describe("crypto (on-chain): Hot Desk → Member + 2 days/mo", () => {
     expect(await sub()).toMatchObject({ plan_key: "member_2day", pending_plan_key: null });
     expect((await runCron()).status).toBe(200);
     expect(await member()).toMatchObject({ member_type: "hot_desk", pin_code_slot: 12 });
+  });
+
+  it("a sweep working from a stale snapshot doesn't take a desk an admin gave by hand meanwhile", async () => {
+    await seed({ rail: "onchain" });
+    expect((await pick("member_2day")).status).toBe(200);
+    await db.exec(`update onchain_invoices set period_start = period_start - interval '5 days', period_end = period_end - interval '5 days';
+      update subscriptions set current_period_end = current_period_end - interval '5 days',
+        pending_plan_at = pending_plan_at - interval '5 days' where id = 50`);
+    // Sweep A has read the due switch. Before it gets the reservation, sweep B finishes that switch and an
+    // admin gives the member a desk by hand.
+    const sweepB = AsyncResource.bind(() => finishOnchainPlanSwitches(db as never));
+    db.beforeNextWrite("rpc:acquire_lock_writer", async () => {
+      await sweepB();
+      await asWriter("update members set member_type = 'cold_desk', pin_code_slot = 14, pin_code = '111222' where id = 7;");
+    });
+    await finishOnchainPlanSwitches(db as never);
+    expect(await member()).toMatchObject({ member_type: "cold_desk", pin_code_slot: 14 });
+    expect(clearUserCode).toHaveBeenCalledTimes(1);
+    expect(clearUserCode).toHaveBeenCalledWith(12);
+    expect(await audits("plan_switch_completed")).toHaveLength(1);
   });
 
   it("a desk member still waiting for a door code keeps the desk when a daily invoice is paid ahead", async () => {
