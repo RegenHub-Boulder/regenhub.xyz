@@ -198,7 +198,10 @@ begin
      or (s.admin_cancel_mode is null and not subscription_is_live(s.status) and op.stripe_done_at is null) then
     outcome := case when subscription_is_live(s.status) and s.admin_cancel_mode = 'period_end'
       then 'already_scheduled' else 'already_canceled' end;
-    end_access := s.admin_cancel_mode = 'now' and subscription_is_live(s.status);
+    -- A recorded operation still open has its door step left, even when
+    -- something else (Stripe's webhook) has ended the row since.
+    end_access := (op.recorded_at is not null and op.finished_at is null)
+      or (s.admin_cancel_mode = 'now' and subscription_is_live(s.status));
     select payload into prior from admin_actions where id = s.admin_cancel_audit_id;
     if op.recorded_at is null and op.finished_at is null then
       -- The admin can come back to void overdue invoices (e.g. scheduled earlier without voiding).

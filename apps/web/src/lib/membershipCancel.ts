@@ -175,6 +175,9 @@ async function voidStripeInvoices(subscriptionId: string) {
   return { voided, warnings };
 }
 
+/** Stripe never brings these back. */
+const isEndedAtStripe = (status: string) => status === "canceled" || status === "incomplete_expired";
+
 /**
  * Ask Stripe. Returns "already_canceled" when Stripe had ended it before we
  * asked. On a refusal Stripe confirms (it still shows the subscription
@@ -185,12 +188,14 @@ async function cancelAtStripe(admin: ServiceClient, operationId: number, sub: Su
   const id = sub.stripe_subscription_id!;
   const stripe = getStripe();
   const details = reason ? { cancellation_details: { comment: reason.slice(0, 500) } } : {};
+  // One key per operation: the request and the billing cron asking at once get one answer from Stripe.
+  const once = { idempotencyKey: `admin-cancel-${operationId}` };
   try {
     if (mode === "now") {
       // No proration credit and no final invoice: the admin is ending it, not refunding it.
-      await stripe.subscriptions.cancel(id, { prorate: false, invoice_now: false, ...details });
+      await stripe.subscriptions.cancel(id, { prorate: false, invoice_now: false, ...details }, once);
     } else {
-      await stripe.subscriptions.update(id, { cancel_at_period_end: true, ...details });
+      await stripe.subscriptions.update(id, { cancel_at_period_end: true, ...details }, once);
     }
     return "done" as const;
   } catch (error) {
@@ -201,13 +206,17 @@ async function cancelAtStripe(admin: ServiceClient, operationId: number, sub: Su
       unknownToStripe = cause?.code === "resource_missing";
       return null;
     });
-    if (current?.status === "canceled") return "already_canceled" as const;
+    if (current && isEndedAtStripe(current.status)) return "already_canceled" as const;
     if (current && mode === "period_end" && current.cancel_at_period_end) return "done" as const;
     console.error("[CancelMembership] Stripe cancel failed:", error);
     const message = error instanceof Error ? error.message : "unknown error";
-    if (!current && !unknownToStripe) {
+    // Only a request Stripe rejected as invalid is a refusal. A rate limit, a
+    // conflict with the same operation's other runner, or an outage may
+    // still be applied, so the operation stays for the next try.
+    const refused = unknownToStripe || (error as { type?: string })?.type === "StripeInvalidRequestError";
+    if (!refused) {
       throw new CancelMembershipError(
-        `Couldn't reach Stripe (${message}). The cancellation is saved and the billing cron will finish it; trying again also finishes it.`,
+        `Stripe didn't confirm the cancellation (${message}). It is saved and the billing cron will finish it; trying again also finishes it.`,
         502,
       );
     }
@@ -233,6 +242,9 @@ type Operation = {
   finished_at: string | null;
 };
 
+/** Stripe's clock and the database's can disagree by a little. */
+const STRIPE_CLOCK_SKEW_MS = 60_000;
+
 type Run = { recorded: Recorded; sub: SubscriptionRow; door: DowngradeResult | null; warnings: string[] };
 
 /**
@@ -242,7 +254,11 @@ type Run = { recorded: Recorded; sub: SubscriptionRow; door: DowngradeResult | n
  * all run it; each acts only on this operation, with its original admin and
  * choices.
  */
-async function runOperation(admin: ServiceClient, op: Operation): Promise<Run> {
+async function runOperation(admin: ServiceClient, operationId: number): Promise<Run> {
+  // Fresh, not the caller's snapshot: another runner may have moved it on.
+  const { data: opRow, error: opError } = await admin.from("admin_cancel_operations").select("*").eq("id", operationId).single();
+  if (opError) throw opError;
+  const op = opRow as Operation;
   const { data: subRow, error } = await admin.from("subscriptions").select(SUBSCRIPTION_COLUMNS).eq("id", op.subscription_id).single();
   if (error) throw error;
   const sub = subRow as SubscriptionRow;
@@ -261,7 +277,18 @@ async function runOperation(admin: ServiceClient, op: Operation): Promise<Run> {
       if (stampError) throw stampError;
     } else if (op.stripe_done_at && op.mode === "period_end" && isLiveSubscription(sub.status)) {
       // Resuming: has Stripe ended it outright since (or before) we asked?
-      alreadyCanceled = (await getStripe().subscriptions.retrieve(sub.stripe_subscription_id!)).status === "canceled";
+      alreadyCanceled = isEndedAtStripe((await getStripe().subscriptions.retrieve(sub.stripe_subscription_id!)).status);
+    } else if (!op.stripe_done_at && !isLiveSubscription(sub.status) && !sub.admin_cancel_mode) {
+      // Ended here without this operation's Stripe step stamped: Stripe may
+      // have accepted our call just before the request stopped. If Stripe
+      // ended it after this operation began, record it as this admin's cancel.
+      const current = await getStripe().subscriptions.retrieve(sub.stripe_subscription_id!);
+      const endedAt = (current.canceled_at ?? current.ended_at ?? 0) * 1000;
+      if (isEndedAtStripe(current.status) && endedAt >= Date.parse(op.created_at) - STRIPE_CLOCK_SKEW_MS) {
+        alreadyCanceled = true;
+        const { error: stampError } = await admin.rpc("admin_cancel_stripe_done", { p_operation_id: op.id });
+        if (stampError) throw stampError;
+      }
     }
     const voids = op.void_invoices && sub.stripe_subscription_id
       ? await voidStripeInvoices(sub.stripe_subscription_id)
@@ -344,7 +371,7 @@ export async function cancelMembership(
   if (beginError) throw beginError;
   const op = started as Operation & { resumed: boolean };
 
-  const { recorded, sub, door, warnings } = await runOperation(admin, op);
+  const { recorded, sub, door, warnings } = await runOperation(admin, op.id);
   if (op.resumed) {
     warnings.unshift(
       `An earlier cancel (admin #${op.actor_member_id}, ${op.mode === "now" ? "now" : "at period end"}, started ${new Date(op.created_at).toUTCString()}) was still finishing. It has been finished with its own settings; yours were not applied. Submit again if you still want them.`,
@@ -410,7 +437,7 @@ export async function sweepAdminCancels(admin: ServiceClient, now = new Date()):
   if (openError) throw openError;
   for (const op of (open ?? []) as (Operation & { subscriptions: { member_id: number } })[]) {
     try {
-      const { sub, door } = await runOperation(admin, op);
+      const { sub, door } = await runOperation(admin, op.id);
       if (door) done(sub, door);
     } catch (cause) {
       failed({ id: op.subscription_id, member_id: op.subscriptions.member_id }, cause);

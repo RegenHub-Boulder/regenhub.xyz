@@ -191,7 +191,8 @@ describe("card (Stripe)", () => {
     await seed({ rail: "stripe" });
     const result = await cancel({ reason: "Moved away" });
 
-    expect(stripe.subscriptions.cancel).toHaveBeenCalledWith("sub_test_50", expect.objectContaining({ prorate: false, invoice_now: false }));
+    expect(stripe.subscriptions.cancel).toHaveBeenCalledWith("sub_test_50", expect.objectContaining({ prorate: false, invoice_now: false }),
+      { idempotencyKey: expect.stringMatching(/^admin-cancel-\d+$/) });
     expect(result).toMatchObject({ outcome: "canceled", rail: "stripe", mode: "now", door: { revokedSlot: 12, lockRevokeFailed: false } });
     expect(await sub()).toMatchObject({ status: "canceled", admin_cancel_mode: "now", admin_canceled_by: 1, admin_cancel_reason: "Moved away" });
     expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null, pin_code: null, disabled: false });
@@ -203,7 +204,7 @@ describe("card (Stripe)", () => {
     await seed({ rail: "stripe" });
     const result = await cancel({ mode: "period_end" });
 
-    expect(stripe.subscriptions.update).toHaveBeenCalledWith("sub_test_50", expect.objectContaining({ cancel_at_period_end: true }));
+    expect(stripe.subscriptions.update).toHaveBeenCalledWith("sub_test_50", expect.objectContaining({ cancel_at_period_end: true }), expect.anything());
     expect(stripe.subscriptions.cancel).not.toHaveBeenCalled();
     expect(result).toMatchObject({ outcome: "scheduled", accessEndsAt: new Date(periodEnd).toISOString(), door: null });
     expect(await sub()).toMatchObject({ status: "active", cancel_at_period_end: true, admin_cancel_mode: "period_end" });
@@ -274,7 +275,7 @@ describe("card (Stripe)", () => {
 
   it("changes nothing locally when Stripe refuses the cancel, and the next request starts fresh", async () => {
     await seed({ rail: "stripe" });
-    stripe.subscriptions.cancel.mockRejectedValueOnce(new Error("Card declined"));
+    stripe.subscriptions.cancel.mockRejectedValueOnce(Object.assign(new Error("Invalid cancellation_details"), { type: "StripeInvalidRequestError" }));
     await expect(cancel({ reason: "First try" })).rejects.toMatchObject({ status: 502 });
     expect(await sub()).toMatchObject({ status: "active", admin_canceled_at: null });
     expect(await audits()).toEqual([]);
@@ -422,7 +423,7 @@ describe("card (Stripe): one operation per cancel, finished by the billing cron"
     const state = stripeSub("sub_test_50", "active");
     stripe.subscriptions.cancel.mockImplementation(async () => {
       if (state.status === "canceled") throw new Error("This subscription is already canceled");
-      state.status = "canceled";
+      Object.assign(state, { status: "canceled", canceled_at: Math.floor(Date.now() / 1000) });
       return { ...state };
     });
     stripe.subscriptions.update.mockImplementation(async (_id: string, params: Record<string, unknown>) => {
@@ -519,6 +520,63 @@ describe("card (Stripe): one operation per cancel, finished by the billing cron"
       expect.objectContaining({ actor_member_id: 2, payload: expect.objectContaining({ mode: "now", reason: "Gone for good" }) }),
     ]);
     expect((await sub()).status).toBe("canceled");
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+  });
+
+  it("the door step fails, then Stripe's deletion webhook ends the row: the billing cron still finishes the operation", async () => {
+    await seed({ rail: "stripe" });
+    statefulStripe();
+    await db.exec(`create function fail_member_update() returns trigger language plpgsql as $$
+      begin raise exception 'injected member update failure'; end $$;
+      create trigger fail_member_update before update on members for each row execute function fail_member_update();`);
+    await expect(cancel({ reason: "Gone" })).rejects.toThrow(/injected/);
+    await db.exec("drop trigger fail_member_update on members");
+    expect((await sendStripeEvent("evt_del", "customer.subscription.deleted", { ...stripeSub("sub_test_50", "canceled") })).status).toBe(200);
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+
+    expect((await runCron()).status).toBe(200);
+    expect(await operations()).toEqual([expect.objectContaining({ recorded_at: expect.any(String), finished_at: expect.any(String) })]);
+    // Nothing left to resume: the next request is its own.
+    expect((await cancel()).resumed).toBe(false);
+    expect(await audits()).toHaveLength(1);
+  });
+
+  it("Stripe accepted but the step was never stamped, then the webhook ended the row: the cron still records it naming the admin", async () => {
+    await seed({ rail: "stripe" });
+    statefulStripe();
+    db.beforeNextWrite("rpc:admin_cancel_stripe_done", () => { throw new Error("process stopped"); });
+    await expect(cancel({ reason: "Moved away" })).rejects.toThrow(/process stopped/);
+    expect((await sendStripeEvent("evt_del", "customer.subscription.deleted", { ...stripeSub("sub_test_50", "canceled") })).status).toBe(200);
+
+    expect((await runCron()).status).toBe(200);
+    expect(await audits()).toEqual([expect.objectContaining({
+      actor_member_id: 1, payload: expect.objectContaining({ mode: "now", outcome: "canceled", reason: "Moved away" }),
+    })]);
+    expect(await sub()).toMatchObject({ status: "canceled", admin_cancel_mode: "now", admin_canceled_by: 1 });
+    expect(stripe.subscriptions.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("the cron running the same operation while the request's Stripe call is in flight can't abandon it", async () => {
+    await seed({ rail: "stripe" });
+    const state = statefulStripe();
+    let inFlight = true;
+    stripe.subscriptions.cancel.mockImplementation(async () => {
+      if (inFlight) {
+        // The request's call reaches Stripe; before Stripe applies it, the cron
+        // runs the same operation and its own call is turned away.
+        inFlight = false;
+        stripe.subscriptions.cancel.mockImplementationOnce(async () => {
+          throw Object.assign(new Error("Too many concurrent requests"), { type: "StripeRateLimitError" });
+        });
+        await runCron();
+      }
+      Object.assign(state, { status: "canceled", canceled_at: Math.floor(Date.now() / 1000) });
+      return { ...state };
+    });
+    const result = await cancel({ reason: "Moved away" });
+
+    expect(result).toMatchObject({ outcome: "canceled", door: { revokedSlot: 12 } });
+    expect(await audits()).toEqual([expect.objectContaining({ actor_member_id: 1, payload: expect.objectContaining({ reason: "Moved away" }) })]);
     expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
   });
 
