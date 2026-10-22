@@ -141,18 +141,28 @@ subscription end. The free-day email templates are **duplicated** in `apps/bot/s
 edit both or they drift.
 
 ### Admin "Cancel membership" (both rails)
-`/admin/members/[id]` → Billing → Cancel membership (`lib/membershipCancel.ts`). One SQL function,
-`admin_cancel_subscription` (migration 059), records the cancel under `FOR UPDATE` on the subscription:
-the `admin_cancel_*` marker, on-chain invoice voids and the `admin_actions` row commit together; repeats
-are no-ops. While the marker is set nothing makes the subscription payable or entitled again: no invoice
-insert (trigger), no credit (`credit_onchain_invoice` records a late transfer as an `exception` payment
-for an admin to reconcile), no payment effects or Stripe activation (both re-read the row under the PIN
-writer). A canceled row, canceled any way, never goes live again (trigger) and a late transfer for it is
-never credited; a void invoice stays void. Card cancels call Stripe first; the webhook uses Stripe's
-*current* subscription for marked rows, and only a renewal Stripe reports lifts the marker.
-Cancel-now stays "marked + live" until the door step finishes; the on-chain billing cron finishes any
-left pending and ends period-end cancels. The door step asks `admin_cancel_due()` under the PIN writer
-first, so a payment that just extended the period keeps its door.
+`/admin/members/[id]` → Billing → Cancel membership (`lib/membershipCancel.ts`). Each request is one row in
+`admin_cancel_operations` (migration 059), written before anything else: subscription, rail, admin, reason, mode
+(now/period_end), void choice. The row is never rewritten; each step stamps its own time, once:
+`stripe_done_at` (card: Stripe has it) → `recorded_at` → `door_done_at` (cancel-now) → `finished_at`. A period-end
+cancel finishes once recorded (its access ends with its period); finished without `recorded_at` means Stripe
+refused it. At most one unfinished operation per subscription: a new request resumes it unchanged (original admin
+and choices) and the response says `resumed` with a warning. The SQL steps (`record_admin_cancel`,
+`finish_admin_cancel`, `abandon_admin_cancel`) take the operation id and act only on it, so stale recovery can't
+consume newer work. The on-chain billing cron (`sweepAdminCancels`) carries every unfinished operation on, on
+both rails, from its last stamped step, including the door step after a webhook already ended the row; it also
+ends on-chain period-end cancels whose period is over (Stripe's deletion webhook does that for cards).
+
+`record_admin_cancel` records under `FOR UPDATE` on the subscription: the `admin_cancel_*` marker, on-chain invoice
+voids, the one `admin_actions` row naming the operation's admin, and `recorded_at` commit together. While the
+marker is set nothing makes the subscription payable or entitled again: no invoice insert (trigger), no credit
+(`credit_onchain_invoice` records a late transfer as an `exception` payment for an admin to reconcile), no payment
+effects or Stripe activation (both re-read the row under the PIN writer). A canceled row, canceled any way, never
+goes live again (trigger) and a late transfer for it is never credited; a void invoice stays void. Card cancels
+call Stripe after the operation is written; the webhook uses Stripe's *current* subscription for marked rows, and
+only a renewal Stripe reports lifts the marker. Cancel-now stays "marked + live" until the door step finishes. The
+door step asks `admin_cancel_door_due()` under the PIN writer first, and the period-end step `admin_cancel_due()`,
+so a payment that just extended the period keeps its door.
 
 ### Add a new member via bot
 Use `/admin → Add member` as an admin in the Telegram bot.
