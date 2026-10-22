@@ -7,6 +7,7 @@ import { processGaslessRelayQueue } from "@/lib/onchain/gaslessRelay";
 import { onchainRenewalReminderEmail, sendEmail } from "@/lib/email";
 import { planLabel } from "@/lib/plans";
 import { sweepAdminCancels } from "@/lib/membershipCancel";
+import { sweepPlanSwitches } from "@/lib/planSwitch";
 
 export async function POST(req: Request) {
   const secret = process.env.CRON_SECRET;
@@ -38,7 +39,12 @@ export async function POST(req: Request) {
     console.error("[OnchainBilling] Admin cancel sweep failed:", cause);
     return { error: cause instanceof Error ? cause.message : "unknown" };
   });
-  // Desk → daily switches whose paid daily period has started: end desk access.
+  // Card desk → daily switch requests that stopped part-way: finish or release them.
+  const planSwitchRequests = await sweepPlanSwitches(admin).catch((cause) => {
+    console.error("[OnchainBilling] Plan switch request sweep failed:", cause);
+    return { error: cause instanceof Error ? cause.message : "unknown" };
+  });
+  // On-chain desk → daily switches whose paid desk period is over: end desk access.
   const planSwitches = await finishOnchainPlanSwitches(admin).catch((cause) => {
     console.error("[OnchainBilling] Plan switch sweep failed:", cause);
     return { error: cause instanceof Error ? cause.message : "unknown" };
@@ -84,5 +90,5 @@ export async function POST(req: Request) {
   }
   const effectsFailures = await retryPendingOnchainEffects(admin);
   const finalized = await advanceFinalizedOnchainPayments(admin);
-  return NextResponse.json({ gaslessRelays, adminCancels, planSwitches, invoicesCreated: created.length, remindersSent, pastDue, confirmations, effectsFailures, finalized });
+  return NextResponse.json({ gaslessRelays, adminCancels, planSwitchRequests, planSwitches, invoicesCreated: created.length, remindersSent, pastDue, confirmations, effectsFailures, finalized });
 }

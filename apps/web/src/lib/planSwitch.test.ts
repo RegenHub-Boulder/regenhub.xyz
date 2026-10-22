@@ -1,3 +1,4 @@
+import { AsyncResource } from "node:async_hooks";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { encodeAbiParameters, encodeEventTopics, parseAbiItem } from "viem";
 import { makePgDb, type PgDb } from "../../test/pgDb";
@@ -58,33 +59,67 @@ let periodEnd = "";
 let db: PgDb;
 let stripe: ReturnType<typeof fakeStripe>;
 
+type Price = { id: string; unit_amount: number; active?: boolean; currency?: string; product?: string; recurring?: { interval: string; interval_count: number } };
+
 /** A Stripe subscription as the webhook and retrieve() see it. */
-function stripeSub(plan: string, opts: { status?: string; periodEnd?: string; schedule?: string | null } = {}) {
+function stripeSub(plan: string, opts: { status?: string; periodEnd?: string; schedule?: string | null; price?: Partial<Price> } = {}) {
   return {
     id: "sub_test_50", customer: "cus_test_7", status: opts.status ?? "active", cancel_at_period_end: false, canceled_at: null,
     schedule: opts.schedule ?? null, discounts: [],
     metadata: { plan_key: plan },
-    items: { data: [{ id: "si_test", price: { id: `price_${plan}`, unit_amount: CENTS[plan] },
+    items: { data: [{ id: "si_test", price: { id: `price_${plan}`, unit_amount: CENTS[plan], ...opts.price },
       current_period_start: unix(periodEnd) - 30 * 86400, current_period_end: unix(opts.periodEnd ?? periodEnd) }] },
   };
 }
 
+type Schedule = { id: string; status: string; created: number; metadata: Record<string, string>; phases: unknown[] };
+
+/**
+ * Stripe, as far as these flows reach it. Schedules are kept: create attaches
+ * one to the subscription (the same idempotency key gives the same one back),
+ * update changes it, release detaches it. retrieve() shows the attached one.
+ */
 function fakeStripe() {
+  const schedules = new Map<string, Schedule>();
+  const byKey = new Map<string, Schedule>();
+  const state = { attached: null as string | null, deskPrice: {} as Partial<Price> };
+  const makeSchedule = (key?: string) => {
+    if (key && byKey.has(key)) return byKey.get(key)!;
+    const schedule: Schedule = {
+      id: `sub_sched_${schedules.size + 1}`, status: "active", created: Math.floor(Date.now() / 1000), metadata: {},
+      phases: [{ start_date: unix(periodEnd) - 30 * 86400, end_date: unix(periodEnd), discounts: [],
+        items: [{ price: "price_hot_desk", quantity: 1 }] }],
+    };
+    schedules.set(schedule.id, schedule);
+    if (key) byKey.set(key, schedule);
+    state.attached = schedule.id;
+    return schedule;
+  };
   return {
+    state,
+    makeSchedule,
     subscriptions: {
       cancel: vi.fn(async (id: string) => ({ id, status: "canceled" })),
       update: vi.fn(async (id: string, params: Record<string, unknown>) => ({ id, status: "active", ...params })),
-      retrieve: vi.fn(async (): Promise<unknown> => stripeSub("hot_desk")),
+      retrieve: vi.fn(async (): Promise<unknown> => stripeSub("hot_desk", { schedule: state.attached, price: state.deskPrice })),
     },
     subscriptionSchedules: {
-      create: vi.fn(async (params: { from_subscription: string }) => ({
-        id: "sub_sched_1", subscription: params.from_subscription, status: "active", end_behavior: "release",
-        phases: [{ start_date: unix(periodEnd) - 30 * 86400, end_date: unix(periodEnd), discounts: [],
-          items: [{ price: "price_hot_desk", quantity: 1 }] }],
-      })),
-      update: vi.fn(async (id: string, params: Record<string, unknown>) => ({ id, status: "active", ...params })),
-      release: vi.fn(async (id: string) => ({ id, status: "released" })),
-      retrieve: vi.fn(async (id: string) => ({ id, status: "active" }) as { id: string; status: string }),
+      create: vi.fn(async (_params: { from_subscription: string }, options?: { idempotencyKey?: string }) =>
+        structuredClone(makeSchedule(options?.idempotencyKey))),
+      update: vi.fn(async (id: string, params: { metadata?: Record<string, string>; phases?: unknown[] }) => {
+        const schedule = schedules.get(id);
+        if (!schedule || schedule.status !== "active") throw Object.assign(new Error("schedule is not active"), { type: "StripeInvalidRequestError" });
+        Object.assign(schedule, { metadata: params.metadata ?? schedule.metadata, phases: params.phases ?? schedule.phases });
+        return structuredClone(schedule);
+      }),
+      release: vi.fn(async (id: string) => {
+        const schedule = schedules.get(id);
+        if (schedule) schedule.status = "released";
+        if (state.attached === id) state.attached = null;
+        return { id, status: "released" };
+      }),
+      retrieve: vi.fn(async (id: string): Promise<{ id: string; status: string } & Partial<Schedule>> =>
+        structuredClone(schedules.get(id) ?? { id, status: "active" })),
     },
     products: { create: vi.fn(async (params: { name: string }) => ({ id: `prod_${params.name}` })) },
     invoices: {
@@ -212,11 +247,13 @@ describe("card (Stripe): Hot Desk → Member + 2 days/mo", () => {
 
     expect(response.status).toBe(200);
     expect(body).toMatchObject({ ok: true, scheduled: true, effectiveAt: new Date(periodEnd).toISOString() });
-    expect(stripe.subscriptionSchedules.create).toHaveBeenCalledWith({ from_subscription: "sub_test_50" });
+    expect(stripe.subscriptionSchedules.create).toHaveBeenCalledWith(
+      { from_subscription: "sub_test_50" }, { idempotencyKey: expect.stringMatching(/^plan-switch-\d+$/) });
     const [scheduleId, params] = stripe.subscriptionSchedules.update.mock.calls[0] as [string, Record<string, unknown>];
     expect(scheduleId).toBe("sub_sched_1");
     expect(params).toMatchObject({
       end_behavior: "release",
+      proration_behavior: "none",
       phases: [
         { items: [{ price: "price_hot_desk", quantity: 1 }], end_date: unix(periodEnd) },
         {
@@ -353,13 +390,22 @@ describe("card (Stripe): Hot Desk → Member + 2 days/mo", () => {
     expect(setUserCode).not.toHaveBeenCalled();
   });
 
-  it("if recording the switch fails, the Stripe schedule is released so nothing changes unseen", async () => {
+  it("if recording the switch fails, the request is kept and the billing cron records it", async () => {
     await seed();
     await db.exec(`create function fail_pending() returns trigger language plpgsql as $$
-      begin if new.pending_plan_key is not null then raise exception 'injected'; end if; return new; end $$;
+      begin if new.pending_plan_key is not null then raise exception 'injected' using errcode = 'XX000'; end if; return new; end $$;
       create trigger fail_pending before update on subscriptions for each row execute function fail_pending();`);
-    expect((await pick("member_2day")).status).toBe(500);
-    expect(stripe.subscriptionSchedules.release).toHaveBeenCalledWith("sub_sched_1");
+    const response = await pick("member_2day");
+    expect(response.status).toBe(500);
+    expect((await response.json()).error).toMatch(/saved and finishes on its own/);
+    expect(await sub()).toMatchObject({ pending_plan_key: null });
+
+    await db.exec("drop trigger fail_pending on subscriptions");
+    expect((await runCron()).status).toBe(200);
+    expect(await sub()).toMatchObject({ pending_plan_key: "member_2day", pending_plan_schedule_id: "sub_sched_1" });
+    expect(stripe.subscriptionSchedules.create).toHaveBeenCalledTimes(1);
+    expect(stripe.subscriptionSchedules.release).not.toHaveBeenCalled();
+    expect(await audits("plan_switch_scheduled")).toHaveLength(1);
   });
 
   it("an admin cancel at period end while a switch is pending releases the schedule first", async () => {
@@ -470,7 +516,7 @@ describe("an admin cancel wins over a plan switch", () => {
   it("a switch racing an admin cancel loses: the database refuses it and the schedule is released", async () => {
     await seed();
     // The admin's cancel begins after the route checked, just before the switch is recorded.
-    db.beforeNextWrite("subscriptions", () => db.sql("select begin_admin_cancel(50, 'period_end', 1, null, false)"));
+    db.beforeNextWrite("rpc:record_plan_switch", () => db.sql("select begin_admin_cancel(50, 'period_end', 1, null, false)"));
     const res = await pick("member_2day");
     expect(res.status).toBe(409);
     expect(stripe.subscriptionSchedules.release).toHaveBeenCalledWith("sub_sched_1");
@@ -496,6 +542,113 @@ describe("an admin cancel wins over a plan switch", () => {
     expect(await sub()).toMatchObject({ status: "canceled", plan_key: "hot_desk", pending_plan_key: null });
     expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
     expect(await audits("plan_switch_completed")).toHaveLength(0);
+  });
+});
+
+describe("card (Stripe): ordering, recovery and Stripe's rules", () => {
+  const networkError = () => Object.assign(new Error("socket hang up"), { type: "StripeConnectionError" });
+  const openRequests = () => db.sql("select schedule_id, outcome, finished_at from plan_switch_operations where finished_at is null");
+
+  it("an older desk event racing the daily one can't put the desk back: deliveries run one at a time", async () => {
+    await seed();
+    await pick("member_2day");
+    const rolled = stripeSub("member_2day", { periodEnd: iso(34 * DAY), schedule: "sub_sched_1" });
+    stripe.subscriptions.retrieve.mockResolvedValue(rolled);
+    let daily: Promise<Response> | undefined;
+    // A separate request: bound to the test's context, not the first delivery's
+    // (whose PIN-writer reservation would otherwise be inherited).
+    const deliverDaily = AsyncResource.bind(() => sendStripeEvent("evt_daily", "customer.subscription.updated", rolled));
+    // The older delivery has judged its "Hot Desk" event fresh and is about to
+    // write it when the daily one arrives.
+    db.beforeNextWrite("subscriptions", async () => {
+      daily = deliverDaily();
+      await Promise.race([daily, new Promise((resolve) => setTimeout(resolve, 1500))]);
+    });
+    const older = await sendStripeEvent("evt_older", "customer.subscription.updated", stripeSub("hot_desk", { schedule: "sub_sched_1" }));
+    expect(older.status).toBe(200);
+    expect((await daily!).status).toBe(200);
+    expect(await sub()).toMatchObject({ plan_key: "member_2day", pending_plan_key: null });
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+    expect(setUserCode).not.toHaveBeenCalled();
+  });
+
+  it("the current phase keeps its amount when its inline price is archived: it goes back as price_data", async () => {
+    await seed();
+    stripe.state.deskPrice = { active: false, currency: "usd", product: "prod_desk", recurring: { interval: "month", interval_count: 1 } };
+    expect((await pick("member_2day")).status).toBe(200);
+    const [, params] = stripe.subscriptionSchedules.update.mock.calls[0] as unknown as [string, { phases: { items: unknown[] }[]; proration_behavior: string }];
+    expect(params.proration_behavior).toBe("none");
+    expect(params.phases[0].items).toEqual([{
+      price_data: { currency: "usd", product: "prod_desk", unit_amount: 25000, recurring: { interval: "month", interval_count: 1 } },
+      quantity: 1,
+    }]);
+  });
+
+  it("Stripe made the schedule but didn't answer: it's found on the subscription and the cron finishes the switch", async () => {
+    await seed();
+    stripe.subscriptionSchedules.create.mockImplementationOnce(async (_params, options) => {
+      stripe.makeSchedule(options?.idempotencyKey);
+      throw networkError();
+    });
+    const response = await pick("member_2day");
+    expect(response.status).toBe(502);
+    expect((await response.json()).error).toMatch(/saved and finishes on its own/);
+    expect(await openRequests()).toEqual([expect.objectContaining({ schedule_id: null, outcome: null })]);
+    // Asking again resumes the same request; it doesn't make a second schedule.
+    stripe.subscriptionSchedules.update.mockRejectedValueOnce(networkError());
+    expect((await pick("member_2day")).status).toBe(502);
+
+    expect((await runCron()).status).toBe(200);
+    expect(stripe.subscriptionSchedules.create).toHaveBeenCalledTimes(1);
+    expect(await sub()).toMatchObject({ pending_plan_key: "member_2day", pending_plan_schedule_id: "sub_sched_1" });
+    expect(await openRequests()).toEqual([]);
+    expect(await audits("plan_switch_scheduled")).toHaveLength(1);
+  });
+
+  it("a switch Stripe didn't confirm can be cancelled by the member: its schedule is released", async () => {
+    await seed();
+    stripe.subscriptionSchedules.update.mockRejectedValueOnce(networkError());
+    expect((await pick("member_2day")).status).toBe(502);
+    expect((await keepDesk()).status).toBe(200);
+    expect(stripe.subscriptionSchedules.release).toHaveBeenCalledWith("sub_sched_1");
+    expect(stripe.state.attached).toBeNull();
+    expect(await openRequests()).toEqual([]);
+    expect((await runCron()).status).toBe(200);
+    expect(await sub()).toMatchObject({ pending_plan_key: null });
+  });
+
+  it("a schedule the member's switch attached as an admin cancel reached Stripe is released, and the cancel goes through", async () => {
+    await seed();
+    // The member's request began; the admin's cancel finds no schedule yet to drop.
+    await db.sql("select begin_plan_switch(50, 7, 'hot_desk', 'member_2day')");
+    stripe.subscriptions.update.mockImplementationOnce(async () => {
+      stripe.makeSchedule("plan-switch-1"); // the member's create lands first
+      throw Object.assign(new Error("The subscription is managed by the subscription schedule sub_sched_1"), { type: "StripeInvalidRequestError" });
+    });
+    const result = await cancelMembership(db as never, { memberId: 7, actorMemberId: 1, mode: "period_end", reason: null, voidOpenInvoices: false });
+    expect(result.outcome).toBe("scheduled");
+    expect(stripe.subscriptionSchedules.release).toHaveBeenCalledWith("sub_sched_1");
+    expect(stripe.subscriptions.update).toHaveBeenCalledTimes(2);
+    expect(await sub()).toMatchObject({ admin_cancel_mode: "period_end", pending_plan_key: null });
+    expect(await one("select count(*)::int n from admin_cancel_operations where finished_at is null")).toEqual({ n: 0 });
+  });
+
+  it("'Keep desk' just after Stripe started the daily phase says so, and lands the switch", async () => {
+    await seed();
+    await pick("member_2day");
+    const rolled = stripeSub("member_2day", { periodEnd: iso(34 * DAY) });
+    stripe.subscriptions.retrieve.mockResolvedValue(rolled);
+    const response = await keepDesk();
+    expect(response.status).toBe(409);
+    expect((await response.json()).error).toMatch(/took effect/);
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+    expect(await audits("plan_switch_canceled")).toHaveLength(0);
+    expect(await audits("plan_switch_completed")).toHaveLength(1);
+
+    // Stripe's event for the new phase brings the row in line, without clearing the door twice.
+    expect((await sendStripeEvent("evt_roll", "customer.subscription.updated", rolled)).status).toBe(200);
+    expect(await sub()).toMatchObject({ plan_key: "member_2day", pending_plan_key: null });
+    expect(clearUserCode).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -552,7 +705,8 @@ describe("crypto (on-chain): Hot Desk → Member + 2 days/mo", () => {
 
     // The daily period starts.
     await db.exec(`update onchain_invoices set period_start = period_start - interval '5 days', period_end = period_end - interval '5 days';
-      update subscriptions set current_period_end = current_period_end - interval '5 days' where id = 50`);
+      update subscriptions set current_period_end = current_period_end - interval '5 days',
+        pending_plan_at = pending_plan_at - interval '5 days' where id = 50`);
     expect((await runCron()).status).toBe(200);
     expect(clearUserCode).toHaveBeenCalledWith(12);
     expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
@@ -589,6 +743,48 @@ describe("crypto (on-chain): Hot Desk → Member + 2 days/mo", () => {
     expect((await runCron()).status).toBe(200);
     expect(await member()).toMatchObject({ member_type: "cold_desk", pin_code_slot: 14 });
     expect(clearUserCode).not.toHaveBeenCalled();
+  });
+
+  it("the desk ends with its paid period, daily invoice paid or not; a desk given by hand later stays", async () => {
+    await seed({ rail: "onchain" });
+    expect((await pick("member_2day")).status).toBe(200);
+    expect(await sub()).toMatchObject({ plan_key: "member_2day", pending_plan_key: "member_2day", pending_plan_from: "hot_desk" });
+    expect((await runCron()).status).toBe(200);
+    expect(await member()).toMatchObject({ member_type: "hot_desk", pin_code_slot: 12 });
+
+    // The paid desk period is over; the daily invoice isn't paid.
+    await db.exec(`update onchain_invoices set period_start = period_start - interval '5 days', period_end = period_end - interval '5 days';
+      update subscriptions set current_period_end = current_period_end - interval '5 days',
+        pending_plan_at = pending_plan_at - interval '5 days' where id = 50`);
+    expect((await runCron()).status).toBe(200);
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+    expect(await sub()).toMatchObject({ pending_plan_key: null });
+    expect(await audits("plan_switch_completed")).toEqual([expect.objectContaining({
+      payload: expect.objectContaining({ rail: "onchain", from: "hot_desk", to: "member_2day" }),
+    })]);
+
+    // An admin gives the member a desk by hand; the old desk invoice doesn't take it away.
+    await asWriter("update members set member_type = 'cold_desk', pin_code_slot = 14, pin_code = '111222' where id = 7;");
+    vi.mocked(clearUserCode).mockClear();
+    expect((await runCron()).status).toBe(200);
+    expect(await member()).toMatchObject({ member_type: "cold_desk", pin_code_slot: 14 });
+    expect(clearUserCode).not.toHaveBeenCalled();
+  });
+
+  it("a desk member still waiting for a door code keeps the desk when a daily invoice is paid ahead", async () => {
+    await seed({ rail: "onchain" });
+    await asWriter("update members set pin_code_slot = null, pin_code = null where id = 7;");
+    const invoice = await (async () => {
+      expect((await pick("member_2day")).status).toBe(200);
+      const [issued] = await generateUpcomingOnchainInvoices(db as never);
+      return issued as { id: number; amount_usdc_micros: number };
+    })();
+    chainPays(BigInt(invoice.amount_usdc_micros));
+    const paid = await submitPayment(new Request("http://localhost/api/portal/onchain/submit", {
+      method: "POST", body: JSON.stringify({ invoice_id: invoice.id, tx_hash: TX }),
+    }));
+    expect((await paid.json()).status).toBe("paid");
+    expect(await member()).toMatchObject({ member_type: "hot_desk" });
   });
 
   it("an admin cancel now after a crypto switch still clears the desk door code", async () => {

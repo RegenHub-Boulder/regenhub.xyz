@@ -101,12 +101,13 @@ export default async function PortalPage() {
         discount_cents: number | null;
         pending_plan_key?: string | null;
         pending_plan_at?: string | null;
+        pending_plan_from?: string | null;
       }
     | null = null;
   if (member) {
     const { data } = await supabase
       .from("subscriptions")
-      .select("id, payment_rail, wallet_id, plan_key, monthly_cents, net_cents, status, cancel_at_period_end, current_period_end, past_due_since, discount_cents, pending_plan_key, pending_plan_at")
+      .select("id, payment_rail, wallet_id, plan_key, monthly_cents, net_cents, status, cancel_at_period_end, current_period_end, past_due_since, discount_cents, pending_plan_key, pending_plan_at, pending_plan_from")
       .eq("member_id", member.id)
       // `incomplete` is the first-payment state for a self-serve on-chain
       // membership. It must render the invoice/payment card even though no
@@ -244,7 +245,12 @@ export default async function PortalPage() {
   // daily plan; it takes effect when the paid period ends (lib/planSwitch.ts).
   const currentPlanDef = activeSubscription ? getPlan(activeSubscription.plan_key) : null;
   const pendingSwitch = activeSubscription?.pending_plan_key && activeSubscription.pending_plan_at
-    ? { label: planLabel(activeSubscription.pending_plan_key), at: activeSubscription.pending_plan_at }
+    ? {
+      label: planLabel(activeSubscription.pending_plan_key),
+      at: activeSubscription.pending_plan_at,
+      // On chain plan_key already names the daily plan; the desk being kept is pending_plan_from.
+      keeps: planLabel(activeSubscription.pending_plan_from ?? activeSubscription.plan_key),
+    }
     : null;
   const canChangePlan = !!activeSubscription && activeSubscription.payment_rail === "stripe" &&
     (currentPlanDef?.selfServe ?? false) && !activeSubscription.cancel_at_period_end && !pendingSwitch;
@@ -528,7 +534,7 @@ export default async function PortalPage() {
                     <span>
                       Switching to <strong className="text-foreground">{pendingSwitch.label}</strong> on{" "}
                       {new Date(pendingSwitch.at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}.
-                      You keep {planLabel(activeSubscription.plan_key)} and your door code until then.
+                      You keep {pendingSwitch.keeps} and your door code until then.
                     </span>
                   </p>
                 )}

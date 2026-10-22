@@ -273,6 +273,7 @@ export interface Database {
           /** A desk → daily switch waiting for the paid period to end (migration 060). */
           pending_plan_key?: PlanKey | null;
           pending_plan_at?: string | null;
+          pending_plan_from?: PlanKey | null;
           pending_plan_schedule_id?: string | null;
           created_at: string;
           updated_at: string;
@@ -308,6 +309,7 @@ export interface Database {
           /** A desk → daily switch waiting for the paid period to end (migration 060). */
           pending_plan_key?: PlanKey | null;
           pending_plan_at?: string | null;
+          pending_plan_from?: PlanKey | null;
           pending_plan_schedule_id?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["subscriptions"]["Insert"]>;
@@ -653,6 +655,25 @@ export interface Database {
         Update: never;
         Relationships: [];
       };
+      /** A card desk → daily switch request (migration 060). Written only by its SQL functions. */
+      plan_switch_operations: {
+        Row: {
+          id: number;
+          subscription_id: number;
+          actor_member_id: number | null;
+          from_plan: string;
+          to_plan: string;
+          created_at: string;
+          schedule_id: string | null;
+          effective_at: string | null;
+          recorded_at: string | null;
+          outcome: "scheduled" | "refused" | "abandoned" | null;
+          finished_at: string | null;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       /** Each Stripe invoice void of a card admin cancel operation (migration 059). Written only by admin_cancel_stripe_void(). */
       admin_cancel_stripe_voids: {
         Row: {
@@ -750,6 +771,13 @@ export interface Database {
           match_status: "credited" | "exception";
         }>;
       };
+      admin_cancel_in_progress: { Args: { p_subscription_id: number }; Returns: boolean };
+      /** The plan_switch_operations row (new, or the unfinished one) plus `resumed`. Refuses (P0001) during an admin cancel. */
+      begin_plan_switch: { Args: { p_subscription_id: number; p_actor: number | null; p_from: string; p_to: string }; Returns: unknown };
+      plan_switch_schedule_made: { Args: { p_operation_id: number; p_schedule_id: string }; Returns: unknown };
+      record_plan_switch: { Args: { p_operation_id: number; p_effective_at: string }; Returns: unknown };
+      decide_plan_switch: { Args: { p_operation_id: number; p_outcome: "refused" | "abandoned" }; Returns: unknown };
+      finish_plan_switch: { Args: { p_operation_id: number }; Returns: null };
       begin_admin_cancel: {
         Args: { p_subscription_id: number; p_mode: "now" | "period_end"; p_actor: number | null; p_reason: string | null; p_void_open: boolean };
         /** The admin_cancel_operations row (new, or the unfinished one, unchanged) plus `resumed`. */

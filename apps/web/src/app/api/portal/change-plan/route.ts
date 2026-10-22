@@ -5,10 +5,12 @@ import { getStripe, getPlan, isStripeConfigured, PLANS } from "@/lib/stripe";
 import { AuditAction, logAction } from "@/lib/auditLog";
 import { isDeskPlan } from "@/lib/plans";
 import {
+  abandonOpenSwitch,
   adminCancelInProgress,
   CANCEL_IN_PROGRESS_MESSAGE,
   cancelPendingSwitch,
   isDeskToDaily,
+  onchainSwitchColumns,
   PlanSwitchError,
   resolvePlanProduct,
   scheduleDeskToDaily,
@@ -78,7 +80,7 @@ export async function POST(req: Request) {
   const admin = createServiceClient();
   const { data: sub } = await admin
     .from("subscriptions")
-    .select("id, member_id, stripe_subscription_id, payment_rail, plan_key, status, pending_plan_key, pending_plan_at, pending_plan_schedule_id")
+    .select("id, member_id, stripe_subscription_id, payment_rail, plan_key, status, current_period_end, pending_plan_key, pending_plan_at, pending_plan_from, pending_plan_schedule_id")
     .eq("member_id", member.id)
     .in("status", ["active", "trialing", "past_due"])
     .order("created_at", { ascending: false })
@@ -96,8 +98,8 @@ export async function POST(req: Request) {
   if (canceling == null) return NextResponse.json({ error: "Could not load your subscription" }, { status: 500 });
   if (canceling) return NextResponse.json({ error: CANCEL_IN_PROGRESS_MESSAGE }, { status: 409 });
 
-  // A desk → daily switch is already waiting for the period to end.
-  if (sub.pending_plan_key) {
+  // A card desk → daily switch is already waiting for the period to end.
+  if (sub.payment_rail !== "onchain" && sub.pending_plan_key) {
     if (sub.pending_plan_key === targetKey) {
       return NextResponse.json({ ok: true, scheduled: true, effectiveAt: sub.pending_plan_at, to: target.label });
     }
@@ -137,7 +139,7 @@ export async function POST(req: Request) {
   }
 
   if (sub.payment_rail === "onchain") {
-    const { data: changed, error } = await admin.from("subscriptions").update({ plan_key: targetKey, monthly_cents: target.defaultMonthlyCents })
+    const { data: changed, error } = await admin.from("subscriptions").update({ plan_key: targetKey, monthly_cents: target.defaultMonthlyCents, ...onchainSwitchColumns(sub, targetKey) })
       .eq("id", sub.id).eq("payment_rail", "onchain").is("admin_cancel_mode", null)
       .select("id").maybeSingle();
     if (error) return NextResponse.json({ error: "Could not change plan" }, { status: 500 });
@@ -244,9 +246,10 @@ export async function DELETE() {
   const admin = createServiceClient();
   const { data: sub, error } = await admin
     .from("subscriptions")
-    .select("id, member_id, stripe_subscription_id, plan_key, pending_plan_key, pending_plan_at, pending_plan_schedule_id")
+    .select("id, member_id, stripe_subscription_id, plan_key, pending_plan_key, pending_plan_at, pending_plan_from, pending_plan_schedule_id")
     .eq("member_id", member.id)
-    .not("pending_plan_key", "is", null)
+    .eq("payment_rail", "stripe")
+    .in("status", ["active", "trialing", "past_due"])
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -254,6 +257,11 @@ export async function DELETE() {
   if (!sub) return NextResponse.json({ error: "There's no plan switch to cancel." }, { status: 404 });
 
   try {
+    // Never recorded (Stripe didn't confirm it): drop the request and whatever it made at Stripe.
+    if (!sub.pending_plan_key) {
+      if (!await abandonOpenSwitch(admin, sub.id)) return NextResponse.json({ error: "There's no plan switch to cancel." }, { status: 404 });
+      return NextResponse.json({ ok: true, canceled: true, keeps: getPlan(sub.plan_key)?.label ?? sub.plan_key });
+    }
     await cancelPendingSwitch(admin, { sub: sub as PendingSwitchRow, actorMemberId: member.id, reason: "member" });
   } catch (err) {
     if (err instanceof PlanSwitchError) return NextResponse.json({ error: err.message }, { status: err.status });
