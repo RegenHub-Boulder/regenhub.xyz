@@ -344,6 +344,7 @@ async function handleSubscriptionDeleted(admin: ServiceClient, sub: Stripe.Subsc
       // A desk → daily switch still pending dies with the subscription.
       pending_plan_key: null,
       pending_plan_at: null,
+      pending_plan_from: null,
       pending_plan_schedule_id: null,
     })
     .eq("stripe_subscription_id", sub.id);

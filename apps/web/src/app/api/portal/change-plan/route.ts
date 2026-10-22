@@ -10,6 +10,7 @@ import {
   CANCEL_IN_PROGRESS_MESSAGE,
   cancelPendingSwitch,
   isDeskToDaily,
+  onchainChangeMessage,
   onchainSwitchColumns,
   PlanSwitchError,
   resolvePlanProduct,
@@ -139,14 +140,15 @@ export async function POST(req: Request) {
   }
 
   if (sub.payment_rail === "onchain") {
-    const { data: changed, error } = await admin.from("subscriptions").update({ plan_key: targetKey, monthly_cents: target.defaultMonthlyCents, ...onchainSwitchColumns(sub, targetKey) })
+    const switchColumns = onchainSwitchColumns(sub, targetKey);
+    const { data: changed, error } = await admin.from("subscriptions").update({ plan_key: targetKey, monthly_cents: target.defaultMonthlyCents, ...switchColumns })
       .eq("id", sub.id).eq("payment_rail", "onchain").is("admin_cancel_mode", null)
       .select("id").maybeSingle();
     if (error) return NextResponse.json({ error: "Could not change plan" }, { status: 500 });
     if (!changed) return NextResponse.json({ error: CANCEL_IN_PROGRESS_MESSAGE }, { status: 409 });
     await logAction({ action: AuditAction.ONCHAIN_SUBSCRIPTION_CHANGED, actorMemberId: member.id,
       target: { table: "subscriptions", id: sub.id }, payload: { from: sub.plan_key, to: targetKey, source: "self_serve" } }, admin);
-    return NextResponse.json({ ok: true, message: "Plan saved for the next invoice. Issued invoices keep their price; access changes when the new invoice is paid." });
+    return NextResponse.json({ ok: true, message: onchainChangeMessage(switchColumns, targetKey) });
   }
   if (!isStripeConfigured()) return NextResponse.json({ error: "Stripe is not configured" }, { status: 503 });
 

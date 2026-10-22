@@ -1,5 +1,5 @@
 import { resolveOnchainCoupon } from "@/lib/onchain/discount";
-import { onchainSwitchColumns } from "@/lib/planSwitch";
+import { onchainChangeMessage, onchainSwitchColumns } from "@/lib/planSwitch";
 import { requireAdmin, requireAdminMember } from "@/lib/admin";
 import { NextResponse } from "next/server";
 import { getAddress, isAddress } from "viem";
@@ -121,9 +121,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const plan = body.plan_key ? getPlan(body.plan_key) : null;
   if (body.plan_key && !plan) return NextResponse.json({ error: "Unknown plan" }, { status: 400 });
   const changes: import("@/lib/supabase/types").Database["public"]["Tables"]["subscriptions"]["Update"] = {};
+  const switchColumns = plan && body.plan_key ? onchainSwitchColumns(sub, body.plan_key) : {};
   if (plan && body.plan_key) {
     // Desk → daily: the member keeps the desk until its paid period ends (lib/planSwitch.ts).
-    Object.assign(changes, { plan_key: body.plan_key, monthly_cents: plan.defaultMonthlyCents }, onchainSwitchColumns(sub, body.plan_key));
+    Object.assign(changes, { plan_key: body.plan_key, monthly_cents: plan.defaultMonthlyCents }, switchColumns);
   }
   if (body.discount_code !== undefined) {
     try { changes.onchain_coupon = body.discount_code.trim() ? await resolveOnchainCoupon(body.discount_code, body.plan_key ?? sub.plan_key) : null; }
@@ -132,5 +133,5 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const { error } = await admin.from("subscriptions").update(changes).eq("id", sub.id).eq("payment_rail", "onchain").in("status", ["active", "trialing", "past_due"]);
   if (error) return NextResponse.json({ error: "Could not update membership" }, { status: 500 });
   await logAction({ action: AuditAction.ONCHAIN_SUBSCRIPTION_CHANGED, actorMemberId: actor?.id, target: { table: "subscriptions", id: sub.id }, payload: { member_id: memberId, from: sub.plan_key, ...changes } }, admin);
-  return NextResponse.json({ ok: true, message: "Saved for the next invoice. Issued invoices keep their price; access changes when the new invoice is paid." });
+  return NextResponse.json({ ok: true, message: body.plan_key ? onchainChangeMessage(switchColumns, body.plan_key) : "Discount saved for the next invoice. Issued invoices keep their price." });
 }

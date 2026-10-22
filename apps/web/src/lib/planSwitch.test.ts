@@ -466,6 +466,16 @@ describe("an admin cancel wins over a plan switch", () => {
   const adminCancel = (mode: "now" | "period_end") =>
     cancelMembership(db as never, { memberId: 7, actorMemberId: 1, mode, reason: null, voidOpenInvoices: false });
 
+  it("Stripe deleting the subscription clears a pending switch, every column of it", async () => {
+    await seed();
+    await pick("member_2day");
+    expect(await sub()).toMatchObject({ pending_plan_key: "member_2day", pending_plan_from: "hot_desk" });
+    expect((await sendStripeEvent("evt_deleted", "customer.subscription.deleted", stripeSub("hot_desk", { status: "canceled" }))).status).toBe(200);
+    expect(await sub()).toMatchObject({
+      status: "canceled", pending_plan_key: null, pending_plan_at: null, pending_plan_from: null, pending_plan_schedule_id: null,
+    });
+  });
+
   it("an admin cancel now clears a pending switch: the schedule goes first, and the admin is on the record", async () => {
     await seed();
     await pick("member_2day");
@@ -721,7 +731,9 @@ describe("crypto (on-chain): Hot Desk → Member + 2 days/mo", () => {
 
   it("an upgrade to a desk paid ahead still grants the door code at once, as before", async () => {
     await seed({ rail: "onchain", plan: "member_basic" });
-    expect((await pick("hot_desk")).status).toBe(200);
+    const picked = await pick("hot_desk");
+    expect(picked.status).toBe(200);
+    expect((await picked.json()).message).toMatch(/the new plan applies once that invoice is paid/);
     const [invoice] = await generateUpcomingOnchainInvoices(db as never) as { id: number; amount_usdc_micros: number }[];
     chainPays(BigInt(invoice.amount_usdc_micros));
     const paid = await submitPayment(new Request("http://localhost/api/portal/onchain/submit", {
@@ -747,7 +759,12 @@ describe("crypto (on-chain): Hot Desk → Member + 2 days/mo", () => {
 
   it("the desk ends with its paid period, daily invoice paid or not; a desk given by hand later stays", async () => {
     await seed({ rail: "onchain" });
-    expect((await pick("member_2day")).status).toBe(200);
+    const picked = await pick("member_2day");
+    expect(picked.status).toBe(200);
+    // The member is told the desk stays to the end of the paid period, not that it ends when the invoice is paid.
+    const { message } = await picked.json();
+    expect(message).toMatch(/^Saved\. Hot Desk and its door code stay until \w{3} \d{1,2}, \d{4}, the end of the period already paid for; Member \+ 2 days\/mo starts then/);
+    expect(message).not.toMatch(/once that invoice is paid/);
     expect(await sub()).toMatchObject({ plan_key: "member_2day", pending_plan_key: "member_2day", pending_plan_from: "hot_desk" });
     expect((await runCron()).status).toBe(200);
     expect(await member()).toMatchObject({ member_type: "hot_desk", pin_code_slot: 12 });

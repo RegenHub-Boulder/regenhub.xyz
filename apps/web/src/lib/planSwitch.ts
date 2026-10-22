@@ -519,6 +519,19 @@ export function onchainSwitchColumns(
   };
 }
 
+/**
+ * What an on-chain plan change does, for the member or admin who made it.
+ * Leaving a desk keeps it to the end of the period paid for; any other change
+ * prices the next invoice and applies once that invoice is paid.
+ */
+export function onchainChangeMessage(columns: ReturnType<typeof onchainSwitchColumns>, targetKey: string): string {
+  if ("pending_plan_key" in columns && columns.pending_plan_key && columns.pending_plan_at && columns.pending_plan_from) {
+    const date = new Date(columns.pending_plan_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Denver" });
+    return `Saved. ${planLabel(columns.pending_plan_from)} and its door code stay until ${date}, the end of the period already paid for; ${planLabel(targetKey)} starts then and is billed on the next invoice.`;
+  }
+  return "Saved for the next invoice. Issued invoices keep their price; the new plan applies once that invoice is paid.";
+}
+
 export type SwitchLanded = Pick<DowngradeResult, "revokedSlot" | "lockStatus" | "lockRevokeFailed">;
 
 /**
