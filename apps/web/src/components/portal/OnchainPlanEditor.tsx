@@ -26,7 +26,7 @@ export function OnchainPlanEditor({ memberId }: { memberId?: number }) {
       {getAllPlansSorted().map(({ key, def }) => <option value={key} key={key}>{def.label} · ${def.defaultMonthlyCents / 100}/mo</option>)}
     </select></label>
     {memberId && <label className="block">Discount code<input aria-label="Subscription discount code" className="block w-full rounded border border-white/20 bg-transparent p-2" value={code} onChange={event => setCode(event.target.value)} /></label>}
-    <p className="text-xs text-muted">Applies to the next invoice issued. Existing invoices keep their price. Access changes when the new invoice is paid.</p>
+    <p className="text-xs text-muted">Applies to the next invoice issued. Existing invoices keep their price. A desk you've paid for stays until that period ends.</p>
     <button type="button" className="btn-glass rounded px-3 py-2" disabled={busy || (!plan && !code)} onClick={() => save()}>{busy ? "Saving…" : "Save changes"}</button>
     {memberId && <button type="button" className="btn-glass rounded px-3 py-2" disabled={busy} onClick={() => { setCode(""); void save(true); }}>Remove discount</button>}
     {message && <p role="status" className="text-xs">{message}</p>}
