@@ -33,6 +33,12 @@ export const AuditAction = {
   // in the same transaction as the change, actor = the member who signed.
   WALLET_MOVED:           "wallet_moved",
   WALLET_REMOVED:         "wallet_removed",
+  /** A member asked to leave a desk for a daily plan at the end of the paid period. */
+  PLAN_SWITCH_SCHEDULED:  "plan_switch_scheduled",
+  /** A pending desk → daily switch was dropped (by the member, or by an admin cancel). */
+  PLAN_SWITCH_CANCELED:   "plan_switch_canceled",
+  /** The desk period ended and the daily plan took over; payload has the door outcome. */
+  PLAN_SWITCH_COMPLETED:  "plan_switch_completed",
   // Comms
   EMAIL_SENT:             "email_sent",
   BATCH_EMAIL_SENT:       "batch_email_sent",
@@ -46,6 +52,9 @@ export const AuditAction = {
   COUPON_CREATED:         "coupon_created",
   COUPON_DEACTIVATED:     "coupon_deactivated",
   COUPON_DELETED:         "coupon_deleted",
+  // On-chain payments
+  /** A member reported a transaction for an invoice already voided (unverified): check it on chain, refund by hand. */
+  ONCHAIN_PAYMENT_AFTER_VOID: "onchain_payment_after_void",
 } as const;
 
 export type AuditAction = (typeof AuditAction)[keyof typeof AuditAction];
@@ -123,4 +132,22 @@ export async function actorIdFromAuthUid(
     .eq("supabase_user_id", authUid)
     .maybeSingle();
   return data?.id ?? null;
+}
+
+/**
+ * Like actorIdFromAuthUid, for actions that must name their admin: throws if
+ * the lookup fails or finds no member, so the caller stops before acting.
+ */
+export async function requireActorIdFromAuthUid(
+  authUid: string,
+  admin: ServiceClient,
+): Promise<number> {
+  const { data, error } = await admin
+    .from("members")
+    .select("id")
+    .eq("supabase_user_id", authUid)
+    .maybeSingle();
+  if (error) throw new Error(`Actor lookup failed: ${error.message}`);
+  if (data?.id == null) throw new Error("No member is linked to this sign-in");
+  return data.id;
 }

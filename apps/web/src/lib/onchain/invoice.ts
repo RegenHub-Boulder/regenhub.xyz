@@ -76,6 +76,9 @@ export async function generateUpcomingOnchainInvoices(
     .select("id, member_id, monthly_cents, current_period_end")
     .eq("payment_rail", "onchain")
     .in("status", ["active", "trialing", "past_due"])
+    // Canceled by an admin (now or at period end): no renewal. A trigger
+    // enforces this under the subscription lock (migration 059).
+    .is("admin_cancel_mode", null)
     .not("current_period_end", "is", null)
     .lte("current_period_end", reminderCutoff);
   if (error) throw error;

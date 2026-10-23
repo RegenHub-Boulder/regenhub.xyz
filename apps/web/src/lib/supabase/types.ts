@@ -264,6 +264,19 @@ export interface Database {
           discount_duration: DiscountDuration | null;
           discount_months: number | null;
           discount_note: string | null;
+          admin_canceled_at?: string | null;
+          admin_canceled_by?: number | null;
+          admin_cancel_reason?: string | null;
+          admin_cancel_mode?: "now" | "period_end" | null;
+          admin_cancel_ends_at?: string | null;
+          admin_cancel_audit_id?: number | null;
+          /** A desk → daily switch waiting for the paid period to end (migration 060). */
+          pending_plan_key?: PlanKey | null;
+          pending_plan_at?: string | null;
+          pending_plan_from?: PlanKey | null;
+          pending_plan_schedule_id?: string | null;
+          /** Card: a landed switch's schedule still to release (migration 060). */
+          landed_schedule_id?: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -289,6 +302,18 @@ export interface Database {
           discount_duration?: DiscountDuration | null;
           discount_months?: number | null;
           discount_note?: string | null;
+          admin_canceled_at?: string | null;
+          admin_canceled_by?: number | null;
+          admin_cancel_reason?: string | null;
+          admin_cancel_mode?: "now" | "period_end" | null;
+          admin_cancel_ends_at?: string | null;
+          admin_cancel_audit_id?: number | null;
+          /** A desk → daily switch waiting for the paid period to end (migration 060). */
+          pending_plan_key?: PlanKey | null;
+          pending_plan_at?: string | null;
+          pending_plan_from?: PlanKey | null;
+          pending_plan_schedule_id?: string | null;
+          landed_schedule_id?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["subscriptions"]["Insert"]>;
         Relationships: [];
@@ -613,6 +638,59 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["admin_actions"]["Insert"]>;
         Relationships: [];
       };
+      /** One per admin cancel request (migration 059). Written only by the 059 functions; never rewritten. */
+      admin_cancel_operations: {
+        Row: {
+          id: number;
+          subscription_id: number;
+          rail: PaymentRail;
+          actor_member_id: number;
+          reason: string | null;
+          mode: "now" | "period_end";
+          void_invoices: boolean;
+          created_at: string;
+          stripe_done_at: string | null;
+          recorded_at: string | null;
+          door_done_at: string | null;
+          finished_at: string | null;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      /** A card desk → daily switch request (migration 060). Written only by its SQL functions. */
+      plan_switch_operations: {
+        Row: {
+          id: number;
+          subscription_id: number;
+          actor_member_id: number | null;
+          from_plan: string;
+          to_plan: string;
+          created_at: string;
+          create_started_at: string | null;
+          cancel_at_period_end_before: boolean | null;
+          schedule_id: string | null;
+          effective_at: string | null;
+          recorded_at: string | null;
+          outcome: "scheduled" | "refused" | "abandoned" | null;
+          finished_at: string | null;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      /** Each Stripe invoice void of a card admin cancel operation (migration 059). Written only by admin_cancel_stripe_void(). */
+      admin_cancel_stripe_voids: {
+        Row: {
+          operation_id: number;
+          invoice_id: string;
+          outcome: "pending" | "voided" | "failed";
+          updated_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       webhook_events: {
         Row: {
           id: number;
@@ -694,7 +772,53 @@ export interface Database {
           plan_key: string;
           period_end: string;
           was_new: boolean;
+          /** "exception": paid after an admin cancel; recorded, not credited (migration 059). */
+          match_status: "credited" | "exception";
         }>;
+      };
+      admin_cancel_in_progress: { Args: { p_subscription_id: number }; Returns: boolean };
+      /** The plan_switch_operations row (new, or the unfinished one) plus `resumed`. Refuses (P0001) during an admin cancel. */
+      begin_plan_switch: { Args: { p_subscription_id: number; p_actor: number | null; p_from: string; p_to: string }; Returns: unknown };
+      plan_switch_schedule_made: { Args: { p_operation_id: number; p_schedule_id: string }; Returns: unknown };
+      record_plan_switch: { Args: { p_operation_id: number; p_effective_at: string }; Returns: unknown };
+      decide_plan_switch: { Args: { p_operation_id: number; p_outcome: "refused" | "abandoned" }; Returns: unknown };
+      finish_plan_switch: { Args: { p_operation_id: number }; Returns: null };
+      /** False once the request is decided: no create may start then. */
+      plan_switch_create_started: { Args: { p_operation_id: number }; Returns: boolean };
+      plan_switch_note_cancel: { Args: { p_operation_id: number; p_cancel_at_period_end: boolean }; Returns: boolean };
+      /** Clears a landed switch and writes its plan_switch_completed audit row, in one transaction. */
+      complete_plan_switch: {
+        Args: { p_subscription_id: number; p_member_id: number; p_rail: string; p_from: string; p_to: string;
+          p_door?: { door_slot_cleared: number | null; door_clear_failed: boolean } | null };
+        Returns: null;
+      };
+      begin_admin_cancel: {
+        Args: { p_subscription_id: number; p_mode: "now" | "period_end"; p_actor: number | null; p_reason: string | null; p_void_open: boolean };
+        /** The admin_cancel_operations row (new, or the unfinished one, unchanged) plus `resumed`. */
+        Returns: unknown;
+      };
+      record_admin_cancel: {
+        Args: { p_operation_id: number; p_stripe?: { already_canceled: boolean } | null };
+        Returns: unknown;
+      };
+      admin_cancel_stripe_done: { Args: { p_operation_id: number }; Returns: null };
+      admin_cancel_stripe_void: {
+        Args: { p_operation_id: number; p_invoice_id: string; p_outcome: "pending" | "voided" | "failed" };
+        Returns: null;
+      };
+      abandon_admin_cancel: { Args: { p_operation_id: number }; Returns: boolean | null };
+      admin_cancel_door_due: { Args: { p_operation_id: number }; Returns: boolean };
+      finish_admin_cancel: {
+        Args: { p_operation_id: number; p_door?: { door_slot_cleared: number | null; door_clear_failed: boolean } | null };
+        Returns: boolean;
+      };
+      admin_cancel_due: {
+        Args: { p_subscription_id: number };
+        Returns: boolean;
+      };
+      end_admin_cancel_period: {
+        Args: { p_subscription_id: number; p_door?: { door_slot_cleared: number | null; door_clear_failed: boolean } | null };
+        Returns: boolean;
       };
       find_stale_member_links: {
         Args: Record<string, never>;

@@ -1,6 +1,11 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Activity } from "lucide-react";
+import { planLabel } from "@/lib/plans";
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", { timeZone: "America/Denver", month: "short", day: "numeric", year: "numeric" });
+}
 
 interface ActionRow {
   id: number;
@@ -28,6 +33,10 @@ const ACTION_LABELS: Record<string, string> = {
   code_revoked:           "Door code revoked",
   checkout_link_generated: "Stripe checkout link generated",
   subscription_canceled_by_admin: "Subscription canceled by admin",
+  plan_switch_scheduled:  "Member scheduled a switch off their desk",
+  plan_switch_canceled:   "Pending plan switch canceled",
+  plan_switch_completed:  "Plan switch took effect",
+  onchain_payment_after_void: "Member reported paying a voided invoice (unverified; check, then refund)",
   email_sent:             "Email sent",
   batch_email_sent:       "Batch email sent",
   free_day_approved:      "Free-day claim approved",
@@ -48,6 +57,31 @@ function summary(row: ActionRow): string | null {
       return p.implies_membership ? "Implies Daily approval" : null;
     case "batch_email_sent":
       return typeof p.subject === "string" ? p.subject : null;
+    case "onchain_payment_after_void":
+      return typeof p.tx_hash === "string" ? `Invoice #${String(p.invoice_id)} · tx ${p.tx_hash}` : null;
+    case "plan_switch_scheduled":
+    case "plan_switch_canceled": {
+      const plans = `${planLabel(String(p.from ?? "?"))} → ${planLabel(String(p.to ?? "?"))}`;
+      const when = typeof p.effective_at === "string" ? `on ${formatDate(p.effective_at)}` : null;
+      const by = p.reason === "admin_cancel" ? "superseded by an admin cancel" : null;
+      return [plans, when, by].filter(Boolean).join(" · ");
+    }
+    case "plan_switch_completed":
+      return [
+        `${planLabel(String(p.from ?? "?"))} → ${planLabel(String(p.to ?? "?"))}`,
+        p.rail === "onchain" ? "Crypto" : "Card",
+        p.door_clear_failed
+          ? "door code NOT cleared on every lock — slot quarantined, run Lock Sync"
+          : typeof p.door_slot_cleared === "number" ? `desk door code cleared (slot ${p.door_slot_cleared})` : "no desk door code to clear",
+      ].join(" · ");
+    case "subscription_canceled_by_admin":
+      if (!p.rail) return null;
+      return [
+        p.rail === "onchain" ? "Crypto" : "Card",
+        p.mode === "period_end" ? "at period end" : "now",
+        Array.isArray(p.voided_invoice_ids) && p.voided_invoice_ids.length ? `voided ${p.voided_invoice_ids.join(", ")}` : null,
+        typeof p.reason === "string" ? p.reason : null,
+      ].filter(Boolean).join(" · ");
     default:
       return null;
   }

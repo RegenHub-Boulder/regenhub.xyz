@@ -37,7 +37,7 @@ function database(disabled = true) {
   const writes: { table: string; values: Row }[] = [];
   const rows: Record<string, Row[]> = {
     members: [member], onchain_payments: [payment(3, 7)], webhook_events: [],
-    subscriptions: [{ id: 1, member_id: 7, wallet_id: 1, plan_key: "hot_desk", payment_rail: "onchain" }],
+    subscriptions: [{ id: 1, member_id: 7, wallet_id: 1, plan_key: "hot_desk", payment_rail: "onchain", status: "active" }],
     onchain_invoices: [{ id: 2, subscription_id: 1, status: "submitted", submitted_tx_hash: txHash, token_contract: token, treasury_address: treasury, amount_usdc_micros: 100 }],
     member_wallets: [{ id: 1, address: sender, revoked_at: null }], onchain_relay_jobs: [],
   };
@@ -63,6 +63,7 @@ function database(disabled = true) {
       not: (key: string, _op: string, value: unknown) => { filters.push(r => (r[key] ?? null) !== value); return builder; },
       in: (key: string, values: unknown[]) => { filters.push(r => values.includes(r[key])); return builder; },
       lte: (key: string, value: number) => { filters.push(r => Number(r[key]) <= value); return builder; },
+      gt: (key: string, value: number) => { filters.push(r => Number(r[key]) > value); return builder; },
       order: (key: string, opts: { nullsFirst?: boolean; ascending?: boolean }) => { orders.push({ key, nullsFirst: opts.nullsFirst ?? false, ascending: opts.ascending ?? true }); return builder; },
       limit: (value: number) => { limit = value; return builder; },
       update: (values: Row) => { mutation = { kind: "update", values }; return builder; },
