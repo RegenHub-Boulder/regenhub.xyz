@@ -129,7 +129,8 @@ end;
 $$;
 
 -- A switch landed: clear it and audit it in one transaction, so a retry that
--- finds it still pending writes the audit it couldn't. p_door is the door
+-- finds it still pending writes the audit it couldn't. Audited only when a
+-- pending switch was consumed. p_door is the door
 -- outcome when this run ended the desk (null when an earlier run did).
 -- Card: the daily plan is written here too, in the same transaction, so the
 -- row never says "desk, nothing pending" after the desk was ended; an older
@@ -145,6 +146,8 @@ begin
     plan_key = case when p_rail = 'stripe' then p_to else plan_key end
     -- Only a switch still pending: a repeat landing, or a desk left another way, changes nothing here.
     where id = p_subscription_id and pending_plan_key is not null;
+  -- Nothing consumed: not a switch completing (a repeat, or a desk left another way), so no audit row.
+  if not found then return; end if;
   insert into admin_actions (actor_member_id, action, target_table, target_id, payload)
     values (null, 'plan_switch_completed', 'members', p_member_id::text,
       jsonb_build_object('subscription_id', p_subscription_id, 'rail', p_rail, 'from', p_from, 'to', p_to)

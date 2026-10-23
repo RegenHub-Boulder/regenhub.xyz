@@ -169,8 +169,9 @@ door step asks `admin_cancel_door_due()` under the PIN writer first, and the per
 so a payment that just extended the period keeps its door.
 A desk → daily switch (migration 060) yields to a cancel: the card Stripe step drops it first, recorded or still
 being set up (Stripe won't set a period-end cancel on a scheduled subscription), audited `plan_switch_canceled` as
-the operation's admin. If Stripe still refuses because a switch's schedule attached meanwhile, the step releases it
-and asks once more. A trigger clears any switch left on a marked or ended row; `begin_plan_switch`,
+the operation's admin, and releases a landed switch's schedule still awaiting release (`landed_schedule_id`). If
+Stripe still refuses because a switch's schedule attached meanwhile (or a landed one), the step releases it and asks
+once more; if the release fails the operation stays open for the cron, never abandoned. A trigger clears any switch left on a marked or ended row; `begin_plan_switch`,
 `record_plan_switch` and the trigger refuse a new one while a cancel is recorded or running, and
 `/api/portal/change-plan` refuses every plan change then, on both rails.
 
@@ -189,9 +190,12 @@ The Stripe webhook lands the switch (ends desk access) when the daily phase star
 `customer.subscription.created/updated` delivery runs from freshness check to access grant under one PIN-writer
 reservation (`lib/stripeSubscriptionSync.ts`), so out-of-order deliveries can't put a desk back. "Keep desk" reads
 Stripe back after the release; if the daily phase already began, it settles the row through that same sync.
-While a switch is pending, every event's state is read back from Stripe. A landing clears the switch, writes the
-daily `plan_key` (card) and its `plan_switch_completed` audit in one transaction (`complete_plan_switch`), so a retry
-still finds it pending if the audit didn't commit, and an older desk event can't restore the desk if the rest of
+For a subscription that has or ever had a switch (any `plan_switch_operations` row, a pending switch, a landed
+schedule, or a schedule on the event), every event's state is read back from Stripe, so a local "nothing pending"
+(a switch Stripe accepted but that was never recorded) can't let an older desk event through. A landing clears the
+switch, writes the daily `plan_key` (card) and its `plan_switch_completed` audit in one transaction
+(`complete_plan_switch`, which audits only when it consumed a pending switch), so a retry still finds it pending if
+the audit didn't commit, and an older desk event can't restore the desk if the rest of
 the mirror failed. The landed schedule moves to `subscriptions.landed_schedule_id` until Stripe confirms its
 release; the next event or the billing cron retries it. **Crypto:** `plan_key` changes at once (it prices the next
 invoice) and `pending_plan_*` (no schedule) marks the desk still held; the billing cron

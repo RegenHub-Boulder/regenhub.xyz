@@ -65,12 +65,13 @@ export async function notifyTelegram(text: string, opts?: { silent?: boolean }) 
  * - The event names a different plan from ours (a plan change, or an older
  *   event arriving after one): a pre-switch "Hot Desk" event must not bring a
  *   desk back after a desk → daily switch landed.
- * - A desk → daily switch is pending (its landing may be half done).
+ * - The subscription has, or ever had, a desk → daily switch, or carries a
+ *   schedule: its landing may be half done, recorded or not.
  */
 async function currentStateFor(admin: ServiceClient, sub: Stripe.Subscription): Promise<Stripe.Subscription> {
   const { data: row, error } = await admin
     .from("subscriptions")
-    .select("admin_cancel_mode, plan_key, pending_plan_key")
+    .select("id, admin_cancel_mode, plan_key, pending_plan_key, landed_schedule_id")
     .eq("stripe_subscription_id", sub.id)
     .maybeSingle();
   if (error) throw error;
@@ -88,11 +89,14 @@ async function currentStateFor(admin: ServiceClient, sub: Stripe.Subscription): 
     return current;
   }
   const stalePlan = row.plan_key !== sub.metadata?.plan_key;
-  // While a switch is pending, any event may predate its landing (or a landing
-  // that ended the desk but whose record didn't commit), so ask Stripe. That
-  // is every event until the paid desk period ends: one extra read each.
-  const switchPending = !!row.pending_plan_key;
-  return stalePlan || switchPending ? getStripe().subscriptions.retrieve(sub.id) : sub;
+  if (stalePlan || row.pending_plan_key || row.landed_schedule_id || scheduleIdOf(sub)) return getStripe().subscriptions.retrieve(sub.id);
+  // A subscription that has (or had) a plan switch: any event may predate a
+  // landing whose record never committed (a switch Stripe accepted but that
+  // wasn't recorded, or a mirror that failed after the desk was ended), and
+  // the local row can say "desk, nothing pending". Stripe's state decides.
+  const { data: op, error: opError } = await admin.from("plan_switch_operations").select("id").eq("subscription_id", row.id).limit(1).maybeSingle();
+  if (opError) throw opError;
+  return op ? getStripe().subscriptions.retrieve(sub.id) : sub;
 }
 
 export type PrevRow = { status: string; cancel_at_period_end: boolean; past_due_since: string | null } | null;
