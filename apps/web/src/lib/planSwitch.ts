@@ -570,6 +570,8 @@ export async function abandonOpenSwitch(admin: ServiceClient, subscriptionId: nu
  * cancel operation stays open and the billing cron runs it again.
  */
 export async function dropSwitchForCancel(admin: ServiceClient, sub: PendingSwitchRow, actorMemberId: number) {
+  // A landed switch whose schedule release hasn't gone through yet manages the subscription too.
+  if (!await releaseLandedSchedule(admin, sub.id)) throw new Error("the landed switch's Stripe schedule couldn't be released");
   if (sub.pending_plan_schedule_id) {
     await cancelPendingSwitch(admin, { sub, actorMemberId, reason: "admin_cancel" });
   }
@@ -587,15 +589,21 @@ export async function dropSwitchForCancel(admin: ServiceClient, sub: PendingSwit
  * If it is a plan switch's (recorded, or a request that made it), release it
  * and drop the switch, so the cancel can be asked again. False when the
  * schedule is someone else's (made in the dashboard): that's a real refusal.
+ * Throws when it is ours but Stripe won't release it yet, so the admin cancel
+ * stays open for the billing cron instead of being abandoned.
  */
 export async function releaseSwitchScheduleForCancel(
   admin: ServiceClient, sub: PendingSwitchRow, scheduleId: string, actorMemberId: number,
 ): Promise<boolean> {
   const stripe = getStripe();
   const { data: fresh, error } = await admin.from("subscriptions")
-    .select("id, member_id, plan_key, stripe_subscription_id, pending_plan_key, pending_plan_at, pending_plan_from, pending_plan_schedule_id")
+    .select("id, member_id, plan_key, stripe_subscription_id, pending_plan_key, pending_plan_at, pending_plan_from, pending_plan_schedule_id, landed_schedule_id")
     .eq("id", sub.id).single();
   if (error) throw error;
+  if (fresh.landed_schedule_id === scheduleId) {
+    if (!await releaseLandedSchedule(admin, sub.id)) throw new Error("the landed switch's Stripe schedule couldn't be released");
+    return true;
+  }
   if (fresh.pending_plan_schedule_id === scheduleId) {
     await cancelPendingSwitch(admin, { sub: fresh as PendingSwitchRow, actorMemberId, reason: "admin_cancel" });
     return true;
@@ -605,7 +613,7 @@ export async function releaseSwitchScheduleForCancel(
   if (latestError) throw latestError;
   const op = latest as SwitchOperation | null;
   if (!op || op.recorded_at || !await madeBy(stripe, op, scheduleId)) return false;
-  if (!await releaseSchedule(stripe, scheduleId)) return false;
+  if (!await releaseSchedule(stripe, scheduleId)) throw new Error("the switch's Stripe schedule couldn't be released");
   await decide(admin, op.id, "abandoned");
   const { error: finishError } = await admin.rpc("finish_plan_switch", { p_operation_id: op.id });
   if (finishError) throw finishError;

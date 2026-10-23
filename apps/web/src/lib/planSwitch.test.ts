@@ -853,6 +853,92 @@ describe("card (Stripe): the third review's findings", () => {
   });
 });
 
+describe("card (Stripe): the fifth review's findings", () => {
+  const networkError = () => Object.assign(new Error("socket hang up"), { type: "StripeConnectionError" });
+  const managedBySchedule = () => Object.assign(new Error("The subscription is managed by a subscription schedule"), { type: "StripeInvalidRequestError" });
+  const adminCancel = () =>
+    cancelMembership(db as never, { memberId: 7, actorMemberId: 1, mode: "period_end", reason: null, voidOpenInvoices: false });
+  /** After the roll, Stripe shows the daily plan with whatever schedule is still attached; a cancel is refused while one is. */
+  function stripeAfterRoll() {
+    stripe.subscriptions.retrieve.mockImplementation(async () => ({
+      ...stripeSub("member_2day", { periodEnd: iso(34 * DAY), schedule: stripe.state.attached }), cancel_at_period_end: stripe.state.cancelAtPeriodEnd,
+    }));
+    stripe.subscriptions.update.mockImplementation(async (id: string, params: Record<string, unknown>) => {
+      if (stripe.state.attached) throw managedBySchedule();
+      if (typeof params.cancel_at_period_end === "boolean") stripe.state.cancelAtPeriodEnd = params.cancel_at_period_end;
+      return { id, status: "active", ...params };
+    });
+  }
+
+  it("a switch Stripe accepted but that was never recorded: an older desk event after a failed landing can't restore the desk", async () => {
+    await seed();
+    await db.exec(`create function fail_pending() returns trigger language plpgsql as $$
+      begin if new.pending_plan_key is not null then raise exception 'injected' using errcode = 'XX000'; end if; return new; end $$;
+      create trigger fail_pending before update on subscriptions for each row execute function fail_pending();
+      create function fail_daily_upsert() returns trigger language plpgsql as $$
+      begin if new.monthly_cents = 5000 and old.monthly_cents <> 5000 then raise exception 'injected upsert failure'; end if; return new; end $$;
+      create trigger fail_daily_upsert before update on subscriptions for each row execute function fail_daily_upsert();`);
+    expect((await pick("member_2day")).status).toBe(500); // Stripe has the schedule; the record failed
+    expect(await sub()).toMatchObject({ plan_key: "hot_desk", pending_plan_key: null });
+    // The daily phase starts: the desk is ended, then mirroring the row fails.
+    expect((await periodRolls()).status).toBe(500);
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+    expect(await sub()).toMatchObject({ plan_key: "hot_desk", pending_plan_key: null });
+
+    await db.exec("drop trigger fail_daily_upsert on subscriptions");
+    // An older "Hot Desk" event from before the schedule existed.
+    expect((await sendStripeEvent("evt_older_desk", "customer.subscription.updated", stripeSub("hot_desk"))).status).toBe(200);
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+    expect(await sub()).toMatchObject({ plan_key: "member_2day" });
+    expect(setUserCode).not.toHaveBeenCalled();
+  });
+
+  it("an admin period-end cancel releases a landed switch's schedule Stripe hadn't released yet, then cancels", async () => {
+    await seed();
+    await pick("member_2day");
+    stripe.subscriptionSchedules.release.mockRejectedValueOnce(networkError());
+    expect((await periodRolls()).status).toBe(200);
+    expect(await sub()).toMatchObject({ plan_key: "member_2day", landed_schedule_id: "sub_sched_1" });
+    stripeAfterRoll();
+
+    const result = await adminCancel();
+    expect(result.outcome).toBe("scheduled");
+    expect(stripe.state.attached).toBeNull();
+    expect(stripe.state.cancelAtPeriodEnd).toBe(true);
+    expect(await sub()).toMatchObject({ admin_cancel_mode: "period_end", landed_schedule_id: null });
+    expect(await one("select count(*)::int n from admin_cancel_operations where finished_at is null")).toEqual({ n: 0 });
+  });
+
+  it("if Stripe still won't release the landed schedule, the cancel stays open and the billing cron finishes it", async () => {
+    await seed();
+    await pick("member_2day");
+    stripe.subscriptionSchedules.release.mockRejectedValueOnce(networkError());
+    expect((await periodRolls()).status).toBe(200);
+    stripeAfterRoll();
+    stripe.subscriptionSchedules.release.mockRejectedValueOnce(networkError());
+
+    await expect(adminCancel()).rejects.toThrow(/billing cron will finish it/);
+    expect(await one("select count(*)::int n from admin_cancel_operations where finished_at is null")).toEqual({ n: 1 });
+    expect(await sub()).toMatchObject({ admin_cancel_mode: null });
+
+    expect((await runCron()).status).toBe(200);
+    expect(stripe.state.attached).toBeNull();
+    expect(stripe.state.cancelAtPeriodEnd).toBe(true);
+    expect(await sub()).toMatchObject({ admin_cancel_mode: "period_end", landed_schedule_id: null });
+    expect(await one("select count(*)::int n from admin_cancel_operations where finished_at is null")).toEqual({ n: 0 });
+  });
+
+  it("leaving a desk with no switch pending (a change made at Stripe) writes no switch-completed audit", async () => {
+    await seed();
+    const daily = stripeSub("member_2day", { periodEnd: iso(34 * DAY) });
+    stripe.subscriptions.retrieve.mockResolvedValue(daily);
+    expect((await sendStripeEvent("evt_stripe_change", "customer.subscription.updated", daily)).status).toBe(200);
+    expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+    expect(await sub()).toMatchObject({ plan_key: "member_2day" });
+    expect(await audits("plan_switch_completed")).toHaveLength(0);
+  });
+});
+
 describe("upgrades and daily ↔ daily are unchanged", () => {
   it("daily → daily swaps the price now, with prorations, and no schedule", async () => {
     await seed({ plan: "member_basic" });
