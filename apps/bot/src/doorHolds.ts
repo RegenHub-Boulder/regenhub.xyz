@@ -1,5 +1,5 @@
 import type TelegramBot from "node-telegram-bot-api";
-import { db, findAdminByTelegram } from "./db/supabase.js";
+import { db, resolveAdminSender } from "./db/supabase.js";
 import {
   unlockDoors,
   lockDoors,
@@ -115,7 +115,7 @@ export async function handleHoldOpen(
   const chatId = msg.chat.id;
   // Admin-only: holding a door open is a physical-security action. A regular
   // member (incl. day-pass) must never be able to prop the building open.
-  const member = await findAdminByTelegram(msg.from?.username ?? "");
+  const member = await resolveAdminSender(msg.from);
   if (!member) {
     return bot.sendMessage(chatId, "Admins only — holding doors open is restricted. Ask an admin to run it.");
   }
@@ -205,7 +205,7 @@ export async function handleRelock(bot: TelegramBot, msg: TelegramBot.Message) {
   // Admin-only too: relock during an active event hold would lock people out
   // mid-happy-hour, so it shouldn't be a free-for-all. (Locking is the safe
   // direction, but ending someone else's hold is an admin decision.)
-  const member = await findAdminByTelegram(msg.from?.username ?? "");
+  const member = await resolveAdminSender(msg.from);
   if (!member) {
     return bot.sendMessage(chatId, "Admins only — ask an admin to relock.");
   }

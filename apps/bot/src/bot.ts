@@ -1,6 +1,6 @@
 import { withLockWriter } from "@regenhub/shared";
 import TelegramBot from "node-telegram-bot-api";
-import { db, findMemberByTelegram, findAdminByTelegram, type MemberRow } from "./db/supabase.js";
+import { db, findMemberByTelegram, resolveSender, resolveAdminSender, type MemberRow } from "./db/supabase.js";
 import { sendEmail, freeDayApprovedEmail, freeDayPlusMembershipApprovedEmail, membershipApprovedEmail } from "./email.js";
 import {
   allocateSlotWithRetry,
@@ -61,7 +61,7 @@ function fmt(date: Date): string {
 
 async function handleStart(msg: TelegramBot.Message) {
   await react(msg);
-  const user = await findMemberByTelegram(msg.from?.username ?? "");
+  const user = await resolveSender(msg.from);
   if (!user) return bot.sendMessage(msg.chat.id, `Your Telegram (@${msg.from?.username}) isn't registered. Contact an admin to get set up.`);
 
   const typeLabel =
@@ -77,7 +77,7 @@ async function handleStart(msg: TelegramBot.Message) {
 
 async function handleHelp(msg: TelegramBot.Message) {
   await react(msg);
-  const user = await findMemberByTelegram(msg.from?.username ?? "");
+  const user = await resolveSender(msg.from);
   if (!user) return bot.sendMessage(msg.chat.id, `Your Telegram (@${msg.from?.username}) isn't registered. Contact an admin to get set up.`);
 
   const isFull = user.member_type !== "day_pass";
@@ -111,7 +111,7 @@ async function handleHelp(msg: TelegramBot.Message) {
 
 async function handleStatus(msg: TelegramBot.Message) {
   await react(msg);
-  const user = await findMemberByTelegram(msg.from?.username ?? "");
+  const user = await resolveSender(msg.from);
   if (!user) return bot.sendMessage(msg.chat.id, `Your Telegram (@${msg.from?.username}) isn't registered. Contact an admin to get set up.`);
 
   const typeLabel =
@@ -135,7 +135,7 @@ async function handleStatus(msg: TelegramBot.Message) {
 
 async function handleMyCode(msg: TelegramBot.Message) {
   await react(msg);
-  const user = await findMemberByTelegram(msg.from?.username ?? "");
+  const user = await resolveSender(msg.from);
   if (!user) return bot.sendMessage(msg.chat.id, "Not registered. Contact an admin.");
   if (user.member_type === "day_pass") return bot.sendMessage(msg.chat.id, "Cold/hot desk members only. Use /daypass for a temporary code.");
   if (!user.pin_code) return bot.sendMessage(msg.chat.id, "No code set yet. Use /newcode to set one.");
@@ -148,7 +148,7 @@ async function handleMyCode(msg: TelegramBot.Message) {
 
 async function handleNewCodeImpl(msg: TelegramBot.Message, match: RegExpExecArray | null) {
   await react(msg);
-  const user = await findMemberByTelegram(msg.from?.username ?? "");
+  const user = await resolveSender(msg.from);
   if (!user) return bot.sendMessage(msg.chat.id, "Not registered. Contact an admin.");
   if (user.member_type === "day_pass") return bot.sendMessage(msg.chat.id, "Cold/hot desk members only.");
   if (!user.pin_code_slot) return bot.sendMessage(msg.chat.id, "No slot assigned. Contact an admin.");
@@ -183,7 +183,7 @@ async function handleNewCodeImpl(msg: TelegramBot.Message, match: RegExpExecArra
 
 async function handleDayPassImpl(msg: TelegramBot.Message) {
   await react(msg);
-  const user = await findMemberByTelegram(msg.from?.username ?? "");
+  const user = await resolveSender(msg.from);
   if (!user) return bot.sendMessage(msg.chat.id, "Not registered. Contact an admin.");
 
   // Atomic decrement — prevents double-spend race condition
@@ -246,7 +246,7 @@ async function handleDayPassImpl(msg: TelegramBot.Message) {
 
 async function handleEmail(msg: TelegramBot.Message, match: RegExpExecArray | null) {
   await react(msg);
-  const user = await findMemberByTelegram(msg.from?.username ?? "");
+  const user = await resolveSender(msg.from);
   if (!user) return bot.sendMessage(msg.chat.id, "Not registered. Contact an admin.");
 
   const email = match?.[1]?.trim();
@@ -267,7 +267,7 @@ async function handleEmail(msg: TelegramBot.Message, match: RegExpExecArray | nu
 
 async function handleQuickCode(msg: TelegramBot.Message, match: RegExpExecArray | null) {
   await react(msg);
-  const admin = await findAdminByTelegram(msg.from?.username ?? "");
+  const admin = await resolveAdminSender(msg.from);
   if (!admin) return bot.sendMessage(msg.chat.id, "Admins only.");
 
   const ownerId = msg.from?.id;
@@ -288,7 +288,7 @@ async function handleQuickCode(msg: TelegramBot.Message, match: RegExpExecArray 
 
 async function handleCodes(msg: TelegramBot.Message) {
   await react(msg);
-  const admin = await findAdminByTelegram(msg.from?.username ?? "");
+  const admin = await resolveAdminSender(msg.from);
   if (!admin) return bot.sendMessage(msg.chat.id, "Admins only.");
   return sendCodesList(msg.chat.id, 0);
 }
@@ -323,7 +323,7 @@ async function sendCodesList(chatId: number, offset: number) {
 
 async function handleAdmin(msg: TelegramBot.Message) {
   await react(msg);
-  const admin = await findAdminByTelegram(msg.from?.username ?? "");
+  const admin = await resolveAdminSender(msg.from);
   if (!admin) return bot.sendMessage(msg.chat.id, "Admins only.");
 
   clearPending(msg.chat.id);
@@ -376,7 +376,7 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
 
   // ── Member callbacks (no admin required) ──
   if (data.startsWith("reveal_pin_")) {
-    const member = await findMemberByTelegram(username);
+    const member = await resolveSender(query.from);
     if (!member) return bot.sendMessage(chatId, "Not registered.");
     const memberId = parseInt(data.replace("reveal_pin_", ""));
     if (member.id !== memberId) return; // Ignore if not the owner
@@ -416,17 +416,10 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
       .eq("id", claimId);
 
     // If approving for membership too, flip the flag on the member.
-    // Resolve approver's member.id by their telegram username for audit.
+    // Resolve approver's member.id for audit, by Telegram id first (a recycled
+    // handle must not be credited with someone else's approval).
     if (withMembership) {
-      let approverMemberId: number | null = null;
-      if (username) {
-        const { data: approverMember } = await db
-          .from("members")
-          .select("id")
-          .eq("telegram_username", username)
-          .maybeSingle();
-        approverMemberId = approverMember?.id ?? null;
-      }
+      const approverMemberId = (await resolveSender(query.from))?.id ?? null;
       const { error: flagErr } = await db
         .from("members")
         .update({
@@ -487,16 +480,9 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
     }
     const approver = username ? `@${username}` : query.from.first_name;
 
-    // Resolve approver's member.id for the audit trail (nullable if unknown).
-    let approverMemberId: number | null = null;
-    if (username) {
-      const { data: approverMember } = await db
-        .from("members")
-        .select("id")
-        .eq("telegram_username", username)
-        .maybeSingle();
-      approverMemberId = approverMember?.id ?? null;
-    }
+    // Resolve approver's member.id for the audit trail (nullable if unknown),
+    // by Telegram id first, like every other sender check.
+    const approverMemberId = (await resolveSender(query.from))?.id ?? null;
 
     // Carry the applicant's Telegram handle onto the member row so the bot
     // recognizes them (/mycode etc.). The unique index on telegram_username
@@ -609,7 +595,7 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
   }
 
   // ── Admin callbacks ──
-  const admin = await findAdminByTelegram(username);
+  const admin = await resolveAdminSender(query.from);
   if (!admin) return bot.sendMessage(chatId, "Admins only.");
 
   const userId = query.from.id;
@@ -993,7 +979,7 @@ async function handleAddAdminFlow(chatId: number, text: string) {
 
 async function handleChangeType(msg: TelegramBot.Message) {
   await react(msg);
-  const admin = await findAdminByTelegram(msg.from?.username ?? "");
+  const admin = await resolveAdminSender(msg.from);
   if (!admin) return bot.sendMessage(msg.chat.id, "Admins only.");
 
   const ownerId = msg.from?.id;
@@ -1134,7 +1120,7 @@ async function handleChangeToCallbackImpl(chatId: number, userId: number, data: 
 
 async function handleCoop(msg: TelegramBot.Message, match: RegExpExecArray | null) {
   await react(msg);
-  const admin = await findAdminByTelegram(msg.from?.username ?? "");
+  const admin = await resolveAdminSender(msg.from);
   if (!admin) return bot.sendMessage(msg.chat.id, "Admins only.");
 
   const arg = match?.[1]?.trim();
@@ -1170,10 +1156,9 @@ async function handleCoop(msg: TelegramBot.Message, match: RegExpExecArray | nul
 
 async function handleInvite(msg: TelegramBot.Message) {
   const chatId = msg.chat.id;
-  const username = msg.from?.username ?? "";
   await react(msg);
 
-  const member = await findMemberByTelegram(username);
+  const member = await resolveSender(msg.from);
   if (!member) return bot.sendMessage(chatId, "You're not registered. Ask an admin to add you first.");
   if (!member.is_coop_member) return bot.sendMessage(chatId, "Only cooperative members can send invites.");
 
