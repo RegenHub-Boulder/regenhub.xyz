@@ -65,7 +65,7 @@ export async function POST(req: Request) {
   // can revoke door access in the same pass.
   const { data: stale, error } = await admin
     .from("subscriptions")
-    .select("id, member_id, stripe_subscription_id, plan_key, past_due_since, members(name, pin_code_slot, member_type)")
+    .select("id, member_id, stripe_subscription_id, plan_key, past_due_since, members!subscriptions_member_id_fkey(name, pin_code_slot, member_type)")
     .eq("status", "past_due")
     .lt("past_due_since", cutoff)
     .is("access_disabled_at", null)

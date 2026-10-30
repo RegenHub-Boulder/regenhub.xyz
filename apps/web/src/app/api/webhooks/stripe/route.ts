@@ -184,7 +184,7 @@ async function handleSubscriptionUpdated(admin: ServiceClient, event: Stripe.Sub
     if (!prev.cancel_at_period_end && sub.cancel_at_period_end) {
       const { data: row } = await admin
         .from("subscriptions")
-        .select("member_id, members(name)")
+        .select("member_id, members!subscriptions_member_id_fkey(name)")
         .eq("stripe_subscription_id", sub.id)
         .returns<SubMemberNameRow[]>()
         .maybeSingle();
@@ -206,7 +206,7 @@ async function handleSubscriptionUpdated(admin: ServiceClient, event: Stripe.Sub
     if (prev.status !== "past_due" && newStatus === "past_due") {
       const { data: row } = await admin
         .from("subscriptions")
-        .select("member_id, plan_key, monthly_cents, members(name, email)")
+        .select("member_id, plan_key, monthly_cents, members!subscriptions_member_id_fkey(name, email)")
         .eq("stripe_subscription_id", sub.id)
         .returns<(SubMemberNameEmailRow & { plan_key: string; monthly_cents: number })[]>()
         .maybeSingle();
@@ -235,7 +235,7 @@ async function handleSubscriptionUpdated(admin: ServiceClient, event: Stripe.Sub
     if (prev.status === "past_due" && isActiveStatus(newStatus)) {
       const { data: row } = await admin
         .from("subscriptions")
-        .select("member_id, members(name)")
+        .select("member_id, members!subscriptions_member_id_fkey(name)")
         .eq("stripe_subscription_id", sub.id)
         .returns<SubMemberNameRow[]>()
         .maybeSingle();
@@ -269,7 +269,7 @@ async function handleSubscriptionDeleted(admin: ServiceClient, sub: Stripe.Subsc
   // a desk tier (cold/hot). For day-pass / social tiers there's no slot to free.
   const { data: row } = await admin
     .from("subscriptions")
-    .select("member_id, plan_key, members(name, email, pin_code_slot, member_type)")
+    .select("member_id, plan_key, members!subscriptions_member_id_fkey(name, email, pin_code_slot, member_type)")
     .eq("stripe_subscription_id", sub.id)
     .returns<{
       member_id: number;

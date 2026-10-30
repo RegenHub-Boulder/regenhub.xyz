@@ -81,7 +81,7 @@ export default async function BillingPage() {
   const [{ data: subs }, { data: purchases }, { data: thisMonthPurchases }, { data: grants }, { data: webhookEvents }] = await Promise.all([
     supabase
       .from("subscriptions")
-      .select("*, members(id, name, email)")
+      .select("*, members!subscriptions_member_id_fkey(id, name, email)")
       .order("created_at", { ascending: false })
       .returns<SubWithMember[]>(),
     supabase
