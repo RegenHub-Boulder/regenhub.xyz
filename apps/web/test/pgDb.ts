@@ -235,6 +235,12 @@ export async function makePgDb() {
       neq: (col: string, v: unknown) => filter(`${ident(col)} <> ${param(v)}`),
       in: (col: string, vs: unknown[]) => filter(vs.length ? `${ident(col)} in (${vs.map(param).join(", ")})` : "false"),
       is: (col: string, v: null | boolean) => filter(`${ident(col)} is ${v === null ? "null" : v ? "true" : "false"}`),
+      // PostgREST `or=(col.op.value,...)`, for the eq/ilike forms the code uses.
+      or: (text: string) => filter(`(${splitTopLevel(text).map((part) => {
+        const m = /^(\w+)\.(eq|ilike)\.(.*)$/s.exec(part);
+        if (!m || /[(),]/.test(m[3])) throw new Error(`pgDb: or(${part}) unsupported`);
+        return m[2] === "eq" ? `${ident(m[1])} = ${param(m[3])}` : `${ident(m[1])} ilike ${param(m[3].replace(/\*/g, "%"))}`;
+      }).join(" or ")})`),
       not: (col: string, operator: string, v: unknown) => {
         if (operator !== "is" || v !== null) throw new Error(`pgDb: not(${operator}, ${String(v)}) unsupported`);
         return filter(`${ident(col)} is not null`);
