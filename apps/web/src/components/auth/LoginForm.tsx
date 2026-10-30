@@ -20,28 +20,40 @@ export function LoginForm({ initialBanner = null, next = "/portal" }: Props = {}
   const [sent, setSent] = useState(false);
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resent, setResent] = useState(false);
   const [error, setError] = useState<string | null>(initialBanner);
+
+  const sendLink = async (isResend: boolean) => {
+    setLoading(true);
+    setError(null);
+    setResent(false);
+
+    try {
+      const supabase = createClient();
+      const callbackUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: callbackUrl,
+        },
+      });
+
+      if (error) {
+        setError(error.message);
+      } else {
+        setSent(true);
+        setResent(isResend);
+      }
+    } catch {
+      setError("Couldn't reach the server. Check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    const supabase = createClient();
-    const callbackUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: callbackUrl,
-      },
-    });
-
-    if (error) {
-      setError(error.message);
-    } else {
-      setSent(true);
-    }
-    setLoading(false);
+    await sendLink(false);
   };
 
   const handleOtpSubmit = async (e: React.FormEvent) => {
@@ -49,19 +61,24 @@ export function LoginForm({ initialBanner = null, next = "/portal" }: Props = {}
     setLoading(true);
     setError(null);
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.verifyOtp({
-      email,
-      token: otp,
-      type: "email",
-    });
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.verifyOtp({
+        email,
+        token: otp,
+        type: "email",
+      });
 
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-    } else {
-      router.push(next);
+      if (error) {
+        setError(error.message);
+      } else {
+        router.push(next);
+        return; // keep the spinner while navigating
+      }
+    } catch {
+      setError("Couldn't reach the server. Check your connection and try again.");
     }
+    setLoading(false);
   };
 
   if (sent) {
@@ -95,9 +112,33 @@ export function LoginForm({ initialBanner = null, next = "/portal" }: Props = {}
             {loading ? "Verifying…" : "Sign in"}
           </Button>
         </form>
+        {resent && <p className="text-center text-xs text-sage">A new link and code are on their way.</p>}
         <p className="text-center text-xs text-muted">
           Or click the magic link in the email instead.
         </p>
+        <div className="flex items-center justify-center gap-4 text-xs">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => sendLink(true)}
+            className="underline text-muted hover:text-sage transition-colors disabled:opacity-50"
+          >
+            Resend email
+          </button>
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => {
+              setSent(false);
+              setOtp("");
+              setError(null);
+              setResent(false);
+            }}
+            className="underline text-muted hover:text-sage transition-colors disabled:opacity-50"
+          >
+            Use a different email
+          </button>
+        </div>
       </div>
     );
   }

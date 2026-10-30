@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
+import { DEFAULT_NEXT, safeNextPath } from "@/lib/safeNext";
 import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/portal";
+  // An unchecked next in `${origin}${next}` is an open redirect, so validate
+  // it as a same-origin path.
+  const next = safeNextPath(searchParams.get("next")) ?? DEFAULT_NEXT;
 
   // Derive the correct public origin — behind Cloudflare/Traefik the
   // internal request.url has host 0.0.0.0:PORT, so prefer forwarded headers.
