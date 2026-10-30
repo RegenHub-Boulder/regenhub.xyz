@@ -9,6 +9,7 @@ import {
   getLockEntities,
   withoutFrontLocks,
 } from "@regenhub/shared";
+import { hasBearerSecret } from "@/lib/secretAuth";
 
 /**
  * POST /api/cron/door-watchdog
@@ -51,8 +52,7 @@ async function notifyTelegram(text: string) {
 export async function POST(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret) return NextResponse.json({ error: "CRON_SECRET not set" }, { status: 503 });
-  const auth = req.headers.get("authorization");
-  if (auth !== `Bearer ${secret}`) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!hasBearerSecret(req, secret)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const admin = createServiceClient();
   const nowIso = new Date().toISOString();

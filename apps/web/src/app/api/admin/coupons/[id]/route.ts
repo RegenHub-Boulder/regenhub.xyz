@@ -1,20 +1,7 @@
 import type Stripe from "stripe";
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/admin";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
-
-async function requireAdmin() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Unauthorized" as const, status: 401 };
-  const { data: adminMember } = await supabase
-    .from("members")
-    .select("is_admin, disabled")
-    .eq("supabase_user_id", user.id)
-    .single();
-  if (!adminMember?.is_admin || adminMember.disabled) return { error: "Forbidden" as const, status: 403 };
-  return { ok: true as const };
-}
 
 type PromoNewShape = Stripe.PromotionCode & {
   promotion?: { type: "coupon"; coupon?: string | Stripe.Coupon };
@@ -35,8 +22,7 @@ export async function PATCH(
   if (!isStripeConfigured()) {
     return NextResponse.json({ error: "Stripe is not configured" }, { status: 503 });
   }
-  const auth = await requireAdmin();
-  if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  if (!await requireAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await ctx.params;
   const body = (await req.json().catch(() => null)) as { active?: boolean } | null;
@@ -78,8 +64,7 @@ export async function DELETE(
   if (!isStripeConfigured()) {
     return NextResponse.json({ error: "Stripe is not configured" }, { status: 503 });
   }
-  const auth = await requireAdmin();
-  if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  if (!await requireAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await ctx.params;
   const stripe = getStripe();

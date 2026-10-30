@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { sendEmail, adminDigestEmail, type DigestData } from "@/lib/email";
+import { hasBearerSecret } from "@/lib/secretAuth";
 
 /**
  * POST /api/cron/admin-digest
@@ -16,7 +17,7 @@ export async function POST(req: Request) {
   if (!secret) {
     return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 503 });
   }
-  if (req.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!hasBearerSecret(req, secret)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -2,14 +2,14 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { prepareIssue, sendBatch } from "@/lib/newsletterSend";
 import { compileIssue, renderNewsletterText, isoWeek } from "@/lib/newsletter";
+import { hasBearerSecret } from "@/lib/secretAuth";
 
 /** Biweekly cron. Both cron and the studio send the same frozen issue through
  * the leased ledger. `force` bypasses cadence only, never the autosend switch. */
 export async function POST(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret) return NextResponse.json({ error: "CRON_SECRET not set" }, { status: 503 });
-  const auth = req.headers.get("authorization");
-  if (auth !== `Bearer ${secret}`) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!hasBearerSecret(req, secret)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = (await req.json().catch(() => ({}))) as { force?: boolean };
 

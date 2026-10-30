@@ -1,8 +1,7 @@
 import { resolveOnchainCoupon } from "@/lib/onchain/discount";
-import { requireAdmin } from "@/lib/admin";
+import { requireAdmin, requireAdminMember } from "@/lib/admin";
 import { NextResponse } from "next/server";
 import { getAddress, isAddress } from "viem";
-import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { discountedCents, generateUpcomingOnchainInvoices } from "@/lib/onchain/invoice";
 import { activateMembershipAccess } from "@/lib/membershipLifecycle";
@@ -17,19 +16,11 @@ type Body = {
 };
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  if (!await requireAdmin()) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await requireAdminMember();
+  if (!auth) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const actor = auth.member;
 
   const admin = createServiceClient();
-  const { data: actor } = await admin
-    .from("members")
-    .select("id, is_admin")
-    .eq("supabase_user_id", user.id)
-    .single();
-  if (!actor?.is_admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const memberId = Number.parseInt((await ctx.params).id, 10);
   const body = (await req.json().catch(() => null)) as Body | null;

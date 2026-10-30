@@ -7,6 +7,7 @@ import {
   nudgeBalanceEmptyEmail,
 } from "@/lib/email";
 import { logAction } from "@/lib/auditLog";
+import { hasBearerSecret } from "@/lib/secretAuth";
 
 /**
  * POST /api/cron/lifecycle-nudges
@@ -68,8 +69,7 @@ type NudgeType = "balance_empty" | "first_visit_followup" | "never_visited";
 export async function POST(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret) return NextResponse.json({ error: "CRON_SECRET not set" }, { status: 503 });
-  const auth = req.headers.get("authorization");
-  if (auth !== `Bearer ${secret}`) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!hasBearerSecret(req, secret)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const admin = createServiceClient();
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";

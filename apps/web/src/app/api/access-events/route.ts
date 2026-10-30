@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
+import { hasBearerSecret } from "@/lib/secretAuth";
 
 type AccessMethod = Database["public"]["Enums"]["access_method"];
 
@@ -50,8 +51,7 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   }
-  const auth = req.headers.get("authorization");
-  if (auth !== `Bearer ${secret}`) {
+  if (!hasBearerSecret(req, secret)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

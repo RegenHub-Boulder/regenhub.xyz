@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
-import { createClient } from "@/lib/supabase/server";
+import { requireAdminMember } from "@/lib/admin";
 import { getStripe, getPlan, isStripeConfigured, PLANS } from "@/lib/stripe";
 
 /**
@@ -35,19 +35,6 @@ export type AdminCouponView = {
   created_at: string;
   expires_at: string | null;
 };
-
-async function requireAdmin() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Unauthorized" as const, status: 401 };
-  const { data: adminMember } = await supabase
-    .from("members")
-    .select("id, is_admin, disabled")
-    .eq("supabase_user_id", user.id)
-    .single();
-  if (!adminMember?.is_admin || adminMember.disabled) return { error: "Forbidden" as const, status: 403 };
-  return { adminMember };
-}
 
 /** Stripe Product ID → our plan_key (cold_desk, hot_desk, …) */
 function productIdToPlanKey(productId: string): string | null {
@@ -117,8 +104,8 @@ export async function GET() {
   if (!isStripeConfigured()) {
     return NextResponse.json({ error: "Stripe is not configured" }, { status: 503 });
   }
-  const auth = await requireAdmin();
-  if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  const auth = await requireAdminMember();
+  if (!auth) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
     const stripe = getStripe();
@@ -162,8 +149,8 @@ export async function POST(req: Request) {
   if (!isStripeConfigured()) {
     return NextResponse.json({ error: "Stripe is not configured" }, { status: 503 });
   }
-  const auth = await requireAdmin();
-  if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  const auth = await requireAdminMember();
+  if (!auth) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = (await req.json().catch(() => null)) as CreateBody | null;
   if (!body) return NextResponse.json({ error: "Invalid body" }, { status: 400 });
@@ -194,7 +181,7 @@ export async function POST(req: Request) {
   const couponParams: Stripe.CouponCreateParams = {
     duration,
     name: code,
-    metadata: { created_by_member_id: String(auth.adminMember.id) },
+    metadata: { created_by_member_id: String(auth.member.id) },
   };
   if (duration === "repeating") couponParams.duration_in_months = body.duration_in_months!;
 
@@ -247,7 +234,7 @@ export async function POST(req: Request) {
   const promoParams: Stripe.PromotionCodeCreateParams = {
     promotion: { type: "coupon", coupon: coupon.id },
     code,
-    metadata: { created_by_member_id: String(auth.adminMember.id) },
+    metadata: { created_by_member_id: String(auth.member.id) },
   };
   if (body.max_redemptions && body.max_redemptions > 0) {
     promoParams.max_redemptions = body.max_redemptions;
