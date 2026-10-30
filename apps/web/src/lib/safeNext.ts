@@ -13,15 +13,18 @@ export function safeNextPath(raw: string | null | undefined): string | undefined
   if (!raw.startsWith("/")) return undefined;
   if (raw.startsWith("//") || raw.startsWith("/\\")) return undefined;
   if (/[\u0000-\u001f\u007f\\]/.test(raw)) return undefined;
-  // Resolve against a dummy origin: anything that escapes it is rejected.
+  // Resolve against a dummy origin: anything that escapes it is rejected. Dot
+  // segments ("/.//evil.com", "/%2e//evil.com") resolve to a path starting "//",
+  // which a browser reads as another host, so reject that too and hand back the
+  // resolved path: what is checked is what gets followed.
   try {
     const base = "http://internal.invalid";
     const u = new URL(raw, base);
-    if (u.origin !== base) return undefined;
+    if (u.origin !== base || u.pathname.startsWith("//")) return undefined;
+    return u.pathname + u.search + u.hash;
   } catch {
     return undefined;
   }
-  return raw;
 }
 
 /** `/auth/login`, carrying the destination when it is safe to carry. */
