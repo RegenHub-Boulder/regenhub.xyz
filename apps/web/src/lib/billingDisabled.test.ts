@@ -63,6 +63,7 @@ function database(disabled = true) {
       not: (key: string, _op: string, value: unknown) => { filters.push(r => (r[key] ?? null) !== value); return builder; },
       in: (key: string, values: unknown[]) => { filters.push(r => values.includes(r[key])); return builder; },
       lte: (key: string, value: number) => { filters.push(r => Number(r[key]) <= value); return builder; },
+      gt: (key: string, value: number) => { filters.push(r => Number(r[key]) > value); return builder; },
       order: (key: string, opts: { nullsFirst?: boolean; ascending?: boolean }) => { orders.push({ key, nullsFirst: opts.nullsFirst ?? false, ascending: opts.ascending ?? true }); return builder; },
       limit: (value: number) => { limit = value; return builder; },
       update: (values: Row) => { mutation = { kind: "update", values }; return builder; },

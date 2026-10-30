@@ -33,6 +33,12 @@ export const AuditAction = {
   // in the same transaction as the change, actor = the member who signed.
   WALLET_MOVED:           "wallet_moved",
   WALLET_REMOVED:         "wallet_removed",
+  /** A member asked to leave a desk for a daily plan at the end of the paid period. */
+  PLAN_SWITCH_SCHEDULED:  "plan_switch_scheduled",
+  /** A pending desk → daily switch was dropped (by the member, or by an admin cancel). */
+  PLAN_SWITCH_CANCELED:   "plan_switch_canceled",
+  /** The desk period ended and the daily plan took over; payload has the door outcome. */
+  PLAN_SWITCH_COMPLETED:  "plan_switch_completed",
   // Comms
   EMAIL_SENT:             "email_sent",
   BATCH_EMAIL_SENT:       "batch_email_sent",

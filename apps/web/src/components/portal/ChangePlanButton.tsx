@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Loader2, ArrowUpDown, Check } from "lucide-react";
+import { Loader2, ArrowUpDown, Check, Undo2 } from "lucide-react";
 
-import { getSelfServePlans } from "@/lib/plans";
+import { getSelfServePlans, isDeskPlan } from "@/lib/plans";
 
 // Cheapest first so the ladder reads naturally upward
 const SELF_SERVE_PLANS = getSelfServePlans().map(({ key, def }) => ({
@@ -13,15 +13,22 @@ const SELF_SERVE_PLANS = getSelfServePlans().map(({ key, def }) => ({
   label: def.label,
   dollars: def.defaultMonthlyCents / 100,
   passes: def.monthlyDayPasses ?? 0,
+  desk: isDeskPlan(key),
 }));
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
 
 interface Props {
   currentPlanKey: string;
   currentMonthlyCents: number;
+  /** End of the period already paid for: when a desk → daily switch takes effect. */
+  currentPeriodEnd?: string | null;
   hasDiscount?: boolean;
 }
 
-export function ChangePlanButton({ currentPlanKey, currentMonthlyCents, hasDiscount }: Props) {
+export function ChangePlanButton({ currentPlanKey, currentMonthlyCents, currentPeriodEnd, hasDiscount }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -32,7 +39,9 @@ export function ChangePlanButton({ currentPlanKey, currentMonthlyCents, hasDisco
   // Only show change-plan when current plan is in the self-serve ladder
   if (!current) return null;
 
-  const options = SELF_SERVE_PLANS.filter((p) => p.key !== currentPlanKey);
+  // From a desk, the self-serve move is to a daily plan; desk ↔ desk needs an admin.
+  const options = SELF_SERVE_PLANS.filter((p) => p.key !== currentPlanKey && !(current.desk && p.desk));
+  const whenPaidPeriodEnds = currentPeriodEnd ? formatDate(currentPeriodEnd) : "the end of the period you've paid for";
 
   async function switchTo(planKey: string) {
     setBusy(true);
@@ -67,12 +76,23 @@ export function ChangePlanButton({ currentPlanKey, currentMonthlyCents, hasDisco
       {open && (
         <div className="glass-panel p-4 border border-sage/20 space-y-3 mt-3 max-w-xl">
           <div>
-            <p className="text-sm font-medium">Pick a different tier</p>
-            <p className="text-xs text-muted mt-1">
-              Currently on <span className="text-foreground font-medium">{current.label}</span> at ${currentMonthlyCents / 100}/mo.
-              The change takes effect immediately. Stripe will prorate the difference on your next renewal invoice.
-              {hasDiscount && " Any active discount stays attached and continues to apply."}
-            </p>
+            <p className="text-sm font-medium">{current.desk ? "Move to a daily plan" : "Pick a different tier"}</p>
+            {current.desk ? (
+              <p className="text-xs text-muted mt-1">
+                Currently on <span className="text-foreground font-medium">{current.label}</span> at ${currentMonthlyCents / 100}/mo.
+                The switch takes effect on <span className="text-foreground font-medium">{whenPaidPeriodEnds}</span>, when the
+                period you&apos;ve paid for ends. You keep your desk and your door code until then. There&apos;s no
+                proration: the new plan bills from that date, and from then on you use day passes like other daily members.
+                You can cancel the switch any time before it takes effect.
+                {hasDiscount && " Any active discount stays attached and continues to apply."}
+              </p>
+            ) : (
+              <p className="text-xs text-muted mt-1">
+                Currently on <span className="text-foreground font-medium">{current.label}</span> at ${currentMonthlyCents / 100}/mo.
+                The change takes effect immediately. Stripe will prorate the difference on your next renewal invoice.
+                {hasDiscount && " Any active discount stays attached and continues to apply."}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -88,11 +108,15 @@ export function ChangePlanButton({ currentPlanKey, currentMonthlyCents, hasDisco
                 >
                   <div>
                     <p className="text-sm font-medium">{p.label}</p>
-                    <p className="text-xs text-muted">{p.passes} day pass{p.passes === 1 ? "" : "es"} credited monthly</p>
+                    <p className="text-xs text-muted">
+                      {p.desk ? "Permanent door code + 24/7 access" : `${p.passes} day pass${p.passes === 1 ? "" : "es"} credited monthly`}
+                    </p>
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-semibold">${p.dollars}/mo</p>
-                    <p className="text-xs text-muted">{isUpgrade ? "↑ upgrade" : "↓ downgrade"}</p>
+                    <p className="text-xs text-muted">
+                      {current.desk ? `from ${whenPaidPeriodEnds}` : isUpgrade ? "↑ upgrade" : "↓ downgrade"}
+                    </p>
                   </div>
                   {target === p.key && busy && <Loader2 className="w-4 h-4 animate-spin text-sage" />}
                   {target === p.key && !busy && !error && <Check className="w-4 h-4 text-emerald-400" />}
@@ -103,11 +127,14 @@ export function ChangePlanButton({ currentPlanKey, currentMonthlyCents, hasDisco
 
           {error && <p className="text-xs text-red-400">{error}</p>}
 
-          <div className="pt-2 border-t border-white/5">
-            <p className="text-xs text-muted">
-              Switching off Full Access (Hot/Cold Desk) still needs an admin touch — email <a href="mailto:boulder.regenhub@gmail.com" className="text-sage hover:underline">boulder.regenhub@gmail.com</a> so we can reclaim your door code.
-            </p>
-          </div>
+          {current.desk && (
+            <div className="pt-2 border-t border-white/5">
+              <p className="text-xs text-muted">
+                Moving between Hot and Cold Desk still needs an admin touch — email{" "}
+                <a href="mailto:boulder.regenhub@gmail.com" className="text-sage hover:underline">boulder.regenhub@gmail.com</a>.
+              </p>
+            </div>
+          )}
 
           <Button size="sm" variant="ghost" onClick={() => setOpen(false)} className="text-muted text-xs">
             Cancel
@@ -115,5 +142,38 @@ export function ChangePlanButton({ currentPlanKey, currentMonthlyCents, hasDisco
         </div>
       )}
     </>
+  );
+}
+
+/** Drop a pending desk → daily switch before it takes effect. */
+export function CancelPlanSwitchButton({ keepLabel }: { keepLabel: string }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function keep() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/portal/change-plan", { method: "DELETE" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(data?.error ?? "Could not cancel the switch");
+        return;
+      }
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <Button onClick={keep} disabled={busy} className="btn-glass gap-2 text-sm">
+        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Undo2 className="w-4 h-4" />}
+        Keep {keepLabel}
+      </Button>
+      {error && <p className="text-xs text-red-400 max-w-xs">{error}</p>}
+    </div>
   );
 }

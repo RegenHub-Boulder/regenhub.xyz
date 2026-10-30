@@ -1,6 +1,7 @@
 import type { createServiceClient } from "@/lib/supabase/admin";
 import type { PaymentRail } from "@/lib/supabase/types";
-import { getPlan } from "@/lib/plans";
+import { isDeskMemberType, isDeskPlan, planLabel } from "@/lib/plans";
+import { dropSwitchForCancel, releaseSwitchScheduleForCancel, scheduleIdOf } from "@/lib/planSwitch";
 import { getStripe } from "@/lib/stripe";
 import { downgradeMembershipAccess, type DowngradeResult } from "@/lib/membershipLifecycle";
 import { withLockWriter } from "@regenhub/shared";
@@ -54,6 +55,10 @@ type SubscriptionRow = {
   current_period_end: string | null;
   stripe_subscription_id: string | null;
   admin_cancel_mode: CancelMode | null;
+  pending_plan_key: string | null;
+  pending_plan_at: string | null;
+  pending_plan_from: string | null;
+  pending_plan_schedule_id: string | null;
 };
 
 /** What record_admin_cancel() (migration 059) returns. */
@@ -73,19 +78,21 @@ type Recorded = {
 };
 
 const SUBSCRIPTION_COLUMNS =
-  "id, member_id, payment_rail, plan_key, status, current_period_end, stripe_subscription_id, admin_cancel_mode";
-
-function isDeskPlan(planKey: string): boolean {
-  const type = getPlan(planKey)?.grantsMemberType;
-  return type === "cold_desk" || type === "hot_desk";
-}
+  "id, member_id, payment_rail, plan_key, status, current_period_end, stripe_subscription_id, admin_cancel_mode, pending_plan_key, pending_plan_at, pending_plan_from, pending_plan_schedule_id";
 
 /** Clear the member's door code through the shared lifecycle. Caller holds the PIN-writer reservation. */
 async function endAccess(admin: ServiceClient, sub: Pick<SubscriptionRow, "member_id" | "plan_key">) {
+  // The member's type too: a crypto member who switched desk → daily keeps
+  // the desk (and its door code) until the daily period starts, while the
+  // subscription's plan_key already names the daily plan.
+  const { data: current, error: memberError } = await admin
+    .from("members").select("member_type").eq("id", sub.member_id).single();
+  if (memberError) throw memberError;
+  const onDesk = isDeskMemberType(current.member_type);
   const downgrade = await downgradeMembershipAccess(admin, {
     memberId: sub.member_id,
     currentPinSlot: null,
-    revokePermanentPin: isDeskPlan(sub.plan_key),
+    revokePermanentPin: isDeskPlan(sub.plan_key) || onDesk,
   });
   if (downgrade.memberUpdateError) {
     const { message } = downgrade.memberUpdateError as { message?: string };
@@ -220,9 +227,12 @@ const endedSince = (current: { canceled_at?: number | null; ended_at?: number | 
  * Ask Stripe. Returns "already_canceled" when Stripe had ended it before we
  * asked. On a refusal Stripe confirms (it still shows the subscription
  * untouched) the operation is abandoned; if Stripe can't be read back, the
- * operation stays and the billing cron asks again.
+ * operation stays and the billing cron asks again. A refusal because a plan
+ * switch's schedule now manages the subscription (the member scheduled one as
+ * the cancel began) isn't final: the schedule is released and Stripe asked
+ * once more.
  */
-async function cancelAtStripe(admin: ServiceClient, op: Operation, sub: SubscriptionRow, mode: CancelMode) {
+async function cancelAtStripe(admin: ServiceClient, op: Operation, sub: SubscriptionRow, mode: CancelMode, retried = false): Promise<"done" | "already_canceled"> {
   const id = sub.stripe_subscription_id!;
   const stripe = getStripe();
   const details = op.reason ? { cancellation_details: { comment: op.reason.slice(0, 500) } } : {};
@@ -235,7 +245,7 @@ async function cancelAtStripe(admin: ServiceClient, op: Operation, sub: Subscrip
       await stripe.subscriptions.cancel(id, { prorate: false, invoice_now: false, ...details });
     } else {
       // One key per operation: the request and the billing cron asking at once get one answer.
-      await stripe.subscriptions.update(id, { cancel_at_period_end: true, ...details }, { idempotencyKey: `admin-cancel-${op.id}` });
+      await stripe.subscriptions.update(id, { cancel_at_period_end: true, ...details }, { idempotencyKey: `admin-cancel-${op.id}${retried ? "-after-switch" : ""}` });
     }
     return "done" as const;
   } catch (error) {
@@ -257,6 +267,10 @@ async function cancelAtStripe(admin: ServiceClient, op: Operation, sub: Subscrip
     // conflict with the same operation's other runner, or an outage may
     // still be applied, so the operation stays for the next try.
     const refused = unknownToStripe || (error as { type?: string })?.type === "StripeInvalidRequestError";
+    const schedule = current ? scheduleIdOf(current) : null;
+    if (refused && schedule && !retried && await releaseSwitchScheduleForCancel(admin, sub, schedule, op.actor_member_id)) {
+      return cancelAtStripe(admin, op, sub, mode, true);
+    }
     if (!refused) {
       throw new CancelMembershipError(
         `Stripe didn't confirm the cancellation (${message}). It is saved and the billing cron will finish it; trying again also finishes it.`,
@@ -310,8 +324,28 @@ async function runOperation(admin: ServiceClient, operationId: number): Promise<
     // Nothing to ask Stripe when it's already ended here, or the marker already covers this request.
     const repeat = sub.admin_cancel_mode === "now" || (sub.admin_cancel_mode != null && op.mode === "period_end");
     if (!op.stripe_done_at && isLiveSubscription(sub.status) && !repeat) {
+      // A desk → daily switch is a Stripe schedule, and Stripe won't change
+      // cancellation on a subscription a schedule manages. The cancel
+      // supersedes the switch, recorded or still being set up.
+      try {
+        await dropSwitchForCancel(admin, sub, op.actor_member_id);
+      } catch (error) {
+        throw new CancelMembershipError(
+          `Could not drop the member's pending plan switch first (${error instanceof Error ? error.message : "unknown error"}). The cancel is saved and the billing cron will finish it; trying again also finishes it.`,
+          502,
+        );
+      }
       const stripeMode = op.mode === "now" || sub.status === "incomplete" ? "now" : "period_end";
-      alreadyCanceled = await cancelAtStripe(admin, op, sub, stripeMode) === "already_canceled";
+      alreadyCanceled = await cancelAtStripe(admin, op, sub, stripeMode).catch(async (error: unknown) => {
+        if (!(error instanceof CancelMembershipError) || !sub.pending_plan_schedule_id) throw error;
+        // The switch is already dropped; say so. If Stripe refused (the
+        // operation is closed), the member now renews on the desk until a cancel lands.
+        const { data: after } = await admin.from("admin_cancel_operations").select("finished_at").eq("id", op.id).single();
+        const dropped = `The member's scheduled switch to ${planLabel(sub.pending_plan_key ?? "")} was dropped first`;
+        throw new CancelMembershipError(after?.finished_at
+          ? `${error.message} ${dropped}; their plan stays as it is until you cancel again.`
+          : `${error.message} ${dropped}.`, error.status);
+      }) === "already_canceled";
       if (alreadyCanceled) warnings.push("Stripe had already canceled this subscription (a missed webhook); it is now ended here too.");
       const { error: stampError } = await admin.rpc("admin_cancel_stripe_done", { p_operation_id: op.id });
       if (stampError) throw stampError;

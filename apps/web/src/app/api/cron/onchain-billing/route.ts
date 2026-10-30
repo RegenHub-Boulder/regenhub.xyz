@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { generateUpcomingOnchainInvoices, isRenewalInvoice, markDueOnchainSubscriptionsPastDue } from "@/lib/onchain/invoice";
-import { advanceFinalizedOnchainPayments, processOnchainInvoice, retryPendingOnchainEffects } from "@/lib/onchain/verifyPayment";
+import { advanceFinalizedOnchainPayments, finishOnchainPlanSwitches, processOnchainInvoice, retryPendingOnchainEffects } from "@/lib/onchain/verifyPayment";
 import { isGaslessRelayConfigured } from "@/lib/onchain/config";
 import { processGaslessRelayQueue } from "@/lib/onchain/gaslessRelay";
 import { onchainRenewalReminderEmail, sendEmail } from "@/lib/email";
 import { planLabel } from "@/lib/plans";
 import { sweepAdminCancels } from "@/lib/membershipCancel";
+import { sweepPlanSwitches } from "@/lib/planSwitch";
 
 export async function POST(req: Request) {
   const secret = process.env.CRON_SECRET;
@@ -36,6 +37,16 @@ export async function POST(req: Request) {
   // here must not stall everyone else's billing.
   const adminCancels = await sweepAdminCancels(admin).catch((cause) => {
     console.error("[OnchainBilling] Admin cancel sweep failed:", cause);
+    return { error: cause instanceof Error ? cause.message : "unknown" };
+  });
+  // Card desk → daily switch requests that stopped part-way: finish or release them.
+  const planSwitchRequests = await sweepPlanSwitches(admin).catch((cause) => {
+    console.error("[OnchainBilling] Plan switch request sweep failed:", cause);
+    return { error: cause instanceof Error ? cause.message : "unknown" };
+  });
+  // On-chain desk → daily switches whose paid desk period is over: end desk access.
+  const planSwitches = await finishOnchainPlanSwitches(admin).catch((cause) => {
+    console.error("[OnchainBilling] Plan switch sweep failed:", cause);
     return { error: cause instanceof Error ? cause.message : "unknown" };
   });
   const created = await generateUpcomingOnchainInvoices(admin);
@@ -79,5 +90,5 @@ export async function POST(req: Request) {
   }
   const effectsFailures = await retryPendingOnchainEffects(admin);
   const finalized = await advanceFinalizedOnchainPayments(admin);
-  return NextResponse.json({ gaslessRelays, adminCancels, invoicesCreated: created.length, remindersSent, pastDue, confirmations, effectsFailures, finalized });
+  return NextResponse.json({ gaslessRelays, adminCancels, planSwitchRequests, planSwitches, invoicesCreated: created.length, remindersSent, pastDue, confirmations, effectsFailures, finalized });
 }

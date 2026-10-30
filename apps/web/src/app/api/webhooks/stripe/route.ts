@@ -1,37 +1,19 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
-import { getStripe, getPlan, planLabel } from "@/lib/stripe";
-import { resolveSubscriptionNet } from "@/lib/stripeRetrieveNet";
+import { getStripe, planLabel } from "@/lib/stripe";
 import { fulfillPassPurchase } from "@/lib/passFulfillment";
 import { createServiceClient } from "@/lib/supabase/admin";
 import {
   sendEmail,
-  welcomeNewMemberEmail,
   subscriptionEndedEmail,
   paymentReminderEmail,
 } from "@/lib/email";
-import type { StripeSubscriptionStatus } from "@/lib/supabase/types";
-import {
-  activateMembershipAccess,
-  downgradeMembershipAccess,
-} from "@/lib/membershipLifecycle";
+import { downgradeMembershipAccess } from "@/lib/membershipLifecycle";
 import { grantSubscriptionPasses } from "@/lib/subscriptionPasses";
-import { withLockWriter } from "@regenhub/shared";
+import { isDeskPlan } from "@/lib/plans";
+import { isActiveStatus, notifyTelegram, upsertSubscription, WebhookDataError } from "@/lib/stripeSubscriptionSync";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
-
-/**
- * Throw this from a handler when the event is permanently un-processable
- * (e.g. missing or unknown metadata). Top-level returns 422 so Stripe marks
- * the delivery as failed (and stops retrying) and the issue is visible in
- * the Stripe Dashboard. Any other error → 500 → Stripe retries.
- */
-class WebhookDataError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "WebhookDataError";
-  }
-}
 
 // Typed shapes for subscription→member joins (avoids @ts-expect-error)
 type SubMemberNameRow = { member_id: number; members: { name: string } | null };
@@ -39,31 +21,6 @@ type SubMemberNameEmailRow = {
   member_id: number;
   members: { name: string; email: string | null } | null;
 };
-
-function isActiveStatus(s: string | null | undefined): boolean {
-  return s === "active" || s === "trialing";
-}
-
-async function notifyTelegram(text: string, opts?: { silent?: boolean }) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_GROUP_CHAT_ID;
-  if (!token || !chatId) return;
-  try {
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        parse_mode: "Markdown",
-        disable_web_page_preview: true,
-        disable_notification: opts?.silent ?? false,
-      }),
-    });
-  } catch (err) {
-    console.error("[StripeWebhook] Telegram notify error:", err);
-  }
-}
 
 export async function POST(request: Request) {
   const stripe = getStripe();
@@ -208,52 +165,16 @@ async function handleCheckoutCompleted(
   return result.member_id ?? null;
 }
 
-/**
- * For a subscription an admin canceled, an event can be older than the cancel
- * (Stripe doesn't guarantee delivery order), so use Stripe's current state of
- * the subscription instead of the event's. A canceled Stripe subscription
- * never comes back, so a cancel-now can't be undone this way. If Stripe now
- * says a period-end cancel is off, the member renewed after the admin's
- * cancel (e.g. in the billing portal): that's an explicit re-subscribe, and
- * the marker is lifted.
- */
-async function currentIfAdminCanceled(admin: ServiceClient, sub: Stripe.Subscription): Promise<Stripe.Subscription> {
-  const { data: row, error } = await admin
-    .from("subscriptions")
-    .select("admin_cancel_mode")
-    .eq("stripe_subscription_id", sub.id)
-    .maybeSingle();
-  if (error) throw error;
-  if (!row?.admin_cancel_mode) return sub;
-  const current = await getStripe().subscriptions.retrieve(sub.id);
-  if (current.status !== "canceled" && !current.cancel_at_period_end) {
-    const { error: liftError } = await admin
-      .from("subscriptions")
-      .update({ admin_canceled_at: null, admin_canceled_by: null, admin_cancel_reason: null, admin_cancel_mode: null, admin_cancel_ends_at: null, admin_cancel_audit_id: null })
-      .eq("stripe_subscription_id", sub.id)
-      .eq("admin_cancel_mode", "period_end");
-    if (liftError) throw liftError;
-  }
-  return current;
-}
-
 async function handleSubscriptionCreated(
   admin: ServiceClient,
   sub: Stripe.Subscription,
 ): Promise<number | null> {
-  return upsertSubscription(admin, await currentIfAdminCanceled(admin, sub), { isNew: true });
+  return (await upsertSubscription(admin, sub, { isNew: true })).memberId;
 }
 
 async function handleSubscriptionUpdated(admin: ServiceClient, event: Stripe.Subscription): Promise<number | null> {
-  const sub = await currentIfAdminCanceled(admin, event);
-  // Capture previous state to detect transitions
-  const { data: prev } = await admin
-    .from("subscriptions")
-    .select("status, cancel_at_period_end, past_due_since")
-    .eq("stripe_subscription_id", sub.id)
-    .maybeSingle();
-
-  const memberId = await upsertSubscription(admin, sub, { isNew: false });
+  // `prev` is the row as this delivery found it, to detect transitions.
+  const { memberId, sub, prev } = await upsertSubscription(admin, event, { isNew: false });
 
   const newStatus = sub.status;
 
@@ -336,6 +257,11 @@ async function handleSubscriptionDeleted(admin: ServiceClient, sub: Stripe.Subsc
       status: sub.status,
       canceled_at: new Date().toISOString(),
       cancel_at_period_end: sub.cancel_at_period_end,
+      // A desk → daily switch still pending dies with the subscription.
+      pending_plan_key: null,
+      pending_plan_at: null,
+      pending_plan_from: null,
+      pending_plan_schedule_id: null,
     })
     .eq("stripe_subscription_id", sub.id);
 
@@ -355,10 +281,7 @@ async function handleSubscriptionDeleted(admin: ServiceClient, sub: Stripe.Subsc
   if (!row?.member_id) return null;
 
   const name = row.members?.name ?? "A member";
-  const cancelledPlan = getPlan(row.plan_key);
-  const wasDeskTier =
-    cancelledPlan?.grantsMemberType === "cold_desk" ||
-    cancelledPlan?.grantsMemberType === "hot_desk";
+  const wasDeskTier = isDeskPlan(row.plan_key);
   const slot = row.members?.pin_code_slot ?? null;
 
   let lockRevokeNote = "";
@@ -499,228 +422,4 @@ async function handleInvoicePaymentFailed(
       .eq("stripe_subscription_id", subId);
   }
   return existing?.member_id ?? null;
-}
-
-// =====================================================
-// Sub upsert + side effects
-// =====================================================
-
-async function upsertSubscription(
-  admin: ServiceClient,
-  sub: Stripe.Subscription,
-  { isNew }: { isNew: boolean },
-): Promise<number | null> {
-  // Plan key comes from metadata set at checkout creation. No fallback — if
-  // metadata is missing, something's wrong with how the sub was created
-  // (likely created manually in Stripe Dashboard, not via our admin flow).
-  const planKey = sub.metadata?.plan_key;
-  if (!planKey) {
-    throw new WebhookDataError(`subscription ${sub.id} has no plan_key in metadata`);
-  }
-  const plan = getPlan(planKey);
-  if (!plan) {
-    throw new WebhookDataError(`subscription ${sub.id} has unknown plan_key "${planKey}"`);
-  }
-
-  const item = sub.items.data[0];
-  const priceId = item?.price?.id ?? "";
-  // Stripe v20 reports the actual recurring amount on the SubscriptionItem's price
-  const monthlyCents = item?.price?.unit_amount ?? parseInt(sub.metadata?.monthly_cents ?? "0", 10);
-
-  // Resolve member by Stripe customer ID
-  const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
-  let { data: member } = await admin
-    .from("members")
-    .select("id, name, email, day_passes_balance, supabase_user_id, pin_code_slot")
-    .eq("stripe_customer_id", customerId)
-    .maybeSingle();
-
-  // Fallback: lookup by metadata.member_id (set in createApprovalCheckoutSession)
-  if (!member && sub.metadata?.member_id) {
-    const memberId = parseInt(sub.metadata.member_id, 10);
-    if (Number.isFinite(memberId)) {
-      const { data: m } = await admin
-        .from("members")
-        .select("id, name, email, day_passes_balance, supabase_user_id, pin_code_slot")
-        .eq("id", memberId)
-        .maybeSingle();
-      if (m) {
-        member = m;
-        // Backfill customer ID
-        await admin
-          .from("members")
-          .update({ stripe_customer_id: customerId })
-          .eq("id", m.id);
-      }
-    }
-  }
-
-  if (!member) {
-    throw new WebhookDataError(
-      `subscription ${sub.id} has no resolvable member (customer ${customerId})`,
-    );
-  }
-
-  // Stripe is the source of truth for what's actually charging (checkout
-  // promo codes live on sub.discounts; webhook payloads usually send IDs
-  // so we retrieve+expand). Application snapshot is the fallback for the
-  // note/duration columns when Stripe has no currently-active coupon.
-  const net = await resolveSubscriptionNet(sub, monthlyCents);
-
-  let discountSnapshot: {
-    cents: number | null;
-    duration: "forever" | "repeating" | null;
-    months: number | null;
-    note: string | null;
-  } = { cents: null, duration: null, months: null, note: null };
-  if (net.offCents != null && net.offCents > 0) {
-    discountSnapshot = {
-      cents: net.offCents,
-      duration: net.duration === "once" ? null : net.duration,
-      months: net.durationMonths,
-      note: net.note,
-    };
-  } else {
-    const appIdStr = sub.metadata?.application_id;
-    if (appIdStr) {
-      const appId = parseInt(appIdStr, 10);
-      if (Number.isFinite(appId)) {
-        const { data: app } = await admin
-          .from("applications")
-          .select("discount_cents, discount_duration, discount_months, discount_note")
-          .eq("id", appId)
-          .maybeSingle();
-        if (app) {
-          discountSnapshot = {
-            cents: app.discount_cents,
-            duration: app.discount_duration,
-            months: app.discount_months,
-            note: app.discount_note,
-          };
-        }
-      }
-    }
-  }
-
-  const status = sub.status as StripeSubscriptionStatus;
-  // Stripe v20 moved current_period_end to the SubscriptionItem (per-item billing periods)
-  const periodEndUnix = sub.items.data[0]?.current_period_end;
-  const currentPeriodEnd = periodEndUnix ? new Date(periodEndUnix * 1000).toISOString() : null;
-
-  const row = {
-    member_id: member.id,
-    stripe_subscription_id: sub.id,
-    stripe_customer_id: customerId,
-    stripe_price_id: priceId,
-    plan_key: planKey,
-    monthly_cents: monthlyCents,
-    net_cents: net.netCents,
-    status,
-    current_period_end: currentPeriodEnd,
-    cancel_at_period_end: sub.cancel_at_period_end,
-    canceled_at: sub.canceled_at ? new Date(sub.canceled_at * 1000).toISOString() : null,
-    discount_cents: discountSnapshot.cents,
-    discount_duration: discountSnapshot.duration,
-    discount_months: discountSnapshot.months,
-    discount_note: discountSnapshot.note,
-  };
-
-  await admin.from("subscriptions").upsert(row, { onConflict: "stripe_subscription_id" });
-
-  // Side effects: only grant access when status flips to active/trialing
-  let autoAllocatedSlot: number | null = null;
-  let autoAllocationFailure: string | null = null;
-  // Re-read the row under the PIN-writer reservation: an admin cancel that
-  // committed after this event was read must win (it ends access under the
-  // same reservation, and its marker keeps the row ended).
-  const activation = isActiveStatus(status)
-    ? await withLockWriter(admin, async () => {
-      const { data: current, error: currentError } = await admin
-        .from("subscriptions")
-        .select("status, admin_cancel_mode")
-        .eq("stripe_subscription_id", sub.id)
-        .single();
-      if (currentError) throw currentError;
-      if (!isActiveStatus(current.status) || current.admin_cancel_mode === "now") return null;
-      return activateMembershipAccess(admin, {
-        memberId: member.id,
-        currentPinSlot: member.pin_code_slot,
-        grantsMemberType: plan.grantsMemberType,
-      });
-    })
-    : null;
-  if (activation) {
-    autoAllocatedSlot = activation.autoAllocatedSlot;
-    autoAllocationFailure = activation.autoAllocationFailure;
-
-    // Clear any stale past_due_since on grant
-    await admin
-      .from("subscriptions")
-      .update({ past_due_since: null, access_disabled_at: null })
-      .eq("stripe_subscription_id", sub.id);
-
-    // First-time activation side effects (new subscription, not a status flap)
-    if (isNew) {
-      // Mark the originating application complete (if there was one)
-      if (sub.metadata?.application_id) {
-        const appId = parseInt(sub.metadata.application_id, 10);
-        if (Number.isFinite(appId)) {
-          await admin
-            .from("applications")
-            .update({ checkout_completed_at: new Date().toISOString() })
-            .eq("id", appId);
-        }
-      }
-
-      // If this new subscriber has no auth account yet (self-serve signup
-      // without prior login), send a magic link so they can claim their
-      // portal. Mirrors first-time day-pass buyer flow.
-      if (!member.supabase_user_id && member.email) {
-        const baseUrl =
-          process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://regenhub.xyz";
-        const { error: otpErr } = await admin.auth.signInWithOtp({
-          email: member.email,
-          options: {
-            emailRedirectTo: `${baseUrl}/auth/callback?next=/portal`,
-            shouldCreateUser: true,
-          },
-        });
-        if (otpErr) console.error("[Webhook] OTP send failed:", otpErr);
-      }
-
-      const passesNote =
-        member.day_passes_balance > 0
-          ? ` (${member.day_passes_balance} guest passes carried forward)`
-          : "";
-      const source = sub.metadata?.source ? ` · via ${sub.metadata.source}` : "";
-      const slotNote = autoAllocatedSlot
-        ? `\n\n🔑 Auto-allocated PIN slot ${autoAllocatedSlot} + pushed to lock.`
-        : "";
-      const failNote = autoAllocationFailure
-        ? `\n\n⚠️ *Action needed:* ${autoAllocationFailure}. Run Lock Sync from /admin/access.`
-        : "";
-      await notifyTelegram(
-        `🎉 *New member!*\n\n*${member.name}* is now on ${planLabel(planKey)} ($${monthlyCents / 100}/mo)${passesNote}${source}.${slotNote}${failNote}`,
-      );
-
-      // Welcome the member themselves — the group celebrated, but until now
-      // the person who just paid heard nothing directly.
-      if (member.email) {
-        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
-        const isDeskTier =
-          plan.grantsMemberType === "cold_desk" || plan.grantsMemberType === "hot_desk";
-        const tpl = welcomeNewMemberEmail({
-          name: member.name,
-          planLabel: planLabel(planKey),
-          monthlyDollars: monthlyCents / 100,
-          isDeskTier,
-          siteUrl,
-        });
-        sendEmail({ to: member.email, subject: tpl.subject, html: tpl.html, text: tpl.text })
-          .catch((err) => console.error("[Webhook] Welcome email failed:", err));
-      }
-    }
-  }
-
-  return member.id;
 }
