@@ -6,7 +6,7 @@ import { NextResponse, type NextRequest } from "next/server";
  * `/auth/login?next=…` and come back after sign-in. Scoped by the matcher to
  * the two gated trees only; public pages are untouched (stay static/ISR).
  */
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const headers = new Headers(request.headers);
   headers.set("x-pathname", request.nextUrl.pathname + request.nextUrl.search);
   return NextResponse.next({ request: { headers } });
