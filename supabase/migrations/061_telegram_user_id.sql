@@ -18,13 +18,17 @@ create unique index if not exists members_telegram_user_id_unique
   on members (telegram_user_id)
   where telegram_user_id is not null;
 
--- If an admin points a member at a different @handle, the old numeric binding
--- belongs to the previous holder: drop it so the new person can bind on first
--- contact. (A statement that sets both columns together is respected.)
+-- If a member is pointed at a different @handle (admin edit, profile edit,
+-- application approval), the old numeric binding belongs to the previous
+-- holder: drop it so the new person can bind on first contact. (A statement
+-- that sets both columns together is respected.) Handles are compared in 044's
+-- canonical form, case-folded as Telegram does, so re-saving "@Alice" as
+-- "alice" (the admin form re-sends the handle on every save) keeps the binding.
 create or replace function members_reset_telegram_user_id() returns trigger
 language plpgsql as $$
 begin
-  if new.telegram_username is distinct from old.telegram_username
+  if lower(nullif(btrim(regexp_replace(new.telegram_username, '^@+', '')), ''))
+       is distinct from lower(nullif(btrim(regexp_replace(old.telegram_username, '^@+', '')), ''))
      and new.telegram_user_id is not distinct from old.telegram_user_id then
     new.telegram_user_id := null;
   end if;
@@ -37,15 +41,17 @@ create trigger members_reset_telegram_user_id
   before update of telegram_username on members
   for each row execute function members_reset_telegram_user_id();
 
--- Members must not be able to set or clear their own binding through the
--- RLS-permitted self-update policy (003_members_update_own). A column REVOKE
--- would not override a table-level UPDATE grant, so enforce it in a trigger:
--- requests arriving as anon/authenticated (PostgREST JWT roles) keep the old
--- value. The bot and admin SQL (service_role / postgres) are unaffected.
+-- Members must never set or clear their own binding. Today anon/authenticated
+-- can't UPDATE members at all (031 revoked it), so this is the second lock in
+-- case a later migration grants it back: a write running as one of those roles
+-- keeps the old value. It checks current_user, the role PostgREST switches to
+-- for the request, not the request.jwt.claim.* settings, which current
+-- PostgREST no longer sets. The bot and admin routes (service_role) and
+-- SECURITY DEFINER functions are unaffected.
 create or replace function members_protect_telegram_user_id() returns trigger
 language plpgsql as $$
 begin
-  if coalesce(current_setting('request.jwt.claim.role', true), '') in ('anon', 'authenticated')
+  if current_user in ('anon', 'authenticated')
      and new.telegram_user_id is distinct from old.telegram_user_id then
     new.telegram_user_id := old.telegram_user_id;
   end if;
