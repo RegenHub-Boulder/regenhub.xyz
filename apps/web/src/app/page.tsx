@@ -25,7 +25,21 @@ export const metadata: Metadata = {
   },
 };
 
+// Homepage v2 prototype ("Co-op broadsheet"). Default OFF; NEXT_PUBLIC_HOME_V2=true
+// is baked at build time like every NEXT_PUBLIC_* var.
+const HOME_V2 = ["true", "1", "yes"].includes((process.env.NEXT_PUBLIC_HOME_V2 ?? "").toLowerCase());
+
+// v2 reads no cookies, so Next prerenders it at build, where the events backends
+// are often unconfigured. Regenerate on the same 5-minute cadence as the events
+// fetch so the list isn't frozen until the next deploy. The default page reads
+// the session and stays dynamic, so this doesn't change it.
+export const revalidate = 300;
+
 export default async function Home() {
+  if (HOME_V2) {
+    const { default: HomeV2 } = await import("@/components/landing/v2/HomeV2");
+    return <HomeV2 />;
+  }
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
