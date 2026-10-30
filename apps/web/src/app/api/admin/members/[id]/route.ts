@@ -16,6 +16,31 @@ import {
 
 const PERMANENT_TYPES = ["cold_desk", "hot_desk", "hub_friend"];
 
+const KEPT_HISTORY =
+  "This member can't be deleted: billing or admin-cancel records refer to them and have to be kept. Disable the member instead.";
+
+/**
+ * Records the database keeps (on delete restrict) and so refuses the delete
+ * for: on-chain payments (migration 046), and admin cancel records (059),
+ * which keep the subscription they cancel and the admin who asked. Checked
+ * before the door code is cleared, so a refused delete leaves it alone.
+ * Throws if it can't tell.
+ */
+async function hasKeptHistory(admin: ReturnType<typeof createServiceClient>, memberId: number) {
+  const count = async (query: PromiseLike<{ count: number | null; error: unknown }>) => {
+    const { count: n, error } = await query;
+    if (error) throw error;
+    return n ?? 0;
+  };
+  const head = { count: "exact", head: true } as const;
+  if (await count(admin.from("onchain_payments").select("id", head).eq("member_id", memberId))) return true;
+  if (await count(admin.from("admin_cancel_operations").select("id", head).eq("actor_member_id", memberId))) return true;
+  const { data: subs, error } = await admin.from("subscriptions").select("id").eq("member_id", memberId);
+  if (error) throw error;
+  const ids = (subs ?? []).map((sub) => sub.id as number);
+  return ids.length > 0 && await count(admin.from("admin_cancel_operations").select("id", head).in("subscription_id", ids)) > 0;
+}
+
 async function nextFreeSlot(
   supabase: Awaited<ReturnType<typeof createClient>>
 ): Promise<number | null> {
@@ -182,6 +207,18 @@ export async function DELETE(
       .eq("id", Number(id))
       .single();
 
+    // Service-role client for the write (members DELETE/UPDATE are revoked from
+    // the authenticated role — migration 031). Route is requireAdmin-gated.
+    const admin = createServiceClient();
+    let kept: boolean;
+    try {
+      kept = await hasKeptHistory(admin, Number(id));
+    } catch (err) {
+      console.error("[AdminMember DELETE] history check failed:", err);
+      return NextResponse.json({ error: "Couldn't check this member's billing records; nothing was changed. Try again." }, { status: 500 });
+    }
+    if (kept) return NextResponse.json({ error: KEPT_HISTORY }, { status: 409 });
+
     // Clear the lock code if they have a slot assigned
     let lockStatus: string | null = null;
     if (member?.pin_code_slot) {
@@ -193,10 +230,6 @@ export async function DELETE(
         return NextResponse.json({ error: "Member retained: PIN slot quarantined. Retry clear in Lock Sync." }, { status: 502 });
       }
     }
-
-    // Service-role client for the write (members DELETE/UPDATE are revoked from
-    // the authenticated role — migration 031). Route is requireAdmin-gated.
-    const admin = createServiceClient();
 
     // Deleting a member never touches auth.users or applications (see
     // migration 050) — if this email can still sign in, or has an application
@@ -238,6 +271,11 @@ export async function DELETE(
       .eq("id", Number(id));
 
     if (error) {
+      // A foreign key that keeps history (on-chain payments, admin cancel records) refused it.
+      if (error.code === "23503") {
+        const cleared = lockStatus ? " Their door code was already cleared; run Lock Sync if they should keep it." : "";
+        return NextResponse.json({ error: KEPT_HISTORY + cleared }, { status: 409 });
+      }
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 

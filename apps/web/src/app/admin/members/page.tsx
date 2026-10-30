@@ -11,6 +11,7 @@ import { MembershipSyncButton } from "@/components/admin/MembershipSyncButton";
 import type { AdminUsersResponse, AdminUser, AdminUserSubscription } from "@/app/api/admin/users/route";
 import type { Member } from "@/lib/supabase/types";
 import { effectiveMonthlyCents } from "@/lib/stripeNet";
+import { matchesStatusFilter } from "@/lib/adminMemberFilters";
 
 function subBadge(sub: AdminUserSubscription | null) {
   if (!sub) return null;
@@ -18,7 +19,7 @@ function subBadge(sub: AdminUserSubscription | null) {
   if (sub.status === "past_due") {
     return (
       <Badge className="text-sm bg-red-500/20 text-red-400 border-red-500/30" title="Payment failed">
-        {dollars} · past due
+        {dollars} · past due{sub.payment_rail === "onchain" ? " · crypto" : ""}
       </Badge>
     );
   }
@@ -258,6 +259,10 @@ export default function UsersPage() {
   const handleStatusChange = (v: string) => { setStatusFilter(v); setPage(0); };
 
   const noProfileCount = data?.users.filter((u) => !u.member).length ?? 0;
+  const overdueCount = data
+    ? data.users.filter((u) => matchesStatusFilter(u.member, u.subscription, "overdue")).length +
+      data.legacyMembers.filter((m) => matchesStatusFilter(m, m.subscription, "overdue")).length
+    : 0;
 
   // Client-side search + filter
   const filteredUsers = useMemo(() => {
@@ -272,15 +277,7 @@ export default function UsersPage() {
     }
 
     // Status filter
-    if (statusFilter === "active") {
-      result = result.filter((u) => u.member && !u.member.disabled);
-    } else if (statusFilter === "disabled") {
-      result = result.filter((u) => u.member?.disabled);
-    } else if (statusFilter === "no_subscription") {
-      // Migration backlog: a member exists, isn't disabled, but has no active
-      // Stripe subscription. Useful for working through Xero→Stripe moves.
-      result = result.filter((u) => u.member && !u.member.disabled && !u.subscription);
-    }
+    result = result.filter((u) => matchesStatusFilter(u.member, u.subscription, statusFilter));
 
     // Search
     if (search.trim()) {
@@ -307,13 +304,7 @@ export default function UsersPage() {
     }
 
     // Status filter
-    if (statusFilter === "active") {
-      result = result.filter((m) => !m.disabled);
-    } else if (statusFilter === "disabled") {
-      result = result.filter((m) => m.disabled);
-    } else if (statusFilter === "no_subscription") {
-      result = result.filter((m) => !m.disabled && !m.subscription);
-    }
+    result = result.filter((m) => matchesStatusFilter(m, m.subscription, statusFilter));
 
     // Search
     if (search.trim()) {
@@ -389,6 +380,7 @@ export default function UsersPage() {
             <option value="active">Active</option>
             <option value="disabled">Disabled</option>
             <option value="no_subscription">No subscription (migration backlog)</option>
+            <option value="overdue">Overdue — past due, card or crypto ({overdueCount})</option>
           </select>
         </div>
       )}
