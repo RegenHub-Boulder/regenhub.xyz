@@ -39,24 +39,22 @@ export type MemberRow = {
  * tooling that operates *on* a member — /changetype, /coop — passes
  * `{ includeDisabled: true }` so it can still reach those rows.
  */
+/** Defaults to the service client; tests pass a real-Postgres stand-in. */
+type LookupOpts = { includeDisabled?: boolean; client?: Pick<typeof db, "from"> };
+
 export async function findMemberByTelegram(
   username: string,
-  opts: { includeDisabled?: boolean } = {},
+  opts: LookupOpts = {},
 ): Promise<MemberRow | null> {
   const p = telegramIlikePatterns(username);
   if (!p) return null;
-  let q = db
+  let q = (opts.client ?? db)
     .from("members")
     .select("*")
     .or(`telegram_username.ilike.${p.bare},telegram_username.ilike.${p.withAt}`);
   if (!opts.includeDisabled) q = q.eq("disabled", false);
   const { data } = await q.limit(1).maybeSingle();
   return data ?? null;
-}
-
-export async function findAdminByTelegram(username: string): Promise<MemberRow | null> {
-  const member = await findMemberByTelegram(username);
-  return member?.is_admin && !member.disabled ? member : null;
 }
 
 /**
@@ -74,13 +72,14 @@ export async function findAdminByTelegram(username: string): Promise<MemberRow |
  */
 export async function resolveSender(
   from: { id?: number; username?: string } | undefined,
-  opts: { includeDisabled?: boolean } = {},
+  opts: LookupOpts = {},
 ): Promise<MemberRow | null> {
+  const client = opts.client ?? db;
   const username = from?.username ?? "";
   const senderId = from?.id;
 
   if (senderId !== undefined) {
-    let q = db.from("members").select("*").eq("telegram_user_id", senderId);
+    let q = client.from("members").select("*").eq("telegram_user_id", senderId);
     if (!opts.includeDisabled) q = q.eq("disabled", false);
     const { data, error } = await q.limit(1).maybeSingle();
     if (!error && data) return data;
@@ -98,7 +97,7 @@ export async function resolveSender(
     return null;
   }
   // bind — conditional on still being NULL so two racing senders can't both win
-  const { data: bound } = await db
+  const { data: bound } = await client
     .from("members")
     .update({ telegram_user_id: senderId })
     .eq("id", row.id)
@@ -114,7 +113,10 @@ export async function resolveSender(
   return { ...row, telegram_user_id: senderId };
 }
 
-export async function resolveAdminSender(from: { id?: number; username?: string } | undefined): Promise<MemberRow | null> {
-  const member = await resolveSender(from);
+export async function resolveAdminSender(
+  from: { id?: number; username?: string } | undefined,
+  opts: Pick<LookupOpts, "client"> = {},
+): Promise<MemberRow | null> {
+  const member = await resolveSender(from, opts);
   return member?.is_admin && !member.disabled ? member : null;
 }

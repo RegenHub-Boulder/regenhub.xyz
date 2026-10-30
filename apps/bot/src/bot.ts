@@ -416,17 +416,10 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
       .eq("id", claimId);
 
     // If approving for membership too, flip the flag on the member.
-    // Resolve approver's member.id by their telegram username for audit.
+    // Resolve approver's member.id for audit, by Telegram id first (a recycled
+    // handle must not be credited with someone else's approval).
     if (withMembership) {
-      let approverMemberId: number | null = null;
-      if (username) {
-        const { data: approverMember } = await db
-          .from("members")
-          .select("id")
-          .eq("telegram_username", username)
-          .maybeSingle();
-        approverMemberId = approverMember?.id ?? null;
-      }
+      const approverMemberId = (await resolveSender(query.from))?.id ?? null;
       const { error: flagErr } = await db
         .from("members")
         .update({
@@ -487,16 +480,9 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
     }
     const approver = username ? `@${username}` : query.from.first_name;
 
-    // Resolve approver's member.id for the audit trail (nullable if unknown).
-    let approverMemberId: number | null = null;
-    if (username) {
-      const { data: approverMember } = await db
-        .from("members")
-        .select("id")
-        .eq("telegram_username", username)
-        .maybeSingle();
-      approverMemberId = approverMember?.id ?? null;
-    }
+    // Resolve approver's member.id for the audit trail (nullable if unknown),
+    // by Telegram id first, like every other sender check.
+    const approverMemberId = (await resolveSender(query.from))?.id ?? null;
 
     // Carry the applicant's Telegram handle onto the member row so the bot
     // recognizes them (/mycode etc.). The unique index on telegram_username
