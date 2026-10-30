@@ -18,7 +18,7 @@ export type MemberRow = {
   name: string;
   email: string | null;
   telegram_username: string | null;
-  /** Numeric Telegram id, bound on first verified interaction (migration 056). */
+  /** Numeric Telegram id, bound on first verified interaction (migration 061). */
   telegram_user_id?: number | string | null;
   pin_code: string | null;
   pin_code_slot: number | null;
@@ -66,7 +66,7 @@ export async function findAdminByTelegram(username: string): Promise<MemberRow |
  * - Otherwise match by @username; an unbound row is bound to `from.id` now
  *   (trust on first use), a row bound to a DIFFERENT id is refused — that is a
  *   recycled handle — and is logged.
- * - If migration 056 isn't applied (no telegram_user_id column) this degrades
+ * - If migration 061 isn't applied (no telegram_user_id column) this degrades
  *   to the old username-only behaviour.
  *
  * Use for every "who is the sender" check. Admin tooling that looks up a

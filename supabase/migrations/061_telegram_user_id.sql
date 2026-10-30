@@ -1,4 +1,4 @@
--- Migration 056: bind members to a numeric Telegram user id.
+-- Migration 061: bind members to a numeric Telegram user id.
 --
 -- The bot used to identify people by @username only. Telegram usernames are
 -- releasable and re-claimable, so a recycled handle inherited that member's
