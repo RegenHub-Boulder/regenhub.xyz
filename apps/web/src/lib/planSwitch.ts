@@ -77,6 +77,59 @@ export const CANCEL_IN_PROGRESS_MESSAGE = "Your membership is set to end, so the
 const SAVED_MESSAGE = "Stripe didn't confirm the switch. It's saved and finishes on its own within the hour; check back here, and you can cancel it then.";
 const NOTHING_CHANGED = "Stripe couldn't schedule the switch. Nothing changed; try again in a minute.";
 
+/**
+ * Card, any change other than desk → daily: swap the subscription's price now
+ * with `create_prorations`. Nothing is charged at once; Stripe credits the
+ * unused time at the old price and adds the rest of the period at the new
+ * price to the next renewal invoice. Discounts on the subscription carry over.
+ * The webhook mirrors the change into `subscriptions` (and member_type).
+ *
+ * `changed` is false when Stripe already runs `targetKey` (a retry after a
+ * change that went through), so repeating it never re-prices the period.
+ */
+export async function changeCardPlanNow(stripe: Stripe, stripeSubscriptionId: string, targetKey: string): Promise<{ changed: boolean }> {
+  const target = getPlan(targetKey);
+  if (!target) throw new PlanSwitchError("Unknown plan", 400);
+  let liveSub: Stripe.Subscription;
+  try {
+    liveSub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+  } catch (err) {
+    console.error("[ChangePlan] Failed to retrieve subscription:", err);
+    throw new PlanSwitchError("Could not load subscription", 502);
+  }
+  if (liveSub.metadata?.plan_key === targetKey) return { changed: false };
+  const existingItem = liveSub.items.data[0];
+  if (!existingItem) throw new PlanSwitchError("Subscription has no items?", 500);
+
+  const productIdForUpdate = await resolvePlanProduct(stripe, targetKey, target);
+  try {
+    await stripe.subscriptions.update(stripeSubscriptionId, {
+      items: [
+        {
+          id: existingItem.id,
+          price_data: {
+            currency: "usd",
+            product: productIdForUpdate,
+            unit_amount: target.defaultMonthlyCents,
+            recurring: { interval: "month" },
+          },
+        },
+      ],
+      proration_behavior: "create_prorations",
+      metadata: {
+        ...(liveSub.metadata ?? {}),
+        plan_key: targetKey,
+        monthly_cents: String(target.defaultMonthlyCents),
+        last_change_at: new Date().toISOString(),
+      },
+    });
+  } catch (err) {
+    console.error("[ChangePlan] Stripe update failed:", err);
+    throw new PlanSwitchError(err instanceof Error ? err.message : "Plan change failed", 502);
+  }
+  return { changed: true };
+}
+
 /** True when moving from `from` to `to` leaves a desk for a daily plan. */
 export function isDeskToDaily(from: string, to: string): boolean {
   return isDeskPlan(from) && !isDeskPlan(to) && getPlan(to)?.grantsMemberType === "day_pass";
@@ -649,6 +702,11 @@ export function onchainSwitchColumns(
  * columns from a transition the cron has just consumed. `changed` is false
  * when no live on-chain row matched (or an admin cancel is marked, with
  * `refuseWhenCanceling`).
+ *
+ * A new plan also reprices, in the same transaction, an invoice already issued
+ * but not paid and with no payment on its way (migration 062's trigger).
+ * `issued` lists every unpaid invoice afterwards, so the caller can say which
+ * one moved and which kept its price.
  */
 export async function changeOnchainPlan(
   admin: ServiceClient,
@@ -670,21 +728,51 @@ export async function changeOnchainPlan(
     if (args.refuseWhenCanceling) update = update.is("admin_cancel_mode", null);
     const { data: changed, error: updateError } = await update.select("id").maybeSingle();
     if (updateError) throw updateError;
-    return { changed: !!changed, canceling: sub.admin_cancel_mode != null, from: sub.plan_key, changes, switchColumns };
+    let issued: IssuedInvoice[] = [];
+    if (changed && target) {
+      const { data: invoices, error: invoiceError } = await admin.from("onchain_invoices")
+        .select("id, period_start, plan_key, amount_cents, status")
+        .eq("subscription_id", sub.id).in("status", ["open", "submitted", "detected"]).order("period_start");
+      if (invoiceError) throw invoiceError;
+      issued = (invoices ?? []) as IssuedInvoice[];
+    }
+    return { changed: !!changed, canceling: sub.admin_cancel_mode != null, from: sub.plan_key, changes, switchColumns, issued };
   }, "On-chain plan change");
+}
+
+/** An issued, unpaid invoice of an on-chain subscription, as a plan change left it. */
+export type IssuedInvoice = { id: number; period_start: string; plan_key: string | null; amount_cents: number; status: string };
+
+const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+const shortDate = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Denver" });
+
+/** What a plan change did to invoices already issued: repriced, or kept because a payment is on its way. */
+function issuedInvoiceLines(issued: IssuedInvoice[], targetKey: string, canceling = false): string[] {
+  return issued.map((invoice) => {
+    const period = `your invoice for the period from ${shortDate(invoice.period_start)}`;
+    const kept = `so it keeps its price (${dollars(invoice.amount_cents)})`;
+    if (canceling) return `The membership is set to end, so ${period} keeps its price (${dollars(invoice.amount_cents)}).`;
+    if (invoice.status !== "open") return `A payment for ${period} is already on its way, ${kept}; ${planLabel(targetKey)} applies from the invoice after it.`;
+    if (invoice.plan_key === targetKey) return `${period[0].toUpperCase()}${period.slice(1)} is now ${dollars(invoice.amount_cents)}.`;
+    return `A payment for ${period} has already been authorized, ${kept}; ${planLabel(targetKey)} applies from the invoice after it.`;
+  });
 }
 
 /**
  * What an on-chain plan change does, for the member or admin who made it.
  * Leaving a desk keeps it to the end of the period paid for; any other change
- * prices the next invoice and applies once that invoice is paid.
+ * prices the next unpaid invoice (an issued one is repriced, migration 062)
+ * and applies once that invoice is paid.
  */
-export function onchainChangeMessage(columns: ReturnType<typeof onchainSwitchColumns>, targetKey: string): string {
+export function onchainChangeMessage(columns: ReturnType<typeof onchainSwitchColumns>, targetKey: string, issued: IssuedInvoice[] = [], canceling = false): string {
+  const invoices = issuedInvoiceLines(issued, targetKey, canceling);
   if ("pending_plan_key" in columns && columns.pending_plan_key && columns.pending_plan_at && columns.pending_plan_from) {
-    const date = new Date(columns.pending_plan_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Denver" });
-    return `Saved. ${planLabel(columns.pending_plan_from)} and its door code stay until ${date}, the end of the period already paid for; ${planLabel(targetKey)} starts then and is billed on the next invoice.`;
+    return [
+      `Saved. ${planLabel(columns.pending_plan_from)} and its door code stay until ${shortDate(columns.pending_plan_at)}, the end of the period already paid for; ${planLabel(targetKey)} starts then and is billed on the next invoice.`,
+      ...invoices,
+    ].join(" ");
   }
-  return "Saved for the next invoice. Issued invoices keep their price; the new plan applies once that invoice is paid.";
+  return ["Saved. Your next unpaid invoice is priced at the new plan, and the new plan applies once that invoice is paid.", ...invoices].join(" ");
 }
 
 export type SwitchLanded = Pick<DowngradeResult, "revokedSlot" | "lockStatus" | "lockRevokeFailed">;

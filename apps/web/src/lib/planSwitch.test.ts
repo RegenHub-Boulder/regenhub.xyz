@@ -955,6 +955,7 @@ describe("upgrades and daily ↔ daily are unchanged", () => {
 
   it("daily → desk upgrades now, and the webhook grants a door code", async () => {
     await seed({ plan: "member_basic" });
+    stripe.subscriptions.retrieve.mockResolvedValue(stripeSub("member_basic"));
     expect((await pick("hot_desk")).status).toBe(200);
     expect(stripe.subscriptions.update).toHaveBeenCalledWith("sub_test_50", expect.objectContaining({ proration_behavior: "create_prorations" }));
     expect(stripe.subscriptionSchedules.create).not.toHaveBeenCalled();
@@ -1176,5 +1177,86 @@ describe("crypto (on-chain): Hot Desk → Member + 2 days/mo", () => {
     const result = await cancelMembership(db as never, { memberId: 7, actorMemberId: 1, mode: "now", reason: null, voidOpenInvoices: false });
     expect(result.door).toMatchObject({ revokedSlot: 12 });
     expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+  });
+});
+
+// Reported 2026-11: a member moved her crypto membership to the $30 plan and was
+// billed again at the old rate. The renewal invoice is issued ONCHAIN_REMINDER_DAYS
+// (7) before the period ends, with a reminder; a change made after that (often
+// because of that reminder) only priced the invoice after the open one.
+describe("crypto (on-chain): a plan change after the renewal invoice was issued", () => {
+  const openInvoice = () => one("select id, status, plan_key, base_amount_cents, amount_cents, amount_usdc_micros from onchain_invoices where subscription_id = 50 and status <> 'paid' order by period_start");
+  async function issueRenewal(plan: string) {
+    await seed({ rail: "onchain", plan });
+    const [invoice] = await generateUpcomingOnchainInvoices(db as never) as { id: number; amount_cents: number; plan_key: string }[];
+    expect(invoice).toMatchObject({ plan_key: plan, amount_cents: CENTS[plan] });
+    return invoice;
+  }
+
+  it("a daily → $30 change reprices the open renewal invoice, and paying it credits the $30 plan", async () => {
+    const issued = await issueRenewal("member_2day");
+    const picked = await pick("member_basic");
+    expect(picked.status).toBe(200);
+    expect((await picked.json()).message).toMatch(/\$30\.00/);
+    expect(await openInvoice()).toMatchObject({ id: issued.id, status: "open", plan_key: "member_basic", base_amount_cents: 3000, amount_cents: 3000, amount_usdc_micros: 30_000_000 });
+
+    chainPays(30_000_000n);
+    const paid = await submitPayment(new Request("http://localhost/api/portal/onchain/submit", {
+      method: "POST", body: JSON.stringify({ invoice_id: issued.id, tx_hash: TX }),
+    }));
+    expect((await paid.json()).status).toBe("paid");
+    expect(await sub()).toMatchObject({ plan_key: "member_basic", monthly_cents: 3000, net_cents: 3000 });
+  });
+
+  it("a desk → daily change reprices the open desk invoice; the desk still ends with its paid period", async () => {
+    const issued = await issueRenewal("hot_desk");
+    expect((await pick("member_2day")).status).toBe(200);
+    expect(await openInvoice()).toMatchObject({ id: issued.id, plan_key: "member_2day", amount_cents: 5000 });
+    expect(await sub()).toMatchObject({ plan_key: "member_2day", pending_plan_key: "member_2day", pending_plan_from: "hot_desk" });
+  });
+
+  it("an invoice with a payment on its way keeps its price, and the member is told", async () => {
+    const issued = await issueRenewal("member_2day");
+    await db.sql("update onchain_invoices set status = 'submitted', submitted_tx_hash = $1, submitted_at = now() where id = $2", [TX, issued.id]);
+    const picked = await pick("member_basic");
+    expect(picked.status).toBe(200);
+    expect((await picked.json()).message).toMatch(/already on its way, so it keeps its price/);
+    expect(await openInvoice()).toMatchObject({ id: issued.id, plan_key: "member_2day", amount_cents: 5000 });
+  });
+
+  it("a plan and discount-code change made together reprices the issued invoice with the code the subscription had before the edit", async () => {
+    await seed({ rail: "onchain", plan: "member_2day" });
+    await db.sql(`update subscriptions set onchain_coupon = '{"code":"KEEP","duration":"forever","percent_off":20,"plan_keys":[]}' where id = 50`);
+    const [issued] = await generateUpcomingOnchainInvoices(db as never) as { id: number }[];
+    expect(await openInvoice()).toMatchObject({ id: issued.id, amount_cents: 4000 });
+
+    // Removing the code in the same edit doesn't take it off the issued invoice...
+    await db.sql("update subscriptions set plan_key = 'member_basic', monthly_cents = 3000, onchain_coupon = null where id = 50");
+    expect(await one("select plan_key, amount_cents, coupon_code from onchain_invoices where id = $1", [issued.id]))
+      .toEqual({ plan_key: "member_basic", amount_cents: 2400, coupon_code: "KEEP" });
+    // ...and a new once-code isn't spent on it.
+    await db.sql(`update subscriptions set plan_key = 'member_5day', monthly_cents = 10000,
+      onchain_coupon = '{"code":"ONCE","duration":"once","percent_off":50,"plan_keys":[]}' where id = 50`);
+    expect(await one("select plan_key, amount_cents, coupon_code from onchain_invoices where id = $1", [issued.id]))
+      .toEqual({ plan_key: "member_5day", amount_cents: 10000, coupon_code: null });
+    expect(await one("select onchain_coupon_start from subscriptions where id = 50")).toEqual({ onchain_coupon_start: null });
+  });
+
+  it("a signed gasless authorization keeps the invoice's price; an unsigned one is expired and the invoice repriced", async () => {
+    const issued = await issueRenewal("member_2day");
+    const job = (status: string) => db.sql(`insert into onchain_relay_jobs (invoice_id, member_id, wallet_id, from_address, token_contract, treasury_address,
+        amount_usdc_micros, authorization_nonce, valid_after, valid_before, status, authorization_from_block)
+      values ($1, 7, 3, $2, $3, $4, 50000000, $5, 0, 9999999999, $6, 1)
+      on conflict (invoice_id) do update set status = excluded.status`,
+    [issued.id, WALLET, NATIVE_USDC_ADDRESS, TREASURY_ADDRESS, `0x${"d".repeat(64)}`, status]);
+
+    await job("signed");
+    expect((await pick("member_basic")).status).toBe(200);
+    expect(await openInvoice()).toMatchObject({ amount_cents: 5000, plan_key: "member_2day" });
+
+    await job("prepared");
+    expect((await pick("member_5day")).status).toBe(200);
+    expect(await openInvoice()).toMatchObject({ amount_cents: 10000, plan_key: "member_5day" });
+    expect(await one("select status from onchain_relay_jobs where invoice_id = $1", [issued.id])).toEqual({ status: "expired" });
   });
 });

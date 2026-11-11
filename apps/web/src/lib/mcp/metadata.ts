@@ -1,7 +1,7 @@
 /** OAuth metadata for the RegenHub MCP. Issuer = the site origin; endpoints live
  *  under /oauth/*, the resource is /mcp. Scopes anticipate the per-tier surface. */
 
-export const MCP_SCOPES = ["read", "deploy", "locks", "migrate"] as const;
+export const MCP_SCOPES = ["read", "deploy", "locks", "migrate", "billing"] as const;
 
 export type McpScope = (typeof MCP_SCOPES)[number];
 
