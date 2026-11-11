@@ -6,7 +6,17 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import type { McpAuthInfo } from "./oauth";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { getStripe, isStripeConfigured } from "@/lib/stripe";
+import { getStripe, isStripeConfigured, PLANS, type KnownPlanKey } from "@/lib/stripe";
+import {
+  billingSummaryHandler,
+  cancelSubscriptionHandler,
+  changeMemberPlanHandler,
+  DESCRIPTIONS,
+  getMemberBillingHandler,
+  listMembersHandler,
+  listOpenInvoicesHandler,
+  voidStripeInvoiceHandler,
+} from "./billingTools";
 import { sendApplicationCheckoutEmail } from "@/lib/applicationCheckout";
 import { siteOrigin } from "./metadata";
 import {
@@ -17,7 +27,7 @@ import {
 } from "./migrationTools";
 
 const SERVER_NAME = "regenhub";
-const SERVER_VERSION = "0.5.0";
+const SERVER_VERSION = "0.6.0";
 
 /**
  * Build the MCP tool surface. Phase 1 = `ping`. Future tools gate on the caller's
@@ -209,12 +219,89 @@ function buildServer(auth: McpAuthInfo): McpServer {
     async ({ filename }) => runMigrationHandler(auth, filename),
   );
 
+  // ── members + billing (T-445): reads need `read`; writes need `billing`, confirm: true and a live admin ──
+  const callerAuth = (extra: { authInfo?: AuthInfo }): McpAuthInfo => {
+    // The per-request token decides scopes; the session is bound to its member (handleMcpRequest).
+    const info = extra.authInfo;
+    return info
+      ? { ...auth, token: info.token, clientId: info.clientId, scopes: info.scopes, extra: (info.extra as McpAuthInfo["extra"] | undefined) ?? auth.extra }
+      : auth;
+  };
+  const sb = () => createServiceClient();
+  const READ = { readOnlyHint: true, openWorldHint: false } as const;
+  const WRITE = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true } as const;
+  const confirm = z.boolean().optional().describe("Must be true to act. Without it the tool only previews what it would do.");
+
+  server.registerTool("list_members", {
+    description: DESCRIPTIONS.list_members,
+    annotations: READ,
+    inputSchema: {
+      search: z.string().max(100).optional().describe("Part of a name, email or Telegram handle"),
+      plan_key: z.string().optional().describe("e.g. member_basic, member_2day, member_5day, hot_desk, cold_desk"),
+      status: z.enum(["active", "trialing", "past_due", "canceled", "incomplete", "none"]).optional(),
+      rail: z.enum(["stripe", "onchain"]).optional().describe("stripe = card, onchain = crypto (USDC)"),
+      include_disabled: z.boolean().optional(),
+      limit: z.number().int().min(1).max(200).optional().describe("Default 50"),
+    },
+  }, async (args, extra) => listMembersHandler(sb(), callerAuth(extra), args));
+
+  server.registerTool("get_member_billing", {
+    description: DESCRIPTIONS.get_member_billing,
+    annotations: READ,
+    inputSchema: {
+      member_id: z.number().int().positive().optional().describe("members.id (from list_members)"),
+      email: z.string().email().optional().describe("The member's email, if you don't have the id"),
+    },
+  }, async (args, extra) => getMemberBillingHandler(sb(), callerAuth(extra), args));
+
+  server.registerTool("list_open_invoices", { description: DESCRIPTIONS.list_open_invoices, annotations: READ },
+    async (extra) => listOpenInvoicesHandler(sb(), callerAuth(extra)));
+
+  server.registerTool("billing_summary", { description: DESCRIPTIONS.billing_summary, annotations: READ },
+    async (extra) => billingSummaryHandler(sb(), callerAuth(extra)));
+
+  server.registerTool("void_stripe_invoice", {
+    description: DESCRIPTIONS.void_stripe_invoice,
+    annotations: WRITE,
+    inputSchema: {
+      invoice_id: z.string().regex(/^in_[A-Za-z0-9]+$/, "a Stripe invoice id, in_…").describe("Stripe invoice id (in_…), from list_open_invoices"),
+      reason: z.string().min(3).max(500).describe("Why it's being voided; goes in the audit row"),
+      confirm,
+    },
+  }, async (args, extra) => voidStripeInvoiceHandler(sb(), callerAuth(extra), args));
+
+  server.registerTool("cancel_subscription", {
+    description: DESCRIPTIONS.cancel_subscription,
+    annotations: WRITE,
+    inputSchema: {
+      member_id: z.number().int().positive().describe("members.id"),
+      subscription_id: z.number().int().positive().optional().describe("subscriptions.id; defaults to the member's live one"),
+      mode: z.enum(["now", "period_end"]).describe("'now' ends access at once; 'period_end' stops renewal"),
+      reason: z.string().min(3).max(500).describe("Why; goes in the audit rows"),
+      void_open_invoices: z.boolean().optional().describe("Also void this subscription's open unpaid invoices"),
+      confirm,
+    },
+  }, async (args, extra) => cancelSubscriptionHandler(sb(), callerAuth(extra), args));
+
+  server.registerTool("change_member_plan", {
+    description: DESCRIPTIONS.change_member_plan,
+    annotations: WRITE,
+    inputSchema: {
+      member_id: z.number().int().positive().describe("members.id"),
+      plan_key: z.enum(Object.keys(PLANS) as [KnownPlanKey, ...KnownPlanKey[]]).describe("Target plan"),
+      confirm,
+    },
+  }, async (args, extra) => changeMemberPlanHandler(sb(), callerAuth(extra), args));
+
   return server;
 }
 
 // One transport per active session, keyed by Mcp-Session-Id. Persists in the
 // long-running Next server (single instance) for the initialize→tools/call handshake.
 const transports: Record<string, WebStandardStreamableHTTPServerTransport> = {};
+// Who opened each session. A session's tools act as that member, so another
+// member's token can't ride it even if the session id leaks.
+const sessionOwners: Record<string, number> = {};
 
 /**
  * Handle an MCP request (POST/GET/DELETE) using the SDK's Web-Standard transport,
@@ -229,6 +316,13 @@ export async function handleMcpRequest(request: Request, auth: McpAuthInfo, pars
   const sessionId = request.headers.get("mcp-session-id") ?? undefined;
   let transport = sessionId ? transports[sessionId] : undefined;
 
+  if (transport && sessionId && sessionOwners[sessionId] !== auth.extra.memberId) {
+    return Response.json(
+      { jsonrpc: "2.0", error: { code: -32000, message: "Forbidden: this session belongs to another account" }, id: null },
+      { status: 403 },
+    );
+  }
+
   if (!transport) {
     if (sessionId || !isInitializeRequest(parsedBody)) {
       return Response.json(
@@ -239,8 +333,8 @@ export async function handleMcpRequest(request: Request, auth: McpAuthInfo, pars
     const t = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       enableJsonResponse: true,
-      onsessioninitialized: (sid) => { transports[sid] = t; },
-      onsessionclosed: (sid) => { delete transports[sid]; },
+      onsessioninitialized: (sid) => { transports[sid] = t; sessionOwners[sid] = auth.extra.memberId; },
+      onsessionclosed: (sid) => { delete transports[sid]; delete sessionOwners[sid]; },
     });
     transport = t;
     await buildServer(auth).connect(transport);

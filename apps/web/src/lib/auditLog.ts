@@ -55,6 +55,9 @@ export const AuditAction = {
   // On-chain payments
   /** A member reported a transaction for an invoice already voided (unverified): check it on chain, refund by hand. */
   ONCHAIN_PAYMENT_AFTER_VOID: "onchain_payment_after_void",
+  // MCP
+  /** A write tool of the RegenHub MCP (lib/mcp/billingTools.ts): written before it acts, outcome filled in after. */
+  MCP_BILLING_WRITE: "mcp_billing_write",
 } as const;
 
 export type AuditAction = (typeof AuditAction)[keyof typeof AuditAction];
