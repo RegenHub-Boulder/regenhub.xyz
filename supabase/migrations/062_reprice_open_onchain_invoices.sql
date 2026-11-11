@@ -79,7 +79,14 @@ $$;
 -- Returns what moved. Called by the trigger below on a plan change, and
 -- directly (service role) to repair an invoice issued before this migration
 -- for a member who had already changed plan.
-create function reprice_open_onchain_invoices(p_subscription_id integer)
+--
+-- p_keep_coupon: price with the coupon the subscription had BEFORE this update
+-- (p_coupon / p_coupon_start), for an update that changes the plan and the
+-- discount code together. A new code applies from the next invoice issued, as
+-- the admin editor says: it is not spent on, and a removed code is not taken
+-- off, an invoice already issued.
+create function reprice_open_onchain_invoices(p_subscription_id integer, p_keep_coupon boolean default false,
+  p_coupon jsonb default null, p_coupon_start timestamptz default null)
 returns table (invoice_id bigint, old_amount_cents integer, new_amount_cents integer, plan_key text)
 language plpgsql security definer set search_path = public as $$
 declare
@@ -93,6 +100,10 @@ begin
   select * into s from subscriptions where id = p_subscription_id for update;
   if not found or s.payment_rail <> 'onchain' or not subscription_is_live(s.status) or s.admin_cancel_mode is not null then
     return;
+  end if;
+  if p_keep_coupon then
+    s.onchain_coupon := p_coupon;
+    s.onchain_coupon_start := p_coupon_start;
   end if;
   for inv in
     select * from onchain_invoices oi
@@ -115,7 +126,7 @@ begin
       update onchain_relay_jobs set status = 'expired', last_error = 'invoice repriced by a plan change; sign again'
         where onchain_relay_jobs.invoice_id = inv.id and status = 'prepared';
     end if;
-    if q.coupon_start is not null and s.onchain_coupon_start is null then
+    if q.coupon_start is not null and s.onchain_coupon_start is null and not p_keep_coupon then
       update subscriptions set onchain_coupon_start = q.coupon_start where id = s.id and onchain_coupon_start is null;
       s.onchain_coupon_start := q.coupon_start;
     end if;
@@ -129,7 +140,11 @@ create function reprice_on_onchain_plan_change() returns trigger
 language plpgsql set search_path = public as $$
 begin
   if new.plan_key is distinct from old.plan_key or new.monthly_cents is distinct from old.monthly_cents then
-    perform reprice_open_onchain_invoices(new.id);
+    if (new.onchain_coupon - 'stripe_redemptions') is distinct from (old.onchain_coupon - 'stripe_redemptions') then
+      perform reprice_open_onchain_invoices(new.id, true, old.onchain_coupon, old.onchain_coupon_start);
+    else
+      perform reprice_open_onchain_invoices(new.id);
+    end if;
   end if;
   return null;
 end;
@@ -139,6 +154,8 @@ create trigger reprice_open_onchain_invoices after update of plan_key, monthly_c
   for each row when (new.payment_rail = 'onchain') execute function reprice_on_onchain_plan_change();
 
 revoke all on function onchain_invoice_price(subscriptions, timestamptz, integer) from public, anon, authenticated;
-revoke all on function reprice_open_onchain_invoices(integer) from public, anon, authenticated;
-grant execute on function reprice_open_onchain_invoices(integer) to service_role;
+-- price_onchain_invoice (not security definer) calls it on every invoice insert, made as service_role.
+grant execute on function onchain_invoice_price(subscriptions, timestamptz, integer) to service_role;
+revoke all on function reprice_open_onchain_invoices(integer, boolean, jsonb, timestamptz) from public, anon, authenticated;
+grant execute on function reprice_open_onchain_invoices(integer, boolean, jsonb, timestamptz) to service_role;
 revoke all on function reprice_on_onchain_plan_change() from public, anon, authenticated;

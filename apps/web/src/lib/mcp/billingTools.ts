@@ -612,10 +612,14 @@ export async function changeMemberPlanHandler(admin: ServiceClient, auth: McpAut
     const auditArgs = { member_id: args.member_id, plan_key: args.plan_key, subscription_id: sub.id, reprice_only: true };
     const auditId = await auditStart(admin, gate.actor, tool, { table: "subscriptions", id: sub.id }, auditArgs);
     if (auditId == null) return fail(AUDIT_UNAVAILABLE);
-    const { data, error } = await withLockWriter(admin, async () => admin.rpc("reprice_open_onchain_invoices", { p_subscription_id: sub.id }), "MCP reprice");
-    if (error) {
-      await auditFinish(admin, auditId, tool, auditArgs, "failed", { error: error.message });
-      return fail(`Repricing failed: ${error.message}. Nothing was changed.`);
+    let data: unknown;
+    try {
+      const result = await withLockWriter(admin, async () => admin.rpc("reprice_open_onchain_invoices", { p_subscription_id: sub.id }), "MCP reprice");
+      if (result.error) throw result.error;
+      data = result.data;
+    } catch (e) {
+      await auditFinish(admin, auditId, tool, auditArgs, "failed", { error: errorText(e) });
+      return fail(`Repricing failed: ${errorText(e)}. Nothing was changed; retrying is safe.`);
     }
     const moved = (data ?? []) as { invoice_id: number; old_amount_cents: number; new_amount_cents: number }[];
     const warning = await auditFinish(admin, auditId, tool, auditArgs, moved.length ? "repriced" : "nothing_to_reprice", { repriced: moved });

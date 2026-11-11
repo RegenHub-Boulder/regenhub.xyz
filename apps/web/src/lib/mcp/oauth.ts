@@ -68,8 +68,10 @@ export async function getClient(clientId: string): Promise<OAuthClient | null> {
 }
 
 async function getMember(memberId: number) {
-  const { data } = await sb().from("members").select("is_admin, is_ops_admin, email").eq("id", memberId).maybeSingle();
-  return data as { is_admin: boolean; is_ops_admin: boolean; email: string | null } | null;
+  const { data } = await sb().from("members").select("is_admin, is_ops_admin, email, disabled").eq("id", memberId).maybeSingle();
+  const m = data as { is_admin: boolean; is_ops_admin: boolean; email: string | null; disabled: boolean } | null;
+  // A disabled member is no ops admin, whatever the flag says.
+  return m && !m.disabled ? m : null;
 }
 
 // ── authorization codes (PKCE) ──────────────────────────────

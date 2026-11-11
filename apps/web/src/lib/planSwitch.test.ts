@@ -1224,6 +1224,24 @@ describe("crypto (on-chain): a plan change after the renewal invoice was issued"
     expect(await openInvoice()).toMatchObject({ id: issued.id, plan_key: "member_2day", amount_cents: 5000 });
   });
 
+  it("a plan and discount-code change made together reprices the issued invoice with the code the subscription had before the edit", async () => {
+    await seed({ rail: "onchain", plan: "member_2day" });
+    await db.sql(`update subscriptions set onchain_coupon = '{"code":"KEEP","duration":"forever","percent_off":20,"plan_keys":[]}' where id = 50`);
+    const [issued] = await generateUpcomingOnchainInvoices(db as never) as { id: number }[];
+    expect(await openInvoice()).toMatchObject({ id: issued.id, amount_cents: 4000 });
+
+    // Removing the code in the same edit doesn't take it off the issued invoice...
+    await db.sql("update subscriptions set plan_key = 'member_basic', monthly_cents = 3000, onchain_coupon = null where id = 50");
+    expect(await one("select plan_key, amount_cents, coupon_code from onchain_invoices where id = $1", [issued.id]))
+      .toEqual({ plan_key: "member_basic", amount_cents: 2400, coupon_code: "KEEP" });
+    // ...and a new once-code isn't spent on it.
+    await db.sql(`update subscriptions set plan_key = 'member_5day', monthly_cents = 10000,
+      onchain_coupon = '{"code":"ONCE","duration":"once","percent_off":50,"plan_keys":[]}' where id = 50`);
+    expect(await one("select plan_key, amount_cents, coupon_code from onchain_invoices where id = $1", [issued.id]))
+      .toEqual({ plan_key: "member_5day", amount_cents: 10000, coupon_code: null });
+    expect(await one("select onchain_coupon_start from subscriptions where id = 50")).toEqual({ onchain_coupon_start: null });
+  });
+
   it("a signed gasless authorization keeps the invoice's price; an unsigned one is expired and the invoice repriced", async () => {
     const issued = await issueRenewal("member_2day");
     const job = (status: string) => db.sql(`insert into onchain_relay_jobs (invoice_id, member_id, wallet_id, from_address, token_contract, treasury_address,
