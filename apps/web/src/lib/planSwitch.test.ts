@@ -955,6 +955,7 @@ describe("upgrades and daily ↔ daily are unchanged", () => {
 
   it("daily → desk upgrades now, and the webhook grants a door code", async () => {
     await seed({ plan: "member_basic" });
+    stripe.subscriptions.retrieve.mockResolvedValue(stripeSub("member_basic"));
     expect((await pick("hot_desk")).status).toBe(200);
     expect(stripe.subscriptions.update).toHaveBeenCalledWith("sub_test_50", expect.objectContaining({ proration_behavior: "create_prorations" }));
     expect(stripe.subscriptionSchedules.create).not.toHaveBeenCalled();

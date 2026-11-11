@@ -77,6 +77,59 @@ export const CANCEL_IN_PROGRESS_MESSAGE = "Your membership is set to end, so the
 const SAVED_MESSAGE = "Stripe didn't confirm the switch. It's saved and finishes on its own within the hour; check back here, and you can cancel it then.";
 const NOTHING_CHANGED = "Stripe couldn't schedule the switch. Nothing changed; try again in a minute.";
 
+/**
+ * Card, any change other than desk → daily: swap the subscription's price now
+ * with `create_prorations`. Nothing is charged at once; Stripe credits the
+ * unused time at the old price and adds the rest of the period at the new
+ * price to the next renewal invoice. Discounts on the subscription carry over.
+ * The webhook mirrors the change into `subscriptions` (and member_type).
+ *
+ * `changed` is false when Stripe already runs `targetKey` (a retry after a
+ * change that went through), so repeating it never re-prices the period.
+ */
+export async function changeCardPlanNow(stripe: Stripe, stripeSubscriptionId: string, targetKey: string): Promise<{ changed: boolean }> {
+  const target = getPlan(targetKey);
+  if (!target) throw new PlanSwitchError("Unknown plan", 400);
+  let liveSub: Stripe.Subscription;
+  try {
+    liveSub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+  } catch (err) {
+    console.error("[ChangePlan] Failed to retrieve subscription:", err);
+    throw new PlanSwitchError("Could not load subscription", 502);
+  }
+  if (liveSub.metadata?.plan_key === targetKey) return { changed: false };
+  const existingItem = liveSub.items.data[0];
+  if (!existingItem) throw new PlanSwitchError("Subscription has no items?", 500);
+
+  const productIdForUpdate = await resolvePlanProduct(stripe, targetKey, target);
+  try {
+    await stripe.subscriptions.update(stripeSubscriptionId, {
+      items: [
+        {
+          id: existingItem.id,
+          price_data: {
+            currency: "usd",
+            product: productIdForUpdate,
+            unit_amount: target.defaultMonthlyCents,
+            recurring: { interval: "month" },
+          },
+        },
+      ],
+      proration_behavior: "create_prorations",
+      metadata: {
+        ...(liveSub.metadata ?? {}),
+        plan_key: targetKey,
+        monthly_cents: String(target.defaultMonthlyCents),
+        last_change_at: new Date().toISOString(),
+      },
+    });
+  } catch (err) {
+    console.error("[ChangePlan] Stripe update failed:", err);
+    throw new PlanSwitchError(err instanceof Error ? err.message : "Plan change failed", 502);
+  }
+  return { changed: true };
+}
+
 /** True when moving from `from` to `to` leaves a desk for a daily plan. */
 export function isDeskToDaily(from: string, to: string): boolean {
   return isDeskPlan(from) && !isDeskPlan(to) && getPlan(to)?.grantsMemberType === "day_pass";

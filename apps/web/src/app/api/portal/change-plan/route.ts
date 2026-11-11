@@ -13,7 +13,7 @@ import {
   changeOnchainPlan,
   onchainChangeMessage,
   PlanSwitchError,
-  resolvePlanProduct,
+  changeCardPlanNow,
   scheduleDeskToDaily,
   SwitchAlreadyLandedError,
   type PendingSwitchRow,
@@ -180,51 +180,16 @@ export async function POST(req: Request) {
     }
   }
 
-  // Fetch the Stripe subscription to get the current item id (need it to swap)
-  const stripe = getStripe();
-  let liveSub;
+
+  // Swap the price now, with prorations (lib/planSwitch.ts). The webhook syncs
+  // our local subscriptions row from the customer.subscription.updated event.
   try {
-    liveSub = await stripe.subscriptions.retrieve(sub.stripe_subscription_id);
+    await changeCardPlanNow(getStripe(), sub.stripe_subscription_id, targetKey);
   } catch (err) {
-    console.error("[ChangePlan] Failed to retrieve subscription:", err);
-    return NextResponse.json({ error: "Could not load subscription" }, { status: 502 });
+    if (err instanceof PlanSwitchError) return NextResponse.json({ error: err.message }, { status: err.status });
+    console.error("[ChangePlan] Plan change failed:", err);
+    return NextResponse.json({ error: "Plan change failed" }, { status: 502 });
   }
-  const existingItem = liveSub.items.data[0];
-  if (!existingItem) {
-    return NextResponse.json({ error: "Subscription has no items?" }, { status: 500 });
-  }
-
-  const productIdForUpdate = await resolvePlanProduct(stripe, targetKey, target);
-
-  try {
-    await stripe.subscriptions.update(sub.stripe_subscription_id, {
-      items: [
-        {
-          id: existingItem.id,
-          price_data: {
-            currency: "usd",
-            product: productIdForUpdate,
-            unit_amount: target.defaultMonthlyCents,
-            recurring: { interval: "month" },
-          },
-        },
-      ],
-      proration_behavior: "create_prorations",
-      metadata: {
-        ...(liveSub.metadata ?? {}),
-        plan_key: targetKey,
-        monthly_cents: String(target.defaultMonthlyCents),
-        last_change_at: new Date().toISOString(),
-      },
-    });
-  } catch (err) {
-    console.error("[ChangePlan] Stripe update failed:", err);
-    const msg = err instanceof Error ? err.message : "Plan change failed";
-    return NextResponse.json({ error: msg }, { status: 502 });
-  }
-
-  // The webhook will sync our local subscriptions row from the customer.subscription.updated
-  // event. We don't need to update local state here.
 
   return NextResponse.json({
     ok: true,
