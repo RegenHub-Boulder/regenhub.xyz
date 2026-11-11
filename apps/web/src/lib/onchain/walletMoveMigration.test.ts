@@ -1,5 +1,5 @@
 import type { PGlite } from "@electric-sql/pglite";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   addInvoice, addMember, addOnchainSubscription, addRelayJob, createOnchainDb, linkWallet,
   migration, one, rows, syntheticAddress,
@@ -20,6 +20,9 @@ const unlink = (db: PGlite, memberId: number, walletId: number) =>
 const activeHolder = async (db: PGlite, address: string) =>
   (await rows(db, "select member_id from member_wallets where address_normalized = lower($1) and revoked_at is null", [address]))
     .map((r) => r.member_id);
+
+// Each test migrates its own PGlite; under a full parallel run that can pass the 5s default.
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 120_000 });
 
 describe("058_wallet_move.sql", () => {
   it("applies twice over production-shaped rows: revoked history, a 0xdead tombstone, a subscription on a revoked wallet", async () => {

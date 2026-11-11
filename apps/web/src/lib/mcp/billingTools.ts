@@ -194,13 +194,24 @@ export async function listMembersHandler(admin: ServiceClient, auth: McpAuthInfo
 
 async function findMember(admin: ServiceClient, args: { member_id?: number; email?: string }): Promise<MemberRow | string> {
   if (!args.member_id && !args.email) return "Pass member_id or email.";
-  let q = admin.from("members").select(MEMBER_COLUMNS);
+  if (args.member_id) {
+    const { data, error } = await admin.from("members").select(MEMBER_COLUMNS).eq("id", args.member_id).maybeSingle();
+    if (error) return `members query failed: ${error.message}`;
+    return (data as MemberRow | null) ?? `No member #${args.member_id}.`;
+  }
   // Emails aren't stored normalised everywhere (bot and admin adds keep their case): match without case.
-  const email = args.email?.trim().replace(/[%_*,()\\]/g, "") ?? "";
-  q = args.member_id ? q.eq("id", args.member_id) : q.or(`email.ilike.${email}`);
-  const { data, error } = await q.maybeSingle();
+  // LIKE wildcards are escaped; characters PostgREST's or() syntax can't carry aren't in real addresses.
+  const email = args.email!.trim();
+  if (/[*,()]/.test(email)) return `No member with email ${email}.`;
+  const { data, error } = await admin.from("members").select(MEMBER_COLUMNS)
+    .or(`email.ilike.${email.replace(/[\\%_]/g, "\\$&")}`).limit(5);
   if (error) return `members query failed: ${error.message}`;
-  return (data as MemberRow | null) ?? `No member ${args.member_id ? `#${args.member_id}` : `with email ${args.email}`}.`;
+  const rows = (data ?? []) as MemberRow[];
+  // Two rows differing only in case can exist (the unique constraint is case-sensitive): an exact match wins.
+  const exact = rows.find((m) => m.email === email) ?? rows.find((m) => m.email === email.toLowerCase());
+  if (exact || rows.length === 1) return exact ?? rows[0];
+  if (rows.length > 1) return `Several members match ${email} (ids ${rows.map((m) => m.id).join(", ")}); pass member_id.`;
+  return `No member with email ${email}.`;
 }
 
 type OnchainInvoiceRow = {
@@ -255,14 +266,14 @@ export async function getMemberBillingHandler(admin: ServiceClient, auth: McpAut
     subIds.length ? admin.from("plan_switch_operations").select("id, subscription_id, from_plan, to_plan, outcome, effective_at, recorded_at, finished_at, created_at")
       .in("subscription_id", subIds).order("id", { ascending: false }).limit(5) : none,
   ]);
-  for (const [name, r] of Object.entries({ onchain_invoices: invoices, day_passes: pools, purchases, pass_grants: grants, admin_cancel_operations: cancels, plan_switch_operations: switches })) {
-    if (r.error) return fail(`${name} query failed: ${r.error.message}`);
-  }
+  // One failed side query is shown where it failed; it doesn't hide the rest of the picture.
+  const failed = Object.entries({ onchain_invoices: invoices, day_passes: pools, purchases, pass_grants: grants, admin_cancel_operations: cancels, plan_switch_operations: switches })
+    .filter(([, r]) => r.error).map(([name, r]) => `⚠️ ${name} query failed: ${r.error!.message}`);
 
   const lines = [`## ${member.name} (member ${member.id})`,
     `${member.email ?? "no email"}${member.telegram_username ? ` · @${member.telegram_username.replace(/^@/, "")}` : ""} · ${member.member_type}` +
       `${member.disabled ? " · DISABLED" : ""} · joined ${day(member.created_at)}`,
-    `Stripe customer: ${member.stripe_customer_id ?? "none"}`];
+    `Stripe customer: ${member.stripe_customer_id ?? "none"}`, ...failed];
 
   lines.push("", "### Subscriptions");
   const subRows = (subs.data ?? []) as unknown as SubRow[];
@@ -289,7 +300,7 @@ export async function getMemberBillingHandler(admin: ServiceClient, auth: McpAut
   const switchRows = (switches.data ?? []) as { id: number; from_plan: string; to_plan: string; outcome: string | null; effective_at: string | null; finished_at: string | null; created_at: string }[];
   if (cancelRows.length || switchRows.length) {
     lines.push("", "### Admin cancels and plan switches");
-    for (const c of cancelRows) lines.push(`- cancel op #${c.id} (sub #${c.subscription_id}, ${c.mode}) started ${day(c.created_at)} · ${c.finished_at ? "finished" : c.recorded_at ? "recorded, finishing" : "not recorded yet"}`);
+    for (const c of cancelRows) lines.push(`- cancel op #${c.id} (sub #${c.subscription_id}, ${c.mode}) started ${day(c.created_at)} · ${c.finished_at ? (c.recorded_at ? "finished" : "ended unrecorded: Stripe refused it, the membership was NOT canceled") : c.recorded_at ? "recorded, finishing" : "not recorded yet"}`);
     for (const w of switchRows) lines.push(`- switch op #${w.id}: ${planLabel(w.from_plan)} → ${planLabel(w.to_plan)} · ${w.outcome ?? "open"}${w.effective_at ? ` · effective ${day(w.effective_at)}` : ""} · ${w.finished_at ? "finished" : "unfinished"}`);
   }
 
@@ -493,6 +504,9 @@ export async function voidStripeInvoiceHandler(admin: ServiceClient, auth: McpAu
       await auditFinish(admin, auditId, tool, auditArgs, "failed", { error: errorText(e) });
       return fail(`Stripe refused to void ${inv.id}: ${errorText(e)}. Nothing was changed.`);
     }
+    // Someone else's void landed first: say so, and don't claim it in the audit.
+    const warning = await auditFinish(admin, auditId, tool, auditArgs, "already_void", {});
+    return text([`Invoice ${inv.id} was voided by another call a moment ago. Nothing more to do. Audit row #${auditId}.`, warning].filter(Boolean).join("\n"));
   }
   const warning = await auditFinish(admin, auditId, tool, auditArgs, "voided", { amount_due_cents: inv.amount_due, customer: inv.customer, subscription: stripeInvoiceSubscription(inv) });
   return text([`Voided ${inv.id} (${usd(inv.amount_due)}). Audit row #${auditId}.`, warning].filter(Boolean).join("\n"));
@@ -533,17 +547,24 @@ export async function cancelSubscriptionHandler(admin: ServiceClient, auth: McpA
   const auditId = await auditStart(admin, gate.actor, tool, { table: "members", id: args.member_id }, auditArgs);
   if (auditId == null) return fail(AUDIT_UNAVAILABLE);
   let started = false;
-  const run = () => (started = true) && cancelMembership(admin, {
+  let finished: Awaited<ReturnType<typeof cancelMembership>> | null = null;
+  const run = async () => {
+    started = true;
+    finished = await cancelMembership(admin, {
     memberId: args.member_id,
     subscriptionId: args.subscription_id,
     actorMemberId: gate.actor.id,
     mode: args.mode,
     reason: args.reason.trim().slice(0, 500),
     voidOpenInvoices: args.void_open_invoices === true,
-  });
+    });
+    return finished;
+  };
   try {
     // Cancel now clears the door code: hold the PIN-writer reservation first, as the admin route does.
-    const result = args.mode === "now" ? await withLockWriter(admin, run, "MCP cancel") : await run();
+    // The cancel itself can succeed and releasing the reservation fail: that is still a cancel.
+    const result = await (args.mode === "now" ? withLockWriter(admin, run, "MCP cancel") : run())
+      .catch((e) => { if (finished) return finished; throw e; });
     const warning = await auditFinish(admin, auditId, tool, auditArgs, result.outcome, {
       subscription_id: result.subscriptionId, rail: result.rail, access_ends_at: result.accessEndsAt, voided: result.voidedInvoiceIds, resumed: result.resumed,
     });
@@ -557,7 +578,7 @@ export async function cancelSubscriptionHandler(admin: ServiceClient, auth: McpA
     ].filter(Boolean).join("\n"));
   } catch (e) {
     const message = e instanceof CancelMembershipError ? e.message
-      : !started ? `The door-code writer is busy, so nothing was changed (${errorText(e)}). Try again in a minute.`
+      : !started ? `The door-code writer reservation couldn't be taken (busy or unavailable), so nothing was changed: ${errorText(e)}. Try again in a minute.`
       : `Cancellation failed partway: ${errorText(e)}. Repeating is safe; the billing cron also carries an unfinished cancel on.`;
     await auditFinish(admin, auditId, tool, auditArgs, "failed", { error: errorText(e) });
     return fail(message);

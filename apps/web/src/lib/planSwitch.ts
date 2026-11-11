@@ -751,8 +751,8 @@ function issuedInvoiceLines(issued: IssuedInvoice[], targetKey: string, cancelin
   return issued.map((invoice) => {
     const period = `your invoice for the period from ${shortDate(invoice.period_start)}`;
     const kept = `so it keeps its price (${dollars(invoice.amount_cents)})`;
-    if (invoice.status !== "open") return `A payment for ${period} is already on its way, ${kept}; ${planLabel(targetKey)} applies from the invoice after it.`;
     if (canceling) return `The membership is set to end, so ${period} keeps its price (${dollars(invoice.amount_cents)}).`;
+    if (invoice.status !== "open") return `A payment for ${period} is already on its way, ${kept}; ${planLabel(targetKey)} applies from the invoice after it.`;
     if (invoice.plan_key === targetKey) return `${period[0].toUpperCase()}${period.slice(1)} is now ${dollars(invoice.amount_cents)}.`;
     return `A payment for ${period} has already been authorized, ${kept}; ${planLabel(targetKey)} applies from the invoice after it.`;
   });

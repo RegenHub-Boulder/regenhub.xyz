@@ -184,6 +184,11 @@ describe("read tools", () => {
     // Emails added by the bot or an admin keep their case; the lookup doesn't care.
     await db.sql("update members set email = 'Brent.Porter@Example.test' where id = 8");
     expect(body(await getMemberBillingHandler(db as never, ada(), { email: "brent.porter@example.test" }))).toMatch(/## Brent Porter \(member 8\)/);
+    // An underscore is a character, not a wildcard, and isn't dropped.
+    await db.sql("update members set email = 'cleo_card@example.test' where id = 9");
+    expect(body(await getMemberBillingHandler(db as never, ada(), { email: "cleo_card@example.test" }))).toMatch(/## Cleo Card \(member 9\)/);
+    await db.sql("update members set email = 'patXex@example.test' where id = 7");
+    expect((await getMemberBillingHandler(db as never, ada(), { email: "pat_ex@example.test" })).isError).toBe(true);
 
     const missing = await getMemberBillingHandler(db as never, ada(), { member_id: 999 });
     expect(missing.isError).toBe(true);

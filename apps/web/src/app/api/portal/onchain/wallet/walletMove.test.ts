@@ -13,9 +13,6 @@ import {
 // session lookup, supabase-js, the SQL functions — is the real code against PGlite.
 type Cookie = { name: string; value: string };
 const jar = vi.hoisted(() => ({ cookies: [] as Cookie[], request: null as { getStore(): Cookie[] | undefined } | null }));
-// Each test builds a migrated PGlite; under a full parallel run that can pass the 5s default.
-vi.setConfig({ testTimeout: 60_000, hookTimeout: 120_000 });
-
 vi.mock("next/headers", () => ({
   cookies: async () => {
     const cookies = jar.request?.getStore() ?? [];
