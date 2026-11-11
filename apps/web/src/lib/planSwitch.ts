@@ -649,6 +649,11 @@ export function onchainSwitchColumns(
  * columns from a transition the cron has just consumed. `changed` is false
  * when no live on-chain row matched (or an admin cancel is marked, with
  * `refuseWhenCanceling`).
+ *
+ * A new plan also reprices, in the same transaction, an invoice already issued
+ * but not paid and with no payment on its way (migration 062's trigger).
+ * `issued` lists every unpaid invoice afterwards, so the caller can say which
+ * one moved and which kept its price.
  */
 export async function changeOnchainPlan(
   admin: ServiceClient,
@@ -670,21 +675,46 @@ export async function changeOnchainPlan(
     if (args.refuseWhenCanceling) update = update.is("admin_cancel_mode", null);
     const { data: changed, error: updateError } = await update.select("id").maybeSingle();
     if (updateError) throw updateError;
-    return { changed: !!changed, canceling: sub.admin_cancel_mode != null, from: sub.plan_key, changes, switchColumns };
+    let issued: IssuedInvoice[] = [];
+    if (changed && target) {
+      const { data: invoices, error: invoiceError } = await admin.from("onchain_invoices")
+        .select("id, period_start, plan_key, amount_cents, status")
+        .eq("subscription_id", sub.id).in("status", ["open", "submitted", "detected"]).order("period_start");
+      if (invoiceError) throw invoiceError;
+      issued = (invoices ?? []) as IssuedInvoice[];
+    }
+    return { changed: !!changed, canceling: sub.admin_cancel_mode != null, from: sub.plan_key, changes, switchColumns, issued };
   }, "On-chain plan change");
+}
+
+/** An issued, unpaid invoice of an on-chain subscription, as a plan change left it. */
+export type IssuedInvoice = { id: number; period_start: string; plan_key: string | null; amount_cents: number; status: string };
+
+const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+const shortDate = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Denver" });
+
+/** What a plan change did to invoices already issued: repriced, or kept because a payment is on its way. */
+function issuedInvoiceLines(issued: IssuedInvoice[], targetKey: string): string[] {
+  return issued.map((invoice) => invoice.plan_key === targetKey
+    ? `Your invoice for the period from ${shortDate(invoice.period_start)} is now ${dollars(invoice.amount_cents)}.`
+    : `A payment for your invoice for the period from ${shortDate(invoice.period_start)} is already on its way, so that invoice keeps its price (${dollars(invoice.amount_cents)}); ${planLabel(targetKey)} applies from the invoice after it.`);
 }
 
 /**
  * What an on-chain plan change does, for the member or admin who made it.
  * Leaving a desk keeps it to the end of the period paid for; any other change
- * prices the next invoice and applies once that invoice is paid.
+ * prices the next unpaid invoice (an issued one is repriced, migration 062)
+ * and applies once that invoice is paid.
  */
-export function onchainChangeMessage(columns: ReturnType<typeof onchainSwitchColumns>, targetKey: string): string {
+export function onchainChangeMessage(columns: ReturnType<typeof onchainSwitchColumns>, targetKey: string, issued: IssuedInvoice[] = []): string {
+  const invoices = issuedInvoiceLines(issued, targetKey);
   if ("pending_plan_key" in columns && columns.pending_plan_key && columns.pending_plan_at && columns.pending_plan_from) {
-    const date = new Date(columns.pending_plan_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Denver" });
-    return `Saved. ${planLabel(columns.pending_plan_from)} and its door code stay until ${date}, the end of the period already paid for; ${planLabel(targetKey)} starts then and is billed on the next invoice.`;
+    return [
+      `Saved. ${planLabel(columns.pending_plan_from)} and its door code stay until ${shortDate(columns.pending_plan_at)}, the end of the period already paid for; ${planLabel(targetKey)} starts then and is billed on the next invoice.`,
+      ...invoices,
+    ].join(" ");
   }
-  return "Saved for the next invoice. Issued invoices keep their price; the new plan applies once that invoice is paid.";
+  return ["Saved. Your next unpaid invoice is priced at the new plan, and the new plan applies once that invoice is paid.", ...invoices].join(" ");
 }
 
 export type SwitchLanded = Pick<DowngradeResult, "revokedSlot" | "lockStatus" | "lockRevokeFailed">;

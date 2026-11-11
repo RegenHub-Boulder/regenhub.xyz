@@ -155,7 +155,7 @@ export async function POST(req: Request) {
     const switchColumns = result.switchColumns;
     await logAction({ action: AuditAction.ONCHAIN_SUBSCRIPTION_CHANGED, actorMemberId: member.id,
       target: { table: "subscriptions", id: sub.id }, payload: { from: result.from, to: targetKey, source: "self_serve" } }, admin);
-    return NextResponse.json({ ok: true, message: onchainChangeMessage(switchColumns, targetKey) });
+    return NextResponse.json({ ok: true, message: onchainChangeMessage(switchColumns, targetKey, result.issued) });
   }
   if (!isStripeConfigured()) return NextResponse.json({ error: "Stripe is not configured" }, { status: 503 });
 

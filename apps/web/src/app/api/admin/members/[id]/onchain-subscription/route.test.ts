@@ -17,12 +17,11 @@ it("rejects non-admin/disabled-admin sessions before service-role reads", async 
   expect((await PATCH(request({ plan_key: "member_basic" }), ctx)).status).toBe(403);
   expect(createServiceClient).not.toHaveBeenCalled();
 });
-it("edits the prospective plan and records an audit event without repricing invoices", async () => {
+it("edits the plan and records an audit event", async () => {
   vi.mocked(requireAdmin).mockResolvedValue({ id: "admin" } as never);
   const admin = makeSupabaseMock({ selects: { members: { data: { id: 9 } }, subscriptions: { data: { id: 1, plan_key: "cold_desk" } } } });
   vi.mocked(createServiceClient).mockReturnValue(admin as never);
   expect((await PATCH(request({ plan_key: "member_basic" }), ctx)).status).toBe(200);
-  expect(admin.from).not.toHaveBeenCalledWith("onchain_invoices");
   expect(logAction).toHaveBeenCalledWith(expect.objectContaining({ actorMemberId: 9, payload: expect.objectContaining({ plan_key: "member_basic", monthly_cents: 3000 }) }), admin);
 });
 it("rejects invalid codes without updating the subscription", async () => {

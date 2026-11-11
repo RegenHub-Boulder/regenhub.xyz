@@ -134,5 +134,5 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   // Ended between the read above and the update: nothing changed, so nothing is audited.
   if (!result.changed) return NextResponse.json({ error: "This crypto membership isn't active any more; nothing was changed." }, { status: 409 });
   await logAction({ action: AuditAction.ONCHAIN_SUBSCRIPTION_CHANGED, actorMemberId: actor?.id, target: { table: "subscriptions", id: sub.id }, payload: { member_id: memberId, from: result.from, ...result.changes } }, admin);
-  return NextResponse.json({ ok: true, message: body.plan_key ? onchainChangeMessage(result.switchColumns, body.plan_key) : "Discount saved for the next invoice. Issued invoices keep their price." });
+  return NextResponse.json({ ok: true, message: body.plan_key ? onchainChangeMessage(result.switchColumns, body.plan_key, result.issued) : "Discount saved for the next invoice. Issued invoices keep their price." });
 }
