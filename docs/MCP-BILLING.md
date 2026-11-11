@@ -86,8 +86,8 @@ Example: `billing_summary({})`
 ### `void_stripe_invoice`
 Voids one **open** Stripe invoice: Stripe stops collecting it and it can't be paid or reopened. An
 already-void invoice answers "already void, nothing to do". A paid invoice is refused (refund it in the
-Stripe dashboard); a draft is refused (delete it there). The Stripe call carries the idempotency key
-`mcp-void-<invoice id>`.
+Stripe dashboard); a draft is refused (delete it there). A retry can't void twice: a void invoice
+refuses a second void, and a refusal is read back from Stripe before it's reported.
 
 | argument | type | notes |
 |---|---|---|
@@ -144,7 +144,12 @@ How the money works:
 - **Crypto (USDC)**: no proration. The new plan prices the next unpaid invoice, **including a renewal
   invoice already issued** (they're issued 7 days before the period ends), unless a payment for it is
   already on its way (a submitted transaction or a signed gasless authorization). Leaving a desk keeps
-  it to the end of the paid period.
+  it to the end of the paid period. The repriced invoice uses the discount code set on the membership
+  at that moment, except when the same edit also changes the code: then it keeps the code from before
+  the edit (a new code starts with the next invoice issued).
+  One gap: a payment sent by hand from a wallet but not yet reported in the portal is invisible. If the
+  plan changes in between, the transfer no longer matches the invoice and lands as an exception for an
+  admin to reconcile. The portal pays through gasless authorizations, which are covered.
 
 Refused while an admin cancel is recorded or running, while a different card switch is scheduled, or
 for a disabled member. Asking for the plan the member already has is a no-op, except on crypto, where

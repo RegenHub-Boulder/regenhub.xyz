@@ -1220,7 +1220,7 @@ describe("crypto (on-chain): a plan change after the renewal invoice was issued"
     await db.sql("update onchain_invoices set status = 'submitted', submitted_tx_hash = $1, submitted_at = now() where id = $2", [TX, issued.id]);
     const picked = await pick("member_basic");
     expect(picked.status).toBe(200);
-    expect((await picked.json()).message).toMatch(/already on its way.*keeps its price/);
+    expect((await picked.json()).message).toMatch(/already on its way, so it keeps its price/);
     expect(await openInvoice()).toMatchObject({ id: issued.id, plan_key: "member_2day", amount_cents: 5000 });
   });
 

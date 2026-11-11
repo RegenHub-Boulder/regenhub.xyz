@@ -195,7 +195,9 @@ export async function listMembersHandler(admin: ServiceClient, auth: McpAuthInfo
 async function findMember(admin: ServiceClient, args: { member_id?: number; email?: string }): Promise<MemberRow | string> {
   if (!args.member_id && !args.email) return "Pass member_id or email.";
   let q = admin.from("members").select(MEMBER_COLUMNS);
-  q = args.member_id ? q.eq("id", args.member_id) : q.eq("email", args.email!.trim().toLowerCase());
+  // Emails aren't stored normalised everywhere (bot and admin adds keep their case): match without case.
+  const email = args.email?.trim().replace(/[%_*,()\\]/g, "") ?? "";
+  q = args.member_id ? q.eq("id", args.member_id) : q.or(`email.ilike.${email}`);
   const { data, error } = await q.maybeSingle();
   if (error) return `members query failed: ${error.message}`;
   return (data as MemberRow | null) ?? `No member ${args.member_id ? `#${args.member_id}` : `with email ${args.email}`}.`;
@@ -238,17 +240,22 @@ export async function getMemberBillingHandler(admin: ServiceClient, auth: McpAut
   const member = await findMember(admin, args);
   if (typeof member === "string") return fail(member);
 
-  const [subs, invoices, pools, purchases, grants, cancels, switches] = await Promise.all([
-    admin.from("subscriptions").select(SUB_COLUMNS).eq("member_id", member.id).order("created_at", { ascending: false }),
+  const subs = await admin.from("subscriptions").select(SUB_COLUMNS).eq("member_id", member.id).order("created_at", { ascending: false });
+  if (subs.error) return fail(`subscriptions query failed: ${subs.error.message}`);
+  // Cancel and switch operations are keyed by subscription, not member.
+  const subIds = ((subs.data ?? []) as unknown as SubRow[]).map((s) => s.id);
+  const none = Promise.resolve({ data: [], error: null });
+  const [invoices, pools, purchases, grants, cancels, switches] = await Promise.all([
     admin.from("onchain_invoices").select(ONCHAIN_INVOICE_COLUMNS).eq("member_id", member.id).order("period_start", { ascending: false }).limit(24),
     admin.from("day_passes").select("id, allowed_uses, used_count, expires_at, created_at").eq("member_id", member.id).order("created_at", { ascending: false }),
     admin.from("purchases").select("id, kind, amount_cents, passes_granted, created_at").eq("member_id", member.id).order("created_at", { ascending: false }).limit(24),
     admin.from("pass_grants").select("id, plan_key, passes_granted, stripe_invoice_id, created_at").eq("member_id", member.id).order("created_at", { ascending: false }).limit(12),
-    admin.from("admin_cancel_operations").select("id, subscription_id, mode, created_at, recorded_at, finished_at").eq("member_id", member.id).order("id", { ascending: false }).limit(5),
-    admin.from("plan_switch_operations").select("id, subscription_id, from_plan, to_plan, outcome, effective_at, recorded_at, finished_at, created_at")
-      .eq("member_id", member.id).order("id", { ascending: false }).limit(5),
+    subIds.length ? admin.from("admin_cancel_operations").select("id, subscription_id, mode, created_at, recorded_at, finished_at")
+      .in("subscription_id", subIds).order("id", { ascending: false }).limit(5) : none,
+    subIds.length ? admin.from("plan_switch_operations").select("id, subscription_id, from_plan, to_plan, outcome, effective_at, recorded_at, finished_at, created_at")
+      .in("subscription_id", subIds).order("id", { ascending: false }).limit(5) : none,
   ]);
-  for (const [name, r] of Object.entries({ subscriptions: subs, onchain_invoices: invoices, day_passes: pools, purchases })) {
+  for (const [name, r] of Object.entries({ onchain_invoices: invoices, day_passes: pools, purchases, pass_grants: grants, admin_cancel_operations: cancels, plan_switch_operations: switches })) {
     if (r.error) return fail(`${name} query failed: ${r.error.message}`);
   }
 
@@ -476,8 +483,9 @@ export async function voidStripeInvoiceHandler(admin: ServiceClient, auth: McpAu
   const auditId = await auditStart(admin, gate.actor, tool, { table: "stripe_invoices", id: inv.id! }, auditArgs);
   if (auditId == null) return fail(AUDIT_UNAVAILABLE);
   try {
-    // Stripe makes the same void with the same key at most once.
-    await stripe.invoices.voidInvoice(inv.id!, {}, { idempotencyKey: `mcp-void-${inv.id}` });
+    // No idempotency key: Stripe would replay a first transient failure for 24h. Voiding twice can't
+    // happen (a void invoice refuses it), and a refusal is read back below.
+    await stripe.invoices.voidInvoice(inv.id!);
   } catch (e) {
     // Another call may have voided it a moment ago.
     const now = await stripe.invoices.retrieve(inv.id!).catch(() => null);
@@ -524,7 +532,8 @@ export async function cancelSubscriptionHandler(admin: ServiceClient, auth: McpA
   const auditArgs = { ...args, confirm: undefined };
   const auditId = await auditStart(admin, gate.actor, tool, { table: "members", id: args.member_id }, auditArgs);
   if (auditId == null) return fail(AUDIT_UNAVAILABLE);
-  const run = () => cancelMembership(admin, {
+  let started = false;
+  const run = () => (started = true) && cancelMembership(admin, {
     memberId: args.member_id,
     subscriptionId: args.subscription_id,
     actorMemberId: gate.actor.id,
@@ -547,7 +556,9 @@ export async function cancelSubscriptionHandler(admin: ServiceClient, auth: McpA
       warning,
     ].filter(Boolean).join("\n"));
   } catch (e) {
-    const message = e instanceof CancelMembershipError ? e.message : `Cancellation failed partway: ${errorText(e)}. Repeating is safe; the billing cron also carries an unfinished cancel on.`;
+    const message = e instanceof CancelMembershipError ? e.message
+      : !started ? `The door-code writer is busy, so nothing was changed (${errorText(e)}). Try again in a minute.`
+      : `Cancellation failed partway: ${errorText(e)}. Repeating is safe; the billing cron also carries an unfinished cancel on.`;
     await auditFinish(admin, auditId, tool, auditArgs, "failed", { error: errorText(e) });
     return fail(message);
   }
@@ -596,8 +607,9 @@ export async function changeMemberPlanHandler(admin: ServiceClient, auth: McpAut
 
   const sub = await loadSub().catch(() => null);
   if (!sub) return fail(`Member ${args.member_id} has no live subscription (or it couldn't be read). Nothing was changed.`);
-  const { data: member } = await admin.from("members").select("disabled").eq("id", args.member_id).maybeSingle();
-  if ((member as { disabled: boolean } | null)?.disabled) return fail(`Member ${args.member_id} is disabled. Enable them first; nothing was changed.`);
+  const { data: member, error: memberError } = await admin.from("members").select("disabled").eq("id", args.member_id).maybeSingle();
+  if (memberError || !member) return fail(`Couldn't read member ${args.member_id}. Nothing was changed; try again.`);
+  if ((member as { disabled: boolean }).disabled) return fail(`Member ${args.member_id} is disabled. Enable them first; nothing was changed.`);
   const canceling = await adminCancelInProgress(admin, sub.id).catch(() => null);
   if (canceling == null) return fail("Couldn't check for an admin cancel. Nothing was changed; try again.");
   if (canceling) return fail(`Subscription #${sub.id} is being canceled by an admin, so its plan can't change. Nothing was changed.`);

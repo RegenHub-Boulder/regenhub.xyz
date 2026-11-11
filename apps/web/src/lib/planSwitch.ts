@@ -747,10 +747,15 @@ const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Denver" });
 
 /** What a plan change did to invoices already issued: repriced, or kept because a payment is on its way. */
-function issuedInvoiceLines(issued: IssuedInvoice[], targetKey: string): string[] {
-  return issued.map((invoice) => invoice.plan_key === targetKey
-    ? `Your invoice for the period from ${shortDate(invoice.period_start)} is now ${dollars(invoice.amount_cents)}.`
-    : `A payment for your invoice for the period from ${shortDate(invoice.period_start)} is already on its way, so that invoice keeps its price (${dollars(invoice.amount_cents)}); ${planLabel(targetKey)} applies from the invoice after it.`);
+function issuedInvoiceLines(issued: IssuedInvoice[], targetKey: string, canceling = false): string[] {
+  return issued.map((invoice) => {
+    const period = `your invoice for the period from ${shortDate(invoice.period_start)}`;
+    const kept = `so it keeps its price (${dollars(invoice.amount_cents)})`;
+    if (invoice.status !== "open") return `A payment for ${period} is already on its way, ${kept}; ${planLabel(targetKey)} applies from the invoice after it.`;
+    if (canceling) return `The membership is set to end, so ${period} keeps its price (${dollars(invoice.amount_cents)}).`;
+    if (invoice.plan_key === targetKey) return `${period[0].toUpperCase()}${period.slice(1)} is now ${dollars(invoice.amount_cents)}.`;
+    return `A payment for ${period} has already been authorized, ${kept}; ${planLabel(targetKey)} applies from the invoice after it.`;
+  });
 }
 
 /**
@@ -759,8 +764,8 @@ function issuedInvoiceLines(issued: IssuedInvoice[], targetKey: string): string[
  * prices the next unpaid invoice (an issued one is repriced, migration 062)
  * and applies once that invoice is paid.
  */
-export function onchainChangeMessage(columns: ReturnType<typeof onchainSwitchColumns>, targetKey: string, issued: IssuedInvoice[] = []): string {
-  const invoices = issuedInvoiceLines(issued, targetKey);
+export function onchainChangeMessage(columns: ReturnType<typeof onchainSwitchColumns>, targetKey: string, issued: IssuedInvoice[] = [], canceling = false): string {
+  const invoices = issuedInvoiceLines(issued, targetKey, canceling);
   if ("pending_plan_key" in columns && columns.pending_plan_key && columns.pending_plan_at && columns.pending_plan_from) {
     return [
       `Saved. ${planLabel(columns.pending_plan_from)} and its door code stay until ${shortDate(columns.pending_plan_at)}, the end of the period already paid for; ${planLabel(targetKey)} starts then and is billed on the next invoice.`,

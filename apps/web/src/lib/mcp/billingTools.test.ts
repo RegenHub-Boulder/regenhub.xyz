@@ -181,6 +181,10 @@ describe("read tools", () => {
     expect(brent).toMatch(/card invoice in_brent \(RH-in_brent\) · open · due \$250\.00, paid \$0\.00 · 2 failed attempts/);
     expect(stripe.invoices.list).toHaveBeenCalledWith({ customer: "cus_brent", limit: 24 });
 
+    // Emails added by the bot or an admin keep their case; the lookup doesn't care.
+    await db.sql("update members set email = 'Brent.Porter@Example.test' where id = 8");
+    expect(body(await getMemberBillingHandler(db as never, ada(), { email: "brent.porter@example.test" }))).toMatch(/## Brent Porter \(member 8\)/);
+
     const missing = await getMemberBillingHandler(db as never, ada(), { member_id: 999 });
     expect(missing.isError).toBe(true);
   });
@@ -253,7 +257,7 @@ describe("void_stripe_invoice", () => {
     const r = await voidStripeInvoiceHandler(db as never, ada(), { invoice_id: "in_brent", reason: "subscription already canceled", confirm: true });
     expect(r.isError).toBeUndefined();
     expect(body(r)).toMatch(/Voided in_brent \(\$250\.00\)\. Audit row #\d+\./);
-    expect(stripe.invoices.voidInvoice).toHaveBeenCalledWith("in_brent", {}, { idempotencyKey: "mcp-void-in_brent" });
+    expect(stripe.invoices.voidInvoice).toHaveBeenCalledWith("in_brent");
     expect(await audits()).toEqual([{
       actor_member_id: 1, target_table: "stripe_invoices", target_id: "in_brent",
       payload: expect.objectContaining({ tool: "void_stripe_invoice", outcome: "voided", amount_due_cents: 25000, args: { invoice_id: "in_brent", reason: "subscription already canceled" } }),
@@ -293,6 +297,8 @@ describe("cancel_subscription", () => {
 
     const again = await cancelSubscriptionHandler(db as never, ada(), { member_id: 7, mode: "period_end", reason: "moving away", confirm: true });
     expect(body(again)).toMatch(/^already scheduled/);
+    // The member's billing picture shows the cancel operation (keyed by subscription).
+    expect(body(await getMemberBillingHandler(db as never, ada(), { member_id: 7 }))).toMatch(/cancel op #\d+ \(sub #50, period_end\) started \d{4}-\d\d-\d\d · (finished|recorded, finishing)/);
   });
 
   it("cancel now ends a crypto membership at once", async () => {
