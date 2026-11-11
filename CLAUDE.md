@@ -343,7 +343,7 @@ MCP changes, just redeploy the web app.
   refresh). Discovery at `/.well-known/oauth-authorization-server` and
   `/.well-known/oauth-protected-resource/mcp`. The consent page reads the Supabase session directly
   (same origin), so you sign in as your normal RegenHub account.
-- **Gating:** entry requires `members.is_ops_admin = true` (migration 041), re-checked **live** on
+- **Gating:** entry requires `members.is_ops_admin = true` and not `disabled` (migration 041), re-checked **live** on
   every token verification — demoting a member instantly kills their tokens. Tokens are sha-256
   hashed at rest and member-bound (migrations 040/041: `mcp_oauth_clients/codes/tokens`).
 - **Code:** OAuth core in `apps/web/src/lib/mcp/oauth.ts`, metadata in `metadata.ts`, tool surface +
