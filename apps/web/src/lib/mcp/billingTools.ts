@@ -141,7 +141,8 @@ function subLine(s: SubRow): string {
     `${planLabel(s.plan_key)} (${s.plan_key})`,
     s.payment_rail === "onchain" ? "crypto" : "card",
     s.status,
-    `${usd(s.monthly_cents)}/mo list${s.net_cents != null && s.net_cents !== s.monthly_cents ? `, ${usd(s.net_cents)} net` : ""}`,
+    // Card: net_cents is the discounted recurring price. Crypto: it is the last amount paid, which lags a plan change.
+    `${usd(s.monthly_cents)}/mo list${s.net_cents != null && s.net_cents !== s.monthly_cents ? `, ${usd(s.net_cents)} ${s.payment_rail === "onchain" ? "last paid" : "net"}` : ""}`,
     `started ${day(s.created_at)}`,
     `paid through ${day(s.current_period_end)}`,
   ];
@@ -392,21 +393,24 @@ export async function billingSummaryHandler(admin: ServiceClient, auth: McpAuthI
   }
   type S = { plan_key: string; payment_rail: string; status: string; monthly_cents: number; net_cents: number | null; cancel_at_period_end: boolean; admin_cancel_mode: string | null };
   const rows = (subs.data ?? []) as S[];
+  // Card net_cents is the discounted recurring price; crypto net_cents is the last amount paid, stale after a plan change.
+  const netOf = (s: S) => (s.payment_rail === "onchain" ? s.monthly_cents : s.net_cents ?? s.monthly_cents);
   const byPlan = new Map<string, { count: number; list: number; net: number; card: number; crypto: number; pastDue: number; ending: number }>();
   for (const s of rows) {
     const p = byPlan.get(s.plan_key) ?? { count: 0, list: 0, net: 0, card: 0, crypto: 0, pastDue: 0, ending: 0 };
-    p.count += 1; p.list += s.monthly_cents; p.net += s.net_cents ?? s.monthly_cents;
+    p.count += 1; p.list += s.monthly_cents; p.net += netOf(s);
     if (s.payment_rail === "onchain") p.crypto += 1; else p.card += 1;
     if (s.status === "past_due") p.pastDue += 1;
     if (s.cancel_at_period_end || s.admin_cancel_mode) p.ending += 1;
     byPlan.set(s.plan_key, p);
   }
   const totalList = rows.reduce((n, s) => n + s.monthly_cents, 0);
-  const totalNet = rows.reduce((n, s) => n + (s.net_cents ?? s.monthly_cents), 0);
+  const totalNet = rows.reduce((n, s) => n + netOf(s), 0);
   const lines = [
     "## Billing summary",
     `Live subscriptions: ${rows.length} (${rows.filter((s) => s.payment_rail !== "onchain").length} card, ${rows.filter((s) => s.payment_rail === "onchain").length} crypto)`,
-    `MRR: ${usd(totalNet)} net of discounts (${usd(totalList)} at list prices). Past-due rows are included; rows set to end are counted until they do.`,
+    `MRR: ${usd(totalNet)} net of discounts (${usd(totalList)} at list prices). Past-due rows are included; rows set to end are counted until they do. ` +
+      "Crypto rows count at plan price (their discount codes aren't netted out).",
     "",
     "| plan | live | card | crypto | past due | ending | MRR net | MRR list |",
     "|---|---|---|---|---|---|---|---|",
