@@ -576,7 +576,7 @@ export async function changeMemberPlanHandler(admin: ServiceClient, auth: McpAut
     const sub = await loadSub();
     if (!sub) return `Member ${args.member_id} has no live subscription.`;
     const card = sub.payment_rail !== "onchain";
-    const what = sub.plan_key === args.plan_key ? "Already on that plan: nothing would change."
+    const what = sub.plan_key === args.plan_key ? (card ? "Already on that plan: nothing would change." : "Already on that plan: an open invoice still priced at another plan (and with no payment on its way) would be repriced to it.")
       : card && isDeskToDaily(sub.plan_key, args.plan_key) ? `Scheduled: ${planLabel(sub.plan_key)} → ${target.label} on ${day(sub.current_period_end)}, no proration.`
       : card ? `Now, with proration: ${planLabel(sub.plan_key)} → ${target.label} (${usd(target.defaultMonthlyCents)}/mo).`
       : `Crypto: ${planLabel(sub.plan_key)} → ${target.label} (${usd(target.defaultMonthlyCents)}/mo) from the next unpaid invoice.`;
@@ -600,7 +600,33 @@ export async function changeMemberPlanHandler(admin: ServiceClient, auth: McpAut
 
   const card = sub.payment_rail !== "onchain";
   // Idempotent: the plan it already has (or a card switch to it already scheduled) is success, not an error.
-  if (sub.plan_key === args.plan_key && !(card && sub.pending_plan_key)) return text(`Member ${args.member_id} is already on ${target.label}. Nothing to do.`);
+  if (sub.plan_key === args.plan_key && card && !sub.pending_plan_key) return text(`Member ${args.member_id} is already on ${target.label}. Nothing to do.`);
+  if (sub.plan_key === args.plan_key && !card) {
+    // Crypto, already on the plan: an invoice issued at an older price (before migration 062, or while a payment
+    // was on its way that has since failed) is repriced. Nothing open at another price: nothing to do.
+    const { data: open } = await admin.from("onchain_invoices").select("id, plan_key, amount_cents")
+      .eq("subscription_id", sub.id).eq("status", "open");
+    if (!((open ?? []) as { plan_key: string | null }[]).some((i) => i.plan_key !== args.plan_key)) {
+      return text(`Member ${args.member_id} is already on ${target.label}, and no open invoice is priced at another plan. Nothing to do.`);
+    }
+    const auditArgs = { member_id: args.member_id, plan_key: args.plan_key, subscription_id: sub.id, reprice_only: true };
+    const auditId = await auditStart(admin, gate.actor, tool, { table: "subscriptions", id: sub.id }, auditArgs);
+    if (auditId == null) return fail(AUDIT_UNAVAILABLE);
+    const { data, error } = await withLockWriter(admin, async () => admin.rpc("reprice_open_onchain_invoices", { p_subscription_id: sub.id }), "MCP reprice");
+    if (error) {
+      await auditFinish(admin, auditId, tool, auditArgs, "failed", { error: error.message });
+      return fail(`Repricing failed: ${error.message}. Nothing was changed.`);
+    }
+    const moved = (data ?? []) as { invoice_id: number; old_amount_cents: number; new_amount_cents: number }[];
+    const warning = await auditFinish(admin, auditId, tool, auditArgs, moved.length ? "repriced" : "nothing_to_reprice", { repriced: moved });
+    return text([
+      `Member ${args.member_id} is already on ${target.label}.`,
+      moved.length
+        ? moved.map((m) => `Repriced crypto invoice #${m.invoice_id}: ${usd(m.old_amount_cents)} → ${usd(m.new_amount_cents)}.`).join("\n")
+        : "The open invoice at another price has a payment on its way, so it keeps its price.",
+      `Audit row #${auditId}.`, warning,
+    ].filter(Boolean).join("\n"));
+  }
   if (card && sub.pending_plan_key) {
     if (sub.pending_plan_key === args.plan_key) return text(`A switch to ${target.label} is already scheduled for ${day(sub.pending_plan_at)}. Nothing to do.`);
     return fail(`A switch to ${planLabel(sub.pending_plan_key)} is already scheduled for ${day(sub.pending_plan_at)}. The member (or an admin in the portal) must cancel it first. Nothing was changed.`);

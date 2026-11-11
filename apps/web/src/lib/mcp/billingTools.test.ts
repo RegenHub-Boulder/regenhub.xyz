@@ -314,7 +314,7 @@ describe("change_member_plan", () => {
     expect((await db.sql("select actor_member_id, payload from admin_actions where action = 'onchain_subscription_changed'"))[0]).toMatchObject({ actor_member_id: 1, payload: { source: "mcp", plan_key: "member_basic" } });
 
     const again = await changeMemberPlanHandler(db as never, ada(), { member_id: 7, plan_key: "member_basic", confirm: true });
-    expect(body(again)).toMatch(/already on Member \+ 1 day\/mo\. Nothing to do\./);
+    expect(body(again)).toMatch(/already on Member \+ 1 day\/mo, and no open invoice is priced at another plan\. Nothing to do\./);
   });
 
   it("card: a daily → daily change applies now with create_prorations; a retry Stripe already took is a no-op", async () => {
@@ -336,5 +336,25 @@ describe("change_member_plan", () => {
     const r = await changeMemberPlanHandler(db as never, ada(), { member_id: 7, plan_key: "member_basic", confirm: true });
     expect(body(r)).toMatch(/is being canceled by an admin/);
     expect(await db.sql("select plan_key from subscriptions where id = 50")).toEqual([{ plan_key: "member_2day" }]);
+  });
+});
+
+describe("repairing an invoice issued before migration 062 (Ash's account)", () => {
+  it("a member already on $30 with an open $50 invoice gets it repriced; a second run has nothing to do", async () => {
+    // She switched before the fix: the plan says $30, the issued renewal invoice still says $50.
+    await db.sql("update subscriptions set plan_key = 'member_basic', monthly_cents = 3000 where id = 50");
+    await db.sql(`insert into onchain_invoices (id, subscription_id, member_id, period_start, period_end, due_at, base_amount_cents, amount_cents, amount_usdc_micros)
+      values (801, 50, 7, $1, $2, $1, 5000, 5000, 50000000)`, [iso(4 * DAY), iso(34 * DAY)]);
+    await db.sql("update onchain_invoices set plan_key = 'member_2day', base_amount_cents = 5000, amount_cents = 5000, amount_usdc_micros = 50000000 where id = 801");
+    expect(await db.sql("select plan_key, amount_cents from onchain_invoices where id = 801")).toEqual([{ plan_key: "member_2day", amount_cents: 5000 }]);
+
+    const preview = await changeMemberPlanHandler(db as never, ada(), { member_id: 7, plan_key: "member_basic" });
+    expect(body(preview)).toMatch(/would be repriced to it/);
+    const r = await changeMemberPlanHandler(db as never, ada(), { member_id: 7, plan_key: "member_basic", confirm: true });
+    expect(body(r)).toMatch(/Repriced crypto invoice #801: \$50\.00 → \$30\.00\./);
+    expect(await db.sql("select plan_key, amount_cents, amount_usdc_micros from onchain_invoices where id = 801")).toEqual([{ plan_key: "member_basic", amount_cents: 3000, amount_usdc_micros: 30_000_000 }]);
+    expect(await audits()).toEqual([expect.objectContaining({ payload: expect.objectContaining({ outcome: "repriced" }) })]);
+
+    expect(body(await changeMemberPlanHandler(db as never, ada(), { member_id: 7, plan_key: "member_basic", confirm: true }))).toMatch(/Nothing to do\./);
   });
 });

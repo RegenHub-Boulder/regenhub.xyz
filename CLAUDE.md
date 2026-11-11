@@ -199,7 +199,8 @@ switch, writes the daily `plan_key` (card) and its `plan_switch_completed` audit
 the audit didn't commit, and an older desk event can't restore the desk if the rest of
 the mirror failed. The landed schedule moves to `subscriptions.landed_schedule_id` until Stripe confirms its
 release; the next event or the billing cron retries it. **Crypto:** `plan_key` changes at once (it prices the next
-invoice) and `pending_plan_*` (no schedule) marks the desk still held; the billing cron
+unpaid invoice: migration 062's trigger reprices a renewal invoice already issued, unless a payment for it is on its
+way — a submitted tx or a signed gasless authorization; an unsigned one is expired) and `pending_plan_*` (no schedule) marks the desk still held; the billing cron
 (`finishOnchainPlanSwitches`) ends only that desk once no paid desk period runs, re-checking under the reservation
 that the switch is still pending and due, so a desk given by hand later is left alone even by a sweep that read the
 row earlier. On-chain plan edits (member and admin) go through `changeOnchainPlan`, under the same reservation, so
@@ -346,8 +347,9 @@ MCP changes, just redeploy the web app.
   every token verification — demoting a member instantly kills their tokens. Tokens are sha-256
   hashed at rest and member-bound (migrations 040/041: `mcp_oauth_clients/codes/tokens`).
 - **Code:** OAuth core in `apps/web/src/lib/mcp/oauth.ts`, metadata in `metadata.ts`, tool surface +
-  transport in `server.ts`; routes under `apps/web/src/app/{mcp,oauth,.well-known}`. Scopes
-  (`read/deploy/locks/migrate`) are wired for the planned per-tier surface (members → day codes,
+  transport in `server.ts`; routes under `apps/web/src/app/{mcp,oauth,.well-known}`. Each
+  session is bound to the member who opened it. Scopes
+  (`read/deploy/locks/migrate/billing`) are wired for the planned per-tier surface (members → day codes,
   admins → events/members, ops → dangerous tools). MCP clients aren't required to *request* a
   scope and ours don't, so `createAuthorizationCode` expands an empty request to the full set,
   and `hasScope()` (metadata.ts) treats an empty scope list as a full grant — entry is already
@@ -356,7 +358,16 @@ MCP changes, just redeploy the web app.
 - **Tools:** `ping`; `save_newsletter_draft(issue_key, subject, markdown_body)` (upserts a
   `newsletter_issues` draft via the server-side service client — the whole point: no secrets on the
   caller's machine); `audit_approvals` / `send_checkout_email`; `list_migrations` and
-  `run_migration(filename)` (scope `migrate`, see below). To add a tool: register it in `server.ts`
+  `run_migration(filename)` (scope `migrate`, see below); member + billing tools
+  (`lib/mcp/billingTools.ts`, full reference in `docs/MCP-BILLING.md`): reads `list_members`,
+  `get_member_billing`, `list_open_invoices`, `billing_summary` (scope `read`), writes
+  `void_stripe_invoice`, `cancel_subscription`, `change_member_plan` (scope `billing`, added 2026-11:
+  tokens minted earlier carry an explicit list without it, so **reconnect the MCP once** to use
+  the writes). Writes only act with `confirm: true` (otherwise they preview), re-check live that
+  the caller is an enabled `is_admin` + `is_ops_admin`, write an `admin_actions` row
+  (`mcp_billing_write`) before acting and its outcome after (no row, no action), and call the same
+  code as the admin page and portal (`cancelMembership`, `scheduleDeskToDaily`,
+  `changeCardPlanNow`, `changeOnchainPlan`). To add a tool: register it in `server.ts`
   (zod input shape), redeploy web; the client auto-reconnects and picks up the new tool (bump
   `SERVER_VERSION` to confirm the rollout).
 - **Migrations over MCP** (`lib/migrations.ts` + `lib/mcp/migrationTools.ts`): `list_migrations` is

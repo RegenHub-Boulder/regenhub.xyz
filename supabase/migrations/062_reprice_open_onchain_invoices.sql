@@ -75,30 +75,35 @@ begin
 end;
 $$;
 
-create function reprice_open_onchain_invoices() returns trigger
-language plpgsql set search_path = public as $$
+-- Reprice one subscription's open invoices that have no payment on the way.
+-- Returns what moved. Called by the trigger below on a plan change, and
+-- directly (service role) to repair an invoice issued before this migration
+-- for a member who had already changed plan.
+create function reprice_open_onchain_invoices(p_subscription_id integer)
+returns table (invoice_id bigint, old_amount_cents integer, new_amount_cents integer, plan_key text)
+language plpgsql security definer set search_path = public as $$
 declare
+  s subscriptions%rowtype;
   inv onchain_invoices%rowtype;
   q record;
   job text;
 begin
-  if new.payment_rail <> 'onchain' or not subscription_is_live(new.status) or new.admin_cancel_mode is not null then
-    return null;
+  -- Same lock order as credit_onchain_invoice: the subscription, then its
+  -- invoices, then their relay jobs.
+  select * into s from subscriptions where id = p_subscription_id for update;
+  if not found or s.payment_rail <> 'onchain' or not subscription_is_live(s.status) or s.admin_cancel_mode is not null then
+    return;
   end if;
-  if new.plan_key is not distinct from old.plan_key and new.monthly_cents is not distinct from old.monthly_cents then
-    return null;
-  end if;
-  -- Same lock order as credit_onchain_invoice: the subscription (held by this
-  -- update), then its invoices, then their relay jobs.
   for inv in
-    select * from onchain_invoices
-    where subscription_id = new.id and status = 'open' and submitted_tx_hash is null
-    order by period_start
+    select * from onchain_invoices oi
+    where oi.subscription_id = s.id and oi.status = 'open' and oi.submitted_tx_hash is null
+    order by oi.period_start
     for update
   loop
-    select status into job from onchain_relay_jobs where invoice_id = inv.id for update;
+    job := null;
+    select j.status into job from onchain_relay_jobs j where j.invoice_id = inv.id for update;
     continue when job in ('signed', 'submitting', 'submitted');
-    select * into q from onchain_invoice_price(new, inv.period_start, inv.discount_bps);
+    select * into q from onchain_invoice_price(s, inv.period_start, inv.discount_bps);
     continue when (q.plan_key, q.base_amount_cents, q.coupon_code, q.coupon_discount_cents, q.amount_cents)
       is not distinct from (inv.plan_key, inv.base_amount_cents, inv.coupon_code, inv.coupon_discount_cents, inv.amount_cents);
     update onchain_invoices set
@@ -108,18 +113,32 @@ begin
     where id = inv.id;
     if job = 'prepared' then
       update onchain_relay_jobs set status = 'expired', last_error = 'invoice repriced by a plan change; sign again'
-        where invoice_id = inv.id and status = 'prepared';
+        where onchain_relay_jobs.invoice_id = inv.id and status = 'prepared';
     end if;
-    if q.coupon_start is not null then
-      update subscriptions set onchain_coupon_start = q.coupon_start where id = new.id and onchain_coupon_start is null;
+    if q.coupon_start is not null and s.onchain_coupon_start is null then
+      update subscriptions set onchain_coupon_start = q.coupon_start where id = s.id and onchain_coupon_start is null;
+      s.onchain_coupon_start := q.coupon_start;
     end if;
+    invoice_id := inv.id; old_amount_cents := inv.amount_cents; new_amount_cents := q.amount_cents; plan_key := q.plan_key;
+    return next;
   end loop;
+end;
+$$;
+
+create function reprice_on_onchain_plan_change() returns trigger
+language plpgsql set search_path = public as $$
+begin
+  if new.plan_key is distinct from old.plan_key or new.monthly_cents is distinct from old.monthly_cents then
+    perform reprice_open_onchain_invoices(new.id);
+  end if;
   return null;
 end;
 $$;
 
 create trigger reprice_open_onchain_invoices after update of plan_key, monthly_cents on subscriptions
-  for each row execute function reprice_open_onchain_invoices();
+  for each row when (new.payment_rail = 'onchain') execute function reprice_on_onchain_plan_change();
 
 revoke all on function onchain_invoice_price(subscriptions, timestamptz, integer) from public, anon, authenticated;
-revoke all on function reprice_open_onchain_invoices() from public, anon, authenticated;
+revoke all on function reprice_open_onchain_invoices(integer) from public, anon, authenticated;
+grant execute on function reprice_open_onchain_invoices(integer) to service_role;
+revoke all on function reprice_on_onchain_plan_change() from public, anon, authenticated;

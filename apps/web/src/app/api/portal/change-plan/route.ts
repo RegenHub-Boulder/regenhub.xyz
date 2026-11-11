@@ -34,8 +34,10 @@ interface ChangePlanBody {
  * automatically: Stripe keeps the coupon on the subscription across item
  * changes.
  *
- * On-chain plans are prospective: issued invoices retain their prices and access
- * follows the paid invoice snapshot for the period it covers.
+ * On-chain plans are prospective: the change prices the next unpaid invoice
+ * (one already issued is repriced unless a payment for it is on its way,
+ * migration 062) and access follows the paid invoice snapshot for the period
+ * it covers.
  *
  * Card, desk → daily: scheduled for the end of the paid period (lib/planSwitch.ts);
  * the member keeps the desk and its door code until then, and the Stripe
