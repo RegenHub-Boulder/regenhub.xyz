@@ -2,13 +2,15 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { fetchUpcomingEvents } from "@/lib/events";
 import { isRegenosEventsConfigured } from "@/lib/regenos/config";
-import { regenosCalendarIcsUrl } from "@/lib/regenos/events";
 import { CalendarSubscribeNote, EventList, LumaEmbed } from "@/components/events/EventList";
+import { fetchSeriesOverviews } from "@/lib/seriesEvents";
+import { SeriesCards } from "@/components/events/SeriesCards";
 
 /**
  * The landing page's "Upcoming Events" body.
  *
- * Async server component. Three states, in priority order:
+ * Async server component. Leads with the regular nights (series cards with
+ * their next date), then the rest of the calendar. Three states:
  *
  *  1. regenOS not configured  → the Luma embed, byte-identical to before.
  *  2. regenOS configured, events found → real event cards from the commons.
@@ -31,14 +33,21 @@ const HORIZON_DAYS = 60;
 export default async function UpcomingEvents() {
   if (!isRegenosEventsConfigured()) return <LumaEmbed />;
 
-  const { source, events } = await fetchUpcomingEvents(HORIZON_DAYS);
-  if (events.length === 0) return <LumaEmbed />;
-
-  const icsUrl = source === "regenos" ? regenosCalendarIcsUrl() : null;
+  const [{ source, events }, overviews] = await Promise.all([fetchUpcomingEvents(HORIZON_DAYS), fetchSeriesOverviews()]);
+  // The regular nights lead the page from the hero (NextNights); list the rest here.
+  const others = events.filter((e) => !overviews.some((o) => o.upcoming.some((u) => u.uri === e.id))).slice(0, 6);
 
   return (
     <div className="space-y-4">
-      <EventList events={events} />
+      {source === "regenos" ? (
+        others.length > 0 ? (
+          <EventList events={others} />
+        ) : (
+          <p className="text-center text-muted">Nothing else on the calendar yet.</p>
+        )
+      ) : (
+        <LumaEmbed />
+      )}
 
       <p className="text-center">
         <Link
@@ -50,7 +59,20 @@ export default async function UpcomingEvents() {
         </Link>
       </p>
 
-      {icsUrl && <CalendarSubscribeNote icsUrl={icsUrl} />}
+      {source === "regenos" && <CalendarSubscribeNote icsUrl="/events.ics" />}
     </div>
+  );
+}
+
+/** The regular nights, right under the hero: what the home page leads with. */
+export async function NextNights() {
+  const overviews = await fetchSeriesOverviews();
+  return (
+    <section className="relative px-6 pb-4" aria-label="Regular nights">
+      <div className="max-w-4xl mx-auto space-y-3">
+        <h2 className="text-xl font-semibold text-forest text-center">Come to a night</h2>
+        <SeriesCards overviews={overviews} />
+      </div>
+    </section>
   );
 }

@@ -1,0 +1,148 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { ArrowLeft, CalendarDays, CalendarPlus, MapPin, Repeat } from "lucide-react";
+import { getSeries, SERIES } from "@/lib/series";
+import { fetchCollectiveEvents, formatEventLocation } from "@/lib/regenos/events";
+import { overviewFor } from "@/lib/seriesEvents";
+import { formatEventRange, formatEventWhen } from "@/components/events/EventList";
+import { nextNightLabel } from "@/components/events/SeriesCards";
+
+/**
+ * A series page: `/events/agents-night`, `/events/civic-tech-night`.
+ * What the night is, the next date, the nights after it, past nights, and the
+ * series' calendar feed. RSVP lives on each night's own page.
+ */
+
+export const revalidate = 300;
+
+export function generateStaticParams() {
+  return SERIES.map((s) => ({ key: s.slug }));
+}
+
+interface PageProps {
+  params: Promise<{ key: string }>;
+}
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const series = getSeries((await params).key);
+  if (!series) return { title: "Events — RegenHub" };
+  return { title: `${series.name} — RegenHub`, description: series.blurb };
+}
+
+export default async function SeriesPage({ params }: PageProps) {
+  const series = getSeries((await params).key);
+  if (!series) notFound();
+
+  const now = new Date();
+  const events = (await fetchCollectiveEvents()) ?? [];
+  const o = overviewFor(series, events, now, 4);
+  const { when, note } = nextNightLabel(o.next);
+  const nextHref = o.next?.kind === "posted" ? o.next.event.url : null;
+  const later = [
+    ...o.upcoming.slice(o.next?.kind === "posted" ? 1 : 0).map((e) => ({
+      key: e.uri,
+      start: e.startAt!,
+      when: formatEventWhen(e.startAt!),
+      href: e.url,
+      note: e.name !== series.name ? e.name.slice(series.name.length).replace(/^\s*[:\-–—|]\s*/, "") : null,
+    })),
+    ...o.planned.slice(o.next?.kind === "planned" ? 1 : 0).map((n) => ({
+      key: n.date,
+      start: n.startsAt,
+      when: formatEventWhen(n.startsAt),
+      href: null,
+      note: n.confirmed ? "Planned" : "Planned, to be confirmed",
+    })),
+  ]
+    .sort((a, b) => a.start.localeCompare(b.start))
+    .slice(0, 4);
+  const place = formatEventLocation(series.place);
+  const nightTimes = formatEventRange(
+    o.next?.kind === "posted" ? o.next.event.startAt : o.next?.night.startsAt ?? null,
+    o.next?.kind === "posted" ? o.next.event.endAt : o.next?.night.endsAt ?? null,
+  );
+
+  return (
+    <div className="px-6 py-10">
+      <div className="max-w-3xl mx-auto space-y-6">
+        <p className="text-sm">
+          <Link href="/events" className="inline-flex items-center gap-1.5 text-muted hover:text-sage transition-colors">
+            <ArrowLeft className="w-4 h-4" /> All events
+          </Link>
+        </p>
+
+        <header className="space-y-2">
+          <p className="text-sm uppercase tracking-wide text-sage flex items-center gap-1.5">
+            <Repeat className="w-4 h-4" /> {series.rhythm}
+          </p>
+          <h1 className="text-3xl md:text-4xl font-bold text-forest leading-tight">{series.name}</h1>
+          <p className="text-lg text-muted">{series.about}</p>
+          <p className="flex items-start gap-2 text-muted">
+            <MapPin className="w-5 h-5 text-sage shrink-0 mt-0.5" /> {place}
+          </p>
+        </header>
+
+        <section className="glass-panel-strong p-6 md:p-8 space-y-3" data-testid="series-next">
+          <h2 className="text-sm uppercase tracking-wide text-muted">Next night</h2>
+          <p className="text-2xl font-semibold flex items-start gap-2">
+            <CalendarDays className="w-6 h-6 text-sage shrink-0 mt-1" />
+            <span>{nightTimes || when}</span>
+          </p>
+          {note && <p className="text-sm text-muted">{note}</p>}
+          {nextHref ? (
+            <Link href={nextHref} className="inline-block text-sage hover:underline">
+              Details and RSVP →
+            </Link>
+          ) : (
+            <p className="text-sm text-muted">Open to anyone. Just come; RSVP opens when the night is posted.</p>
+          )}
+        </section>
+
+        {later.length > 0 && (
+          <section className="space-y-2">
+            <h2 className="text-lg font-semibold">After that</h2>
+            <ul className="space-y-2">
+              {later.map((l) => (
+                <li key={l.key} className="glass-panel-subtle rounded-lg px-4 py-3 flex flex-wrap gap-x-3 text-sm">
+                  {l.href ? (
+                    <Link href={l.href} className="font-medium hover:text-sage">
+                      {l.when}
+                    </Link>
+                  ) : (
+                    <span className="font-medium">{l.when}</span>
+                  )}
+                  {l.note && <span className="text-muted">{l.note}</span>}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {o.past.length > 0 && (
+          <section className="space-y-2">
+            <h2 className="text-lg font-semibold">Past nights</h2>
+            <ul className="space-y-1 text-sm">
+              {o.past.slice(0, 12).map((e) => (
+                <li key={e.uri}>
+                  <Link href={e.url ?? "#"} className="text-muted hover:text-sage">
+                    {formatEventWhen(e.startAt!)}
+                    {e.name !== series.name ? ` · ${e.name}` : ""}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <p className="text-sm text-muted flex items-center gap-2">
+          <CalendarPlus className="w-4 h-4 text-sage" />
+          <a href={`/events/${series.slug}.ics`} className="underline hover:text-sage">
+            Add {series.name} to your calendar
+          </a>
+          <span>(a feed that stays up to date)</span>
+        </p>
+      </div>
+    </div>
+  );
+}

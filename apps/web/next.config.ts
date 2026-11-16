@@ -77,6 +77,10 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(__dirname, "../.."),
   },
+  async rewrites() {
+    // Series calendar feeds at /events/<slug>.ics (the route lives at /events/<slug>/calendar.ics).
+    return [{ source: "/events/:slug([a-z0-9-]+).ics", destination: "/events/:slug/calendar.ics" }];
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

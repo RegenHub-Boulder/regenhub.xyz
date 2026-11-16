@@ -6,9 +6,12 @@ vi.mock("@/lib/regenos/config", () => ({
   REGENOS_TIMEOUT_MS: 8_000,
 }));
 
+vi.mock("@/lib/techne/rsvpConfig", () => ({ isRsvpEnabled: vi.fn(() => true) }));
+
 import { NextRequest } from "next/server";
 import { GET, POST } from "./route";
 import { isRegenosLoginEnabled } from "@/lib/regenos/config";
+import { isRsvpEnabled } from "@/lib/techne/rsvpConfig";
 
 /** The proxy's own contract, exercised through the handler: gate first, then forward. */
 function ctx(nsid: string) {
@@ -35,6 +38,7 @@ beforeEach(() => {
   );
   vi.stubGlobal("fetch", upstream);
   vi.mocked(isRegenosLoginEnabled).mockReturnValue(true);
+  vi.mocked(isRsvpEnabled).mockReturnValue(true);
 });
 
 afterEach(() => {
@@ -108,7 +112,7 @@ describe("xrpc proxy allowlist", () => {
   it.each([
     // Neighbours of the allowed writes — near-misses are the ones that matter.
     "social.scenius.adoptEvent",
-    "social.scenius.rsvp",
+    "social.scenius.respondToRequest",
     "social.scenius.inviteToEvent",
     "social.scenius.createScene",
     // Membership sync is the admin API, not this proxy.
@@ -119,6 +123,25 @@ describe("xrpc proxy allowlist", () => {
     expect(res.status).toBe(404);
     expect(upstream).not.toHaveBeenCalled();
   });
+
+  it("forwards rsvp (POST) and getEventAttendance (GET) when RSVP is on", async () => {
+    upstream.mockImplementation(async () => new Response("{}", { status: 200 }));
+    expect((await POST(req("social.scenius.rsvp"), ctx("social.scenius.rsvp"))).status).toBe(200);
+    const att = "social.scenius.getEventAttendance";
+    expect((await GET(req(att, "GET"), ctx(att))).status).toBe(200);
+    expect(upstream).toHaveBeenCalledTimes(2);
+    expect(upstream.mock.calls[0][0]).toBe("https://appview.test/xrpc/social.scenius.rsvp");
+  });
+
+  it.each(["social.scenius.rsvp", "social.scenius.getEventAttendance"])(
+    "404s %s when the RSVP flag is off, even with login on",
+    async (nsid) => {
+      vi.mocked(isRsvpEnabled).mockReturnValue(false);
+      const res = await POST(req(nsid), ctx(nsid));
+      expect(res.status).toBe(404);
+      expect(upstream).not.toHaveBeenCalled();
+    },
+  );
 
   it("404s an allowed event write when the login flag is off", async () => {
     vi.mocked(isRegenosLoginEnabled).mockReturnValue(false);

@@ -150,11 +150,7 @@ export function EventList({ events }: { events: UpcomingEvent[] }) {
   );
 }
 
-/**
- * The calendar-subscription line. This ICS URL deliberately stays on the regenOS
- * web app: it's a feed a calendar client subscribes to, not a page a person
- * navigates to, so it isn't a link-out in the sense that matters.
- */
+/** The calendar-subscription line: regenhub.xyz's own feed (`/events.ics`). */
 export function CalendarSubscribeNote({ icsUrl }: { icsUrl: string }) {
   return (
     <p className="text-center text-sm text-muted">

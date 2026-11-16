@@ -8,7 +8,7 @@ import { MemberDirectory } from "@/components/landing/MemberDirectory";
 import { ForestMascot } from "@/components/landing/ForestMascot";
 import HeroInterestForm from "@/components/landing/HeroInterestForm";
 import CommunityGallery from "@/components/landing/CommunityGallery";
-import UpcomingEvents from "@/components/landing/UpcomingEvents";
+import UpcomingEvents, { NextNights } from "@/components/landing/UpcomingEvents";
 import { PublicHeader } from "@/components/layout/PublicHeader";
 import { PublicFooter } from "@/components/layout/PublicFooter";
 import { HUB_ADDRESS, HUB_EMAIL, HUB_TELEGRAM } from "@/components/layout/publicNav";
@@ -70,6 +70,11 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
           </div>
         </div>
       </section>
+
+      {/* The regular nights lead, right under the hero */}
+      <Suspense fallback={<div className="h-40" />}>
+        <NextNights />
+      </Suspense>
 
       {/* Community Gallery */}
       <CommunityGallery />
