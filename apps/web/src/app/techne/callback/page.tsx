@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { rsvpConfig } from "@/lib/techne/rsvpConfig";
+import { techneConfig } from "@/lib/techne/config";
 import { TechneCallback } from "@/components/events/TechneCallback";
 import { PublicShell } from "@/components/layout/PublicShell";
 
@@ -7,7 +7,7 @@ import { PublicShell } from "@/components/layout/PublicShell";
 export const dynamic = "force-dynamic";
 
 export default function TechneCallbackPage() {
-  const config = rsvpConfig();
+  const config = techneConfig();
   if (!config) redirect("/events");
   return (
     <PublicShell>

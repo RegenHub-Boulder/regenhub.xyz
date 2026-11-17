@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { isRegenosLoginEnabled } from "@/lib/regenos/config";
+import { isTechneSignInEnabled } from "@/lib/techne/config";
 
 /**
  * POST /api/portal/events/revalidate
@@ -15,7 +15,7 @@ import { isRegenosLoginEnabled } from "@/lib/regenos/config";
  * the landing page refetch a public calendar it would have refetched anyway.
  */
 export async function POST() {
-  if (!isRegenosLoginEnabled()) {
+  if (!isTechneSignInEnabled()) {
     return NextResponse.json({ error: "NotFound" }, { status: 404 });
   }
 

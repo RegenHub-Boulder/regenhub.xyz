@@ -20,7 +20,6 @@ import {
   type EventFormValues,
   type EventVisibility,
 } from "@/lib/regenos/eventForm";
-import { ImportLumaCard } from "@/components/portal/ImportLumaCard";
 import { AddSeriesNights } from "@/components/portal/AddSeriesNights";
 import type { PlannedNight } from "@/lib/series";
 import type { PostedNight } from "@/lib/seriesNights";
@@ -55,27 +54,25 @@ function formatWhen(iso: string | null): string {
   });
 }
 
-/** Every mutation is a same-origin `/xrpc` POST; the regenOS session cookie rides along by itself. */
-async function xrpcPost(nsid: string, body: unknown): Promise<void> {
-  const res = await fetch(`/xrpc/${nsid}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const json = await res.json().catch(() => null);
-    throw new Error(json?.message ?? json?.error ?? `regenOS returned ${res.status}`);
-  }
-}
+/**
+ * How the steward's change reaches the collective's calendar: create, update or delete, with the
+ * bodies lib/regenos/eventForm.ts builds (TID keys, the hub's timezone, series names). Null while
+ * Techne has no documented way for an app to post as the collective (docs/TECHNE-SIGN-IN.md); the
+ * page then shows the calendar and says why posting is off.
+ */
+export type EventWrite = (op: "create" | "update" | "delete", input: Record<string, unknown>) => Promise<void>;
 
 export function ManageEvents({
   authority,
   events,
   nights = [],
   posted = [],
+  write,
 }: {
   authority: string;
   events: ManageableEvent[];
+  /** Null = posting is off (see EventWrite). */
+  write: EventWrite | null;
   /** Confirmed series nights not posted yet ("Add the next nights"). */
   nights?: PlannedNight[];
   /** Each posted event's series and start, so a hand-picked night isn't posted twice. */
@@ -114,19 +111,14 @@ export function ManageEvents({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!write) return;
     setSaving(true);
     setError(null);
     try {
       if (editing) {
-        await xrpcPost(
-          "social.scenius.updateEvent",
-          buildUpdateEventInput(form, { authority, rkey: editing }),
-        );
+        await write("update", buildUpdateEventInput(form, { authority, rkey: editing }));
       } else {
-        await xrpcPost(
-          "social.scenius.createEvent",
-          buildCreateEventInput(form, { authority, rkey: mintRkey() }),
-        );
+        await write("create", buildCreateEventInput(form, { authority, rkey: mintRkey() }));
       }
       setEditing(null);
       await refresh();
@@ -138,16 +130,14 @@ export function ManageEvents({
   }
 
   async function handleCancel(event: ManageableEvent) {
+    if (!write) return;
     if (!window.confirm(`Cancel "${event.name}"? Anyone who RSVP'd will be told it's called off.`)) {
       return;
     }
     setBusyRkey(event.rkey);
     setError(null);
     try {
-      await xrpcPost(
-        "social.scenius.deleteEvent",
-        buildDeleteEventInput({ authority, rkey: event.rkey }),
-      );
+      await write("delete", buildDeleteEventInput({ authority, rkey: event.rkey }));
       if (editing === event.rkey) setEditing(null);
       await refresh();
     } catch (err) {
@@ -169,7 +159,9 @@ export function ManageEvents({
         </div>
       )}
 
-      {editing === null ? (
+      {!write ? (
+        <PostingWaits nights={nights} />
+      ) : editing === null ? (
         <>
           <div className="flex flex-wrap gap-3">
             <Button onClick={openCreate} className="btn-primary-glass gap-2 px-6">
@@ -181,12 +173,11 @@ export function ManageEvents({
             authority={authority}
             nights={nights}
             posted={posted}
-            post={async (nsid, body) => {
-              await xrpcPost(nsid, body);
+            post={async (body) => {
+              await write("create", body);
               await refresh();
             }}
           />
-          <ImportLumaCard authority={authority} onImported={refresh} />
         </>
       ) : (
         <Card className="glass-panel">
@@ -336,8 +327,8 @@ export function ManageEvents({
         events={upcoming}
         emptyLabel="Nothing on the calendar yet."
         busyRkey={busyRkey}
-        onEdit={openEdit}
-        onCancel={handleCancel}
+        onEdit={write ? openEdit : null}
+        onCancel={write ? handleCancel : null}
       />
       {past.length > 0 && (
         <EventList
@@ -345,8 +336,8 @@ export function ManageEvents({
           events={past}
           emptyLabel=""
           busyRkey={busyRkey}
-          onEdit={openEdit}
-          onCancel={handleCancel}
+          onEdit={write ? openEdit : null}
+          onCancel={write ? handleCancel : null}
         />
       )}
 
@@ -367,8 +358,8 @@ function EventList({
   events: ManageableEvent[];
   emptyLabel: string;
   busyRkey: string | null;
-  onEdit: (e: ManageableEvent) => void;
-  onCancel: (e: ManageableEvent) => void;
+  onEdit: ((e: ManageableEvent) => void) | null;
+  onCancel: ((e: ManageableEvent) => void) | null;
 }) {
   return (
     <div className="space-y-3">
@@ -403,27 +394,55 @@ function EventList({
                   </Link>
                 )}
               </div>
-              <div className="flex gap-2 shrink-0">
-                <Button onClick={() => onEdit(event)} className="btn-glass gap-2 px-4">
-                  <Pencil className="w-3.5 h-3.5" />
-                  Edit
-                </Button>
-                <Button
-                  onClick={() => onCancel(event)}
-                  disabled={busyRkey === event.rkey}
-                  className="btn-glass gap-2 px-4 text-red-400"
-                >
-                  {busyRkey === event.rkey ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Trash2 className="w-3.5 h-3.5" />
-                  )}
-                  Cancel event
-                </Button>
-              </div>
+              {onEdit && onCancel && (
+                <div className="flex gap-2 shrink-0">
+                  <Button onClick={() => onEdit(event)} className="btn-glass gap-2 px-4">
+                    <Pencil className="w-3.5 h-3.5" />
+                    Edit
+                  </Button>
+                  <Button
+                    onClick={() => onCancel(event)}
+                    disabled={busyRkey === event.rkey}
+                    className="btn-glass gap-2 px-4 text-red-400"
+                  >
+                    {busyRkey === event.rkey ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-3.5 h-3.5" />
+                    )}
+                    Cancel event
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         ))
+      )}
+    </div>
+  );
+}
+
+/** What a steward sees in place of the posting controls while Techne has no documented write. */
+function PostingWaits({ nights }: { nights: PlannedNight[] }) {
+  return (
+    <div className="glass-panel p-5 space-y-2 text-sm" data-testid="posting-waits">
+      <p className="font-medium">Posting from here is off for now</p>
+      <p className="text-muted leading-relaxed">
+        Techne&apos;s published methods let an app write your own records, not the collective&apos;s. We&apos;ve asked
+        Techne how a steward posts as RegenHub; posting comes back here once they answer. The calendar below is what
+        everyone sees.
+      </p>
+      {nights.length > 0 && (
+        <p className="text-muted" data-testid="nights-not-posted">
+          Confirmed but not posted yet:{" "}
+          {nights.map((n, i) => (
+            <span key={`${n.series.slug}:${n.date}`}>
+              {i > 0 && "; "}
+              <span className="text-foreground">{n.series.name}</span>, {formatWhen(n.startsAt)}
+            </span>
+          ))}
+          .
+        </p>
       )}
     </div>
   );

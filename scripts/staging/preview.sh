@@ -34,6 +34,6 @@ node "$ROOT/scripts/staging/seed-rsvps.mjs" --standin http://127.0.0.1:18593 --s
 COLLECTIVE="$(node -e 'console.log(require(process.argv[1]).collective)' "$STATE/seed.json")"
 cd "$ROOT/apps/web"
 export REGENOS_BASE_URL=http://127.0.0.1:18593 REGENOS_COLLECTIVE_DID="$COLLECTIVE" \
-  TECHNE_RSVP_ENABLED=true TECHNE_STAGING_STANDIN=1 TECHNE_STANDIN_URL=http://127.0.0.1:18593 \
+  TECHNE_SIGNIN_ENABLED=true TECHNE_STAGING_STANDIN=1 TECHNE_STANDIN_URL=http://127.0.0.1:18593 \
   SUPABASE_INTERNAL_URL=http://127.0.0.1:18594 NODE_ENV=production
 exec node_modules/.bin/next start -H 127.0.0.1 -p 18590

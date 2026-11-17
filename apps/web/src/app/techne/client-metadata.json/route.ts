@@ -1,17 +1,17 @@
 import { clientMetadata } from "techne-sdk/auth";
-import { rsvpConfig } from "@/lib/techne/rsvpConfig";
-import { RSVP_TYPES } from "@/lib/techne/rsvp";
+import { techneConfig } from "@/lib/techne/config";
+import { SIGNIN_TYPES } from "@/lib/techne/session";
 
 /**
  * regenhub.xyz as a Techne app: its atproto OAuth client metadata
  * (techne.computer/docs/building-an-app.md "Sign-in": the document's own URL is
  * the client id). Built by techne-sdk's `clientMetadata`, asking only for what
- * RSVP needs. 404 while RSVP is off.
+ * the door needs (lib/techne/session.ts SIGNIN_TYPES). 404 while the door is off.
  */
 export const dynamic = "force-dynamic";
 
 export function GET() {
-  const config = rsvpConfig();
+  const config = techneConfig();
   if (!config) return Response.json({ error: "NotFound" }, { status: 404 });
   const origin = new URL(config.clientId).origin;
   const doc = clientMetadata({
@@ -20,7 +20,7 @@ export function GET() {
     clientUri: origin,
     logoUri: `${origin}/regenhub-logo.svg`,
     redirectUris: [config.redirectUri],
-    types: RSVP_TYPES,
+    types: SIGNIN_TYPES,
     ...(config.platform ? { platform: config.platform } : {}),
   });
   return Response.json(doc, { headers: { "cache-control": "public, max-age=300" } });

@@ -16,9 +16,9 @@
  * SAME CONTRACT AS LUMA: every function returns []/null on failure and never
  * throws. Techne being down must never break the landing page or the newsletter.
  *
- * The steward management read at the bottom (`fetchCollectiveEventsForManagement`)
- * still uses the legacy `social.scenius.*` methods with the steward's cookie: it
- * has to see private events, which the documented anonymous read can't.
+ * The legacy steward read at the bottom (`fetchCollectiveEventsForManagement`) is the old
+ * regenOS lane (`social.scenius.*` with the steward's cookie). /portal/events no longer uses it:
+ * stewards see the same documented public reads as everyone (docs/TECHNE-SIGN-IN.md).
  */
 
 import { REGENOS_TIMEOUT_MS, isRegenosEventsConfigured, regenosBaseUrl, regenosCollectiveDid } from "./config";
@@ -139,6 +139,8 @@ export interface CollectiveEvent {
   series: Series | null;
   /** `community.lexicon.calendar.event#cancelled` etc., when set. */
   status: string | null;
+  /** The stored record body, as read (the stewards' edit form prefills from it). */
+  value: CalendarEventValue;
 }
 
 /** Back-compat name used by the detail page. */
@@ -161,6 +163,7 @@ function toCollectiveEvent(r: TechneRecord<CalendarEventValue>): CollectiveEvent
     url: eventUrl(r.uri),
     series: seriesOf(v),
     status: v.status ?? null,
+    value: v,
   };
 }
 

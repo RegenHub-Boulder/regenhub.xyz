@@ -10,7 +10,7 @@
 import { fetchCollectiveEvents, formatEventLocation, type CollectiveEvent } from "@/lib/regenos/events";
 import { SERIES, hasEnded, isCancelled, type Series } from "@/lib/series";
 import { HUB_TIMEZONE } from "@/lib/regenos/eventForm";
-import { siteOrigin } from "@/lib/techne/rsvpConfig";
+import { siteOrigin } from "@/lib/techne/config";
 import { buildIcs, type IcsEvent } from "@/lib/ics";
 
 export const siteUrl = siteOrigin;

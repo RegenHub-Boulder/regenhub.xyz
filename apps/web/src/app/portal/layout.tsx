@@ -4,7 +4,7 @@ import { loginUrlFor } from "@/lib/safeNext";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { MobileNav, type NavLink } from "@/components/nav/MobileNav";
-import { isRegenosLoginEnabled } from "@/lib/regenos/config";
+import { isTechneSignInEnabled } from "@/lib/techne/config";
 
 export const metadata = { title: "Member Portal — RegenHub" };
 
@@ -23,10 +23,9 @@ export default async function PortalLayout({ children }: { children: React.React
   // Matches the admin layout's gate: disabling a member also removes admin.
   const isAdmin = !!member?.is_admin && !member.disabled;
 
-  // Steward-ness is a regenOS read, and doing it here would put an AppView
-  // round-trip on every portal page. The link is flag-gated; the page itself
-  // explains honestly when the person isn't a steward.
-  const eventsEnabled = isRegenosLoginEnabled();
+  // Steward-ness is a Techne read the page does once you've signed in with Techne, so the link is
+  // flag-gated only; the page itself explains honestly when the person isn't a steward.
+  const eventsEnabled = isTechneSignInEnabled();
 
   const links: NavLink[] = [
     { href: "/portal", label: "Dashboard" },
