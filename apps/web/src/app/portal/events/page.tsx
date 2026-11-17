@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { CalendarDays, KeyRound, ShieldQuestion } from "lucide-react";
 import { isRegenosEventsConfigured, isRegenosLoginEnabled, regenosCollectiveDid } from "@/lib/regenos/config";
 import { fetchRegenosIdentity, fetchRegenosSceneStanding } from "@/lib/regenos/auth";
-import { fetchCollectiveEventsForManagement } from "@/lib/regenos/events";
+import { fetchAttendance, fetchCollectiveEventsForManagement } from "@/lib/regenos/events";
+import { SERIES, isCancelled, seriesOf } from "@/lib/series";
+import { unpostedNights } from "@/lib/seriesNights";
 import { ManageEvents, type ManageableEvent } from "@/components/portal/ManageEvents";
 
 export const metadata = { title: "Manage Events — RegenHub" };
@@ -109,7 +111,15 @@ export default async function ManageEventsPage() {
   }
 
   const events = await fetchCollectiveEventsForManagement(cookieHeader);
-  const manageable: ManageableEvent[] = events.map((e) => ({
+  const now = new Date();
+  const goingCounts = await Promise.all(
+    events.map((e) =>
+      e.visibility === "public" && e.startAt && Date.parse(e.startAt) > now.getTime() - 86_400_000
+        ? fetchAttendance(e.uri).then((a) => a?.going ?? null)
+        : Promise.resolve(null),
+    ),
+  );
+  const manageable: ManageableEvent[] = events.map((e, i) => ({
     uri: e.uri,
     rkey: e.rkey,
     name: e.name,
@@ -117,12 +127,19 @@ export default async function ManageEventsPage() {
     visibility: e.visibility,
     value: e.value,
     url: e.url,
+    going: goingCounts[i],
   }));
+  const posted = events.map((e) => ({
+    seriesSlug: seriesOf(e.value)?.slug ?? null,
+    startAt: e.startAt,
+    cancelled: isCancelled(e.value),
+  }));
+  const nights = SERIES.flatMap((s) => unpostedNights(s, posted, now));
 
   return (
     <div className="space-y-8">
       {header}
-      <ManageEvents authority={collectiveDid} events={manageable} />
+      <ManageEvents authority={collectiveDid} events={manageable} nights={nights} posted={posted} />
     </div>
   );
 }
