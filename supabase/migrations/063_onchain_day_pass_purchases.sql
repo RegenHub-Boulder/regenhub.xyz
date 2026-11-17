@@ -13,7 +13,7 @@
 --
 -- Additive: existing rows become kind 'membership' and keep their behaviour.
 -- Reverse (only while no day_pass invoice exists):
---   drop function expire_onchain_pass_invoices(timestamptz);
+--   drop function expire_onchain_pass_invoices(timestamptz, integer);
 --   drop trigger onchain_invoices_active_pass_wallet on onchain_invoices;
 --   drop function assert_pass_invoice_wallet_active();
 --   recreate 057's price_onchain_invoice and 058's onchain_invoices_active_member_wallet
@@ -37,10 +37,12 @@ alter table onchain_invoices
     or (kind = 'day_pass' and subscription_id is null and wallet_id is not null)
   );
 
--- One unpaid pass purchase per member: a second click resumes it.
+-- One unpaid pass purchase per member: a second click resumes it. An
+-- 'exception' one counts: it can still be paid (correctly, or by a relay retry
+-- after a revert) until it expires.
 create unique index onchain_invoices_one_unpaid_pass
   on onchain_invoices (member_id)
-  where kind = 'day_pass' and status in ('open', 'submitted', 'detected');
+  where kind = 'day_pass' and status in ('open', 'submitted', 'detected', 'exception');
 
 comment on column onchain_invoices.kind is
   'membership = a subscription period; day_pass = one day pass bought with USDC (no subscription, wallet_id is the payer, due_at is when an unpaid purchase expires)';
@@ -93,8 +95,10 @@ create trigger onchain_invoices_active_pass_wallet
 
 -- Credit: 059's function with a pass branch. The membership branch is
 -- unchanged. A pass credit has no door or subscription effect, so its payment
--- is written with effects already complete.
-create or replace function credit_onchain_invoice(
+-- is written with effects already complete. Dropped and created (as 059 does),
+-- with its grants restored below.
+drop function credit_onchain_invoice(bigint, text, integer, bigint, text, text, text, text, bigint, text, jsonb);
+create function credit_onchain_invoice(
   p_invoice_id bigint,
   p_tx_hash text,
   p_log_index integer,
@@ -256,7 +260,9 @@ $$;
 -- (credit and reprice order), so it can't cross a submit or a signing: the
 -- loser of each race sees the other's committed state. An expired purchase
 -- is final; a payment reported for it afterwards is kept for an admin.
-create function expire_onchain_pass_invoices(p_now timestamptz default now())
+-- p_member_id: only that member's (a purchase start, or a wallet change, which
+-- passes p_now => 'infinity' to drop an unpaid purchase tied to the old wallet).
+create function expire_onchain_pass_invoices(p_now timestamptz default now(), p_member_id integer default null)
 returns setof bigint
 language plpgsql
 security definer
@@ -270,6 +276,7 @@ begin
     select i.id from onchain_invoices i
     where i.kind = 'day_pass' and i.status in ('open', 'exception')
       and i.submitted_tx_hash is null and i.due_at <= p_now
+      and (p_member_id is null or i.member_id = p_member_id)
     order by i.id
     for update skip locked
   loop
@@ -288,6 +295,6 @@ $$;
 
 revoke all on function credit_onchain_invoice(bigint, text, integer, bigint, text, text, text, text, bigint, text, jsonb) from public, anon, authenticated;
 grant execute on function credit_onchain_invoice(bigint, text, integer, bigint, text, text, text, text, bigint, text, jsonb) to service_role;
-revoke all on function expire_onchain_pass_invoices(timestamptz) from public, anon, authenticated;
-grant execute on function expire_onchain_pass_invoices(timestamptz) to service_role;
+revoke all on function expire_onchain_pass_invoices(timestamptz, integer) from public, anon, authenticated;
+grant execute on function expire_onchain_pass_invoices(timestamptz, integer) to service_role;
 revoke all on function assert_pass_invoice_wallet_active() from public, anon, authenticated;

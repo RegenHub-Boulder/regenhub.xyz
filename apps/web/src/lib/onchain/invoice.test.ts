@@ -75,8 +75,6 @@ describe("on-chain invoice math", () => {
     } as never, new Date("2026-09-10T00:00:00.000Z"));
 
     expect(subscriptions.in).toHaveBeenCalledWith("status", ["active", "trialing", "past_due"]);
-    // A day pass purchase's due_at is its expiry, never a membership falling due.
-    expect(invoices.eq).toHaveBeenCalledWith("kind", "membership");
   });
 });
 

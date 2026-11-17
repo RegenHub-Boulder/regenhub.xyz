@@ -96,6 +96,8 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
       .from("onchain_invoices")
       .select("id, kind, period_start, period_end, amount_cents, status")
       .eq("member_id", member.id)
+      // The cancel card's invoices are membership periods; USDC day passes show under purchases and activity.
+      .eq("kind", "membership")
       .order("period_start", { ascending: false })
       .limit(6),
   ]);

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { createServiceClient } from "@/lib/supabase/admin";
 
 /**
  * Plain-language answers for the wallet SQL functions in migration 058
@@ -72,4 +73,26 @@ export function walletRpcErrorResponse(
       console.error(`[OnchainWallet] ${context} failed:`, error);
       return NextResponse.json({ error: "Could not update your wallet. Try again, or ask an admin." }, { status: 500 });
   }
+}
+
+type WalletAdmin = ReturnType<typeof createServiceClient>;
+
+/**
+ * Before the member's wallet changes (a different address linked, or theirs
+ * removed): drop their unpaid USDC day pass purchases with nothing on the way
+ * (expire_onchain_pass_invoices, migration 063). Each names the old wallet as
+ * its payer and would block the change until it expired. A purchase with a
+ * payment on its way is kept, and still blocks, as it should. Returns an error
+ * response, or null to carry on.
+ */
+export async function abandonPassPurchasesOnWalletChange(admin: WalletAdmin, memberId: number, newAddress: string | null) {
+  if (newAddress) {
+    const { data: current, error } = await admin.from("member_wallets").select("address")
+      .eq("member_id", memberId).is("revoked_at", null).maybeSingle();
+    if (error) return NextResponse.json({ error: "Could not check your current wallet; try again" }, { status: 500 });
+    if (!current || String(current.address).toLowerCase() === newAddress.toLowerCase()) return null;
+  }
+  const { error } = await admin.rpc("expire_onchain_pass_invoices", { p_now: "infinity", p_member_id: memberId });
+  if (error) return NextResponse.json({ error: "Could not close your unpaid day pass purchase; try again" }, { status: 500 });
+  return null;
 }

@@ -23,7 +23,7 @@ vi.mock("@/lib/onchain/config", async (importOriginal) => ({
   getOpPublicClient: vi.fn(),
   assertOpPublicClient: vi.fn(async () => {}),
   isOnchainBillingConfigured: () => true,
-  isGaslessRelayConfigured: () => false,
+  isGaslessRelayConfigured: () => true,
 }));
 // The door transport is faked; the PIN-writer reservation and slot allocation are real.
 vi.mock("@regenhub/shared", async (importOriginal) => ({
@@ -46,6 +46,8 @@ import { POST as startPurchase } from "@/app/api/portal/buy-passes/onchain/route
 import { POST as buyWithCard } from "@/app/api/portal/buy-passes/route";
 import { POST as submitPayment } from "@/app/api/portal/onchain/submit/route";
 import { POST as onchainCron } from "@/app/api/cron/onchain-billing/route";
+import { POST as prepareRelay } from "@/app/api/portal/onchain/relay/prepare/route";
+import { abandonPassPurchasesOnWalletChange } from "@/lib/onchain/walletMove";
 
 const WALLET = "0x1111111111111111111111111111111111111111" as const;
 const TX = `0x${"a".repeat(64)}`;
@@ -216,6 +218,8 @@ describe("crediting", () => {
       payload: expect.objectContaining({ invoice_id: body.invoice.id, tx_hash: TX, expected_usdc_micros: 30_000_000 }),
     }]);
 
+    // Clicking again resumes the same purchase (it can still be paid), never a second one beside it.
+    expect((await start()).body.invoice.id).toBe(body.invoice.id);
     chainPays(30_000_000n);
     expect((await submit(body.invoice.id, TX2)).body).toMatchObject({ status: "paid", wasNew: true });
     expect(await balance()).toBe(1);
@@ -281,6 +285,55 @@ describe("expiry", () => {
     await db.sql("update onchain_relay_jobs set status = 'prepared' where invoice_id = $1", [body.invoice.id]);
     expect(await db.sql("select * from expire_onchain_pass_invoices()")).toHaveLength(1);
     expect(await one("select status from onchain_relay_jobs where invoice_id = $1", [body.invoice.id])).toEqual({ status: "expired" });
+  });
+});
+
+describe("stuck or stale purchases", () => {
+  it("gives up on a transaction still not on chain after 24 hours, keeps it for an admin, then expires", async () => {
+    const { body } = await start();
+    await db.sql("update onchain_invoices set status = 'submitted', submitted_tx_hash = $2, submitted_at = now() - interval '25 hours', due_at = now() - interval '24 hours' where id = $1", [body.invoice.id, TX]);
+    vi.mocked(getOpPublicClient).mockReturnValue({
+      getTransactionReceipt: async () => { throw new Error("Transaction receipt could not be found"); },
+    } as never);
+    expect(await processOnchainInvoice(db as never, body.invoice.id)).toMatchObject({ status: "exception" });
+    expect(await audits("onchain_pass_payment_exception")).toEqual([expect.objectContaining({
+      payload: expect.objectContaining({ tx_hash: TX, reason: "transaction not found on chain after 24 hours" }) })]);
+    expect(await db.sql("select * from expire_onchain_pass_invoices()")).toHaveLength(1);
+    expect(await balance()).toBe(0);
+  });
+
+  it("keeps waiting on a transaction submitted recently", async () => {
+    const { body } = await start();
+    await db.sql("update onchain_invoices set status = 'submitted', submitted_tx_hash = $2, submitted_at = now() where id = $1", [body.invoice.id, TX]);
+    vi.mocked(getOpPublicClient).mockReturnValue({
+      getTransactionReceipt: async () => { throw new Error("Transaction receipt could not be found"); },
+    } as never);
+    expect(await processOnchainInvoice(db as never, body.invoice.id)).toMatchObject({ status: "submitted" });
+  });
+
+  it("won't prepare a payment once the price hold has ended", async () => {
+    const { body } = await start();
+    await db.sql("update onchain_invoices set due_at = now() - interval '1 minute' where id = $1", [body.invoice.id]);
+    const res = await prepareRelay(new Request("http://localhost/api/portal/onchain/relay/prepare", {
+      method: "POST", body: JSON.stringify({ invoice_id: body.invoice.id }),
+    }));
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/price hold has ended/);
+    expect(await db.sql("select invoice_id from onchain_relay_jobs")).toEqual([]);
+  });
+
+  it("drops an unpaid purchase when the member switches to another wallet, and only then", async () => {
+    const { body } = await start();
+    expect(await abandonPassPurchasesOnWalletChange(db as never, 7, WALLET)).toBeNull(); // same wallet: kept
+    expect((await one("select status from onchain_invoices where id = $1", [body.invoice.id])).status).toBe("open");
+    expect(await abandonPassPurchasesOnWalletChange(db as never, 7, "0x2222222222222222222222222222222222222222")).toBeNull();
+    expect((await one("select status from onchain_invoices where id = $1", [body.invoice.id])).status).toBe("expired");
+
+    // One with a payment on its way is never dropped.
+    const next = await start();
+    await db.sql("update onchain_invoices set status = 'submitted', submitted_tx_hash = $2 where id = $1", [next.body.invoice.id, TX]);
+    await abandonPassPurchasesOnWalletChange(db as never, 7, null);
+    expect((await one("select status from onchain_invoices where id = $1", [next.body.invoice.id])).status).toBe("submitted");
   });
 });
 

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { requirePortalMember } from "@/lib/onchain/portalMember";
-import { isOnchainBillingConfigured } from "@/lib/onchain/config";
+import { isGaslessRelayConfigured } from "@/lib/onchain/config";
 import { PassPurchaseError, startOnchainPassPurchase } from "@/lib/onchain/passPurchase";
 
 /**
@@ -13,7 +13,9 @@ import { PassPurchaseError, startOnchainPassPurchase } from "@/lib/onchain/passP
 export async function POST() {
   const session = await requirePortalMember();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!isOnchainBillingConfigured()) {
+  // The pass is paid through the gasless relay (as the page offers it), so
+  // don't open a purchase that couldn't be paid.
+  if (!isGaslessRelayConfigured()) {
     return NextResponse.json({ error: "USDC payments are not configured" }, { status: 503 });
   }
   try {

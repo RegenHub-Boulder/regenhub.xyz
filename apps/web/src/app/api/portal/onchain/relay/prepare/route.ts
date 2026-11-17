@@ -12,6 +12,7 @@ import {
 } from "@/lib/onchain/config";
 import { publicAuthorization, type RelayJob } from "@/lib/onchain/gaslessRelay";
 import { requirePortalMember } from "@/lib/onchain/portalMember";
+import { invoicePayerWalletId } from "@/lib/onchain/invoicePayer";
 
 const AUTHORIZATION_LIFETIME_SECONDS = 30 * 60;
 const USDC_BALANCE_ABI = parseAbi([
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
   const admin = createServiceClient();
   const { data: invoice, error: invoiceError } = await admin
     .from("onchain_invoices")
-    .select("id, member_id, subscription_id, kind, wallet_id, status, submitted_tx_hash, amount_usdc_micros, chain_id, token_contract, treasury_address")
+    .select("id, member_id, subscription_id, kind, wallet_id, due_at, status, submitted_tx_hash, amount_usdc_micros, chain_id, token_contract, treasury_address")
     .eq("id", body!.invoice_id!)
     .eq("member_id", session.member.id)
     .maybeSingle();
@@ -71,20 +72,14 @@ export async function POST(request: Request) {
   if (invoice.submitted_tx_hash) {
     return NextResponse.json({ status: "submitted", txHash: invoice.submitted_tx_hash });
   }
-
-  // A day pass pays from the wallet frozen on its invoice; a membership
-  // invoice from its subscription's wallet.
-  let walletId: number | null = invoice.kind === "day_pass" ? invoice.wallet_id : null;
-  if (invoice.kind !== "day_pass") {
-    const { data: subscription } = await admin
-      .from("subscriptions")
-      .select("wallet_id, payment_rail")
-      .eq("id", invoice.subscription_id)
-      .eq("member_id", session.member.id)
-      .eq("payment_rail", "onchain")
-      .single();
-    walletId = subscription?.wallet_id ?? null;
+  // A day pass holds its price until due_at: no new authorization after that,
+  // and none that outlives it (the purchase can then expire cleanly).
+  const holdEnds = invoice.kind === "day_pass" ? Math.floor(Date.parse(invoice.due_at) / 1000) : Infinity;
+  if (holdEnds <= Math.floor(Date.now() / 1000) + 60) {
+    return NextResponse.json({ error: "This purchase's price hold has ended. Start again for a fresh price." }, { status: 409 });
   }
+
+  const walletId = await invoicePayerWalletId(admin, invoice, session.member.id);
   if (!walletId) {
     return NextResponse.json({ error: "Verified payment wallet not found" }, { status: 409 });
   }
@@ -159,7 +154,7 @@ export async function POST(request: Request) {
     amount_usdc_micros: invoice.amount_usdc_micros,
     authorization_nonce: `0x${randomBytes(32).toString("hex")}`,
     valid_after: Math.max(0, now - 60),
-    valid_before: now + AUTHORIZATION_LIFETIME_SECONDS,
+    valid_before: Math.min(now + AUTHORIZATION_LIFETIME_SECONDS, holdEnds),
     signature: null,
     status: "prepared" as const,
     authorization_from_block: authorizationFromBlock,

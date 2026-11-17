@@ -7,7 +7,8 @@ type ServiceClient = ReturnType<typeof createServiceClient>;
 /** How long an unpaid USDC day pass purchase holds its price before it expires. */
 export const ONCHAIN_PASS_INVOICE_MINUTES = 60;
 
-const UNPAID = ["open", "submitted", "detected"] as const;
+// Still payable: an exception (wrong amount, or a reverted relay that is retried) too, until it expires.
+const UNPAID = ["open", "submitted", "detected", "exception"] as const;
 const SETUP_COLUMNS = "id, amount_cents, amount_usdc_micros, due_at, status, submitted_tx_hash";
 
 export type PassInvoiceSetup = {
@@ -76,9 +77,9 @@ export async function startOnchainPassPurchase(admin: ServiceClient, memberId: n
   if (walletError) throw walletError;
   if (!wallet) throw new PassPurchaseError("Connect and verify a wallet first.", 409);
 
-  // Finish off this member's stale purchase (and anyone else's) before
-  // looking: the cron does the same, this just doesn't wait for it.
-  const { error: expireError } = await admin.rpc("expire_onchain_pass_invoices", { p_now: now.toISOString() });
+  // Finish off this member's stale purchase before looking: the cron does
+  // the same for everyone, this just doesn't wait for it.
+  const { error: expireError } = await admin.rpc("expire_onchain_pass_invoices", { p_now: now.toISOString(), p_member_id: memberId });
   if (expireError) throw expireError;
 
   const { data: open, error: openError } = await admin

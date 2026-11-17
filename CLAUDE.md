@@ -131,8 +131,9 @@ both ways, from `dayPassCentsFor` ($30, $25 with an active/trialing subscription
 **Card:** `/api/portal/buy-passes` → Stripe Checkout → `fulfillPassPurchase` (`purchases` row keyed by the session,
 +1 `day_passes_balance`, receipt email). **USDC** (migration 063): `/api/portal/buy-passes/onchain` writes an
 `onchain_invoices` row of `kind = 'day_pass'` (no subscription; `wallet_id` is the payer; price frozen; `due_at` =
-one hour, after which `expire_onchain_pass_invoices()` (billing cron, and each new purchase) expires it unless a
-payment is on its way). Payment then runs the membership rail unchanged: wallet link, gasless relay,
+one hour; `expire_onchain_pass_invoices()` (billing cron, each new purchase) expires it unless a payment is on its
+way, and a wallet change or removal drops an unpaid one first; relay prepare refuses after the hold and caps the
+authorization at it; a submitted tx still not on chain after 24 h becomes an `exception`). Payment then runs the membership rail unchanged: wallet link, gasless relay,
 `/api/portal/onchain/submit`, `processOnchainInvoice`. `credit_onchain_invoice`'s pass branch writes the payment
 (effects complete), the `purchases` row (`onchain_invoice_id`, unique), +1 balance and the
 `onchain_day_pass_purchased` audit row in one transaction, so a transaction credits one purchase once; the

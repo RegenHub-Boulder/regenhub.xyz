@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { requirePortalMember } from "@/lib/onchain/portalMember";
-import { walletRpcErrorResponse } from "@/lib/onchain/walletMove";
+import { abandonPassPurchasesOnWalletChange, walletRpcErrorResponse } from "@/lib/onchain/walletMove";
 
 /** Remove the caller's own linked wallet, unless it still backs a live crypto membership. */
 export async function POST(request: Request) {
@@ -16,6 +16,8 @@ export async function POST(request: Request) {
   // unlink_member_wallet checks ownership, the live-membership guard and the
   // disabled flag under row locks, and writes the admin_actions row.
   const admin = createServiceClient();
+  const abandoned = await abandonPassPurchasesOnWalletChange(admin, session.member.id, null);
+  if (abandoned) return abandoned;
   const { error } = await admin.rpc("unlink_member_wallet", {
     p_member_id: session.member.id,
     p_wallet_id: walletId,

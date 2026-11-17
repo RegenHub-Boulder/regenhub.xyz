@@ -20,6 +20,7 @@ import {
   ONCHAIN_CHAIN_ID,
   TREASURY_ADDRESS,
 } from "./config";
+import { invoicePayerWalletId } from "./invoicePayer";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 export type RelayJob = Database["public"]["Tables"]["onchain_relay_jobs"]["Row"];
@@ -281,18 +282,7 @@ async function assertRelayJobStillPayable(admin: ServiceClient, job: RelayJob) {
     throw new InvalidRelayJobError("relay job no longer matches its frozen invoice");
   }
 
-  // A day pass pays from the wallet frozen on its invoice.
-  let payerWalletId: number | null = invoice.kind === "day_pass" ? invoice.wallet_id : null;
-  if (invoice.kind !== "day_pass") {
-    const { data: subscription } = await admin
-      .from("subscriptions")
-      .select("wallet_id")
-      .eq("id", invoice.subscription_id)
-      .eq("member_id", job.member_id)
-      .eq("payment_rail", "onchain")
-      .single();
-    payerWalletId = subscription?.wallet_id ?? null;
-  }
+  const payerWalletId = await invoicePayerWalletId(admin, invoice, job.member_id);
   if (!payerWalletId) throw new InvalidRelayJobError("relay invoice has no verified wallet");
   if (payerWalletId !== job.wallet_id) {
     throw new InvalidRelayJobError("relay authorization is not for the current verified wallet");

@@ -16,9 +16,12 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { AuditAction, logAction } from "@/lib/auditLog";
 import { dayPassReceiptEmail, sendEmail } from "@/lib/email";
 import { assertOpPublicClient, getOpPublicClient } from "./config";
+import { invoicePayerWalletId } from "./invoicePayer";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 const EFFECTS_CLAIM_LEASE_MS = 5 * 60 * 1000;
+/** A day pass whose submitted transaction still isn't on chain after this is given up on (kept for an admin). */
+const PASS_TX_NOT_FOUND_MS = 24 * 60 * 60 * 1000;
 
 const TRANSFER_EVENT = parseAbiItem(
   "event Transfer(address indexed from, address indexed to, uint256 value)",
@@ -318,22 +321,9 @@ export async function processOnchainInvoice(
   if (invoiceError || !invoice?.submitted_tx_hash) throw new Error("submitted invoice not found");
 
   const isPass = invoice.kind === "day_pass";
-  // A membership invoice pays from its subscription's wallet; a day pass from
-  // the wallet frozen on the invoice when it was bought.
-  let payer: { memberId: number; walletId: number };
-  if (isPass) {
-    if (!invoice.wallet_id) throw new Error("day pass invoice has no wallet");
-    payer = { memberId: invoice.member_id, walletId: invoice.wallet_id };
-  } else {
-    const { data: subscription } = await admin
-      .from("subscriptions")
-      .select("id, member_id, wallet_id, plan_key")
-      .eq("id", invoice.subscription_id)
-      .eq("payment_rail", "onchain")
-      .single();
-    if (!subscription?.wallet_id) throw new Error("invoice subscription has no verified wallet");
-    payer = { memberId: subscription.member_id, walletId: subscription.wallet_id };
-  }
+  const payerWalletId = await invoicePayerWalletId(admin, invoice, invoice.member_id);
+  if (!payerWalletId) throw new Error("invoice has no verified paying wallet");
+  const payer = { memberId: invoice.member_id, walletId: payerWalletId };
   const { data: relayJob, error: relayJobError } = await admin
     .from("onchain_relay_jobs")
     .select("member_id, from_address")
@@ -364,6 +354,28 @@ export async function processOnchainInvoice(
     receipt = await client.getTransactionReceipt({ hash: txHash });
   } catch (error) {
     if (error instanceof Error && /not found|could not be found/i.test(error.message)) {
+      const submittedAt = invoice.submitted_at ? Date.parse(invoice.submitted_at) : Date.now();
+      if (isPass && Date.now() - submittedAt > PASS_TX_NOT_FOUND_MS) {
+        // A pass whose transaction never showed up (dropped, or a hash that
+        // isn't a payment) would otherwise hold the member's purchase and
+        // wallet forever. Not credited; kept for an admin; the purchase can
+        // then expire. A relayed authorization is long past its window.
+        const reason = "transaction not found on chain after 24 hours";
+        await admin.from("onchain_invoices")
+          .update({ status: "exception", exception_reason: reason, submitted_tx_hash: null, submitted_at: null })
+          .eq("id", invoice.id).eq("submitted_tx_hash", txHash);
+        await admin.from("onchain_relay_jobs")
+          .update({ status: "expired", last_error: reason })
+          .eq("invoice_id", invoice.id).eq("submitted_tx_hash", txHash);
+        await logAction({
+          action: AuditAction.ONCHAIN_PASS_PAYMENT_EXCEPTION,
+          actorMemberId: invoice.member_id,
+          target: { table: "members", id: invoice.member_id },
+          idempotencyKey: `onchain-pass-exception:${invoice.id}:${txHash}`,
+          payload: { invoice_id: invoice.id, tx_hash: txHash, reason, expected_usdc_micros: invoice.amount_usdc_micros },
+        }, admin);
+        return { status: "exception", txHash, reason };
+      }
       return { status: "submitted", txHash };
     }
     throw error;

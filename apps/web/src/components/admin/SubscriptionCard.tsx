@@ -171,7 +171,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
       const res = await fetch(`/api/admin/members/${memberId}/revoke`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refund_last_purchase: refundLast }),
+        body: JSON.stringify({ refund_last_purchase: refundLast && !!lastCardPurchase }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
