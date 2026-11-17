@@ -1,30 +1,28 @@
 "use client";
 
 /**
- * /portal/events behind "Sign in with Techne": the same client and session as RSVP (useTechneSession),
- * at the steward level (lib/techne/session.ts signInScope). Signed out, the door. Signed in, the
- * collective's public membership claims say whether they manage RegenHub (GET
- * /api/portal/events/standing, lib/techne/standing.ts); a manager gets the calendar and posts, edits and
- * removes events as the collective (lib/techne/collectiveEvents.ts + collectiveWrite.ts), anyone else an
- * honest explainer. A session from an RSVP sign-in lacks the posting scope: one more consent fixes it.
- * The platform is the last word on every write; a refusal shows above the calendar.
- * No regenOS cookie, no /xrpc proxy.
+ * /portal/events behind "Sign in with Techne": the same client, scopes and session as RSVP
+ * (useTechneSession; one sign-in for everyone, lib/techne/session.ts signInScope). Signed out, the door.
+ * Signed in, the calendar and the posting form, for anyone: Techne decides on each write whether this
+ * person may post as RegenHub (lib/techne/collectiveWrite.ts, straight to their PDS). RegenHub's public
+ * membership claims (GET /api/portal/events/standing, lib/techne/standing.ts) only say what to expect:
+ * the person's role when one is public, else "posting works if you manage RegenHub on Techne".
+ * A refused write shows Techne's own words above the calendar. No regenOS cookie, no /xrpc proxy.
  */
 
 import { useEffect, useState } from "react";
-import { Loader2, ShieldQuestion } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import type { TechneConfig } from "@/lib/techne/config";
 import type { Standing } from "@/lib/techne/standing";
 import type { PlannedNight } from "@/lib/series";
 import type { PostedNight } from "@/lib/seriesNights";
-import { STEWARD_PATH, grantsStewardWrites, isLoopbackPage } from "@/lib/techne/session";
+import { STEWARD_PATH } from "@/lib/techne/session";
 import { deleteEventBatch, putEventBatch, type EventInput, type ExistingEvent } from "@/lib/techne/collectiveEvents";
-import { sendCollectiveBatch } from "@/lib/techne/collectiveWrite";
+import { sendCollectiveBatch, writeErrorText } from "@/lib/techne/collectiveWrite";
 import type { Session } from "@/lib/techne/call";
 import { useTechneSession } from "@/components/techne/useTechneSession";
 import { SignInWithTechne, SignOutOfTechne } from "@/components/techne/SignInWithTechne";
 import { ManageEvents, type EventWrite, type ManageableEvent } from "@/components/portal/ManageEvents";
-import { Button } from "@/components/ui/button";
 
 /** The standing check for one DID; a check for an older DID is ignored. */
 type Check = { did: string; state: "failed" } | { did: string; state: "done"; standing: Standing };
@@ -57,7 +55,7 @@ export function StewardEvents({
   /** The calendar read, but not each event's config and listing: editing waits for a reload. */
   editingOff: boolean;
 }) {
-  const { config, phase, session, scope, error, start, signOut } = useTechneSession(configProp, STEWARD_PATH, "steward");
+  const { config, phase, session, error, start, signOut } = useTechneSession(configProp, STEWARD_PATH);
   const [lastCheck, setCheck] = useState<Check | null>(null);
   const did = session?.did ?? null;
   const check = lastCheck && lastCheck.did === did ? lastCheck : null;
@@ -77,14 +75,14 @@ export function StewardEvents({
     };
   }, [did]);
 
-  if (phase === "restoring" || (phase === "signed-in" && !check)) {
+  if (phase === "restoring") {
     return <Loader2 className="w-5 h-5 animate-spin text-muted" aria-label="Loading" />;
   }
 
   if (phase !== "signed-in" || !session) {
     return (
       <Panel title="Sign in with Techne to manage events">
-        <p>RegenHub&apos;s calendar lives on Techne. Your Techne account is how it knows you steward RegenHub.</p>
+        <p>RegenHub&apos;s calendar lives on Techne. Sign in with your Techne account; posting as RegenHub works if you manage RegenHub on Techne.</p>
         <div className="pt-1 text-center">
           <SignInWithTechne busy={phase === "starting"} onStart={(signUp) => void start(signUp)} />
         </div>
@@ -97,70 +95,26 @@ export function StewardEvents({
     );
   }
 
+  const role = check?.state === "done" ? check.standing.roleName : null;
   const who = (
-    <p className="text-xs text-muted flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="steward-who">
-      <span>
-        Signed in with Techne as <code className="text-foreground">{session.did}</code>
-        {check?.state === "done" && check.standing.roleName ? ` · ${check.standing.roleName}` : ""}
-      </span>
-      <SignOutOfTechne onSignOut={() => void signOut()} />
-    </p>
+    <div className="text-xs text-muted space-y-1" data-testid="steward-who">
+      <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span>
+          Signed in with Techne as <code className="text-foreground">{session.did}</code>
+          {role ? ` · RegenHub ${role}` : ""}
+        </span>
+        <SignOutOfTechne onSignOut={() => void signOut()} />
+      </p>
+      {/* Only a hint: claims may be private, and Techne decides on the write. */}
+      {check && !(check.state === "done" && check.standing.canManageEvents) && (
+        <p data-testid="steward-hint">
+          {role
+            ? "Posting as RegenHub needs facilitator or steward on Techne; Techne will say if it won't take a post from you."
+            : "Posting works if you manage RegenHub on Techne; Techne will say if it won't take a post from you."}
+        </p>
+      )}
+    </div>
   );
-
-  if (check?.state === "failed") {
-    return (
-      <div className="space-y-4">
-        {who}
-        <Panel title="Couldn't check your role">
-          <p>Techne didn&apos;t answer just now. Reload the page to try again.</p>
-        </Panel>
-      </div>
-    );
-  }
-
-  if (check?.state !== "done" || !check.standing.canManageEvents) {
-    const role = check?.state === "done" ? check.standing.roleName : null;
-    return (
-      <div className="space-y-4">
-        {who}
-        <Panel title="Only stewards edit the calendar">
-          <p>
-            RegenHub lists you as <strong className="text-foreground">{role ?? "not a member"}</strong>. Posting as
-            RegenHub needs facilitator or steward: the people who manage its membership on Techne.
-          </p>
-          <p className="flex items-start gap-2">
-            <ShieldQuestion className="w-4 h-4 mt-0.5 shrink-0 text-sage" />
-            <span>If that&apos;s wrong, ask a RegenHub steward to update your role on Techne. This page reads it live.</span>
-          </p>
-        </Panel>
-      </div>
-    );
-  }
-
-  // Real localhost dev (not the staging stand-in) can't carry the scope; there the write's answer decides.
-  if (!(isLoopbackPage() && !config.standIn) && !grantsStewardWrites(scope)) {
-    return (
-      <div className="space-y-4">
-        {who}
-        <Panel title="One more yes to post as RegenHub">
-          <p>
-            You signed in to RSVP, which lets RegenHub write only your own RSVPs. Posting RegenHub&apos;s events needs
-            your OK on Techne once more.
-          </p>
-          {error && (
-            <p className="text-red-300" role="alert">
-              {error}
-            </p>
-          )}
-          <div className="pt-1">
-            <Button type="button" onClick={() => void start(false)} className="btn-primary-glass px-6">
-              Continue with Techne
-            </Button>
-          </div>
-        </Panel>
-      </div>
-    );
-  }
 
   const write: EventWrite = async (op, input, existing) => {
     const known: ExistingEvent | null = existing
@@ -170,15 +124,7 @@ export function StewardEvents({
     const batch = op === "delete" ? deleteEventBatch(authority, known!) : putEventBatch(authority, input as unknown as EventInput, known);
     const out = await sendCollectiveBatch(session as Session, config, batch);
     if (out.ok) return;
-    throw new Error(
-      out.kind === "refused"
-        ? `Techne didn't let this post through as RegenHub. Only people who manage RegenHub's membership on Techne can post as it. (${out.message})`
-        : out.kind === "signin"
-          ? `Your Techne sign-in has lapsed. Sign out of Techne and sign in again, then retry. (${out.message})`
-          : out.kind === "unknown"
-            ? `Couldn't tell whether Techne took that. Reload to see the calendar before trying again; if this keeps happening, sign out of Techne and sign in again. (${out.message})`
-            : `Techne said no, nothing changed. Try again. (${out.message})`,
-    );
+    throw new Error(writeErrorText(out));
   };
 
   return (

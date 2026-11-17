@@ -3,7 +3,7 @@ Uses the video lab's walkthrough template (~/Code/unforced-media/video-lab/tools
 
     .venv/bin/python walkthrough/film-door.py capture   # steps through the preview for real (fresh RSVP state)
     .venv/bin/python walkthrough/film-door.py render    # -> walkthrough/t482-techne-door.mp4
-Env T482_BASE (default http://127.0.0.1:18600).
+Env T482_BASE (default http://127.0.0.1:18600). Each capture needs a fresh preview (it posts Civic Tech Night).
 """
 import os
 import sys
@@ -36,7 +36,12 @@ STEPS = [
     {'id': 'out', 'tap': 'button:has-text("Sign out of Techne")', 'after': 1500},
     {'id': 'member', 'js': go('/portal/events'), 'wait': 3000, 'tap': SIGN_IN, 'after': 2500, 'quiet': True},
     {'id': 'lee', 'tap': 'a:has-text("Lee (sample)")', 'after': 4000},
-    {'id': 'nope', 'mark': '[data-testid=steward-panel] h2', 'after': 300},
+    {'id': 'form', 'mark': '[data-testid=steward-hint]', 'after': 300},
+    {'id': 'new', 'tap': "button:has-text('New event')", 'after': 800, 'quiet': True},
+    {'id': 'name', 'fill': ('#ev-name', "Lee's night"), 'after': 300, 'quiet': True},
+    {'id': 'when', 'fill': ('#ev-starts', '2026-12-20T18:30'), 'after': 300, 'quiet': True},
+    {'id': 'try', 'tap': "button:has-text('Create event')", 'after': 3000},
+    {'id': 'nope', 'js': 'window.scrollTo(0, 0)', 'wait': 500, 'mark': "p:has-text(\"Techne didn't accept a post as RegenHub\")", 'after': 300},
 ]
 V = Voice([
     ('portal', 'This is regenhub dot x y z on staging, with sample data. [portal]Manage Events asks for one thing: Sign in with Techne.', {'gap': .6}),
@@ -50,8 +55,10 @@ V = Voice([
     ('same', 'and is [same]already signed in. One Techne session for the whole site.', {'gap': .4}),
     ('going', '[going]I am going writes their own R S V P.', {'gap': .7}),
     ('out', '[out]Sign out.', {'gap': .3}),
-    ('lee', 'Someone who doesn\'t manage RegenHub [lee]signs in,', {'gap': .2}),
-    ('nope', '[nope]and gets a plain answer instead of the tools.', {'gap': .9}),
+    ('lee', 'Someone who doesn\'t manage RegenHub [lee]signs in.', {'gap': .4}),
+    ('form', 'Everyone gets [form]the same form. The page only says what to expect.', {'gap': .4}),
+    ('try', 'They [try]try to post,', {'gap': .3}),
+    ('nope', '[nope]and Techne says no, in its own words.', {'gap': .9}),
 ], OUT / 'vo')
 DUR = V.duration + .8
 

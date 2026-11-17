@@ -1,7 +1,8 @@
 /**
- * The steward gate on /portal/events: who Techne's membership claims say may manage RegenHub's
- * calendar. Logic first (it is a permission check), then the route the page calls, run against a
- * fake of Techne's public query at the network edge.
+ * The steward hint on /portal/events: what Techne's public membership claims say about someone's role in
+ * RegenHub (only a hint since 11-17: everyone signed in gets the form and Techne decides on the write).
+ * Logic first (forged or ended claims must not read as a role), then the route the page calls, run against
+ * a fake of Techne's public query at the network edge.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
@@ -9,6 +10,12 @@ import { EVENT_STEWARD_ROLE, MEMBERSHIP_NSID, standingFrom } from "@/lib/techne/
 import { safeReturn } from "@/lib/techne/session";
 import { GET as standingGET } from "@/app/api/portal/events/standing/route";
 import { fakeTechne, type FakeRecord } from "./support/fakeTechne";
+
+// The portal session (Supabase) is outside this test's subject: who is signed in to the portal.
+let portalUser: { id: string } | null = { id: "u1" };
+vi.mock("@/lib/supabase/server", () => ({
+  createClient: async () => ({ auth: { getUser: async () => ({ data: { user: portalUser } }) } }),
+}));
 
 const HUB = "did:plc:hubtest";
 const ME = "did:plc:stewardtest";
@@ -105,6 +112,16 @@ describe("GET /api/portal/events/standing", () => {
   it("says a member, or a stranger who calls themselves a steward, is not", async () => {
     expect(await (await call(OTHER)).json()).toMatchObject({ role: 10, canManageEvents: false });
     expect(await (await call("did:plc:nobody")).json()).toMatchObject({ role: null, canManageEvents: false });
+  });
+
+  it("needs the portal session, so nobody outside the portal can make the server query Techne", async () => {
+    portalUser = null;
+    try {
+      expect((await call(ME)).status).toBe(401);
+      expect(techne.calls).toHaveLength(0);
+    } finally {
+      portalUser = { id: "u1" };
+    }
   });
 
   it("refuses what isn't a DID, says when Techne is down, and is off with the flag", async () => {

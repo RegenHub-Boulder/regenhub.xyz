@@ -13,44 +13,28 @@ import { COLLECTIVE_EVENT_TYPES } from "./collectiveEvents";
 const DEFAULT_PLATFORM = TECHNE_PLATFORM_DID;
 
 /**
- * Two levels of one sign-in, one client id (so one session per origin):
- *   member   — RSVP: `repo:community.lexicon.calendar.rsvp` plus techne-sdk's default reads.
- *   steward  — that, plus `repo:` for the collective's event, config and listing, and
- *              `rpc:com.atproto.repo.applyWrites` at the platform (the write as the collective goes there;
- *              lib/techne/collectiveEvents.ts).
- * The client metadata declares the steward list, the most any sign-in may ask for; a member's sign-in
- * asks for less (techne-sdk/auth: "the PDS refuses a request beyond what the metadata declares").
+ * One sign-in for everyone, one scope list (Aaron, 11-17): the public records the site writes
+ * (`repo:` for the RSVP and for the collective's event, config and listing) plus techne-sdk's default
+ * reads and the `sync.indexRecord` hint. No `authRead`, no `space:` beyond the app's own, so the consent
+ * page shows the community banner, not the red warning ("The SDK's defaults, with `types` and `publish`,
+ * stay off the red one", techne.computer/docs/building-an-app.md *Permissions*).
+ * The scopes don't decide who may post as RegenHub: Techne does, on the write (a person whose role in
+ * RegenHub is facilitator or steward; lib/techne/collectiveWrite.ts). The client metadata declares this
+ * same list, so a hand-back to another server asks for no more than this either.
  */
-export type SignInLevel = "member" | "steward";
-
-export const STEWARD_WRITE_METHOD = "com.atproto.repo.applyWrites";
-
-export function signInScope(config: Pick<TechneConfig, "clientId" | "platform">, level: SignInLevel): string[] {
+export function signInScope(config: Pick<TechneConfig, "clientId" | "platform">): string[] {
   const platform = config.platform ?? DEFAULT_PLATFORM;
-  if (level === "member") return scopes({ clientId: config.clientId, platform, types: [...RSVP_TYPES] });
-  return [
-    ...scopes({ clientId: config.clientId, platform, types: [...RSVP_TYPES, ...COLLECTIVE_EVENT_TYPES] }),
-    `rpc:${STEWARD_WRITE_METHOD}?aud=${platform}%23atproto_appview`,
-  ];
-}
-
-/** Whether a session's granted scope covers posting as the collective. Unknown (no token info) = yes:
- *  the write itself is the last word. */
-export function grantsStewardWrites(granted: string | null | undefined): boolean {
-  if (!granted) return true;
-  const have = granted.split(/\s+/);
-  return have.some((s) => s.startsWith(`rpc:${STEWARD_WRITE_METHOD}?`)) && have.some((s) => s.startsWith("repo") && s.includes("community.lexicon.calendar.event"));
+  return scopes({ clientId: config.clientId, platform, types: [...RSVP_TYPES, ...COLLECTIVE_EVENT_TYPES] });
 }
 
 let standInFor: string | null = null;
 
-/** A localhost page: techne-sdk signs in as atproto's loopback client there (dev only). Its token can't
- *  carry the posting rpc scope, so the steward page doesn't ask for it; the write's answer is the check. */
-export function isLoopbackPage(): boolean {
+/** A localhost page: techne-sdk signs in as atproto's loopback client there (dev only). */
+function isLoopbackPage(): boolean {
   return typeof location !== "undefined" && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
 }
 
-export async function authOptions(config: TechneConfig, level: SignInLevel = "member"): Promise<ClientOptions> {
+export async function authOptions(config: TechneConfig): Promise<ClientOptions> {
   if (config.standIn && standInFor !== config.standIn) {
     const [{ setOAuthClientFactory }, { standInClient }] = await Promise.all([
       import("techne-sdk/auth"),
@@ -61,13 +45,12 @@ export async function authOptions(config: TechneConfig, level: SignInLevel = "me
   }
   // On localhost the SDK signs in as atproto's loopback client, whose private-space scope names no key;
   // an explicit scope list (keyed to the https client id) would be wrong there, so it builds its own from
-  // `types`. The loopback id is built from its scope, so both levels use one list (one client, one
-  // session); posting as the collective then lacks its rpc scope: dev only.
+  // `types` (the same types, so the same grants).
   return {
     clientId: config.clientId,
     ...(isLoopbackPage() && !config.standIn
       ? { types: [...RSVP_TYPES, ...COLLECTIVE_EVENT_TYPES] }
-      : { scope: signInScope(config, level) }),
+      : { scope: signInScope(config) }),
     ...(config.pds ? { pds: config.pds } : {}),
     ...(config.plcUrl ? { plcUrl: config.plcUrl } : {}),
     ...(config.handleDomain ? { handleDomain: config.handleDomain } : {}),
@@ -75,7 +58,8 @@ export async function authOptions(config: TechneConfig, level: SignInLevel = "me
   };
 }
 
-/** Platform calls go through the person's PDS with this `atproto-proxy` header. */
+/** Platform calls (the queries, `sync.indexRecord`) go through the person's PDS with this `atproto-proxy`
+ *  header. Repo writes (`com.atproto.repo.*`) never carry it: the PDS answers those itself. */
 export function platformProxy(config: TechneConfig): string {
   return `${config.platform ?? DEFAULT_PLATFORM}#atproto_appview`;
 }

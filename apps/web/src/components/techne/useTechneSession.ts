@@ -8,18 +8,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TechneConfig } from "@/lib/techne/config";
-import { authOptions, type SignInLevel } from "@/lib/techne/session";
+import { authOptions } from "@/lib/techne/session";
 import type { Session } from "@/lib/techne/call";
 
 export type SessionPhase = "restoring" | "signed-out" | "starting" | "signed-in";
 
-/** The scope the session's token was granted, when the library can tell (OAuthSession.getTokenInfo). */
-async function grantedScope(s: Session): Promise<string | null> {
-  const info = await (s as { getTokenInfo?: (refresh?: boolean) => Promise<{ scope?: string }> }).getTokenInfo?.(false).catch(() => null);
-  return info?.scope ?? null;
-}
-
-export function useTechneSession(configProp: TechneConfig, returnPath: string, level: SignInLevel = "member") {
+export function useTechneSession(configProp: TechneConfig, returnPath: string) {
   // router.refresh() re-sends props as new objects; key the config on its content so the restore
   // runs once per page, not after every refresh.
   const configKey = JSON.stringify(configProp);
@@ -27,18 +21,15 @@ export function useTechneSession(configProp: TechneConfig, returnPath: string, l
   const [phase, setPhase] = useState<SessionPhase>("restoring");
   const [session, setSession] = useState<Session | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [scope, setScope] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
     (async () => {
       try {
         const { restore } = await import("techne-sdk/auth");
-        const s = (await restore(await authOptions(config, level))) as Session | null;
-        const granted = s ? await grantedScope(s) : null;
+        const s = (await restore(await authOptions(config))) as Session | null;
         if (!live) return;
         setSession(s);
-        setScope(granted);
         setPhase(s ? "signed-in" : "signed-out");
       } catch {
         if (live) setPhase("signed-out");
@@ -47,7 +38,7 @@ export function useTechneSession(configProp: TechneConfig, returnPath: string, l
     return () => {
       live = false;
     };
-  }, [config, level]);
+  }, [config]);
 
   const startingRef = useRef(false);
   // Back from the PDS's page restores this one from the bfcache, still "starting": let sign-in run again.
@@ -69,16 +60,15 @@ export function useTechneSession(configProp: TechneConfig, returnPath: string, l
       setError(null);
       try {
         const auth = await import("techne-sdk/auth");
-        const opts = { ...(await authOptions(config, level)), state: returnPath };
+        const opts = { ...(await authOptions(config)), state: returnPath };
         await (signUp ? auth.signUp(opts) : auth.signIn(opts));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Couldn't start sign-in.");
-        // A failed re-consent leaves the existing session as it was.
         setPhase(session ? "signed-in" : "signed-out");
         startingRef.current = false;
       }
     },
-    [config, returnPath, level, session],
+    [config, returnPath, session],
   );
 
   const signOut = useCallback(async () => {
@@ -89,5 +79,5 @@ export function useTechneSession(configProp: TechneConfig, returnPath: string, l
     setPhase("signed-out");
   }, [config, session]);
 
-  return { config, phase, session, scope, error, start, signOut };
+  return { config, phase, session, error, start, signOut };
 }

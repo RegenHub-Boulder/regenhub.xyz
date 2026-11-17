@@ -7,31 +7,42 @@ public docs only (techne.computer/llms.txt and what it lists, reference.html, te
 
 ## What changed
 
-- `/portal/events` no longer uses the old regenOS lane (scenius cookie, magic link, `/xrpc` proxy). A steward
-  signs in with Techne: the same client id and session as RSVP (`components/techne/useTechneSession.ts`), at the
-  steward level of the sign-in (below).
+- With `TECHNE_SIGNIN_ENABLED` **off** (production today) Manage Events is exactly as before T-482: the old
+  regenOS-lane page at `/portal/events` (`components/portal/legacy/`, main's code unchanged, Import from Luma
+  included), its nav link and dashboard card, and the revalidate route, all on `REGENOS_LOGIN_ENABLED`
+  (`isStewardEventsEnabled`, `lib/techne/config.ts`).
+- With it **on**, `/portal/events` is the Techne door: the same client id, scopes and session as RSVP
+  (`components/techne/useTechneSession.ts`). The old page stays reachable at `/portal/events/old`, linked as
+  "Old steward page" from the new one while the regenOS lane is on, until Aaron retires it.
 - The calendar on that page is the documented public read every visitor gets, plus each event's config and
   listing (`query.getRecords`), so edits keep them and removal deletes exactly what exists.
-- Who may post comes from the collective's public membership claims: role ≥ 30 (below).
+- **Everyone signed in with Techne gets the posting form.** RegenHub's public membership claims only word a hint
+  (the person's role, or "Posting works if you manage RegenHub on Techne"). Techne decides on the write.
 - Posting, editing and removing write **as the collective**: the event, its config and its listing in RegenHub's
-  repo, in one `com.atproto.repo.applyWrites` at the platform, through the steward's own PDS
-  (`lib/techne/collectiveEvents.ts`, `lib/techne/collectiveWrite.ts`).
+  repo, in one standard `com.atproto.repo.applyWrites` sent **straight to the steward's own PDS, with no
+  `atproto-proxy` header** (`lib/techne/collectiveEvents.ts`, `lib/techne/collectiveWrite.ts`).
 - `TECHNE_RSVP_ENABLED` is renamed `TECHNE_SIGNIN_ENABLED` (it now covers both pages). It was off in production.
 
 ## Study, with sources
 
-### Writing as the collective (settled by the addendum, 11-17)
+### Writing as the collective (Aaron 11-17: "just standard atproto stuff with the Techne layer on top")
 
 - Who: "the caller then writes as the collective (permissioned.putRecords or com.atproto.repo.applyWrites, repo =
   the new DID) … only whoever manages its own member space (`pub.techne.draft.space.collective.member/self`) may"
-  (techne-sdk 0.4.0 lexicons, `pub.techne.draft.identity.createCollective`). The platform holds the collective's
-  credential. A collective's manage leg is "Facilitator and up" (`pub.techne.draft.appAccess`), so the page offers
-  posting at role ≥ 30.
-- Where the call goes: not to the steward's own PDS (a PDS session writes only that person's repo; techne-sdk's
-  `put` and `connect` write to `techne.did`). It goes to the **platform's** `com.atproto.repo.applyWrites`, which
-  "it relays to the repo's PDS with the credential it holds" (techne-sdk/connect, `connectHosted`), reached the
-  documented way for platform calls: through the person's PDS with `atproto-proxy: did:web:techne.computer#atproto_appview`
-  (techne-sdk/connect module doc; quickstart *Log in*: "reads reach techne.computer through their PDS").
+  (techne-sdk 0.4.0 lexicons, `pub.techne.draft.identity.createCollective`). A collective's manage leg is
+  "Facilitator and up" (`pub.techne.draft.appAccess`): role ≥ 30.
+- Where the call goes: **the steward's own PDS, answering it itself.** techne.computer/ref-applywrites.html: "Your
+  PDS answers it, not techne.computer". RegenHub (did:plc:dl3lexgjfg2euvkqvao4wsgs, `regenhub.techne.town`) and
+  its stewards (e.g. `unforced.techne.town`) both live on `https://pds.techne.town` (plc.directory). The earlier
+  version sent it through the PDS with `atproto-proxy: did:web:techne.computer#atproto_appview`; pds.techne.town
+  refuses that for every `com.atproto.repo.*` method: 403 "… is not forwarded to did:web:techne.computer#atproto_appview"
+  (review of PR #121, B1, GET probes without auth). Only platform methods are forwarded (`sync.indexRecord` "is
+  forwarded as POST only"), so the `sync.indexRecord` hints keep the proxy header.
+- **Unproven until one real post:** whether pds.techne.town lets a manager of RegenHub's member space write
+  RegenHub's repo with their own OAuth session. That is the Techne layer. Nothing read-only can show it; the first
+  real post after deploy does. If it refuses, the steward reads "Techne didn't accept a post as RegenHub from this
+  account. Techne said: <the PDS's own text>", and the browser console logs the status and error code
+  (`[techne] com.atproto.repo.applyWrites as <did>: <status> <error>`).
 - What: public records, so `applyWrites`, not `permissioned.putRecords` (which needs a `space`). Shape as the
   platform's own events and techne-sdk/put `eventRecords`: `community.lexicon.calendar.event` at a TID key,
   `pub.techne.draft.event.config` at `{rkey}-cfg` (attendance, `timezone: America/Denver`), and the collective's
@@ -44,31 +55,32 @@ public docs only (techne.computer/llms.txt and what it lists, reference.html, te
   (keeps waitlist, capacity, attendance) and the listing, or `#create` for a sibling that doesn't exist yet.
   Remove: `#delete` of the event and whichever siblings exist. "Remove" deletes; people who RSVP'd aren't told.
 - Public only: a private event lives in its invite space, which needs `authPermissioned` writes and a `space:`
-  scope beyond the app's own (the red consent warning). The form no longer offers "private".
-- How the app knows it may: the public membership read below decides what the page offers; the platform's answer
-  is the last word. A 401/403 shows above the calendar: "Techne didn't let you post as RegenHub. Only people who
-  manage RegenHub's membership on Techne can." Anything else: "Couldn't reach Techne, nothing changed."
+  scope beyond the app's own (the red consent warning). The form doesn't offer "private".
+- Answers: 401/403 (other than a lapsed token: `ExpiredToken`/`InvalidToken`) = Techne didn't accept the post from
+  this account, in its own words (a reference PDS answers "not your repo" with 401 `AuthenticationRequired`);
+  a lapsed token = sign in again; 400/404/409/413/415/422 = nothing written, try again; anything else (5xx, no
+  answer) = reload before retrying.
 - Live check (2026-11-17): RegenHub's existing event `ev-mtishcrx6pltz6` has exactly this shape (event, `-cfg`
   with `attendance`/`waitlist`, `-ctx` listing), read from pds.techne.town.
-- **Not provable read-only:** that the steward's PDS (techne.town's ePDS) forwards `com.atproto.repo.applyWrites`
-  with `atproto-proxy` to the platform under an `rpc:com.atproto.repo.applyWrites?aud=…` scope. A reference
-  atproto PDS handles `com.atproto.repo.*` itself; whether techne.town's proxies it is the one question left
-  (below). An anonymous POST to `techne.computer/xrpc/com.atproto.repo.applyWrites` got an edge 403 HTML page, which
-  says nothing either way.
 
-### Scopes: two levels, one client
+### Scopes: one sign-in for everyone (Aaron, 11-17)
 
-- Member (RSVP): `atproto`, `repo:community.lexicon.calendar.rsvp`, and techne-sdk's defaults (`authPermissioned`,
-  the app's own private space, `rpc:` for the generic reads and `sync.indexRecord`), building-an-app.md
-  *Permissions*; techne-sdk/auth `scopes()`. The community banner for "public records plus the app's own space".
-- Steward: the member list plus `repo:` for `community.lexicon.calendar.event`, `pub.techne.draft.event.config`,
-  `pub.techne.draft.event.listing`, and `rpc:com.atproto.repo.applyWrites?aud=did:web:techne.computer%23atproto_appview`
-  (`lib/techne/session.ts` `signInScope`).
-- The client metadata declares the steward list, the most any sign-in asks for; `signIn` may ask for less
-  (techne-sdk/auth: "the PDS refuses a request beyond what the metadata declares"; the SDK loads the hosted
-  metadata with `BrowserOAuthClient.load`). So a member only consents to RSVP. A steward who first signed in to
-  RSVP sees "One more yes to post as RegenHub" and signs in again at the steward level (the granted scope is read
-  with the session's `getTokenInfo`).
+- One list, members and stewards alike (`lib/techne/session.ts` `signInScope`): `atproto`, `repo:` for
+  `community.lexicon.calendar.rsvp`, `community.lexicon.calendar.event`, `pub.techne.draft.event.config` and
+  `pub.techne.draft.event.listing`, plus techne-sdk's defaults (`authPermissioned`, the app's own private space,
+  `rpc:` for the generic reads and `sync.indexRecord`); techne-sdk/auth `scopes({ types })`.
+- `repo:<nsid>`: "create, edit and delete those public records" (building-an-app.md *Permissions*); in atproto
+  these cover `applyWrites` too, so the write as the collective needs no `rpc:` scope. Which repo the PDS lets
+  you write is not a scope question: Techne decides on the write.
+- **No red warning.** "a red warning when the app can read or write other private data (authRead, authWrite, any
+  other `space:` scope, or a call we can't bound). The SDK's defaults, with `types` and `publish`, stay off the red
+  one" (building-an-app.md *Permissions*). Asking for the event types keeps the community banner "public records
+  plus the app's own space".
+- A wider "steward level" that could read RegenHub's member roles was dropped (Aaron: "Isn't everybody just doing
+  a sign in with Techne?"). The docs give no narrow scope for one collective's member space: the only reads of
+  private spaces are `include:pub.techne.draft.authRead` or "any other `space:` scope", both the red warning.
+- The client metadata declares exactly this list, so a hand-back to another server (techne-sdk restarts sign-in
+  with the metadata's scope) asks for no more than a first sign-in.
 
 ### Who stewards RegenHub
 
@@ -79,12 +91,12 @@ public docs only (techne.computer/llms.txt and what it lists, reference.html, te
 - Read: `query.listRecords` `{type is pub.techne.draft.membership, author is <collective>, references is
   at://<did>}` — public, no sign-in (reference.html *Query*; building-an-app.md *Read*). The DID comes from the
   person's Techne session. `lib/techne/standing.ts` counts only claims in the collective's own repo about exactly
-  that DID, inside `validFrom`/`validUntil`, and takes the highest role. Facilitator (30) and up may post: the
-  member space's manage leg, which holds the collective's pen (above).
+  that DID, inside `validFrom`/`validUntil`, and takes the highest role.
 - Live, 2026-11-17: RegenHub has one public membership, `unforced.techne.town`, role 40.
 - Limit: a claim the collective placed in its member space is invisible to this read and to the default scopes
   ("The platform narrows the queries to public data and the app's own space", building-an-app.md *Permissions*).
-- This check only decides what the page offers. The platform checks every write itself.
+- This read only words the hint on the page (everyone signed in gets the form). Techne checks every write itself.
+  `GET /api/portal/events/standing` needs the portal session and reads through a one-minute cache.
 
 ### Client metadata
 
@@ -104,15 +116,15 @@ button on `signIn`/`signUp`/`restore`/`signOut`.
 
 ## Questions still open for Lucian
 
-1. Does techne.town's PDS forward `com.atproto.repo.applyWrites` (with `atproto-proxy:
-   did:web:techne.computer#atproto_appview`) to the platform under `rpc:com.atproto.repo.applyWrites?aud=…`, and does
-   the platform then write a public record into the collective's repo for a member-space manager? That is the path
-   the code takes; if the answer is "use another method", only `lib/techne/collectiveWrite.ts` and one scope change.
+1. Does pds.techne.town let someone who manages a collective's member space write that collective's repo (it hosts
+   both) with a plain `com.atproto.repo.applyWrites`, repo = the collective, under their own OAuth session and
+   `repo:` scopes? That is the path the code takes; one real post answers it. If the answer is "use another
+   method", only `lib/techne/collectiveWrite.ts` changes.
 2. Does the platform write the `{rkey}-ctx` listing itself when a collective's event arrives this way? We write it
    in the same batch; if the platform also does, ours is an update of the same record.
-3. A role the collective keeps in its member space (not public) is invisible to the page's check without
-   `authRead`. Is there a documented read for "this person manages collective X"? (Today the platform's answer on
-   the write is the fallback.)
+3. A role the collective keeps in its member space (not public) is invisible to the page's hint without
+   `authRead`. Is there a narrow, documented read for "this person manages collective X"? (Today the page shows the
+   form to everyone and the write decides.)
 
 ## Production config
 
@@ -122,17 +134,21 @@ Each line was checked with one real read-only call on 2026-11-17.
 |---|---|---|
 | `REGENOS_BASE_URL=https://techne.computer` (from `https://scenius.social`) | The docs' API host; the documented reads answer there | `query.listRecords` (RegenHub's events, its listings, its memberships by `references`), `query.getRecords` (one event), the RSVP-by-subject query: all 200 with data. `/.well-known/did.json` names `https://techne.computer` as `#atproto_appview` |
 | `REGENOS_COLLECTIVE_DID` unchanged (`did:plc:dl3lexgjfg2euvkqvao4wsgs`) | | plc.directory: handle `regenhub.techne.town`, PDS `https://pds.techne.town`; descriptor `pub.techne.draft.collective/self` = "RegenHub" |
-| `TECHNE_SIGNIN_ENABLED=true` (new name; drop `TECHNE_RSVP_ENABLED` if set) | Turns on the door, `/techne/client-metadata.json`, `/techne/callback`, `/portal/events` | `https://pds.techne.town/.well-known/oauth-authorization-server`: issuer pds.techne.town, `client_id_metadata_document_supported: true`, DPoP ES256; handle resolution `unforced.techne.town` → did:plc:3hmy2v5fvvdh7vuujef5upvl. `https://regenhub.xyz/techne/client-metadata.json` is 404 today (flag off), as expected |
-| `REGENOS_LOGIN_ENABLED=false` (recommended, Aaron's call) | That lane is what emailed a scenius link that went to beacon.techne.computer | Not flipped by us. With it off, `/auth/login` shows only the Supabase door, `/login` redirects there, `/oauth/callback` is a 404, and **`/admin/members` "Sync claims to regenOS" turns off too** (it rides the same lane) |
+| `TECHNE_SIGNIN_ENABLED=true` (new name; drop `TECHNE_RSVP_ENABLED` if set) | Turns on the door, `/techne/client-metadata.json`, `/techne/callback`, the Techne `/portal/events` (old page moves to `/portal/events/old`) | `https://pds.techne.town/.well-known/oauth-authorization-server`: issuer pds.techne.town, `client_id_metadata_document_supported: true`, DPoP ES256; handle resolution `unforced.techne.town` → did:plc:3hmy2v5fvvdh7vuujef5upvl. `https://regenhub.xyz/techne/client-metadata.json` is 404 today (flag off), as expected |
+| `REGENOS_LOGIN_ENABLED=false` (Aaron's call, only after one real post works through the Techne door) | That lane is what emailed a scenius link that went to beacon.techne.computer | Not flipped by us. With it off, `/auth/login` shows only the Supabase door, `/login` redirects there, `/oauth/callback` is a 404, **the "Old steward page" goes away**, and **`/admin/members` "Sync claims to regenOS" turns off too** (it rides the same lane) |
 | No `TECHNE_PDS_URL`, `TECHNE_PLC_URL`, `TECHNE_HANDLE_DOMAIN`, `TECHNE_PLATFORM_DID`, `TECHNE_STAGING_STANDIN` | Production uses the SDK's defaults; the stand-in is refused for regenhub.xyz anyway | |
 
 The env vars are runtime: set them in Coolify and redeploy the web app. Production deploy is Aaron's go.
 
-## Old lane: propose removing (not done here)
+## Old steward page, and the old lane: remove later (not done here)
 
-Nothing on `/events`, the event pages or `/portal/events` uses it now. It still backs `/auth/login`'s regenOS
-panel, `/login`, `/oauth/*`, `/oauth-client-metadata.json`, `/api/auth/regenos/*`, the `/xrpc` proxy, Luma
-import (`/api/portal/events/import-luma`), the legacy steward read (`fetchCollectiveEventsForManagement`,
-`lib/regenos/auth.ts`) and `/admin/members` membership sync. Proposal: once one real post works through the Techne
-door and Aaron has decided on membership sync, remove the lane in one PR, with `REGENOS_LOGIN_ENABLED` and
-`REGENOS_OAUTH_JWKS_URI`. Until then, `REGENOS_LOGIN_ENABLED=false` keeps it out of sight.
+The old Manage Events (`components/portal/legacy/`, `/portal/events/old`, Import from Luma) is kept unchanged so
+production with the Techne door off is as before, and so stewards have a working page until one real post works
+through the new one. The old lane also backs `/auth/login`'s regenOS panel, `/login`, `/oauth/*`,
+`/oauth-client-metadata.json`, `/api/auth/regenos/*`, the `/xrpc` proxy, `/api/portal/events/import-luma`,
+`fetchCollectiveEventsForManagement`, `lib/regenos/auth.ts` and `/admin/members` membership sync.
+**Subtract:** once one real post works through the Techne door and Aaron retires the old page, delete
+`components/portal/legacy/`, `app/portal/events/old/`, the `OldStewardPage` branch in `app/portal/events/page.tsx`
+and the `isRegenosLoginEnabled` half of `isStewardEventsEnabled`; then the rest of the lane in one PR (with
+`REGENOS_LOGIN_ENABLED`, `REGENOS_OAUTH_JWKS_URI`) once Aaron has decided on membership sync. No date set: it
+waits on the first real post.

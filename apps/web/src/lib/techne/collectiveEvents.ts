@@ -6,10 +6,8 @@
  * Who may: "the caller then writes as the collective (permissioned.putRecords or
  * com.atproto.repo.applyWrites, repo = the new DID) … only whoever manages its own member space
  * (`pub.techne.draft.space.collective.member/self`) may" (lexicon pub.techne.draft.identity.createCollective,
- * techne-sdk 0.4.0). The platform holds the collective's credential, so the batch goes to the platform's
- * `com.atproto.repo.applyWrites` (techne-sdk/connect `connectHosted`: "the platform's
- * com.atproto.repo.applyWrites … which it relays to the repo's PDS with the credential it holds"), reached
- * through the signed-in person's PDS with `atproto-proxy` (their own PDS writes only their own repo).
+ * techne-sdk 0.4.0). The batch is one standard `com.atproto.repo.applyWrites` with repo = the collective,
+ * sent to the steward's own PDS, which answers repo writes itself (lib/techne/collectiveWrite.ts).
  *
  * What is written, all public, in the collective's repo, the shape the platform's own events have
  * (techne-sdk/put `eventRecords`, and RegenHub's live records):
@@ -24,7 +22,7 @@ import { BOULDER, HUB_TIMEZONE } from "@/lib/regenos/eventForm";
 import { EVENT_CONFIG_NSID, EVENT_LISTING_NSID, EVENT_NSID } from "./query";
 
 export { EVENT_CONFIG_NSID, EVENT_LISTING_NSID, EVENT_NSID };
-/** The public types a steward's sign-in writes (one `repo:` scope each). */
+/** The public types posting as the collective writes (one `repo:` scope each, in the one sign-in). */
 export const COLLECTIVE_EVENT_TYPES = [EVENT_NSID, EVENT_CONFIG_NSID, EVENT_LISTING_NSID] as const;
 
 const ADDRESS = "community.lexicon.location.address";

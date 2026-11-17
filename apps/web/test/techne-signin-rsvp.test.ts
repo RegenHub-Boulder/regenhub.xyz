@@ -20,7 +20,7 @@ import { GET as clientMetadataGET } from "@/app/techne/client-metadata.json/rout
 import { GET as stagingGET } from "@/app/staging/techne/[...path]/route";
 import { NextRequest } from "next/server";
 import { techneConfig } from "@/lib/techne/config";
-import { authOptions, safeReturn } from "@/lib/techne/session";
+import { authOptions, safeReturn, signInScope } from "@/lib/techne/session";
 import { writeRsvp } from "@/components/events/RsvpPanel";
 import { fetchAttendance } from "@/lib/regenos/events";
 
@@ -84,7 +84,7 @@ describe("client metadata (regenhub.xyz's OAuth client id)", () => {
     expect(techneConfig()).toBeNull();
   });
 
-  it("serves techne-sdk's document at its own URL: RSVP plus a steward's collective event writes, nothing wider", async () => {
+  it("serves techne-sdk's document at its own URL: the one scope list every sign-in asks for, nothing wider", async () => {
     const doc = await clientMetadataGET().json();
     expect(doc.client_id).toBe("https://preview.test/techne/client-metadata.json");
     expect(doc.redirect_uris).toEqual(["https://preview.test/techne/callback"]);
@@ -92,14 +92,16 @@ describe("client metadata (regenhub.xyz's OAuth client id)", () => {
     expect(doc.dpop_bound_access_tokens).toBe(true);
     const scope = String(doc.scope).split(" ");
     expect(scope).toContain("atproto");
-    // The steward level is the most any sign-in here asks for; a member's sign-in asks for RSVP only.
+    // One sign-in for everyone: the metadata declares exactly what signIn asks for (lib/techne/session.ts).
+    expect(scope).toEqual(signInScope({ clientId: doc.client_id }));
     expect(scope.filter((s) => s.startsWith("repo:"))).toEqual([
       "repo:community.lexicon.calendar.event?action=create&action=update&action=delete",
       "repo:community.lexicon.calendar.rsvp?action=create&action=update&action=delete",
       "repo:pub.techne.draft.event.config?action=create&action=update&action=delete",
       "repo:pub.techne.draft.event.listing?action=create&action=update&action=delete",
     ]);
-    expect(scope).toContain("rpc:com.atproto.repo.applyWrites?aud=did:web:techne.computer%23atproto_appview");
+    // The write as the collective is a repo write the PDS answers: no platform rpc scope for it.
+    expect(scope.some((s) => s.includes("applyWrites"))).toBe(false);
     expect(scope).toContain("rpc:pub.techne.draft.sync.indexRecord?aud=did:web:techne.computer%23atproto_appview");
     expect(scope.some((s) => s.includes("authRead") || s.includes("authWrite"))).toBe(false);
   });

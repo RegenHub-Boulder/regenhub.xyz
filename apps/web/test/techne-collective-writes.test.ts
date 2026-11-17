@@ -1,9 +1,12 @@
 /**
  * A steward posts, edits and removes RegenHub's nights as the collective (lib/techne/collectiveEvents.ts,
- * lib/techne/collectiveWrite.ts). First the batch itself (what lands in the collective's repo), then end
- * to end: the real staging stand-in (scripts/staging/techne-standin.mjs, spawned) plays the person's PDS
- * and the platform's pen rule, the steward's session is the stand-in session the browser uses, and the
- * site's own read (fetchCollectiveEvents) shows each step. Only the platform's AppView is faked.
+ * lib/techne/collectiveWrite.ts). First the batch itself (what lands in the collective's repo), then the
+ * request (straight to the person's PDS, no atproto-proxy), then end to end: the real staging stand-in
+ * (scripts/staging/techne-standin.mjs, spawned) plays the person's PDS, including pds.techne.town's refusal
+ * to forward repo writes and the ASSUMED rule that a manager of RegenHub may write its repo; the steward's
+ * session is the stand-in session the browser uses, and the site's own read (fetchCollectiveEvents) shows
+ * each step. Only the platform's AppView is faked. What the stand-in can't prove: that pds.techne.town lets
+ * a manager write the collective's repo. One real post does.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -21,9 +24,9 @@ import {
   putEventBatch,
   type EventInput,
 } from "@/lib/techne/collectiveEvents";
-import { sendCollectiveBatch } from "@/lib/techne/collectiveWrite";
+import { sendCollectiveBatch, writeErrorText } from "@/lib/techne/collectiveWrite";
 import { standInSession } from "@/lib/techne/standIn";
-import { grantsStewardWrites, signInScope } from "@/lib/techne/session";
+import { platformProxy, signInScope } from "@/lib/techne/session";
 import { getSeries, plannedNight } from "@/lib/series";
 import { seriesNightInput } from "@/lib/seriesNights";
 import { buildUpdateEventInput, eventBodyToFormValues } from "@/lib/regenos/eventForm";
@@ -101,36 +104,71 @@ describe("the batch", () => {
   });
 });
 
+describe("the request", () => {
+  const config = { clientId: "https://preview.test/techne/client-metadata.json", redirectUri: "https://preview.test/techne/callback" };
+  it("goes to the person's own PDS as applyWrites on the collective's repo, with no atproto-proxy; only the index hints are proxied", async () => {
+    const calls: { path: string; headers: Headers; body: Record<string, unknown> }[] = [];
+    // The OAuth session's fetchHandler resolves a path against the person's PDS: that is where it goes.
+    const s = {
+      did: STEWARD,
+      fetchHandler: async (path: string, init: RequestInit) => {
+        calls.push({ path, headers: new Headers(init.headers), body: JSON.parse(String(init.body)) });
+        return Response.json({});
+      },
+    };
+    const batch = putEventBatch(HUB, night(), null);
+    expect(await sendCollectiveBatch(s, config, batch)).toEqual({ ok: true });
+    const [write, ...hints] = calls;
+    expect(write.path).toBe("/xrpc/com.atproto.repo.applyWrites");
+    expect(write.headers.has("atproto-proxy")).toBe(false);
+    expect(write.body.repo).toBe(HUB);
+    expect(hints.map((h) => [h.path, h.headers.get("atproto-proxy")])).toEqual(
+      batch.uris.map(() => ["/xrpc/pub.techne.draft.sync.indexRecord", platformProxy(config)]),
+    );
+  });
+});
+
 describe("what the steward is told when a write doesn't land", () => {
   const config = { clientId: "https://preview.test/techne/client-metadata.json", redirectUri: "https://preview.test/techne/callback" };
   const batch = () => putEventBatch(HUB, night(), null);
-  it("a 5xx from the proxy hop may have landed: check before retrying", async () => {
-    const s = { did: STEWARD, fetchHandler: async () => Response.json({ error: "UpstreamTimeout" }, { status: 504 }) };
-    expect(await sendCollectiveBatch(s, config, batch())).toMatchObject({ ok: false, kind: "unknown" });
+  const answering = (status: number, body: unknown) => ({ did: STEWARD, fetchHandler: async () => Response.json(body, { status }) });
+  it("a refusal says Techne didn't accept a post as RegenHub, in Techne's own words, not that the role is wrong", async () => {
+    const out = await sendCollectiveBatch(answering(403, { error: "Forbidden", message: "may not write as the collective" }), config, batch());
+    expect(out).toMatchObject({ ok: false, kind: "refused", status: 403 });
+    const text = writeErrorText(out as Exclude<typeof out, { ok: true }>);
+    expect(text).toContain("Techne didn't accept a post as RegenHub from this account");
+    expect(text).toContain("may not write as the collective");
+    expect(text).not.toMatch(/steward|facilitator|manage RegenHub's membership/);
+    // A PDS that answers "not your repo" with 401 AuthRequired is the same refusal, not a lapsed sign-in.
+    expect(await sendCollectiveBatch(answering(401, { error: "AuthenticationRequired" }), config, batch())).toMatchObject({ kind: "refused" });
+  });
+  it("a token the PDS no longer accepts says to sign in again", async () => {
+    expect(await sendCollectiveBatch(answering(401, { error: "ExpiredToken" }), config, batch())).toMatchObject({ ok: false, kind: "signin" });
+  });
+  it("a 5xx may have landed: check before retrying", async () => {
+    expect(await sendCollectiveBatch(answering(504, { error: "UpstreamTimeout" }), config, batch())).toMatchObject({ ok: false, kind: "unknown" });
   });
   it("no answer at all may have landed: check before retrying", async () => {
     const s = { did: STEWARD, fetchHandler: async () => { throw new TypeError("fetch failed"); } };
     expect(await sendCollectiveBatch(s, config, batch())).toMatchObject({ ok: false, kind: "unknown" });
   });
   it("an error answer wrote nothing", async () => {
-    const s = { did: STEWARD, fetchHandler: async () => Response.json({ error: "InvalidRequest" }, { status: 400 }) };
-    expect(await sendCollectiveBatch(s, config, batch())).toMatchObject({ ok: false, kind: "failed" });
+    expect(await sendCollectiveBatch(answering(400, { error: "InvalidRequest" }), config, batch())).toMatchObject({ ok: false, kind: "failed" });
   });
 });
 
-describe("the steward's sign-in", () => {
+describe("the one sign-in", () => {
   const config = { clientId: "https://regenhub.xyz/techne/client-metadata.json" };
-  it("members ask for RSVP only; stewards add the collective's types and the platform's applyWrites", () => {
-    const member = signInScope(config, "member");
-    const steward = signInScope(config, "steward");
-    expect(member.join(" ")).toContain("repo:community.lexicon.calendar.rsvp");
-    expect(member.join(" ")).not.toContain("calendar.event");
-    expect(member.join(" ")).not.toContain("applyWrites");
-    expect(steward).toEqual(expect.arrayContaining(member));
-    expect(steward).toContain("rpc:com.atproto.repo.applyWrites?aud=did:web:techne.computer%23atproto_appview");
-    expect(steward.join(" ")).toContain("repo:community.lexicon.calendar.event?");
-    expect(grantsStewardWrites(member.join(" "))).toBe(false);
-    expect(grantsStewardWrites(steward.join(" "))).toBe(true);
+  it("asks everyone for the public types the site writes and the default reads; nothing that brings the red warning", () => {
+    const scope = signInScope(config);
+    const repo = scope.filter((x) => x.startsWith("repo"));
+    for (const t of ["community.lexicon.calendar.rsvp", EVENT_NSID, EVENT_CONFIG_NSID, EVENT_LISTING_NSID]) {
+      expect(repo.some((x) => x.startsWith(`repo:${t}?`))).toBe(true);
+    }
+    expect(scope).toContain("rpc:pub.techne.draft.sync.indexRecord?aud=did:web:techne.computer%23atproto_appview");
+    // building-an-app.md *Permissions*: authRead, authWrite or any space: but the app's own is the red warning.
+    expect(scope.join(" ")).not.toMatch(/authRead|authWrite|applyWrites/);
+    expect(scope.filter((x) => x.startsWith("space:"))).toEqual([expect.stringMatching(/^space:pub\.techne\.draft\.space\.private\?skey=/)]);
   });
 });
 
@@ -179,6 +217,19 @@ describe("end to end through the stand-in", () => {
 
   const calendar = async () => (await fetchCollectiveEvents({ revalidate: 0 })) ?? [];
 
+  it("the old proxy route is refused as pds.techne.town refuses it, and nothing is written", async () => {
+    const steward = standInSession(base, STEWARD);
+    const viaProxy = { did: STEWARD, fetchHandler: (path: string, init: RequestInit) => {
+      const headers = new Headers(init.headers);
+      headers.set("atproto-proxy", platformProxy(config));
+      return steward.fetchHandler(path, { ...init, headers });
+    } };
+    const out = await sendCollectiveBatch(viaProxy, config, putEventBatch(HUB, night(), null));
+    expect(out).toMatchObject({ ok: false, kind: "refused" });
+    expect((out as { message: string }).message).toContain("is not forwarded");
+    expect(await calendar()).toEqual([]);
+  });
+
   it("someone who doesn't manage RegenHub is refused, and nothing is written", async () => {
     const out = await sendCollectiveBatch(standInSession(base, MEMBER), config, putEventBatch(HUB, night(), null));
     expect(out).toMatchObject({ ok: false, kind: "refused" });
@@ -186,7 +237,12 @@ describe("end to end through the stand-in", () => {
   });
 
   it("a sign-in the PDS doesn't accept says to sign in again, not that you lack the role", async () => {
-    const lapsed = { did: STEWARD, fetchHandler: (path: string, init: RequestInit) => fetch(`${base}${path}`, init) };
+    const steward = standInSession(base, STEWARD);
+    const lapsed = { did: STEWARD, fetchHandler: (path: string, init: RequestInit) => {
+      const headers = new Headers(init.headers);
+      headers.set("x-standin-expired", "1");
+      return steward.fetchHandler(path, { ...init, headers });
+    } };
     expect(await sendCollectiveBatch(lapsed, config, putEventBatch(HUB, night(), null))).toMatchObject({ ok: false, kind: "signin" });
     expect(await calendar()).toEqual([]);
   });

@@ -121,7 +121,7 @@ describe("fetchUpcomingRegenosEvents", () => {
     expect((await fetchUpcomingRegenosEvents()).map((e) => e.name)).toEqual(["Theirs, listed by us", "Ours"]);
   });
 
-  it("counts the calendar as down when its own events can't be read, even if its listings can", async () => {
+  it("with its own events unread: strict counts the calendar as down; a public page keeps the listed ones, as before", async () => {
     const techne = fakeTechne([{ uri: `at://${SCENE}/pub.techne.draft.event.listing/l1`, value: { event: { uri: "at://x/y/z" } } }]);
     vi.stubGlobal("fetch", (async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(String(input));
@@ -130,7 +130,9 @@ describe("fetchUpcomingRegenosEvents", () => {
       return techne.fetch(input, init);
     }) as typeof fetch);
     // Null, not []: the stewards' page would otherwise offer every confirmed night as unposted.
-    expect(await fetchCollectiveEvents()).toBeNull();
+    expect(await fetchCollectiveEvents({ strict: true })).toBeNull();
+    // Not strict (the landing page, /events): unchanged from before T-482, an answer from the listings alone.
+    expect(await fetchCollectiveEvents()).toEqual([]);
   });
 
   it("with strict, a list cut short by a failed later page is unread, not short", async () => {

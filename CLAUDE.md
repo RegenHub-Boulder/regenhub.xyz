@@ -48,7 +48,7 @@ The `.dockerignore` has an exception (`!**/.env.production`) so the file is avai
 | `REGENOS_BASE_URL` | Web (runtime) | regenOS AppView base URL, no trailing slash. Unset = events fall back to the Luma embed and one-login stays off. |
 | `REGENOS_COLLECTIVE_DID` | Web (runtime) | The RegenHub collective's `did:plc:…`. Required alongside the base URL for the events swap. |
 | `REGENOS_WEB_URL` | Web (runtime) | **No longer read** (T-482): the calendar feed is regenhub.xyz's own `/events.ics`. Safe to remove from Coolify. |
-| `TECHNE_SIGNIN_ENABLED` | Web (runtime) | **Default off.** `true` turns on "Sign in with Techne": RSVP on event pages, the stewards' `/portal/events`, and `/techne/client-metadata.json`. Needs the events vars above. (Was `TECHNE_RSVP_ENABLED`.) |
+| `TECHNE_SIGNIN_ENABLED` | Web (runtime) | **Default off.** `true` turns on "Sign in with Techne": RSVP on event pages, the Techne `/portal/events` (the old page moves to `/portal/events/old`), and `/techne/client-metadata.json`. Off = Manage Events exactly as before (old regenOS-lane page). Needs the events vars above. (Was `TECHNE_RSVP_ENABLED`.) |
 | `TECHNE_PDS_URL` / `TECHNE_PLC_URL` / `TECHNE_HANDLE_DOMAIN` / `TECHNE_PLATFORM_DID` | Web (runtime) | Test deployments only; production leaves them unset (techne-sdk defaults). |
 | `TECHNE_STAGING_STANDIN` / `TECHNE_STANDIN_URL` | Web (runtime) | **Staging only**, never production: the sign-in stand-in. Refused for the regenhub.xyz origin. |
 | `REGENOS_LOGIN_ENABLED` | Web (runtime) | **Default off.** `true`/`1`/`yes` turns on the regenOS login lane + the `/xrpc` proxy. |
@@ -299,11 +299,10 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   `components/events/EventList.tsx`.
 - **"Sign in with Techne"** (`TECHNE_SIGNIN_ENABLED`, default OFF; T-482): one door, one session, for RSVP
   and the stewards' `/portal/events`. regenhub.xyz is its own atproto OAuth client via `techne-sdk/auth` (the
-  docs' way): client metadata at `/techne/client-metadata.json`, callback `/techne/callback`. Two scope levels on
-  that one client (`lib/techne/session.ts` `signInScope`): **member** = `repo:community.lexicon.calendar.rsvp` + the
-  SDK's default reads; **steward** = that + `repo:` for the collective's event/config/listing +
-  `rpc:com.atproto.repo.applyWrites` at the platform. The metadata declares the steward list; RSVP signs in asking
-  for the member list only. Config:
+  docs' way): client metadata at `/techne/client-metadata.json`, callback `/techne/callback`. **One scope list for
+  everyone** (Aaron, 11-17; `lib/techne/session.ts` `signInScope`): `repo:` for the RSVP and the collective's
+  event/config/listing + the SDK's default reads. No `authRead`/extra `space:`, so no red consent warning. What a
+  person may do is decided by Techne on the write, not by scopes. The metadata declares the same list. Config:
   `lib/techne/config.ts`; the browser side is `components/techne/useTechneSession.ts` + `SignInWithTechne.tsx`,
   used by both pages. The RSVP is the attendee's OWN `community.lexicon.calendar.rsvp` written with
   `com.atproto.repo.putRecord` on their PDS, then hinted with `pub.techne.draft.sync.indexRecord`
@@ -370,24 +369,29 @@ Both doors land the AppView's session cookie on this origin then call the one sh
   `verified === true` and ignore every other channel.
 - `members.did` (migration `042`) is **server-written only** and deliberately absent from the profile
   self-edit whitelist (`api/portal/profile/route.ts:63-65`).
-- `/portal/events` — **Manage Events**, the stewards' in-portal calendar. Since T-482 part 2 it is on the
-  Techne door, not this lane (`TECHNE_SIGNIN_ENABLED`): Supabase session for the portal, then "Sign in with
-  Techne" (the same session as RSVP). The calendar is the documented public read (`fetchCollectiveEvents`); the
-  steward check is the collective's public `pub.techne.draft.membership` claims naming the person, role ≥ 30, the
-  member space's manage leg that holds the collective's pen (`lib/techne/standing.ts`,
-  `GET /api/portal/events/standing`). It decides what the page offers; the platform checks every write.
+- `/portal/events` — **Manage Events**, the stewards' in-portal calendar. **`TECHNE_SIGNIN_ENABLED` off: the old
+  lane's page, unchanged** (`components/portal/legacy/`, described below; nav link, card and revalidate ride
+  `isStewardEventsEnabled()` = Techne door OR `REGENOS_LOGIN_ENABLED`). **On:** the Techne door. Supabase session for
+  the portal, then "Sign in with Techne" (the same session as RSVP); the old page stays at `/portal/events/old`
+  ("Old steward page") until Aaron retires it. The calendar is the documented public read (`fetchCollectiveEvents`).
+  **Everyone signed in gets the form**; the collective's public `pub.techne.draft.membership` claims only word a hint
+  (role, or "posting works if you manage RegenHub on Techne"; `lib/techne/standing.ts`,
+  `GET /api/portal/events/standing`, portal session required, 1-minute cache). Techne decides on the write.
   **Writes as the collective** (`lib/techne/collectiveEvents.ts` builds, `collectiveWrite.ts` sends): the event
   (TID key), its `pub.techne.draft.event.config` `{rkey}-cfg` (timezone America/Denver) and the collective's
-  `pub.techne.draft.event.listing` `{rkey}-ctx`, all public, in RegenHub's repo, in ONE
-  `com.atproto.repo.applyWrites` at the platform (it holds the collective's credential), sent through the
-  steward's PDS with `atproto-proxy`, then `sync.indexRecord` per record. CIDs from techne-sdk/put `plan`. Edits
-  keep the key, `createdAt`, unowned fields and the config's settings; Remove deletes the event and the siblings
-  that exist. Public events only. A 401/403 shows "Techne didn't let you post as RegenHub". Unproven until one
-  real post: that techne.town's PDS proxies `applyWrites` to the platform (docs/TECHNE-SIGN-IN.md). The form
-  rules below (resend every field) still shape the bodies.
-  What follows describes the old lane's version, kept until it is removed (`docs/TECHNE-SIGN-IN.md`).
+  `pub.techne.draft.event.listing` `{rkey}-ctx`, all public, in RegenHub's repo, in ONE standard
+  `com.atproto.repo.applyWrites` (repo = the collective) sent **straight to the steward's own PDS, no
+  `atproto-proxy`** (pds.techne.town refuses to forward `com.atproto.repo.*`; it hosts RegenHub too), then
+  `sync.indexRecord` per record (that one proxied). CIDs from techne-sdk/put `plan`. Edits keep the key,
+  `createdAt`, unowned fields and the config's settings; Remove deletes the event and the siblings that exist.
+  Public events only. A refusal shows "Techne didn't accept a post as RegenHub from this account. Techne said: …"
+  and logs status/error to the console. **Unproven until one real post:** that pds.techne.town lets a manager of
+  RegenHub's member space write RegenHub's repo (docs/TECHNE-SIGN-IN.md). The form rules below (resend every
+  field) still shape the bodies.
+  What follows describes the old lane's page (`components/portal/legacy/`), kept until it is removed
+  (`docs/TECHNE-SIGN-IN.md` "Old steward page").
   **Import from Luma** pastes public luma.com / lu.ma URLs/HTML, parses JSON-LD (no Pro API), then
-  `createEvent`s the selected rows (old lane only; not shown on the Techne page). `/admin/members` **Sync claims to regenOS** admits paid desk
+  `createEvent`s the selected rows (old page only). `/admin/members` **Sync claims to regenOS** admits paid desk
   and hub friends, plus `day_pass` rows with a live subscription (`active`/`trialing`/`past_due`
   — the $30/$50/$100 ladder). One-off day-pass checkouts (no sub) are revoked. Admins/ops as
   `steward`. Builder grants stay explicit on regenOS — those roles can write events.
@@ -395,7 +399,7 @@ Both doors land the AppView's session cookie on this origin then call the one sh
   (`getSceneMembers`, whose `steward` flag is computed for the *caller* through the trust resolver;
   we OR it with a direct Builder+ roster row to mirror the AppView's own `owner_or_builder` write
   gate). Not a steward ⇒ an honest explainer, never the form. Mutations are same-origin `/xrpc`
-  POSTs from `components/portal/ManageEvents.tsx`; the wire shapes live in `lib/regenos/eventForm.ts`.
+  POSTs from `components/portal/legacy/OldManageEvents.tsx`; the wire shapes live in `lib/regenos/eventForm.ts`.
   **Events are written with `publicFace: "exact"`** — the default `rough` face gates street/place-name
   into the `event.detail` record we can't read back, so an edit would silently erase the address.
   `updateEvent` re-runs the whole create fan-out, so an edit resends every field it wants to keep.

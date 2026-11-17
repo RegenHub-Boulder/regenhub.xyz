@@ -11,6 +11,9 @@ import { unpostedNights } from "@/lib/seriesNights";
 import type { ManageableEvent } from "@/components/portal/ManageEvents";
 import { StewardEvents } from "@/components/portal/StewardEvents";
 import { STEWARD_PATH } from "@/lib/techne/session";
+import { isRegenosLoginEnabled } from "@/lib/regenos/config";
+import { OldStewardPage } from "@/components/portal/legacy/OldStewardPage";
+import Link from "next/link";
 
 export const metadata = { title: "Manage Events — RegenHub" };
 
@@ -18,18 +21,21 @@ export const metadata = { title: "Manage Events — RegenHub" };
 export const dynamic = "force-dynamic";
 
 /**
- * Manage Events: the stewards' view of RegenHub's calendar on Techne.
+ * Manage Events. With TECHNE_SIGNIN_ENABLED off this is the old regenOS-lane page, unchanged
+ * (components/portal/legacy/OldStewardPage.tsx). With it on, RegenHub's calendar on Techne:
  *
  * Two doors, as everywhere in the portal: the Supabase sign-in gets you into the portal, and
  * "Sign in with Techne" (the site's one Techne session, shared with RSVP) says who you are on
  * Techne. The calendar is the documented public read every visitor gets (lib/regenos/events.ts).
- * Whether you steward RegenHub is decided in the browser from the collective's membership claims
- * (components/portal/StewardEvents.tsx). Off unless TECHNE_SIGNIN_ENABLED.
+ * Anyone signed in with Techne gets the form; Techne decides on each write whether they may post as
+ * RegenHub (components/portal/StewardEvents.tsx). The old page stays at /portal/events/old while the
+ * regenOS lane is on ("Old steward page").
  */
 export default async function ManageEventsPage() {
   const config = techneConfig();
+  if (!config) return <OldStewardPage />;
   const collective = regenosCollectiveDid();
-  if (!config || !collective) notFound();
+  if (!collective) notFound();
 
   const supabase = await createClient();
   const {
@@ -95,7 +101,17 @@ export default async function ManageEventsPage() {
           <CalendarDays className="w-7 h-7 text-sage" />
           Manage Events
         </h1>
-        <p className="text-muted mt-1">RegenHub&apos;s calendar on Techne.</p>
+        <p className="text-muted mt-1">
+          RegenHub&apos;s calendar on Techne.
+          {isRegenosLoginEnabled() && (
+            <>
+              {" "}
+              <Link href="/portal/events/old" className="underline underline-offset-2 hover:text-foreground">
+                Old steward page
+              </Link>
+            </>
+          )}
+        </p>
       </div>
       <StewardEvents
         config={config}

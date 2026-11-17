@@ -12,7 +12,7 @@
  * lib/techne/standIn.ts; it is refused for the regenhub.xyz origin.
  */
 
-import { isRegenosEventsConfigured } from "@/lib/regenos/config";
+import { isRegenosEventsConfigured, isRegenosLoginEnabled } from "@/lib/regenos/config";
 
 /** What the browser needs to sign in; null when the door is off. Built on the server. */
 export interface TechneConfig {
@@ -36,6 +36,15 @@ export function siteOrigin(): string {
 
 export function isTechneSignInEnabled(): boolean {
   return on(process.env.TECHNE_SIGNIN_ENABLED) && isRegenosEventsConfigured();
+}
+
+/**
+ * Whether the portal has a Manage Events page at all: the Techne door, or the old regenOS lane (whose page
+ * is /portal/events while the door is off, /portal/events/old while it is on). Drives the nav link, the
+ * dashboard card and the revalidate route, so with TECHNE_SIGNIN_ENABLED off they are exactly as before.
+ */
+export function isStewardEventsEnabled(): boolean {
+  return isTechneSignInEnabled() || isRegenosLoginEnabled();
 }
 
 /** The staging stand-in for a Techne PDS. Never on for the production origin. */

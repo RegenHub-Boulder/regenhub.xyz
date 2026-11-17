@@ -10,9 +10,12 @@
 //   - POST /xrpc/pub.techne.draft.sync.indexRecord  accepted (the record is already readable)
 //   - GET  /xrpc/pub.techne.draft.query.listRecords  the AppView's answer, plus the stand-in's
 //          records when the query names their type (as the firehose would have indexed them)
-//   - POST /xrpc/com.atproto.repo.applyWrites   a person's own repo, or (with atproto-proxy naming the
-//          platform) a collective's repo, as Techne's platform does for "whoever manages its own member
-//          space": here, a live public membership claim from that collective at role >= 30. Else 403.
+//   - POST /xrpc/com.atproto.repo.applyWrites   answered by the PDS itself, as pds.techne.town does: with
+//          an atproto-proxy header it answers 403 "... is not forwarded" (pds.techne.town's real answer,
+//          ~/Code/reviews/pr121/REVIEW-pr121.md B1). Without one: a person's own repo, or a collective's
+//          repo when the person "manages its own member space": here, a live public membership claim from
+//          that collective at role >= 30 (the ASSUMED Techne rule for a collective hosted on the same PDS;
+//          unproven until one real post). Else 403 Forbidden. x-standin-expired: 1 = a lapsed token, 401.
 //   - GET  /xrpc/pub.techne.draft.query.getRecords   the AppView's answer with the stand-in's writes applied
 //   - everything else under /xrpc is passed to the AppView unchanged.
 // It also serves the collective's public membership claim for its steward (seed.json), as production
@@ -133,6 +136,11 @@ li a:hover{background:#eef4f0}span{color:#666;font-size:.9rem}</style>
 <h1>Sign in with Techne</h1><p>Staging stand-in: on regenhub.xyz this is techne.town's sign-in. Pick a sample person.</p><ul>${rows}</ul>`);
       return;
     }
+    // Like pds.techne.town: repo methods are the PDS's own; it never forwards them to the platform.
+    if (path.startsWith("/xrpc/com.atproto.repo.") && req.headers["atproto-proxy"]) {
+      return json(res, 403, { error: "InvalidRequest", message: `${path} is not forwarded to ${req.headers["atproto-proxy"]}` });
+    }
+    if (req.headers["x-standin-expired"] && req.method === "POST") return json(res, 401, { error: "ExpiredToken", message: "Token has expired" });
     if (path === "/xrpc/com.atproto.repo.putRecord" && req.method === "POST") {
       if (!did) return json(res, 401, { error: "AuthenticationRequired" });
       const b = JSON.parse(await readBody(req));
@@ -151,9 +159,7 @@ li a:hover{background:#eef4f0}span{color:#666;font-size:.9rem}</style>
     if (path === "/xrpc/com.atproto.repo.applyWrites" && req.method === "POST") {
       if (!did) return json(res, 401, { error: "AuthenticationRequired" });
       const b = JSON.parse(await readBody(req));
-      const viaPlatform = !!req.headers["atproto-proxy"];
-      if (b.repo !== did && !viaPlatform) return json(res, 403, { error: "Forbidden", message: "a PDS writes only your own repo" });
-      if (!holdsPen(did, b.repo)) return json(res, 403, { error: "Forbidden", message: "you don't manage this collective's member space" });
+      if (!holdsPen(did, b.repo)) return json(res, 403, { error: "Forbidden", message: `${did} may not write as ${b.repo}` });
       const results = [];
       const next = [...records];
       for (const w of b.writes ?? []) {

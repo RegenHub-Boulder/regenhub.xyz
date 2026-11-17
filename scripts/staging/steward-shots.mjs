@@ -2,7 +2,7 @@
 // Screenshots of the one Techne door on the staging preview (sample data only), 390x844:
 // a steward signs in with Techne on /portal/events, posts Civic Tech Night as the collective from
 // "Add the next nights", gives it a topic, then RSVPs to it with the same session; then a member who
-// isn't a steward sees the explainer. Run on a fresh preview (scripts/staging/preview.sh).
+// isn't a steward gets the same form, tries to post, and reads Techne's refusal. Run on a fresh preview (scripts/staging/preview.sh).
 // Usage: PLAYWRIGHT_DIR=<dir holding node_modules/playwright> node scripts/staging/steward-shots.mjs [base] [outdir]
 import { createRequire } from "node:module";
 const { chromium } = createRequire(process.env.PLAYWRIGHT_DIR + "/")("playwright");
@@ -68,6 +68,15 @@ await page.goto(BASE + "/portal/events", { waitUntil: "networkidle" });
 await page.click(SIGN_IN);
 await page.waitForSelector("text=Pick a sample person");
 await page.click("text=Lee (sample)");
-await page.waitForSelector("text=Only stewards edit the calendar");
+// Everyone signed in gets the form; Techne (here the stand-in PDS) decides on the write.
+await page.waitForSelector("[data-testid=steward-hint]");
+console.log("lee:", await page.textContent("[data-testid=steward-who]"));
+await page.click("button:has-text('New event')");
+await page.fill("#ev-name", "Lee's night");
+await page.fill("#ev-starts", "2026-12-20T18:30");
+await page.click("button:has-text('Create event')");
+await page.waitForSelector("text=Techne didn't accept a post as RegenHub from this account", { timeout: 15000 });
+await page.evaluate(() => window.scrollTo(0, 0));
+console.log("refused:", await page.locator("p.text-red-400").first().textContent());
 await shot("not-a-steward");
 await browser.close();
