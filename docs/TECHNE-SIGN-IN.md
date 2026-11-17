@@ -41,7 +41,7 @@ public docs only (techne.computer/llms.txt and what it lists, reference.html, te
 - **Unproven until one real post:** whether pds.techne.town lets a manager of RegenHub's member space write
   RegenHub's repo with their own OAuth session. That is the Techne layer. Nothing read-only can show it; the first
   real post after deploy does. If it refuses, the steward reads "Techne didn't accept a post as RegenHub from this
-  account. Techne said: <the PDS's own text>", and the browser console logs the status and error code
+  account. … (Techne said: <the PDS's own text>)", and the browser console logs the status and error code
   (`[techne] com.atproto.repo.applyWrites as <did>: <status> <error>`).
 - What: public records, so `applyWrites`, not `permissioned.putRecords` (which needs a `space`). Shape as the
   platform's own events and techne-sdk/put `eventRecords`: `community.lexicon.calendar.event` at a TID key,
@@ -56,10 +56,11 @@ public docs only (techne.computer/llms.txt and what it lists, reference.html, te
   Remove: `#delete` of the event and whichever siblings exist. "Remove" deletes; people who RSVP'd aren't told.
 - Public only: a private event lives in its invite space, which needs `authPermissioned` writes and a `space:`
   scope beyond the app's own (the red consent warning). The form doesn't offer "private".
-- Answers: 401/403 (other than a lapsed token: `ExpiredToken`/`InvalidToken`) = Techne didn't accept the post from
-  this account, in its own words (a reference PDS answers "not your repo" with 401 `AuthenticationRequired`);
-  a lapsed token = sign in again; 400/404/409/413/415/422 = nothing written, try again; anything else (5xx, no
-  answer) = reload before retrying.
+- Answers (`lib/techne/collectiveWrite.ts`), error name first: `ExpiredToken`, `InvalidToken`, `invalid_token` or
+  `invalid_dpop_proof` (in the body, or `WWW-Authenticate`'s `error=`) at any status = sign in again; then any
+  other 401/403 = Techne didn't accept the post from this account, in its own words, "if you think it should have,
+  sign out and in again" (a reference PDS answers "not your repo" with 401 `AuthenticationRequired`);
+  400/404/409/413/415/422 = nothing written, try again; anything else (5xx, no answer) = reload before retrying.
 - Live check (2026-11-17): RegenHub's existing event `ev-mtishcrx6pltz6` has exactly this shape (event, `-cfg`
   with `attendance`/`waitlist`, `-ctx` listing), read from pds.techne.town.
 

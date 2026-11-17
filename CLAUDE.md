@@ -384,7 +384,7 @@ Both doors land the AppView's session cookie on this origin then call the one sh
   `atproto-proxy`** (pds.techne.town refuses to forward `com.atproto.repo.*`; it hosts RegenHub too), then
   `sync.indexRecord` per record (that one proxied). CIDs from techne-sdk/put `plan`. Edits keep the key,
   `createdAt`, unowned fields and the config's settings; Remove deletes the event and the siblings that exist.
-  Public events only. A refusal shows "Techne didn't accept a post as RegenHub from this account. Techne said: …"
+  Public events only. A refusal shows "Techne didn't accept a post as RegenHub from this account. … (Techne said: …)"
   and logs status/error to the console. **Unproven until one real post:** that pds.techne.town lets a manager of
   RegenHub's member space write RegenHub's repo (docs/TECHNE-SIGN-IN.md). The form rules below (resend every
   field) still shape the bodies.

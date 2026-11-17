@@ -33,7 +33,7 @@ which this run couldn't read (`capture`, then `render`, on a fresh preview).
 5. **Same session on the night** (`07`, `08`): no second sign-in; "I'm going" → "1 going · You're going". *"One
    Techne session for the whole site."*
 6. **Not a steward** (`09`): Lee gets the same form, with "Posting works if you manage RegenHub on Techne". They try
-   to post; the red line reads "Techne didn't accept a post as RegenHub from this account. Techne said: …".
+   to post; the red line reads "Techne didn't accept a post as RegenHub from this account. … (Techne said: …)".
    *"Everyone gets the same form. Techne decides, and says no in its own words."*
 
 Not shown, because staging can't prove it: pds.techne.town letting a manager of RegenHub write RegenHub's repo. The

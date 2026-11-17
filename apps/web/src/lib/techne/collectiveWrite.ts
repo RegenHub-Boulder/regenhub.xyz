@@ -19,11 +19,11 @@ export const COLLECTIVE_WRITE_METHOD = "com.atproto.repo.applyWrites";
 
 export type WriteOutcome =
   | { ok: true }
-  /** 401/403 that isn't a lapsed token (a reference PDS answers "not your repo" with 401
-   *  AuthenticationRequired): Techne didn't accept a post as the collective from this account.
-   *  `message` is the PDS's own text. */
+  /** Any other 401/403 (a reference PDS answers "not your repo" with 401 AuthenticationRequired): Techne
+   *  didn't accept a post as the collective from this account. `message` is the PDS's own text. */
   | { ok: false; kind: "refused"; status: number; message: string }
-  /** The PDS no longer accepts the sign-in's token (expired, revoked): sign in again. */
+  /** The answer names the token as no good (LAPSED_TOKEN, in the body or WWW-Authenticate), whatever
+   *  the status: sign in again. A token refused without a name lands in `refused`, whose text also says so. */
   | { ok: false; kind: "signin"; message: string }
   /** A request the PDS rejected (400, 404, 409, 413, 415, 422): applyWrites is atomic, so nothing was
    *  written; safe to try again. */
@@ -35,8 +35,8 @@ export type WriteOutcome =
 /** Statuses that mean the request itself was rejected, so nothing was applied. */
 const REJECTED = new Set([400, 404, 409, 413, 415, 422]);
 
-/** Error names an atproto PDS gives a token it no longer accepts (as opposed to a write it won't allow). */
-const LAPSED_TOKEN = new Set(["ExpiredToken", "InvalidToken", "invalid_token"]);
+/** Error names a PDS gives a token or DPoP proof it no longer accepts (as opposed to a write it won't allow). */
+const LAPSED_TOKEN = new Set(["ExpiredToken", "InvalidToken", "invalid_token", "invalid_dpop_proof"]);
 
 export async function sendCollectiveBatch(session: Session, config: TechneConfig, batch: CollectiveBatch): Promise<WriteOutcome> {
   try {
@@ -46,10 +46,8 @@ export async function sendCollectiveBatch(session: Session, config: TechneConfig
     if (err instanceof XrpcError) {
       // The one record of why a write as the collective didn't land, for whoever debugs the first real post.
       console.warn(`[techne] ${COLLECTIVE_WRITE_METHOD} as ${batch.input.repo}: ${err.status} ${err.error ?? ""}`.trim(), err.message);
-      // A token the PDS names as no longer good (some PDSes answer expiry with 400).
-      if ((err.status === 401 || err.status === 400) && err.error && LAPSED_TOKEN.has(err.error)) {
-        return { ok: false, kind: "signin", message: err.message };
-      }
+      // The error name first (a lapsed token is a lapsed token at any status), then the status.
+      if (err.error && LAPSED_TOKEN.has(err.error)) return { ok: false, kind: "signin", message: err.message };
       if (err.status === 401 || err.status === 403) return { ok: false, kind: "refused", status: err.status, message: err.message };
       if (REJECTED.has(err.status)) return { ok: false, kind: "failed", message: err.message };
     }
@@ -67,7 +65,7 @@ export async function sendCollectiveBatch(session: Session, config: TechneConfig
 export function writeErrorText(out: Exclude<WriteOutcome, { ok: true }>): string {
   switch (out.kind) {
     case "refused":
-      return `Techne didn't accept a post as RegenHub from this account. Techne said: ${out.message}. If you think it should have, sign out of Techne and sign in again, then retry.`;
+      return `Techne didn't accept a post as RegenHub from this account. If you think it should have, sign out of Techne and sign in again, then retry. (Techne said: ${out.message})`;
     case "signin":
       return `Your Techne sign-in has lapsed. Sign out of Techne and sign in again, then retry. (${out.message})`;
     case "unknown":
