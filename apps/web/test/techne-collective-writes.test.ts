@@ -148,7 +148,15 @@ describe("what the steward is told when a write doesn't land", () => {
     expect(await sendCollectiveBatch(answering(400, { error: "invalid_dpop_proof" }), config, batch())).toMatchObject({ ok: false, kind: "signin" });
     // The OAuth way: no body, the name in WWW-Authenticate.
     const challenged = { did: STEWARD, fetchHandler: async () => new Response("", { status: 401, headers: { "www-authenticate": 'DPoP error="invalid_token", error_description="expired"' } }) };
-    expect(await sendCollectiveBatch(challenged, config, batch())).toMatchObject({ ok: false, kind: "signin" });
+    expect(await sendCollectiveBatch(challenged, config, batch())).toMatchObject({ ok: false, kind: "signin", message: expect.stringContaining("expired") });
+    // A generic body name doesn't hide the challenge; an unquoted challenge counts.
+    const both = (h: string) => ({ did: STEWARD, fetchHandler: async () => Response.json({ error: "AuthenticationRequired" }, { status: 401, headers: { "www-authenticate": h } }) });
+    expect(await sendCollectiveBatch(both('DPoP error="invalid_token"'), config, batch())).toMatchObject({ kind: "signin" });
+    expect(await sendCollectiveBatch(both("DPoP error=invalid_token"), config, batch())).toMatchObject({ kind: "signin" });
+    expect(await sendCollectiveBatch(both('DPoP error="use_dpop_nonce"'), config, batch())).toMatchObject({ kind: "failed" });
+  });
+  it("a 5xx that names a bad token may still have landed: reload first", async () => {
+    expect(await sendCollectiveBatch(answering(502, { error: "InvalidToken" }), config, batch())).toMatchObject({ ok: false, kind: "unknown" });
     // A bare 401 (no error name, not even JSON) is a refusal; its text also says to sign in again.
     const bare = { did: STEWARD, fetchHandler: async () => new Response("no json", { status: 401 }) };
     expect(await sendCollectiveBatch(bare, config, batch())).toMatchObject({ ok: false, kind: "refused" });

@@ -57,7 +57,8 @@ public docs only (techne.computer/llms.txt and what it lists, reference.html, te
 - Public only: a private event lives in its invite space, which needs `authPermissioned` writes and a `space:`
   scope beyond the app's own (the red consent warning). The form doesn't offer "private".
 - Answers (`lib/techne/collectiveWrite.ts`), error name first: `ExpiredToken`, `InvalidToken`, `invalid_token` or
-  `invalid_dpop_proof` (in the body, or `WWW-Authenticate`'s `error=`) at any status = sign in again; then any
+  `invalid_dpop_proof` (in the body, or `WWW-Authenticate`'s `error=`) below 500 = sign in again; a second
+  `use_dpop_nonce` = nothing written, try again; then any
   other 401/403 = Techne didn't accept the post from this account, in its own words, "if you think it should have,
   sign out and in again" (a reference PDS answers "not your repo" with 401 `AuthenticationRequired`);
   400/404/409/413/415/422 = nothing written, try again; anything else (5xx, no answer) = reload before retrying.

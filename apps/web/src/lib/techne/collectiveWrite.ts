@@ -22,8 +22,8 @@ export type WriteOutcome =
   /** Any other 401/403 (a reference PDS answers "not your repo" with 401 AuthenticationRequired): Techne
    *  didn't accept a post as the collective from this account. `message` is the PDS's own text. */
   | { ok: false; kind: "refused"; status: number; message: string }
-  /** The answer names the token as no good (LAPSED_TOKEN, in the body or WWW-Authenticate), whatever
-   *  the status: sign in again. A token refused without a name lands in `refused`, whose text also says so. */
+  /** Below 500, the answer names the token as no good (LAPSED_TOKEN, in the body or WWW-Authenticate):
+   *  sign in again. A token refused without a name lands in `refused`, whose text also says so. */
   | { ok: false; kind: "signin"; message: string }
   /** A request the PDS rejected (400, 404, 409, 413, 415, 422): applyWrites is atomic, so nothing was
    *  written; safe to try again. */
@@ -46,8 +46,12 @@ export async function sendCollectiveBatch(session: Session, config: TechneConfig
     if (err instanceof XrpcError) {
       // The one record of why a write as the collective didn't land, for whoever debugs the first real post.
       console.warn(`[techne] ${COLLECTIVE_WRITE_METHOD} as ${batch.input.repo}: ${err.status} ${err.error ?? ""}`.trim(), err.message);
-      // The error name first (a lapsed token is a lapsed token at any status), then the status.
-      if (err.error && LAPSED_TOKEN.has(err.error)) return { ok: false, kind: "signin", message: err.message };
+      // Below 500, a token named lapsed (in the body or the challenge) wins over the status. A 5xx stays
+      // "unknown" whatever it names: the batch may have landed.
+      const named = [err.error, err.challenge];
+      if (err.status < 500 && named.some((n) => n && LAPSED_TOKEN.has(n))) return { ok: false, kind: "signin", message: err.message };
+      // The OAuth library retries a fresh DPoP nonce once; a second one wrote nothing.
+      if (named.includes("use_dpop_nonce")) return { ok: false, kind: "failed", message: err.message };
       if (err.status === 401 || err.status === 403) return { ok: false, kind: "refused", status: err.status, message: err.message };
       if (REJECTED.has(err.status)) return { ok: false, kind: "failed", message: err.message };
     }
