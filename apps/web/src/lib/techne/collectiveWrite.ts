@@ -51,7 +51,7 @@ export async function sendCollectiveBatch(session: Session, config: TechneConfig
       const named = [err.error, err.challenge];
       if (err.status < 500 && named.some((n) => n && LAPSED_TOKEN.has(n))) return { ok: false, kind: "signin", message: err.message };
       // The OAuth library retries a fresh DPoP nonce once; a second one wrote nothing.
-      if (named.includes("use_dpop_nonce")) return { ok: false, kind: "failed", message: err.message };
+      if (err.status < 500 && named.includes("use_dpop_nonce")) return { ok: false, kind: "failed", message: err.message };
       if (err.status === 401 || err.status === 403) return { ok: false, kind: "refused", status: err.status, message: err.message };
       if (REJECTED.has(err.status)) return { ok: false, kind: "failed", message: err.message };
     }
