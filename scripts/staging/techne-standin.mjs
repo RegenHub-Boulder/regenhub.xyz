@@ -11,6 +11,8 @@
 //   - GET  /xrpc/pub.techne.draft.query.listRecords  the AppView's answer, plus the stand-in's
 //          records when the query names their type (as the firehose would have indexed them)
 //   - everything else under /xrpc is passed to the AppView unchanged.
+// It also serves the collective's public membership claim for its steward (seed.json), as production
+// Techne does for a collective's founder (`mb-self-<did>`, role 40); the local AppView writes none.
 // Usage: node techne-standin.mjs --port 18593 --appview http://127.0.0.1:18591 --state <dir>
 import { createServer } from "node:http";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
@@ -27,6 +29,18 @@ const STORE = join(STATE, "standin-records.json");
 
 const people = () => JSON.parse(readFileSync(join(STATE, "people.json"), "utf8"));
 let records = existsSync(STORE) ? JSON.parse(readFileSync(STORE, "utf8")) : [];
+const SEED = join(STATE, "seed.json");
+if (existsSync(SEED)) {
+  const { collective, steward } = JSON.parse(readFileSync(SEED, "utf8"));
+  const uri = `at://${collective}/pub.techne.draft.membership/mb-self-${steward}`;
+  if (collective && steward && !records.some((r) => r.uri === uri)) {
+    records.push({
+      uri, cid: "bafystandinmembership", author: collective, collection: "pub.techne.draft.membership", source: "public",
+      value: { $type: "pub.techne.draft.membership", subject: steward, role: 40, createdAt: new Date().toISOString() },
+      time: new Date().toISOString(),
+    });
+  }
+}
 const save = () => writeFileSync(STORE, JSON.stringify(records, null, 2));
 
 const json = (res, status, body) => {
@@ -42,13 +56,18 @@ const readBody = (req) =>
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 // Does one stand-in record match a pub.techne.draft.query `where`? Supports what the app sends:
-// type / author / subject leaves with `is` or `in`, combined with `all`.
+// type / author / subject / references leaves with `is` or `in`, combined with `all`.
 function matches(r, node) {
   if (!node) return true;
   if (node.all) return node.all.every((n) => matches(r, n));
   if (node.any) return node.any.some((n) => matches(r, n));
   if (node.not) return !matches(r, node.not);
   const [[role, cond]] = Object.entries(node);
+  if (role === "references") {
+    // A membership's subject is its reference, as `at://{did}` (its registry query document).
+    const refs = r.collection === "pub.techne.draft.membership" && r.value?.subject ? [`at://${r.value.subject}`] : [];
+    return cond.is !== undefined ? refs.includes(cond.is) : !!cond.in && refs.some((x) => cond.in.includes(x));
+  }
   const v = role === "type" ? r.collection : role === "author" ? r.author : role === "subject" ? r.value?.subject?.uri : undefined;
   if (v === undefined) return false;
   if (cond.is !== undefined) return v === cond.is;

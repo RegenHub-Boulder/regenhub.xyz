@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Seed the T-482 staging Techne backend (a local AppView, AUTH_MODE=beta, in-memory PDS) with:
-// a steward, a "RegenHub (staging)" collective, the first night of each series, and fictional
+// a steward, a "RegenHub (staging)" collective, Agents Night's first night, and fictional
 // sample people (their RSVPs are written by seed-rsvps.mjs, through the stand-in). Nobody here is a real person.
 // Usage: node scripts/staging/seed.mjs --appview http://127.0.0.1:18591 --out <state dir>
 // Writes <state dir>/seed.json (collective DID, event URIs) and <state dir>/people.json
@@ -84,8 +84,9 @@ const c = await steward.call("social.scenius.createScene", {
 const collective = c.sceneDid ?? c.collectiveDid ?? c.did;
 console.log("collective", collective);
 
-// The first night of each series. Times are the placeholder 6:30-9pm America/Denver (MST, -07:00).
-const NIGHTS = [
+// Agents Night's first night is posted; Civic Tech Night's is left for the steward page to list as
+// "confirmed but not posted yet". Times are the placeholder 6:30-9pm America/Denver (MST, -07:00).
+const ALL_NIGHTS = [
   {
     slug: "agents-night",
     name: "Agents Night",
@@ -101,6 +102,7 @@ const NIGHTS = [
       "Bring your project, or your neighborhood group's stuck problem, and work on it with others. Open to anyone. (Sample event on staging.)",
   },
 ];
+const NIGHTS = ALL_NIGHTS.filter((n) => n.slug === "agents-night");
 const events = {};
 for (const n of NIGHTS) {
   const rkey = tid();
@@ -134,7 +136,8 @@ const PEOPLE = [
   ["sam-sample", "Sam (sample)"],
   ["lee-sample", "Lee (sample)"],
 ];
-const people = [];
+// The collective's steward signs in through the stand-in too (the steward page), listed first.
+const people = [{ did: steward.did, handle: steward.handle, name: "RegenHub steward (sample)", cookie: steward.cookie }];
 for (const [h, name] of PEOPLE) {
   const a = await new Account(h).signUp(`${h}@example.test`, h);
   people.push({ did: a.did, handle: a.handle, name, cookie: a.cookie });
