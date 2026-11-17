@@ -2,7 +2,6 @@ import { withLockWriter } from "@regenhub/shared";
 import {
   decodeEventLog,
   getAddress,
-  parseAbi,
   parseAbiItem,
   type Address,
   type Hash,
@@ -17,6 +16,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { AuditAction, logAction } from "@/lib/auditLog";
 import { dayPassReceiptEmail, sendEmail } from "@/lib/email";
 import { assertOpPublicClient, getOpPublicClient } from "./config";
+import { findUsedAuthorization } from "./gaslessRelay";
 import { invoicePayerWalletId } from "./invoicePayer";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
@@ -286,20 +286,65 @@ export async function finishOnchainPlanSwitches(admin: ServiceClient, now = new 
   return results;
 }
 
-const AUTHORIZATION_STATE_ABI = parseAbi(["function authorizationState(address authorizer, bytes32 nonce) view returns (bool)"]);
-
-/** Whether this pass invoice's gasless authorization (if it has one) has been used on chain: then USDC may have moved. */
-async function passAuthorizationUsed(admin: ServiceClient, client: ReturnType<typeof getOpPublicClient>, invoiceId: number) {
-  const { data: job, error } = await admin.from("onchain_relay_jobs")
-    .select("from_address, authorization_nonce, token_contract").eq("invoice_id", invoiceId).maybeSingle();
-  if (error) throw error;
-  if (!job) return false;
-  return client.readContract({
-    address: getAddress(job.token_contract),
-    abi: AUTHORIZATION_STATE_ABI,
-    functionName: "authorizationState",
-    args: [getAddress(job.from_address), job.authorization_nonce as Hash],
-  });
+/**
+ * A day pass whose submitted transaction still isn't on chain after 24 hours
+ * would otherwise hold the member's purchase forever. If it was paid through
+ * the gasless relay, ask the chain what became of the authorization: used by
+ * another transaction (a replaced or rebroadcast one) -> verify that one;
+ * used but its event isn't found -> keep waiting and tell an admin, once.
+ * Otherwise (never used, canceled in the wallet, or a direct transfer that
+ * never showed up) no USDC moved under it: give up, not credited, kept for an
+ * admin; the purchase can then expire.
+ */
+async function settleMissingPassTransaction(
+  admin: ServiceClient,
+  invoice: { id: number; member_id: number; amount_usdc_micros: number },
+  txHash: Hash,
+): Promise<ProcessInvoiceResult> {
+  const { data: job, error: jobLookupError } = await admin.from("onchain_relay_jobs").select("*").eq("invoice_id", invoice.id).maybeSingle();
+  if (jobLookupError) throw jobLookupError;
+  let used: Awaited<ReturnType<typeof findUsedAuthorization>> = null;
+  if (job) {
+    try {
+      used = await findUsedAuthorization(job);
+    } catch (cause) {
+      await recordPassPaymentException(admin, invoice, txHash,
+        `authorization used on chain but its transaction can't be found yet (${cause instanceof Error ? cause.message : "unknown"}); check the treasury and settle by hand`);
+      return { status: "submitted", txHash };
+    }
+  }
+  if (used && used !== "canceled") {
+    if (used.toLowerCase() === txHash.toLowerCase()) {
+      await recordPassPaymentException(admin, invoice, txHash,
+        "authorization used on chain but this transaction wasn't found after 24 hours; check the treasury and settle by hand");
+      return { status: "submitted", txHash };
+    }
+    // Paid under another hash: point the purchase at it and verify that.
+    const real = used.toLowerCase();
+    const { data: moved, error: moveError } = await admin.from("onchain_invoices")
+      .update({ submitted_tx_hash: real, submitted_at: new Date().toISOString() })
+      .eq("id", invoice.id).eq("submitted_tx_hash", txHash).in("status", ["submitted", "detected"]).select("id").maybeSingle();
+    if (moveError) throw moveError;
+    if (!moved) return { status: "submitted", txHash };
+    const { error: jobMoveError } = await admin.from("onchain_relay_jobs").update({ submitted_tx_hash: real }).eq("invoice_id", invoice.id);
+    if (jobMoveError) throw jobMoveError;
+    return processOnchainInvoice(admin, invoice.id);
+  }
+  const reason = used === "canceled"
+    ? "payment authorization was canceled in the wallet; nothing was paid"
+    : "transaction not found on chain after 24 hours";
+  const { data: gaveUp, error: giveUpError } = await admin.from("onchain_invoices")
+    .update({ status: "exception", exception_reason: reason, submitted_tx_hash: null, submitted_at: null })
+    .eq("id", invoice.id).eq("submitted_tx_hash", txHash).in("status", ["submitted", "detected"])
+    .select("id").maybeSingle();
+  if (giveUpError) throw giveUpError;
+  if (!gaveUp) return { status: "submitted", txHash }; // paid or changed meanwhile
+  const { error: jobError } = await admin.from("onchain_relay_jobs")
+    .update({ status: "expired", last_error: reason })
+    .eq("invoice_id", invoice.id).eq("submitted_tx_hash", txHash);
+  if (jobError) throw jobError;
+  await recordPassPaymentException(admin, invoice, txHash, reason);
+  return { status: "exception", txHash, reason };
 }
 
 /** A pass transaction that wasn't credited, kept once for an admin to check on chain and refund. */
@@ -388,32 +433,8 @@ export async function processOnchainInvoice(
   } catch (error) {
     if (error instanceof Error && /not found|could not be found/i.test(error.message)) {
       const submittedAt = invoice.submitted_at ? Date.parse(invoice.submitted_at) : Date.now();
-      if (isPass && Date.now() - submittedAt > PASS_TX_NOT_FOUND_MS && await passAuthorizationUsed(admin, client, invoice.id)) {
-        // The authorization was used, so USDC may well have moved, under a
-        // hash we don't have. Don't give up on it; tell an admin (once).
-        await recordPassPaymentException(admin, invoice, txHash,
-          "authorization used on chain but this transaction wasn't found after 24 hours; check the treasury and settle by hand");
-        return { status: "submitted", txHash };
-      }
       if (isPass && Date.now() - submittedAt > PASS_TX_NOT_FOUND_MS) {
-        // A pass whose transaction never showed up (dropped, or a hash that
-        // isn't a payment) would otherwise hold the member's purchase
-        // forever. Given up only if its gasless authorization (if any) was
-        // never used on chain; not credited; kept for an admin; the purchase
-        // can then expire.
-        const reason = "transaction not found on chain after 24 hours";
-        const { data: gaveUp, error: giveUpError } = await admin.from("onchain_invoices")
-          .update({ status: "exception", exception_reason: reason, submitted_tx_hash: null, submitted_at: null })
-          .eq("id", invoice.id).eq("submitted_tx_hash", txHash).in("status", ["submitted", "detected"])
-          .select("id").maybeSingle();
-        if (giveUpError) throw giveUpError;
-        if (!gaveUp) return { status: "submitted", txHash }; // paid or changed meanwhile
-        const { error: jobError } = await admin.from("onchain_relay_jobs")
-          .update({ status: "expired", last_error: reason })
-          .eq("invoice_id", invoice.id).eq("submitted_tx_hash", txHash);
-        if (jobError) throw jobError;
-        await recordPassPaymentException(admin, invoice, txHash, reason);
-        return { status: "exception", txHash, reason };
+        return settleMissingPassTransaction(admin, invoice, txHash);
       }
       return { status: "submitted", txHash };
     }

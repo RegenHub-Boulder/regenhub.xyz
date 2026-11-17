@@ -13,7 +13,7 @@ import {
 import { publicAuthorization, type RelayJob } from "@/lib/onchain/gaslessRelay";
 import { requirePortalMember } from "@/lib/onchain/portalMember";
 import { invoicePayerWalletId } from "@/lib/onchain/invoicePayer";
-import { PASS_SIGNING_WINDOW_SECONDS } from "@/lib/onchain/passPurchase";
+import { passHoldTooShortToSign } from "@/lib/onchain/passPurchase";
 
 const AUTHORIZATION_LIFETIME_SECONDS = 30 * 60;
 const USDC_BALANCE_ABI = parseAbi([
@@ -106,14 +106,6 @@ export async function POST(request: Request) {
     }
   }
 
-  // A day pass holds its price until due_at: no new authorization once too
-  // little of the hold is left to sign it, and none that outlives it (the
-  // purchase can then expire cleanly). One already signed is answered above.
-  const holdEnds = invoice.kind === "day_pass" ? Math.floor(Date.parse(invoice.due_at) / 1000) : Infinity;
-  if (holdEnds <= now + PASS_SIGNING_WINDOW_SECONDS) {
-    return NextResponse.json({ error: "This purchase's price hold is ending. Start again for a fresh price." }, { status: 409 });
-  }
-
   let authorizationFromBlock: number;
   try {
     const client = getOpPublicClient();
@@ -146,6 +138,15 @@ export async function POST(request: Request) {
   if (existing?.status === "prepared" && existing.valid_before > now + 30) {
     return NextResponse.json(responseForJob(existing));
   }
+
+  // A day pass holds its price until due_at: no new authorization once too
+  // little of the hold is left to sign it, and none that outlives it (the
+  // purchase can then expire cleanly). A live one is reused above.
+  const isPass = invoice.kind === "day_pass";
+  if (isPass && passHoldTooShortToSign(invoice.due_at)) {
+    return NextResponse.json({ error: "This purchase's price hold is ending. Start again for a fresh price." }, { status: 409 });
+  }
+  const holdEnds = isPass ? Math.floor(Date.parse(invoice.due_at) / 1000) : Infinity;
 
   const values = {
     invoice_id: invoice.id,

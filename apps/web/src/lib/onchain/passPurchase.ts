@@ -9,6 +9,11 @@ export const ONCHAIN_PASS_INVOICE_MINUTES = 60;
 /** Hold left below which a new payment authorization isn't issued (relay prepare): enough to switch network and sign. */
 export const PASS_SIGNING_WINDOW_SECONDS = 5 * 60;
 
+/** Too little of a pass's price hold is left to issue a new authorization. One rule for relay prepare and purchase start. */
+export function passHoldTooShortToSign(dueAt: string, nowMs = Date.now()) {
+  return Date.parse(dueAt) <= nowMs + PASS_SIGNING_WINDOW_SECONDS * 1000;
+}
+
 // Still payable: an exception (wrong amount, or a reverted relay that is retried) too, until it expires.
 const UNPAID = ["open", "submitted", "detected", "exception"] as const;
 const SETUP_COLUMNS = "id, amount_cents, amount_usdc_micros, due_at, status, submitted_tx_hash";
@@ -62,6 +67,15 @@ function setup(invoice: PassInvoiceSetup["invoice"]): PassInvoiceSetup {
   };
 }
 
+/** A relay authorization for this invoice that is signed (or later), or prepared and still signable. */
+async function liveAuthorization(admin: ServiceClient, invoiceId: number, now: Date) {
+  const { data: job, error } = await admin.from("onchain_relay_jobs").select("status, valid_before").eq("invoice_id", invoiceId).maybeSingle();
+  if (error) throw error;
+  if (!job) return false;
+  return ["signed", "submitting", "submitted"].includes(job.status)
+    || (job.status === "prepared" && job.valid_before > Math.floor(now.getTime() / 1000) + 30);
+}
+
 /**
  * Start (or resume) buying one day pass with USDC. Needs a signature-verified
  * wallet. A member has at most one unpaid pass purchase (unique index, 063):
@@ -79,10 +93,9 @@ export async function startOnchainPassPurchase(admin: ServiceClient, memberId: n
   if (walletError) throw walletError;
   if (!wallet) throw new PassPurchaseError("Connect and verify a wallet first.", 409);
 
-  // Finish off this member's stale purchase before looking (the cron does
-  // the same for everyone): one too close to its end to sign counts as stale.
-  const staleBy = new Date(now.getTime() + PASS_SIGNING_WINDOW_SECONDS * 1000).toISOString();
-  const { error: expireError } = await admin.rpc("expire_onchain_pass_invoices", { p_now: staleBy, p_member_id: memberId });
+  // Finish off this member's stale purchase before looking: the cron does
+  // the same for everyone, this just doesn't wait for it.
+  const { error: expireError } = await admin.rpc("expire_onchain_pass_invoices", { p_now: now.toISOString(), p_member_id: memberId });
   if (expireError) throw expireError;
 
   const findOpen = async () => {
@@ -92,19 +105,18 @@ export async function startOnchainPassPurchase(admin: ServiceClient, memberId: n
     return data as (PassInvoiceSetup["invoice"] & { wallet_id: number }) | null;
   };
   let open = await findOpen();
-  if (open && open.wallet_id !== wallet.id) {
-    // Bought from a wallet that isn't the member's any more: the revoke
-    // trigger drops these, but skips one that was locked at that moment
-    // (063). It can't be paid from a revoked wallet; drop it unless a
-    // payment is on its way.
+  // Drop (unless a payment is on its way) a purchase that can't be paid as it
+  // stands: one bought from a wallet that isn't the member's any more (the
+  // revoke trigger drops these, but skips one locked at that moment, 063),
+  // or one too near its end to sign whose authorization isn't already live.
+  if (open && (open.wallet_id !== wallet.id || (passHoldTooShortToSign(open.due_at, now.getTime()) && !(await liveAuthorization(admin, open.id, now))))) {
     const { error } = await admin.rpc("expire_onchain_pass_invoices", { p_now: "infinity", p_member_id: memberId, p_wallet_id: open.wallet_id });
     if (error) throw error;
     open = await findOpen();
   }
   if (open) {
-    const invoice: Partial<typeof open> = { ...open };
-    delete invoice.wallet_id;
-    return setup(invoice as PassInvoiceSetup["invoice"]);
+    const { wallet_id: _payer, ...invoice } = open; // eslint-disable-line @typescript-eslint/no-unused-vars
+    return setup(invoice);
   }
 
   const { cents } = await dayPassCentsForMember(admin, memberId);

@@ -38,7 +38,7 @@ const ACTION_LABELS: Record<string, string> = {
   plan_switch_completed:  "Plan switch took effect",
   onchain_payment_after_void: "Member reported paying a voided or expired invoice (unverified; check, then refund)",
   onchain_day_pass_purchased: "Bought a day pass with USDC",
-  onchain_pass_payment_exception: "USDC day pass payment didn't match (not credited; check, then refund)",
+  onchain_pass_payment_exception: "USDC day pass payment not credited (see reason; check on chain, then settle by hand)",
   email_sent:             "Email sent",
   batch_email_sent:       "Batch email sent",
   free_day_approved:      "Free-day claim approved",

@@ -182,6 +182,21 @@ async function recoverUsedAuthorization(
   admin: ServiceClient,
   job: RelayJob,
 ): Promise<Hash | null> {
+  const found = await findUsedAuthorization(job);
+  if (!found) return null;
+  if (found === "canceled") throw new InvalidRelayJobError("payment authorization was canceled in the wallet");
+  await recordSubmittedTransaction(admin, job, found);
+  return found;
+}
+
+/**
+ * Whether a job's EIP-3009 authorization was consumed on chain, and by what:
+ * null = not used; "canceled" = canceled in the wallet (no USDC moved); else
+ * the transaction that used it. Throws while the event isn't available yet.
+ */
+export async function findUsedAuthorization(
+  job: Pick<RelayJob, "token_contract" | "from_address" | "authorization_nonce" | "authorization_from_block" | "valid_before">,
+): Promise<Hash | "canceled" | null> {
   const client = getOpPublicClient();
   await assertOpPublicClient(client);
   const observedBlock = await client.getBlockNumber();
@@ -244,9 +259,7 @@ async function recoverUsedAuthorization(
     .map((log) => log.transactionHash)
     .filter(Boolean))] as Hash[];
   if (hashes.length === 0) {
-    if (canceledLogs.length > 0) {
-      throw new InvalidRelayJobError("payment authorization was canceled in the wallet");
-    }
+    if (canceledLogs.length > 0) return "canceled";
     // Circle reports both used and canceled authorizations as consumed. Do
     // not infer a terminal cancellation from missing logs: a transient RPC
     // inconsistency must remain retryable so a real transfer is not orphaned.
@@ -255,7 +268,6 @@ async function recoverUsedAuthorization(
   if (hashes.length > 1) {
     throw new Error(`used authorization has ${hashes.length} matching transfer transactions`);
   }
-  await recordSubmittedTransaction(admin, job, hashes[0]);
   return hashes[0];
 }
 
