@@ -44,6 +44,7 @@ import { onchainPassesReady } from "@/lib/onchain/invoiceKind";
 import { PassPurchaseError, startOnchainPassPurchase } from "@/lib/onchain/passPurchase";
 import { POST as onchainCron } from "@/app/api/cron/onchain-billing/route";
 import { POST as prepareRelay } from "@/app/api/portal/onchain/relay/prepare/route";
+import { POST as walletChallenge } from "@/app/api/portal/onchain/wallet/challenge/route";
 import { billingSummaryHandler, getMemberBillingHandler, listOpenInvoicesHandler } from "@/lib/mcp/billingTools";
 import type { McpAuthInfo } from "@/lib/mcp/oauth";
 
@@ -185,6 +186,11 @@ describe("deployed before migration 063", () => {
     const refused = await startOnchainPassPurchase(db as never, 7).catch((e: unknown) => e);
     expect(refused).toBeInstanceOf(PassPurchaseError);
     expect(refused).toMatchObject({ status: 503 });
+    // Nor link a wallet for one.
+    const link = await walletChallenge(new Request("http://localhost/api", {
+      method: "POST", body: JSON.stringify({ address: "0x3333333333333333333333333333333333333333", intent: "day_pass" }),
+    }));
+    expect(link.status).toBe(503);
   });
 });
 

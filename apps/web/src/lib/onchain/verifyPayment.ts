@@ -25,7 +25,7 @@ const EFFECTS_CLAIM_LEASE_MS = 5 * 60 * 1000;
 /** A day pass whose submitted transaction still isn't on chain after this is given up on (kept for an admin). */
 const PASS_TX_NOT_FOUND_MS = 24 * 60 * 60 * 1000;
 /** Clock slack between this server and OP block times when checking a pass transfer isn't older than its purchase. */
-const PASS_TRANSFER_CLOCK_SLACK_MS = 10 * 60 * 1000;
+const PASS_TRANSFER_CLOCK_SLACK_MS = 2 * 60 * 1000;
 
 const TRANSFER_EVENT = parseAbiItem(
   "event Transfer(address indexed from, address indexed to, uint256 value)",
@@ -393,6 +393,18 @@ async function recordPassPaymentException(
   }, admin);
 }
 
+/** Whether `txHash` is kept for an admin against another of the member's invoices, never credited. */
+async function uncreditedClaimElsewhere(admin: ServiceClient, memberId: number, invoiceId: number, txHash: string) {
+  const { data, error } = await admin.from("admin_actions").select("payload")
+    .in("action", [AuditAction.ONCHAIN_PAYMENT_AFTER_VOID, AuditAction.ONCHAIN_PASS_PAYMENT_EXCEPTION])
+    .eq("target_table", "members").eq("target_id", String(memberId));
+  if (error) throw error;
+  return (data ?? []).some((row) => {
+    const payload = row.payload as { invoice_id?: number; tx_hash?: string } | null;
+    return payload?.invoice_id !== invoiceId && payload?.tx_hash?.toLowerCase() === txHash.toLowerCase();
+  });
+}
+
 /** The card path's receipt (passFulfillment.ts), for a pass paid in USDC. Best effort, as there. */
 async function sendPassReceipt(admin: ServiceClient, memberId: number, amountCents: number) {
   try {
@@ -501,6 +513,10 @@ export async function processOnchainInvoice(
   const transferredAt = isPass
     ? Number((await client.getBlock({ blockNumber: receipt.blockNumber })).timestamp) * 1000
     : null;
+  // Nor can a transfer already kept, uncredited, against another invoice of
+  // this member's (reported after a void or expiry, or a pass exception):
+  // an admin may refund it from that note.
+  const keptElsewhere = isPass ? await uncreditedClaimElsewhere(admin, invoice.member_id, invoice.id, txHash) : false;
 
   let transfer: DecodedTransfer;
   try {
@@ -513,6 +529,7 @@ export async function processOnchainInvoice(
     if (transferredAt !== null && transferredAt < Date.parse(invoice.created_at) - PASS_TRANSFER_CLOCK_SLACK_MS) {
       throw new Error("transfer was sent before this purchase began");
     }
+    if (keptElsewhere) throw new Error("transfer is already recorded, uncredited, against another invoice");
   } catch (error) {
     const reason = error instanceof Error ? error.message : "payment did not match invoice";
     await admin

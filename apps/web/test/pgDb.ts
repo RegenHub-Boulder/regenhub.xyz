@@ -133,7 +133,8 @@ export async function makePgDb({ before = "\uffff" }: { before?: string } = {}) 
     // As PostgREST does, refuse a column the table doesn't have, rows or not.
     if (projection.columns !== "*") {
       for (const col of projection.columns) {
-        const name = col.includes(":") ? col.split(":")[1] : col;
+        // alias:column::cast -> column
+        const name = col.split("::")[0].split(":").pop()!.trim();
         if (tableColumns.has(table) && !tableColumns.get(table)!.has(name)) {
           throw Object.assign(new Error(`column ${table}.${name} does not exist`), { code: "42703" });
         }

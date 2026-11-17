@@ -109,12 +109,12 @@ export default async function PassesPage({ searchParams }: PageProps) {
       .limit(10),
     // Contributing-member rate ($25 vs $30): the same check both purchase routes use.
     contributingMember(supabase, member.id).catch(() => false),
-    // USDC passes need migration 063; until it runs, offer the card only.
-    onchainPassesReady(supabase),
+    // USDC passes need the relayer and migration 063; until then, offer the card only.
+    isGaslessRelayConfigured() ? onchainPassesReady(supabase) : false,
   ]);
   const passCents = dayPassCentsFor(isContributingMember);
   // The USDC flow is the gasless one (as on /membership), so it needs the relayer too.
-  const usdcEnabled = isGaslessRelayConfigured() && passesReady;
+  const usdcEnabled = passesReady;
   // The USDC flow lands here with ?onchain=paid once the server credited the
   // pass; say so only if a USDC purchase really landed in the last few minutes.
   const usdcJustLanded = params.onchain === "paid" && (recentPurchases ?? []).some(

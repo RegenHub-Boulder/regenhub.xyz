@@ -148,8 +148,10 @@ A USDC pass can't be refunded through the admin "refund last purchase" (Stripe o
 Who may buy one: whoever may buy a card pass (any signed-in member row, card members and unapproved people included).
 The wallet link the button runs first sends `intent: "day_pass"`, which skips the challenge route's membership gates
 (card subscription → 409, not approved → 403); `/api/membership/onchain` keeps its own, so a pass wallet never opens a
-crypto membership. A pass is only paid by a transfer mined after the purchase began (10 min clock slack), so an
-older uncredited transfer can't pay a new one.
+crypto membership; the challenge refuses a pass link (503) while passes can't be bought. A pass is only paid by a
+transfer mined after the purchase began (2 min clock slack) and not already kept, uncredited, against another of the
+member's invoices (`onchain_payment_after_void` / `onchain_pass_payment_exception`), so a transfer an admin may
+refund from that note can't also pay a new purchase.
 **Deploy order for 063** (the file ships in the image, so the code runs on the old schema first): deploy web, check
 `onchain_relay_jobs` has no `signed`/`submitting` rows, then `run_migration("063_onchain_day_pass_purchases.sql")`.
 Until it runs the code degrades to membership-only (`lib/onchain/invoiceKind.ts`: a `kind` filter is dropped when

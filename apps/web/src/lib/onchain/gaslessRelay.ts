@@ -305,14 +305,15 @@ async function assertRelayJobStillPayable(admin: ServiceClient, job: RelayJob) {
   if (payerWalletId !== job.wallet_id) {
     throw new InvalidRelayJobError("relay authorization is not for the current verified wallet");
   }
-  const { data: wallet } = await admin
+  const { data: wallet, error: walletError } = await admin
     .from("member_wallets")
     .select("address")
     .eq("id", job.wallet_id)
     .eq("member_id", job.member_id)
     .eq("verification_method", "signature")
     .is("revoked_at", null)
-    .single();
+    .maybeSingle();
+  if (walletError) throw new Error(`relay wallet lookup failed: ${walletError.message}`);
   if (!wallet || getAddress(wallet.address) !== getAddress(job.from_address)) {
     throw new InvalidRelayJobError("relay authorization is not from the current verified wallet");
   }

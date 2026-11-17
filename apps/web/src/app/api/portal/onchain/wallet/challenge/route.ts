@@ -3,6 +3,8 @@ import { getAddress, isAddress } from "viem";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { requirePortalMember } from "@/lib/onchain/portalMember";
 import { createWalletChallenge } from "@/lib/onchain/walletChallenge";
+import { isGaslessRelayConfigured } from "@/lib/onchain/config";
+import { onchainPassesReady } from "@/lib/onchain/invoiceKind";
 
 export async function POST(request: Request) {
   const session = await requirePortalMember();
@@ -17,31 +19,37 @@ export async function POST(request: Request) {
   }
 
   const admin = createServiceClient();
-  const { data: subscription, error: subscriptionError } = await admin
-    .from("subscriptions")
-    .select("id, payment_rail")
-    .eq("member_id", session.member.id)
-    .in("status", ["active", "trialing", "past_due", "incomplete"])
-    .limit(1)
-    .maybeSingle();
-  if (subscriptionError) {
-    return NextResponse.json({ error: "Could not check membership billing" }, { status: 500 });
-  }
-  // A wallet linked to buy a day pass is only a payer: anyone who may buy a
-  // pass with a card may link one (card members included). It doesn't open a
-  // crypto membership: /api/membership/onchain keeps its own approval and
-  // live-membership checks.
-  if (body.intent !== "day_pass" && subscription?.payment_rail !== "onchain") {
-    if (subscription) {
-      return NextResponse.json({ error: "A card membership is already active" }, { status: 409 });
+  if (body.intent === "day_pass") {
+    // A wallet linked to buy a day pass is only a payer: anyone who may buy a
+    // pass with a card may link one (card members included). It doesn't open
+    // a crypto membership: /api/membership/onchain keeps its own approval and
+    // live-membership checks. Only while USDC passes can actually be bought.
+    if (!isGaslessRelayConfigured() || !(await onchainPassesReady(admin))) {
+      return NextResponse.json({ error: "Paying for a day pass in USDC isn't open yet. Pay with card for now." }, { status: 503 });
     }
-    const { data: member } = await admin
-      .from("members")
-      .select("approved_for_daily, approved_for_full")
-      .eq("id", session.member.id)
-      .single();
-    if (!member?.approved_for_daily && !member?.approved_for_full) {
-      return NextResponse.json({ error: "Membership has not been approved yet" }, { status: 403 });
+  } else {
+    const { data: subscription, error: subscriptionError } = await admin
+      .from("subscriptions")
+      .select("id, payment_rail")
+      .eq("member_id", session.member.id)
+      .in("status", ["active", "trialing", "past_due", "incomplete"])
+      .limit(1)
+      .maybeSingle();
+    if (subscriptionError) {
+      return NextResponse.json({ error: "Could not check membership billing" }, { status: 500 });
+    }
+    if (subscription?.payment_rail !== "onchain") {
+      if (subscription) {
+        return NextResponse.json({ error: "A card membership is already active" }, { status: 409 });
+      }
+      const { data: member } = await admin
+        .from("members")
+        .select("approved_for_daily, approved_for_full")
+        .eq("id", session.member.id)
+        .single();
+      if (!member?.approved_for_daily && !member?.approved_for_full) {
+        return NextResponse.json({ error: "Membership has not been approved yet" }, { status: 403 });
+      }
     }
   }
 

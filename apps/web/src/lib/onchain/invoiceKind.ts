@@ -6,6 +6,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * the code that ships it is deployed, so this code runs on the old schema for
  * a while. Before 063 every on-chain invoice is a membership invoice, so a
  * reader that narrows to memberships can simply drop the filter.
+ *
+ * Subtract: once 063 is applied in production, `membershipInvoices` can go
+ * back to a plain `.eq("kind", "membership")` and `isMissingFunction` can go;
+ * the `onchainPassesReady` probe can go with them.
  */
 
 /** Postgres undefined_column, as PostgREST passes it on (or reports it from its schema cache). */
