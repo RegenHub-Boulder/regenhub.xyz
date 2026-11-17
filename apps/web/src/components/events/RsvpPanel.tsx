@@ -11,7 +11,7 @@
  * their session, then hint the platform so the count updates at once.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Loader2, LogOut, UserPlus, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -72,7 +72,12 @@ export async function writeRsvp(
   return rkey;
 }
 
-export function RsvpPanel({ config, event, going, path }: Props) {
+export function RsvpPanel({ config: configProp, event, going, path }: Props) {
+  // router.refresh() re-sends the props as new objects; key the config on its content so the
+  // restore below runs once per page, not after every RSVP.
+  const configKey = JSON.stringify(configProp);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const config = useMemo(() => configProp, [configKey]);
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("restoring");
   const [session, setSession] = useState<Session | null>(null);
@@ -81,10 +86,18 @@ export function RsvpPanel({ config, event, going, path }: Props) {
 
   const loadOwn = useCallback(
     async (s: Session) => {
-      const data = (await sessionCall(s, "com.atproto.repo.listRecords", {
-        query: { repo: s.did, collection: RSVP_NSID, limit: "100" },
-      })) as { records?: { uri: string; value: never }[] };
-      setOwn(findOwnRsvp(data.records ?? [], event.uri));
+      // Every page of their RSVPs, so a change rewrites their existing record (up to 1000).
+      const all: { uri: string; value: never }[] = [];
+      let cursor: string | undefined;
+      for (let page = 0; page < 10; page++) {
+        const data = (await sessionCall(s, "com.atproto.repo.listRecords", {
+          query: { repo: s.did, collection: RSVP_NSID, limit: "100", ...(cursor ? { cursor } : {}) },
+        })) as { records?: { uri: string; value: never }[]; cursor?: string };
+        all.push(...(data.records ?? []));
+        cursor = data.cursor;
+        if (!cursor || !data.records?.length) break;
+      }
+      setOwn(findOwnRsvp(all, event.uri));
     },
     [event.uri],
   );

@@ -39,6 +39,8 @@ describe("series keys", () => {
       "civic-tech-night",
     );
     expect(seriesOf({ name: "Agents Night", uris: [{ uri: "https://regenhub.xyz/events/unknown" }] })?.slug).toBe("agents-night");
+    // Another site's /events/<slug> page doesn't put an event in our series.
+    expect(seriesOf({ name: "Their meetup", uris: [{ uri: "https://lu.ma/events/agents-night" }] })).toBeNull();
   });
 });
 

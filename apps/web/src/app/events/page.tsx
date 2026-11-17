@@ -37,10 +37,10 @@ const HORIZON_DAYS = 120;
 
 export default async function EventsPage() {
   const configured = isRegenosEventsConfigured();
-  const { source, events } = configured
-    ? await fetchUpcomingEvents(HORIZON_DAYS)
-    : { source: "none" as const, events: [] };
-  const overviews = await fetchSeriesOverviews();
+  const [{ source, events }, overviews] = await Promise.all([
+    configured ? fetchUpcomingEvents(HORIZON_DAYS) : Promise.resolve({ source: "none" as const, events: [] }),
+    fetchSeriesOverviews(),
+  ]);
   // The nights already have cards above; list the rest.
   const others = events.filter((e) => !overviews.some((o) => o.upcoming.some((u) => u.uri === e.id)));
 

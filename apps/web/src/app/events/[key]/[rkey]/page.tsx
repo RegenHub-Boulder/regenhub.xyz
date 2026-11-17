@@ -6,7 +6,7 @@ import { fetchAttendance, fetchPublicRegenosEvent, formatEventLocation } from "@
 import { formatEventRange } from "@/components/events/EventList";
 import { RsvpPanel } from "@/components/events/RsvpPanel";
 import { rsvpConfig } from "@/lib/techne/rsvpConfig";
-import { hasEnded } from "@/lib/seriesEvents";
+import { hasEnded, isCancelled } from "@/lib/seriesEvents";
 
 /**
  * One public event, on regenhub.xyz: `/events/<did>/<rkey>`.
@@ -50,6 +50,7 @@ export default async function EventDetailPage({ params }: PageProps) {
   const rsvp = rsvpConfig();
   const attendance = rsvp ? await fetchAttendance(event.uri) : null;
   const ended = hasEnded(event);
+  const cancelled = isCancelled(event);
   const when = formatEventRange(event.startAt, event.endAt);
   const recordType = "https://techne.pub/community.lexicon.calendar.event/";
   const location = event.location ? formatEventLocation(event.location) : "";
@@ -102,7 +103,9 @@ export default async function EventDetailPage({ params }: PageProps) {
           )}
         </article>
 
-        {rsvp ? (
+        {cancelled ? (
+          <div className="glass-panel p-6 text-center font-medium">This night is cancelled.</div>
+        ) : rsvp ? (
           ended ? (
             <div className="glass-panel p-6 text-center text-sm text-muted">This night has happened.</div>
           ) : (

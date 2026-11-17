@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { CalendarPlus, Loader2, Lock, Globe, Pencil, Trash2, X, ArrowRight } from "lucide-react";
 import {
   EMPTY_EVENT_FORM,
+  HUB_TIMEZONE,
   buildCreateEventInput,
   buildDeleteEventInput,
   buildUpdateEventInput,
@@ -37,7 +38,7 @@ export interface ManageableEvent {
 }
 
 /** RegenHub is in Boulder; pinning the zone keeps server and client renders identical. */
-const TZ = "America/Denver";
+const TZ = HUB_TIMEZONE;
 
 function formatWhen(iso: string | null): string {
   if (!iso) return "No time set";

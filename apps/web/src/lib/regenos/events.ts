@@ -264,7 +264,8 @@ export async function fetchUpcomingRegenosEvents(daysAhead = 21): Promise<Regeno
   const before = new Date(now.getTime() + daysAhead * 86_400_000).toISOString();
   const events = (await fetchCollectiveEvents({ after, before })) ?? [];
   return events
-    .filter((e) => e.startAt && Date.parse(e.endAt ?? e.startAt) > now.getTime())
+    // No end: Techne's query document assumes two hours.
+    .filter((e) => e.startAt && (e.endAt ? Date.parse(e.endAt) : Date.parse(e.startAt) + 2 * 3600_000) > now.getTime())
     .map((e) => ({
       uri: e.uri,
       name: e.name,

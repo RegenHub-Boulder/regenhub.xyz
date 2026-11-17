@@ -47,6 +47,36 @@ describe("series overview", () => {
   });
 });
 
+describe("cancelled and open-ended nights", () => {
+  const agents = getSeries("agents-night")!;
+
+  it("never offers a cancelled night as next, and doesn't plan a replacement for its date", async () => {
+    vi.stubGlobal(
+      "fetch",
+      fakeTechne([
+        {
+          ...ev("3a", "Agents Night", "2026-12-02T01:30:00.000Z", "2026-12-02T04:00:00.000Z"),
+          value: {
+            name: "Agents Night",
+            startsAt: "2026-12-02T01:30:00.000Z",
+            status: "community.lexicon.calendar.event#cancelled",
+          },
+        },
+      ]).fetch,
+    );
+    const o = overviewFor(agents, (await fetchCollectiveEvents())!, new Date("2026-11-16T12:00:00Z"));
+    expect(o.next).toMatchObject({ kind: "planned", night: { date: "2026-12-15" } });
+    expect(o.planned.map((n) => n.date)).not.toContain("2026-12-01");
+  });
+
+  it("keeps a night with no end on for two hours after it starts", async () => {
+    vi.stubGlobal("fetch", fakeTechne([ev("3a", "Agents Night", "2026-12-02T01:30:00.000Z")]).fetch);
+    const events = (await fetchCollectiveEvents())!;
+    expect(overviewFor(agents, events, new Date("2026-12-02T03:00:00Z")).next).toMatchObject({ kind: "posted" });
+    expect(overviewFor(agents, events, new Date("2026-12-02T03:31:00Z")).next).toMatchObject({ kind: "planned" });
+  });
+});
+
 describe("calendar feeds", () => {
   beforeEach(() => {
     vi.stubGlobal(

@@ -4,15 +4,8 @@
  * Techne event of the collective. Pure, so it's tested in node.
  */
 
-import { nextNights, type PlannedNight, type Series } from "@/lib/series";
+import { dateIn, nextNights, type PlannedNight, type Series } from "@/lib/series";
 import { HUB_TIMEZONE, mintRkey } from "@/lib/regenos/eventForm";
-
-/** The Denver date of an instant, `YYYY-MM-DD`. */
-function dateIn(iso: string, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(
-    new Date(iso),
-  );
-}
 
 /**
  * The next `count` planned nights of a series with no posted event of the

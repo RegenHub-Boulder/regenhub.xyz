@@ -113,6 +113,35 @@ export function seriesPageUrl(series: Series, siteUrl = "https://regenhub.xyz"):
   return `${siteUrl.replace(/\/+$/, "")}/events/${series.slug}`;
 }
 
+/** Hosts whose `/events/<slug>` is a RegenHub series page: regenhub.xyz and this deployment's own. */
+function siteHosts(): string[] {
+  const hosts = ["regenhub.xyz", "www.regenhub.xyz"];
+  try {
+    if (process.env.NEXT_PUBLIC_SITE_URL) hosts.push(new URL(process.env.NEXT_PUBLIC_SITE_URL).host);
+  } catch {
+    // an unparseable site URL adds nothing
+  }
+  return hosts;
+}
+
+function seriesFromUrl(raw: string): Series | null {
+  try {
+    const url = new URL(raw);
+    if (!siteHosts().includes(url.host)) return null;
+    const m = /^\/events\/([a-z0-9-]+)\/?$/.exec(url.pathname);
+    return m ? getSeries(m[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The calendar date of an instant in `timeZone`, `YYYY-MM-DD`. */
+export function dateIn(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(
+    new Date(iso),
+  );
+}
+
 /** The slice of an event record that decides its series. */
 export interface SeriesMatchable {
   name?: string | null;
@@ -121,14 +150,13 @@ export interface SeriesMatchable {
 
 /**
  * Which series a night belongs to, or null.
- * A `uris` entry ending `/events/<slug>` wins; otherwise the name must be the
+ * A `uris` entry that is this site's `/events/<slug>` page wins; otherwise the name must be the
  * series name exactly, or the series name followed by `:`, `-`, `–`, `—` or `|`.
  * "Agents Nightly" or "Not Agents Night" are not in the series.
  */
 export function seriesOf(event: SeriesMatchable): Series | null {
   for (const u of event.uris ?? []) {
-    const m = /\/events\/([a-z0-9-]+)\/?$/.exec(u?.uri ?? "");
-    const s = m ? getSeries(m[1]) : null;
+    const s = seriesFromUrl(u?.uri ?? "");
     if (s) return s;
   }
   const name = (event.name ?? "").trim().toLowerCase();
