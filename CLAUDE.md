@@ -285,9 +285,8 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   `/events/<slug>` is the series page (next posted night, posted nights after it, past nights; with none upcoming
   it says "Next date coming soon"), built from `lib/seriesEvents.ts`. `/` (right under the hero) and `/events`
   lead with the series cards. `/portal/events` → **Add the next nights** offers the confirmed dates not yet posted
-  plus a date picker for any later night (`lib/seriesNights.ts`) and shows "N going" per event. Posting is off
-  until Techne documents a write as the collective (below, and `docs/TECHNE-SIGN-IN.md`); meanwhile the page lists
-  the confirmed nights not yet posted.
+  plus a date picker for any later night (`lib/seriesNights.ts`), posts them as the collective (below) and shows
+  "N going" per event.
 - **Feeds:** `/events.ics` (everything) and `/events/<slug>.ics` (a rewrite to `/events/<slug>/calendar.ics`),
   built by `lib/ics.ts`; UID = the event's AT-URI. `REGENOS_WEB_URL` is no longer read.
 - `components/landing/UpcomingEvents.tsx` — async server component. **Zero events for any reason
@@ -299,8 +298,11 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   `components/events/EventList.tsx`.
 - **"Sign in with Techne"** (`TECHNE_SIGNIN_ENABLED`, default OFF; T-482): one door, one session, for RSVP
   and the stewards' `/portal/events`. regenhub.xyz is its own atproto OAuth client via `techne-sdk/auth` (the
-  docs' way): client metadata at `/techne/client-metadata.json` (scope: `repo:community.lexicon.calendar.rsvp` +
-  the SDK's default reads; `lib/techne/session.ts` `SIGNIN_TYPES`), callback `/techne/callback`. Config:
+  docs' way): client metadata at `/techne/client-metadata.json`, callback `/techne/callback`. Two scope levels on
+  that one client (`lib/techne/session.ts` `signInScope`): **member** = `repo:community.lexicon.calendar.rsvp` + the
+  SDK's default reads; **steward** = that + `repo:` for the collective's event/config/listing +
+  `rpc:com.atproto.repo.applyWrites` at the platform. The metadata declares the steward list; RSVP signs in asking
+  for the member list only. Config:
   `lib/techne/config.ts`; the browser side is `components/techne/useTechneSession.ts` + `SignInWithTechne.tsx`,
   used by both pages. The RSVP is the attendee's OWN `community.lexicon.calendar.rsvp` written with
   `com.atproto.repo.putRecord` on their PDS, then hinted with `pub.techne.draft.sync.indexRecord`
@@ -370,12 +372,18 @@ Both doors land the AppView's session cookie on this origin then call the one sh
 - `/portal/events` — **Manage Events**, the stewards' in-portal calendar. Since T-482 part 2 it is on the
   Techne door, not this lane (`TECHNE_SIGNIN_ENABLED`): Supabase session for the portal, then "Sign in with
   Techne" (the same session as RSVP). The calendar is the documented public read (`fetchCollectiveEvents`); the
-  steward check is the collective's public `pub.techne.draft.membership` claims naming the person, role ≥ 20
-  (`lib/techne/standing.ts`, `GET /api/portal/events/standing`). It decides what the page shows; the platform
-  checks every write. **Posting is off**: Techne documents no app method that writes a *public* record as a
-  collective (`permissioned.putRecord` hands over the collective's pen for space-bound records only), so
-  `ManageEvents` takes a `write` seam that is `null` and shows "Posting from here is off for now". The form
-  rules below (TID keys, America/Denver, `publicFace: "exact"`, resend every field) still shape the bodies.
+  steward check is the collective's public `pub.techne.draft.membership` claims naming the person, role ≥ 30, the
+  member space's manage leg that holds the collective's pen (`lib/techne/standing.ts`,
+  `GET /api/portal/events/standing`). It decides what the page offers; the platform checks every write.
+  **Writes as the collective** (`lib/techne/collectiveEvents.ts` builds, `collectiveWrite.ts` sends): the event
+  (TID key), its `pub.techne.draft.event.config` `{rkey}-cfg` (timezone America/Denver) and the collective's
+  `pub.techne.draft.event.listing` `{rkey}-ctx`, all public, in RegenHub's repo, in ONE
+  `com.atproto.repo.applyWrites` at the platform (it holds the collective's credential), sent through the
+  steward's PDS with `atproto-proxy`, then `sync.indexRecord` per record. CIDs from techne-sdk/put `plan`. Edits
+  keep the key, `createdAt`, unowned fields and the config's settings; Remove deletes the event and the siblings
+  that exist. Public events only. A 401/403 shows "Techne didn't let you post as RegenHub". Unproven until one
+  real post: that techne.town's PDS proxies `applyWrites` to the platform (docs/TECHNE-SIGN-IN.md). The form
+  rules below (resend every field) still shape the bodies.
   What follows describes the old lane's version, kept until it is removed (`docs/TECHNE-SIGN-IN.md`).
   **Import from Luma** pastes public luma.com / lu.ma URLs/HTML, parses JSON-LD (no Pro API), then
   `createEvent`s the selected rows (old lane only; not shown on the Techne page). `/admin/members` **Sync claims to regenOS** admits paid desk

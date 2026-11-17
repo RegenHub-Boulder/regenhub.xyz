@@ -14,6 +14,9 @@
 import { REGENOS_TIMEOUT_MS, regenosBaseUrl } from "@/lib/regenos/config";
 
 export const EVENT_NSID = "community.lexicon.calendar.event";
+
+/** Every cached Techne read carries this tag, so a steward's change can clear them all at once. */
+export const TECHNE_READS_TAG = "techne-reads";
 export const EVENT_CONFIG_NSID = "pub.techne.draft.event.config";
 export const EVENT_LISTING_NSID = "pub.techne.draft.event.listing";
 
@@ -49,7 +52,7 @@ async function getJson(path: string, params: URLSearchParams, opts: ReadOptions)
     const res = await fetch(url, {
       headers: { accept: "application/json" },
       signal: AbortSignal.timeout(REGENOS_TIMEOUT_MS),
-      ...(revalidate > 0 ? { next: { revalidate } } : { cache: "no-store" as const }),
+      ...(revalidate > 0 ? { next: { revalidate, tags: [TECHNE_READS_TAG] } } : { cache: "no-store" as const }),
     });
     if (!res.ok) {
       console.warn(`[techne] ${path} returned ${res.status}`);

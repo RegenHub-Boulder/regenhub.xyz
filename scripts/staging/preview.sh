@@ -47,4 +47,5 @@ cd "$ROOT/apps/web"
 export REGENOS_BASE_URL="http://127.0.0.1:$P_STANDIN" REGENOS_COLLECTIVE_DID="$COLLECTIVE" \
   TECHNE_SIGNIN_ENABLED=true TECHNE_STAGING_STANDIN=1 TECHNE_STANDIN_URL="http://127.0.0.1:$P_STANDIN" \
   SUPABASE_INTERNAL_URL="http://127.0.0.1:$P_SUPA" NODE_ENV=production
-exec node_modules/.bin/next start -H 127.0.0.1 -p "$B"
+# Not exec: the shell stays, so the trap above stops the rest when next exits.
+node_modules/.bin/next start -H 127.0.0.1 -p "$B"
