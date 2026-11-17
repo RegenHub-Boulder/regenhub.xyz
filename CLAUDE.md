@@ -145,6 +145,15 @@ caller that credited it sends the same receipt email. A wrong amount or sender l
 `onchain_payment_after_void`, never credited. Code that reads paid invoices as membership periods
 (door-access reconciliation, reminders, past-due marking, MCP overdue counts) filters `kind = 'membership'`.
 A USDC pass can't be refunded through the admin "refund last purchase" (Stripe only); refund it from the treasury by hand.
+Who may buy one: whoever may buy a card pass (any signed-in member row, card members and unapproved people included).
+The wallet link the button runs first sends `intent: "day_pass"`, which skips the challenge route's membership gates
+(card subscription → 409, not approved → 403); `/api/membership/onchain` keeps its own, so a pass wallet never opens a
+crypto membership. A pass is only paid by a transfer mined after the purchase began (10 min clock slack), so an
+older uncredited transfer can't pay a new one.
+**Deploy order for 063** (the file ships in the image, so the code runs on the old schema first): deploy web, check
+`onchain_relay_jobs` has no `signed`/`submitting` rows, then `run_migration("063_onchain_day_pass_purchases.sql")`.
+Until it runs the code degrades to membership-only (`lib/onchain/invoiceKind.ts`: a `kind` filter is dropped when
+the column is missing, the passes page hides "Pay with USDC", the purchase route answers 503), so billing carries on.
 
 ### Membership application flow (approve + notify)
 `/apply` (sign-in required) → `/api/portal/application` upserts the application, emails the
