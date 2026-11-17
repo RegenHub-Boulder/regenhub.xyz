@@ -308,26 +308,40 @@ async function settleMissingPassTransaction(
     try {
       used = await findUsedAuthorization(job);
     } catch (cause) {
-      await recordPassPaymentException(admin, invoice, txHash,
-        `authorization used on chain but its transaction can't be found yet (${cause instanceof Error ? cause.message : "unknown"}); check the treasury and settle by hand`);
+      // Only the relay's own "used, but which tx?" answers mean money may
+      // have moved; anything else (an RPC outage) is retried next run.
+      const message = cause instanceof Error ? cause.message : "";
+      if (!/consumed but its event is not available|matching transfer transactions/.test(message)) throw cause;
+      await recordPassPaymentException(admin, invoice, txHash, "untraceable",
+        `authorization used on chain but its transaction can't be traced (${message}); check the treasury and settle by hand`);
       return { status: "submitted", txHash };
     }
   }
   if (used && used !== "canceled") {
     if (used.toLowerCase() === txHash.toLowerCase()) {
-      await recordPassPaymentException(admin, invoice, txHash,
+      await recordPassPaymentException(admin, invoice, txHash, "untraceable",
         "authorization used on chain but this transaction wasn't found after 24 hours; check the treasury and settle by hand");
       return { status: "submitted", txHash };
     }
-    // Paid under another hash: point the purchase at it and verify that.
+    // Paid under another hash: point the purchase (job first, then invoice:
+    // the verifier finds the job by the invoice's hash) at it and verify that.
+    // submitted_at is kept, so if that one can't be found either, the next
+    // run lands in the branch above and an admin hears.
     const real = used.toLowerCase();
-    const { data: moved, error: moveError } = await admin.from("onchain_invoices")
-      .update({ submitted_tx_hash: real, submitted_at: new Date().toISOString() })
-      .eq("id", invoice.id).eq("submitted_tx_hash", txHash).in("status", ["submitted", "detected"]).select("id").maybeSingle();
-    if (moveError) throw moveError;
-    if (!moved) return { status: "submitted", txHash };
+    const conflict = () => recordPassPaymentException(admin, invoice, txHash, "untraceable",
+      `authorization was used by ${real}, which is already recorded elsewhere; check the treasury and settle by hand`);
     const { error: jobMoveError } = await admin.from("onchain_relay_jobs").update({ submitted_tx_hash: real }).eq("invoice_id", invoice.id);
+    if (jobMoveError?.code === "23505") { await conflict(); return { status: "submitted", txHash }; }
     if (jobMoveError) throw jobMoveError;
+    const { data: moved, error: moveError } = await admin.from("onchain_invoices")
+      .update({ submitted_tx_hash: real })
+      .eq("id", invoice.id).eq("submitted_tx_hash", txHash).in("status", ["submitted", "detected"]).select("id").maybeSingle();
+    if (moveError || !moved) {
+      await admin.from("onchain_relay_jobs").update({ submitted_tx_hash: txHash }).eq("invoice_id", invoice.id).eq("submitted_tx_hash", real);
+      if (moveError?.code === "23505") { await conflict(); return { status: "submitted", txHash }; }
+      if (moveError) throw moveError;
+      return { status: "submitted", txHash }; // paid or changed meanwhile
+    }
     return processOnchainInvoice(admin, invoice.id);
   }
   const reason = used === "canceled"
@@ -343,7 +357,7 @@ async function settleMissingPassTransaction(
     .update({ status: "expired", last_error: reason })
     .eq("invoice_id", invoice.id).eq("submitted_tx_hash", txHash);
   if (jobError) throw jobError;
-  await recordPassPaymentException(admin, invoice, txHash, reason);
+  await recordPassPaymentException(admin, invoice, txHash, "gave-up", reason);
   return { status: "exception", txHash, reason };
 }
 
@@ -352,13 +366,15 @@ async function recordPassPaymentException(
   admin: ServiceClient,
   invoice: { id: number; member_id: number; amount_usdc_micros: number },
   txHash: string,
+  kind: "mismatch" | "gave-up" | "untraceable",
   reason: string,
 ) {
   await logAction({
     action: AuditAction.ONCHAIN_PASS_PAYMENT_EXCEPTION,
     actorMemberId: invoice.member_id,
     target: { table: "members", id: invoice.member_id },
-    idempotencyKey: `onchain-pass-exception:${invoice.id}:${txHash}`,
+    // Once per invoice, transaction and kind of outcome: a later, different outcome is still recorded.
+    idempotencyKey: `onchain-pass-exception:${invoice.id}:${txHash}:${kind}`,
     payload: { invoice_id: invoice.id, tx_hash: txHash, reason, expected_usdc_micros: invoice.amount_usdc_micros },
   }, admin);
 }
@@ -492,7 +508,7 @@ export async function processOnchainInvoice(
       .eq("submitted_tx_hash", txHash);
     // The invoice clears its tx hash so a correct payment can follow; keep
     // this one (once) for an admin to check on chain and refund.
-    if (isPass) await recordPassPaymentException(admin, invoice, txHash, reason);
+    if (isPass) await recordPassPaymentException(admin, invoice, txHash, "mismatch", reason);
     return { status: "exception", txHash, reason };
   }
 

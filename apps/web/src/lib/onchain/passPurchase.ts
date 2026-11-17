@@ -8,6 +8,8 @@ type ServiceClient = ReturnType<typeof createServiceClient>;
 export const ONCHAIN_PASS_INVOICE_MINUTES = 60;
 /** Hold left below which a new payment authorization isn't issued (relay prepare): enough to switch network and sign. */
 export const PASS_SIGNING_WINDOW_SECONDS = 5 * 60;
+/** A prepared, unsigned authorization is worth resuming only with at least this long left to sign it. */
+export const PASS_REUSE_AUTHORIZATION_SECONDS = 2 * 60;
 
 /** Too little of a pass's price hold is left to issue a new authorization. One rule for relay prepare and purchase start. */
 export function passHoldTooShortToSign(dueAt: string, nowMs = Date.now()) {
@@ -73,7 +75,7 @@ async function liveAuthorization(admin: ServiceClient, invoiceId: number, now: D
   if (error) throw error;
   if (!job) return false;
   return ["signed", "submitting", "submitted"].includes(job.status)
-    || (job.status === "prepared" && job.valid_before > Math.floor(now.getTime() / 1000) + 30);
+    || (job.status === "prepared" && job.valid_before > Math.floor(now.getTime() / 1000) + PASS_REUSE_AUTHORIZATION_SECONDS);
 }
 
 /**
@@ -109,7 +111,9 @@ export async function startOnchainPassPurchase(admin: ServiceClient, memberId: n
   // stands: one bought from a wallet that isn't the member's any more (the
   // revoke trigger drops these, but skips one locked at that moment, 063),
   // or one too near its end to sign whose authorization isn't already live.
-  if (open && (open.wallet_id !== wallet.id || (passHoldTooShortToSign(open.due_at, now.getTime()) && !(await liveAuthorization(admin, open.id, now))))) {
+  const replaceable = open && !open.submitted_tx_hash && (open.wallet_id !== wallet.id
+    || (passHoldTooShortToSign(open.due_at, now.getTime()) && !(await liveAuthorization(admin, open.id, now))));
+  if (open && replaceable) {
     const { error } = await admin.rpc("expire_onchain_pass_invoices", { p_now: "infinity", p_member_id: memberId, p_wallet_id: open.wallet_id });
     if (error) throw error;
     open = await findOpen();

@@ -382,15 +382,30 @@ describe("stuck or stale purchases", () => {
     expect(new Date(again.body.invoice.due_at).getTime() - Date.now()).toBeGreaterThan(55 * 60 * 1000);
   });
 
-  it("near the end of the hold, a live prepared authorization is resumed, not cancelled under the signer", async () => {
+  it("near the end of the hold, a prepared authorization with time to sign is resumed, not cancelled under the signer", async () => {
     const { body } = await start();
-    await db.sql("update onchain_invoices set due_at = now() + interval '2 minutes' where id = $1", [body.invoice.id]);
+    await db.sql("update onchain_invoices set due_at = now() + interval '4 minutes' where id = $1", [body.invoice.id]);
     await db.sql(`insert into onchain_relay_jobs(invoice_id, member_id, wallet_id, from_address, token_contract, treasury_address,
         amount_usdc_micros, authorization_nonce, valid_after, valid_before, status, authorization_from_block)
-      values ($1, 7, 3, $2, $3, $4, 30000000, $5, 0, extract(epoch from now())::bigint + 110, 'prepared', 1)`,
+      values ($1, 7, 3, $2, $3, $4, 30000000, $5, 0, extract(epoch from now())::bigint + 200, 'prepared', 1)`,
     [body.invoice.id, WALLET, NATIVE_USDC_ADDRESS, TREASURY_ADDRESS, NONCE]);
     expect((await start()).body.invoice.id).toBe(body.invoice.id);
     expect(await one("select status from onchain_relay_jobs where invoice_id = $1", [body.invoice.id])).toEqual({ status: "prepared" });
+
+    // With under two minutes left on it, it isn't worth resuming: a fresh purchase instead.
+    await db.sql("update onchain_relay_jobs set valid_before = extract(epoch from now())::bigint + 60 where invoice_id = $1", [body.invoice.id]);
+    expect((await start()).body.invoice.id).not.toBe(body.invoice.id);
+  });
+
+  it("an RPC outage while checking the authorization is retried, not reported as a payment", async () => {
+    const id = await stuck();
+    chainSays({ usedBy: TX2 }); // authorizationState says used; then reading its logs fails
+    const client = vi.mocked(getOpPublicClient)();
+    vi.mocked(getOpPublicClient).mockReturnValue({ ...client, getLogs: async () => { throw new Error("fetch failed"); } } as never);
+    await expect(processOnchainInvoice(db as never, id)).rejects.toThrow(/fetch failed/);
+    expect(await audits("onchain_pass_payment_exception")).toEqual([]);
+    chainSays("unused");
+    expect(await processOnchainInvoice(db as never, id)).toMatchObject({ status: "exception", reason: "transaction not found on chain after 24 hours" });
   });
 
   it("linking another wallet drops an unpaid purchase made from the old one; the next pays from the new", async () => {
