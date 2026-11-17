@@ -18,7 +18,8 @@ import { useTechneSession } from "@/components/techne/useTechneSession";
 import { SignInWithTechne, SignOutOfTechne } from "@/components/techne/SignInWithTechne";
 import { ManageEvents, type ManageableEvent } from "@/components/portal/ManageEvents";
 
-type Check = { state: "checking" } | { state: "failed" } | { state: "done"; standing: Standing };
+/** The standing check for one DID; a check for an older DID is ignored. */
+type Check = { did: string; state: "failed" } | { did: string; state: "done"; standing: Standing };
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -46,26 +47,26 @@ export function StewardEvents({
   readFailed: boolean;
 }) {
   const { phase, session, error, start, signOut } = useTechneSession(configProp, STEWARD_PATH);
-  const [check, setCheck] = useState<Check>({ state: "checking" });
+  const [lastCheck, setCheck] = useState<Check | null>(null);
   const did = session?.did ?? null;
+  const check = lastCheck && lastCheck.did === did ? lastCheck : null;
 
   useEffect(() => {
     if (!did) return;
     let live = true;
-    setCheck({ state: "checking" });
     fetch(`/api/portal/events/standing?did=${encodeURIComponent(did)}`, { cache: "no-store" })
       .then(async (res) => {
         if (!res.ok) throw new Error(String(res.status));
         const standing = (await res.json()) as Standing;
-        if (live) setCheck({ state: "done", standing });
+        if (live) setCheck({ did, state: "done", standing });
       })
-      .catch(() => live && setCheck({ state: "failed" }));
+      .catch(() => live && setCheck({ did, state: "failed" }));
     return () => {
       live = false;
     };
   }, [did]);
 
-  if (phase === "restoring" || (phase === "signed-in" && check.state === "checking")) {
+  if (phase === "restoring" || (phase === "signed-in" && !check)) {
     return <Loader2 className="w-5 h-5 animate-spin text-muted" aria-label="Loading" />;
   }
 
@@ -89,13 +90,13 @@ export function StewardEvents({
     <p className="text-xs text-muted flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="steward-who">
       <span>
         Signed in with Techne as <code className="text-foreground">{session.did}</code>
-        {check.state === "done" && check.standing.roleName ? ` · ${check.standing.roleName}` : ""}
+        {check?.state === "done" && check.standing.roleName ? ` · ${check.standing.roleName}` : ""}
       </span>
       <SignOutOfTechne onSignOut={() => void signOut()} />
     </p>
   );
 
-  if (check.state === "failed") {
+  if (check?.state === "failed") {
     return (
       <div className="space-y-4">
         {who}
@@ -106,8 +107,8 @@ export function StewardEvents({
     );
   }
 
-  if (check.state !== "done" || !check.standing.canManageEvents) {
-    const role = check.state === "done" ? check.standing.roleName : null;
+  if (check?.state !== "done" || !check.standing.canManageEvents) {
+    const role = check?.state === "done" ? check.standing.roleName : null;
     return (
       <div className="space-y-4">
         {who}
