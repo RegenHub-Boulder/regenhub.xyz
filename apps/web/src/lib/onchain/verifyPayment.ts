@@ -13,6 +13,8 @@ import { endDeskAccessForSwitch } from "@/lib/planSwitch";
 import { grantSubscriptionPasses } from "@/lib/subscriptionPasses";
 import { isLiveSubscription } from "@/lib/subscriptionStatus";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { AuditAction, logAction } from "@/lib/auditLog";
+import { dayPassReceiptEmail, sendEmail } from "@/lib/email";
 import { assertOpPublicClient, getOpPublicClient } from "./config";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
@@ -172,7 +174,8 @@ export async function reconcileOnchainAccess(
   // Period order, rather than arrival/retry order, governs door access.
   const { data: latest, error: latestError } = await admin.from("onchain_invoices")
     .select("plan_key, subscriptions(plan_key)")
-    .eq("member_id", args.memberId).eq("status", "paid")
+    // A day pass bought with USDC is not a membership period.
+    .eq("member_id", args.memberId).eq("kind", "membership").eq("status", "paid")
     .order("period_start", { ascending: false }).order("id", { ascending: false })
     .limit(1).maybeSingle();
   if (latestError) throw latestError;
@@ -231,7 +234,7 @@ async function deskPeriodRunning(admin: ServiceClient, memberId: number, now: Da
   const nowIso = now.toISOString();
   const { data: running, error } = await admin.from("onchain_invoices")
     .select("plan_key, period_end, subscriptions(plan_key)")
-    .eq("member_id", memberId).eq("status", "paid")
+    .eq("member_id", memberId).eq("kind", "membership").eq("status", "paid")
     .lte("period_start", nowIso).gt("period_end", nowIso)
     .order("period_start", { ascending: false }).limit(1).maybeSingle();
   if (error) throw error;
@@ -279,6 +282,24 @@ export async function finishOnchainPlanSwitches(admin: ServiceClient, now = new 
   return results;
 }
 
+/** The card path's receipt (passFulfillment.ts), for a pass paid in USDC. Best effort, as there. */
+async function sendPassReceipt(admin: ServiceClient, memberId: number, amountCents: number) {
+  try {
+    const { data: member } = await admin.from("members").select("name, email, day_passes_balance").eq("id", memberId).single();
+    if (!member?.email) return;
+    const mail = dayPassReceiptEmail({
+      name: member.name ?? "there",
+      quantity: 1,
+      amountDollars: amountCents / 100,
+      newBalance: typeof member.day_passes_balance === "number" ? member.day_passes_balance : null,
+      siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz",
+    });
+    await sendEmail({ to: member.email, subject: mail.subject, html: mail.html, text: mail.text });
+  } catch (error) {
+    console.error("[OnchainPass] Receipt email failed:", error);
+  }
+}
+
 export type ProcessInvoiceResult =
   | { status: "submitted" | "detected"; txHash: string }
   | { status: "paid"; txHash: string; paymentId: number; wasNew: boolean }
@@ -296,13 +317,23 @@ export async function processOnchainInvoice(
     .single();
   if (invoiceError || !invoice?.submitted_tx_hash) throw new Error("submitted invoice not found");
 
-  const { data: subscription } = await admin
-    .from("subscriptions")
-    .select("id, member_id, wallet_id, plan_key")
-    .eq("id", invoice.subscription_id)
-    .eq("payment_rail", "onchain")
-    .single();
-  if (!subscription?.wallet_id) throw new Error("invoice subscription has no verified wallet");
+  const isPass = invoice.kind === "day_pass";
+  // A membership invoice pays from its subscription's wallet; a day pass from
+  // the wallet frozen on the invoice when it was bought.
+  let payer: { memberId: number; walletId: number };
+  if (isPass) {
+    if (!invoice.wallet_id) throw new Error("day pass invoice has no wallet");
+    payer = { memberId: invoice.member_id, walletId: invoice.wallet_id };
+  } else {
+    const { data: subscription } = await admin
+      .from("subscriptions")
+      .select("id, member_id, wallet_id, plan_key")
+      .eq("id", invoice.subscription_id)
+      .eq("payment_rail", "onchain")
+      .single();
+    if (!subscription?.wallet_id) throw new Error("invoice subscription has no verified wallet");
+    payer = { memberId: subscription.member_id, walletId: subscription.wallet_id };
+  }
   const { data: relayJob, error: relayJobError } = await admin
     .from("onchain_relay_jobs")
     .select("member_id, from_address")
@@ -311,14 +342,14 @@ export async function processOnchainInvoice(
     .maybeSingle();
   if (relayJobError) throw relayJobError;
   let expectedSender = relayJob?.from_address ?? null;
-  if (relayJob && relayJob.member_id !== subscription.member_id) {
+  if (relayJob && relayJob.member_id !== payer.memberId) {
     throw new Error("relay authorization belongs to another member");
   }
   if (!expectedSender) {
     const { data: wallet } = await admin
       .from("member_wallets")
       .select("address")
-      .eq("id", subscription.wallet_id)
+      .eq("id", payer.walletId)
       .is("revoked_at", null)
       .single();
     if (!wallet) throw new Error("verified wallet not found");
@@ -387,6 +418,17 @@ export async function processOnchainInvoice(
       .update({ status: "expired", last_error: reason })
       .eq("invoice_id", invoice.id)
       .eq("submitted_tx_hash", txHash);
+    if (isPass) {
+      // The invoice clears its tx hash so a correct payment can follow; keep
+      // this one (once) for an admin to check on chain and refund.
+      await logAction({
+        action: AuditAction.ONCHAIN_PASS_PAYMENT_EXCEPTION,
+        actorMemberId: invoice.member_id,
+        target: { table: "members", id: invoice.member_id },
+        idempotencyKey: `onchain-pass-exception:${invoice.id}:${txHash}`,
+        payload: { invoice_id: invoice.id, tx_hash: txHash, reason, expected_usdc_micros: invoice.amount_usdc_micros },
+      }, admin);
+    }
     return { status: "exception", txHash, reason };
   }
 
@@ -418,6 +460,13 @@ export async function processOnchainInvoice(
   if (credit.match_status === "exception") {
     // Paid after an admin canceled: recorded for reconciliation, not credited.
     return { status: "exception", txHash, reason: "membership was canceled; payment recorded for an admin to reconcile" };
+  }
+
+  if (isPass) {
+    // Pass, purchase row, balance and audit row committed with the credit.
+    // Only the caller that credited it sends the receipt.
+    if (credit.was_new) await sendPassReceipt(admin, invoice.member_id, invoice.amount_cents);
+    return { status: "paid", txHash, paymentId: credit.payment_id, wasNew: credit.was_new };
   }
 
   await completePaymentEffects(admin, {

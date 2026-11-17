@@ -38,7 +38,7 @@ function database(disabled = true) {
   const rows: Record<string, Row[]> = {
     members: [member], onchain_payments: [payment(3, 7)], webhook_events: [],
     subscriptions: [{ id: 1, member_id: 7, wallet_id: 1, plan_key: "hot_desk", payment_rail: "onchain", status: "active" }],
-    onchain_invoices: [{ id: 2, subscription_id: 1, status: "submitted", submitted_tx_hash: txHash, token_contract: token, treasury_address: treasury, amount_usdc_micros: 100 }],
+    onchain_invoices: [{ id: 2, subscription_id: 1, kind: "membership", status: "submitted", submitted_tx_hash: txHash, token_contract: token, treasury_address: treasury, amount_usdc_micros: 100 }],
     member_wallets: [{ id: 1, address: sender, revoked_at: null }], onchain_relay_jobs: [],
   };
   let credits = 0;
@@ -53,7 +53,7 @@ function database(disabled = true) {
         if (table === "onchain_invoices" && columns === "plan_key, subscriptions(plan_key)") {
           expect(writerHeld).toBe(true);
           for (const paid of rows.onchain_payments) {
-            if (!rows.onchain_invoices.some(i => i.id === paid.invoice_id)) rows.onchain_invoices.push({ id: paid.invoice_id, member_id: paid.member_id, status: "paid", period_start: "2026-10-01", ...(paid.onchain_invoices as Row) });
+            if (!rows.onchain_invoices.some(i => i.id === paid.invoice_id)) rows.onchain_invoices.push({ id: paid.invoice_id, member_id: paid.member_id, kind: "membership", status: "paid", period_start: "2026-10-01", ...(paid.onchain_invoices as Row) });
           }
         }
         return builder;
@@ -99,6 +99,7 @@ function database(disabled = true) {
     if (name === "release_lock_writer") writerHeld = false;
     if (["acquire_lock_writer", "release_lock_writer", "check_lock_writer"].includes(name)) return { data: true, error: null };
     if (name === "list_lock_quarantines") return { data: [], error: null };
+    if (name === "expire_onchain_pass_invoices") return { data: [], error: null };
     expect(name).toBe("credit_onchain_invoice");
     const invoice = rows.onchain_invoices.find(r => r.id === args.p_invoice_id)!;
     let paid = rows.onchain_payments.find(r => r.invoice_id === invoice.id);
@@ -225,8 +226,8 @@ it.each([
   rows.members[0].member_type = memberType;
   rows.onchain_payments[0].onchain_invoices = { subscription_id: 1, plan_key: oldPlan, subscriptions: { plan_key: newPlan } };
   rows.onchain_invoices = [
-    { id: 3, member_id: 7, status: "paid", period_start: "2026-10-01", plan_key: oldPlan },
-    { id: 4, member_id: 7, status: "paid", period_start: "2026-11-01", plan_key: newPlan },
+    { id: 3, member_id: 7, kind: "membership", status: "paid", period_start: "2026-10-01", plan_key: oldPlan },
+    { id: 4, member_id: 7, kind: "membership", status: "paid", period_start: "2026-11-01", plan_key: newPlan },
   ];
   expect(await retryPendingOnchainEffects(db as never)).toEqual([]);
   expect(rows.members[0]).toMatchObject({ pin_code_slot: slot, member_type: memberType });

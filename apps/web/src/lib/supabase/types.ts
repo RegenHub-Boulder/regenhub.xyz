@@ -24,6 +24,8 @@ export type OnchainInvoiceStatus =
   | "expired"
   | "void"
   | "exception";
+/** membership = a subscription period; day_pass = one day pass bought with USDC (migration 063). */
+export type OnchainInvoiceKind = "membership" | "day_pass";
 
 // Mirrors Stripe.Subscription.Status verbatim
 export type StripeSubscriptionStatus =
@@ -372,7 +374,11 @@ export interface Database {
       onchain_invoices: {
         Row: {
           id: number;
-          subscription_id: number;
+          /** null for a day pass bought with USDC (kind = 'day_pass'). */
+          subscription_id: number | null;
+          kind: OnchainInvoiceKind;
+          /** The paying wallet of a day_pass invoice; null on membership invoices (they pay from the subscription's wallet). */
+          wallet_id: number | null;
           member_id: number;
           period_start: string;
           period_end: string;
@@ -398,7 +404,9 @@ export interface Database {
           updated_at: string;
         };
         Insert: {
-          subscription_id: number;
+          subscription_id?: number | null;
+          kind?: OnchainInvoiceKind;
+          wallet_id?: number | null;
           member_id: number;
           period_start: string;
           period_end: string;
@@ -541,6 +549,8 @@ export interface Database {
           amount_cents: number;
           passes_granted: number;
           email: string | null;
+          /** Set for a pass bought with USDC; stripe_checkout_session for a card purchase. */
+          onchain_invoice_id: number | null;
           created_at: string;
         };
         Insert: {
@@ -551,6 +561,7 @@ export interface Database {
           amount_cents: number;
           passes_granted: number;
           email?: string | null;
+          onchain_invoice_id?: number | null;
         };
         Update: Partial<Database["public"]["Tables"]["purchases"]["Insert"]>;
         Relationships: [];

@@ -25,7 +25,7 @@ import {
 } from "@/lib/onchain/walletAuthorization";
 
 type Setup = {
-  subscription_id: number;
+  subscription_id?: number;
   invoice: {
     id: number;
     amount_cents: number;
@@ -46,7 +46,10 @@ type Phase = "idle" | "connecting" | "verifying" | "switching" | "preparing" | "
 const PENDING_PAYMENT_KEY = "regenhub:onchain:pending-payment";
 
 type Props = {
-  planKey: string;
+  /** A membership plan to start paying for in USDC… */
+  planKey?: string;
+  /** …or one day pass (the server sets the price; this is only the label until it answers). */
+  dayPass?: { amountCents: number };
   className?: string;
   autoStart?: boolean;
   discountCode?: string;
@@ -64,7 +67,35 @@ const PHASE_LABELS: Record<Exclude<Phase, "idle" | "complete">, string> = {
   received: "Payment received",
 };
 
-function CryptoSubscribeButtonInner({ planKey, className, discountCode, autoStart = false }: Props) {
+/** Where the setup comes from and where a confirmed payment goes: a membership or a day pass. */
+function purposeOf({ planKey, dayPass, discountCode }: Props) {
+  return dayPass
+    ? {
+        setupUrl: "/api/portal/buy-passes/onchain",
+        setupBody: "{}",
+        successHref: "/portal/passes?onchain=paid",
+        preparing: "Preparing your day pass…",
+        startLabel: "Pay with USDC",
+        doneLine: "Payment confirmed. Adding your pass…",
+        startError: "Could not start the USDC payment",
+        fallbackCents: dayPass.amountCents,
+      }
+    : {
+        setupUrl: "/api/membership/onchain",
+        setupBody: JSON.stringify({ plan_key: planKey, discount_code: discountCode }),
+        successHref: "/portal?onchain=paid",
+        preparing: PHASE_LABELS.preparing,
+        startLabel: "Pay with crypto",
+        doneLine: "Payment confirmed. Opening your member portal…",
+        startError: "Could not start crypto membership",
+        fallbackCents: 25_000,
+      };
+}
+
+function CryptoSubscribeButtonInner(props: Props) {
+  const { className, autoStart = false } = props;
+  const purpose = purposeOf(props);
+  const { setupUrl, setupBody, successHref, startError } = purpose;
   const { address, chainId, connector, isConnected } = useAccount();
   const { openConnectModal, connectModalOpen } = useConnectModal();
   const { signMessageAsync } = useSignMessage();
@@ -95,7 +126,7 @@ function CryptoSubscribeButtonInner({ planKey, className, discountCode, autoStar
       if (paid) {
         sessionStorage.removeItem(PENDING_PAYMENT_KEY);
         setPhase("complete");
-        setTimeout(() => { window.location.href = "/portal?onchain=paid"; }, 1_500);
+        setTimeout(() => { window.location.href = successHref; }, 1_500);
       } else {
         setError("OP safe confirmation is taking longer than expected. Your transaction was submitted; do not pay again. Use Check payment confirmation to resume.");
         setPhase("idle");
@@ -104,7 +135,7 @@ function CryptoSubscribeButtonInner({ planKey, className, discountCode, autoStar
       setError(`${cause instanceof Error ? cause.message : "Confirmation is delayed"}. Your transaction was submitted; do not pay again. RegenHub will keep checking it.`);
       setPhase("idle");
     }
-  }, []);
+  }, [successHref]);
 
   const submitPayment = useCallback(async (nextSetup: Setup, signature?: Hex) => {
     setPhase("submitting");
@@ -213,13 +244,13 @@ function CryptoSubscribeButtonInner({ planKey, className, discountCode, autoStar
       });
 
       setPhase("preparing");
-      const setupRes = await fetch("/api/membership/onchain", {
+      const setupRes = await fetch(setupUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan_key: planKey, discount_code: discountCode }),
+        body: setupBody,
       });
       const nextSetup = await setupRes.json() as Setup & { error?: string };
-      if (!setupRes.ok) throw new Error(nextSetup.error ?? "Could not start crypto membership");
+      if (!setupRes.ok) throw new Error(nextSetup.error ?? startError);
       setSetup(nextSetup);
       const pending = (() => {
         try {
@@ -239,11 +270,11 @@ function CryptoSubscribeButtonInner({ planKey, className, discountCode, autoStar
       if (cause instanceof WalletLinkError && cause.code === "wallet_linked_elsewhere") {
         setMoveOffer(cause.message);
       } else {
-        setError(cause instanceof Error ? cause.message : "Could not start crypto membership");
+        setError(cause instanceof Error ? cause.message : startError);
       }
       setPhase("idle");
     }
-  }, [address, confirmSubmittedPayment, discountCode, planKey, preparePayment, signMessageAsync]);
+  }, [address, confirmSubmittedPayment, preparePayment, setupBody, setupUrl, signMessageAsync, startError]);
 
   useEffect(() => {
     if (!connectIntent || !isConnected || !address) return;
@@ -285,7 +316,8 @@ function CryptoSubscribeButtonInner({ planKey, className, discountCode, autoStar
   }, [autoStart, isConnected, openConnectModal]);
 
   const busy = !["idle", "review", "complete"].includes(phase);
-  const amountCents = setup?.invoice.amount_cents ?? 25_000;
+  const amountCents = setup?.invoice.amount_cents ?? purpose.fallbackCents;
+  const phaseLabel = (p: Exclude<Phase, "idle" | "complete">) => (p === "preparing" ? purpose.preparing : PHASE_LABELS[p]);
 
   function handlePaymentClick() {
     if (authorization) {
@@ -311,7 +343,7 @@ function CryptoSubscribeButtonInner({ planKey, className, discountCode, autoStar
         className={className ?? "btn-glass w-full gap-2"}
       >
         {phase === "complete" || phase === "received" ? <CheckCircle2 className="w-4 h-4" /> : busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wallet className="w-4 h-4" />}
-        {phase === "complete" ? "Payment confirmed" : busy ? PHASE_LABELS[phase as Exclude<Phase, "idle" | "complete">] : phase === "review" ? `Authorize $${(amountCents / 100).toFixed(2)} USDC in MetaMask` : txHash ? "Check payment confirmation" : setup ? `Prepare $${(amountCents / 100).toFixed(2)} USDC payment` : "Pay with crypto"}
+        {phase === "complete" ? "Payment confirmed" : busy ? phaseLabel(phase as Exclude<Phase, "idle" | "complete">) : phase === "review" ? `Authorize $${(amountCents / 100).toFixed(2)} USDC in MetaMask` : txHash ? "Check payment confirmation" : setup ? `Prepare $${(amountCents / 100).toFixed(2)} USDC payment` : purpose.startLabel}
       </Button>
 
       {isConnected && address && (
@@ -334,7 +366,11 @@ function CryptoSubscribeButtonInner({ planKey, className, discountCode, autoStar
       {setup && !authorization && phase !== "complete" && (
         <div className="rounded-lg border border-sage/20 bg-sage/5 p-3 text-left space-y-1">
           <p className="text-xs font-medium">${(amountCents / 100).toFixed(2)} USDC · OP Mainnet</p>
-          <p className="text-[11px] text-muted">Direct to the RegenHub treasury. Access begins only after server verification.</p>
+          <p className="text-[11px] text-muted">
+            {props.dayPass
+              ? `Direct to the RegenHub treasury. Your pass is added once the payment is verified. Price held until ${new Date(setup.invoice.due_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/Denver" })}.`
+              : "Direct to the RegenHub treasury. Access begins only after server verification."}
+          </p>
           {txHash && <a href={`https://optimistic.etherscan.io/tx/${txHash}`} target="_blank" rel="noreferrer" className="text-[11px] text-sage underline">View submitted transaction</a>}
         </div>
       )}
@@ -347,7 +383,7 @@ function CryptoSubscribeButtonInner({ planKey, className, discountCode, autoStar
           </div>
         </div>
       )}
-      {phase === "complete" && <p className="text-xs text-emerald-400">Payment confirmed. Opening your member portal…</p>}
+      {phase === "complete" && <p className="text-xs text-emerald-400">{purpose.doneLine}</p>}
       {error && <p className="text-xs text-red-400">{error}</p>}
     </div>
   );

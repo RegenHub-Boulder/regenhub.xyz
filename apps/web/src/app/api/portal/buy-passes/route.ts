@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createPassCheckoutSession, isStripeConfigured, PASS_KINDS } from "@/lib/stripe";
 import type { PurchaseKind } from "@/lib/supabase/types";
+import { isContributingMember } from "@/lib/dayPassPrice";
 
 export async function POST(req: Request) {
   if (!isStripeConfigured()) {
@@ -29,17 +30,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Member profile not found" }, { status: 404 });
   }
 
-  // Contributing-member rate ($25 vs $30 on single day passes) applies to anyone
-  // with an active paid subscription — checks both billable subs and the legacy
-  // member-type signal (hub_friend etc. read as members for pricing purposes).
-  const { data: activeSub } = await supabase
-    .from("subscriptions")
-    .select("id")
-    .eq("member_id", member.id)
-    .in("status", ["active", "trialing"])
-    .limit(1)
-    .maybeSingle();
-  const isMember = !!activeSub;
+  // Contributing-member rate ($25 vs $30): same check as the USDC purchase and the page.
+  let isMember: boolean;
+  try {
+    isMember = await isContributingMember(supabase, member.id);
+  } catch (err) {
+    console.error("[BuyPasses] Member rate lookup failed:", err);
+    return NextResponse.json({ error: "Couldn't check your membership; try again" }, { status: 500 });
+  }
 
   const baseUrl =
     process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://regenhub.xyz";

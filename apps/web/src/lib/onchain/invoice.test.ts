@@ -60,7 +60,7 @@ describe("on-chain invoice math", () => {
 
   it("never promotes an unpaid incomplete signup into past_due membership", async () => {
     const invoices: Record<string, ReturnType<typeof vi.fn>> = {};
-    for (const method of ["select", "in", "lte"]) invoices[method] = vi.fn(() => invoices);
+    for (const method of ["select", "eq", "in", "lte"]) invoices[method] = vi.fn(() => invoices);
     invoices.then = vi.fn((resolve) => Promise.resolve(resolve({
       data: [{ id: 4, subscription_id: 7 }],
       error: null,
@@ -75,6 +75,8 @@ describe("on-chain invoice math", () => {
     } as never, new Date("2026-09-10T00:00:00.000Z"));
 
     expect(subscriptions.in).toHaveBeenCalledWith("status", ["active", "trialing", "past_due"]);
+    // A day pass purchase's due_at is its expiry, never a membership falling due.
+    expect(invoices.eq).toHaveBeenCalledWith("kind", "membership");
   });
 });
 

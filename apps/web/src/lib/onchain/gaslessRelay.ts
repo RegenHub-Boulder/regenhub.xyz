@@ -262,7 +262,7 @@ async function assertRelayJobStillPayable(admin: ServiceClient, job: RelayJob) {
   assertRelayJobMatchesConfig(job);
   const { data: invoice, error: invoiceError } = await admin
     .from("onchain_invoices")
-    .select("member_id, subscription_id, status, submitted_tx_hash, amount_usdc_micros, token_contract, treasury_address")
+    .select("member_id, subscription_id, kind, wallet_id, status, submitted_tx_hash, amount_usdc_micros, token_contract, treasury_address")
     .eq("id", job.invoice_id)
     .single();
   if (invoiceError || !invoice) throw new InvalidRelayJobError("relay invoice not found");
@@ -281,15 +281,20 @@ async function assertRelayJobStillPayable(admin: ServiceClient, job: RelayJob) {
     throw new InvalidRelayJobError("relay job no longer matches its frozen invoice");
   }
 
-  const { data: subscription } = await admin
-    .from("subscriptions")
-    .select("wallet_id")
-    .eq("id", invoice.subscription_id)
-    .eq("member_id", job.member_id)
-    .eq("payment_rail", "onchain")
-    .single();
-  if (!subscription?.wallet_id) throw new InvalidRelayJobError("relay subscription has no verified wallet");
-  if (subscription.wallet_id !== job.wallet_id) {
+  // A day pass pays from the wallet frozen on its invoice.
+  let payerWalletId: number | null = invoice.kind === "day_pass" ? invoice.wallet_id : null;
+  if (invoice.kind !== "day_pass") {
+    const { data: subscription } = await admin
+      .from("subscriptions")
+      .select("wallet_id")
+      .eq("id", invoice.subscription_id)
+      .eq("member_id", job.member_id)
+      .eq("payment_rail", "onchain")
+      .single();
+    payerWalletId = subscription?.wallet_id ?? null;
+  }
+  if (!payerWalletId) throw new InvalidRelayJobError("relay invoice has no verified wallet");
+  if (payerWalletId !== job.wallet_id) {
     throw new InvalidRelayJobError("relay authorization is not for the current verified wallet");
   }
   const { data: wallet } = await admin

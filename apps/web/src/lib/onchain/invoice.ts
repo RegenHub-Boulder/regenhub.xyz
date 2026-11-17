@@ -115,6 +115,8 @@ export async function markDueOnchainSubscriptionsPastDue(
   const { data: due, error } = await admin
     .from("onchain_invoices")
     .select("id, subscription_id")
+    // A day pass's due_at is when the unpaid purchase expires, not a renewal.
+    .eq("kind", "membership")
     .in("status", ["open", "submitted", "detected"])
     .lte("due_at", nowIso);
   if (error) throw error;

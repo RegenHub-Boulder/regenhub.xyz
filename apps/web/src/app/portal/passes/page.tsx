@@ -8,6 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { RequestDayPassButton } from "@/components/portal/RequestDayPassButton";
 import { RevokeCodeButton } from "@/components/portal/RevokeCodeButton";
 import { BuyPassButton } from "@/components/portal/BuyPassButton";
+import { CryptoPassButton } from "@/components/portal/CryptoPassButton";
+import { isContributingMember as contributingMember } from "@/lib/dayPassPrice";
+import { dayPassCentsFor } from "@/lib/plans";
+import { isGaslessRelayConfigured } from "@/lib/onchain/config";
 import { Ticket, Clock, ShoppingCart, Key, ArrowRight, CheckCircle, XCircle, Receipt, Gift } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -15,7 +19,7 @@ import Link from "next/link";
 export const metadata = { title: "Live Codes — RegenHub" };
 
 interface PageProps {
-  searchParams: Promise<{ session_id?: string; checkout?: string }>;
+  searchParams: Promise<{ session_id?: string; checkout?: string; onchain?: string }>;
 }
 
 export default async function PassesPage({ searchParams }: PageProps) {
@@ -82,7 +86,7 @@ export default async function PassesPage({ searchParams }: PageProps) {
 
   const isFullMember = member.member_type !== "day_pass";
 
-  const [{ data: activeCodes }, { data: recentPurchases }, { data: recentGrants }, { data: activeSub }] = await Promise.all([
+  const [{ data: activeCodes }, { data: recentPurchases }, { data: recentGrants }, isContributingMember] = await Promise.all([
     supabase
       .from("day_codes")
       .select("*")
@@ -91,7 +95,7 @@ export default async function PassesPage({ searchParams }: PageProps) {
       .order("expires_at", { ascending: true, nullsFirst: false }),
     supabase
       .from("purchases")
-      .select("id, kind, amount_cents, passes_granted, created_at")
+      .select("id, kind, amount_cents, passes_granted, onchain_invoice_id, created_at")
       .eq("member_id", member.id)
       .order("created_at", { ascending: false })
       .limit(10),
@@ -101,18 +105,12 @@ export default async function PassesPage({ searchParams }: PageProps) {
       .eq("member_id", member.id)
       .order("created_at", { ascending: false })
       .limit(10),
-    supabase
-      .from("subscriptions")
-      .select("id")
-      .eq("member_id", member.id)
-      .in("status", ["active", "trialing"])
-      .limit(1)
-      .maybeSingle(),
+    // Contributing-member rate ($25 vs $30): the same check both purchase routes use.
+    contributingMember(supabase, member.id).catch(() => false),
   ]);
-
-  // Contributing-member rate ($25 vs $30 on single passes) — keep this in
-  // sync with the same check in /api/portal/buy-passes.
-  const isContributingMember = !!activeSub;
+  const passCents = dayPassCentsFor(isContributingMember);
+  // The USDC flow is the gasless one (as on /membership), so it needs the relayer too.
+  const usdcEnabled = isGaslessRelayConfigured();
 
   return (
     <div className="space-y-8 max-w-3xl">
@@ -136,6 +134,15 @@ export default async function PassesPage({ searchParams }: PageProps) {
               Purchase complete — {justPurchased.passes} pass{justPurchased.passes === 1 ? "" : "es"} added to your balance.
             </p>
             <p className="text-xs text-muted mt-0.5">Thanks for supporting RegenHub.</p>
+          </div>
+        </div>
+      )}
+      {params.onchain === "paid" && !justPurchased && (
+        <div className="glass-panel p-4 border border-emerald-500/30 bg-emerald-500/5 flex items-start gap-3">
+          <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium text-emerald-400">USDC payment verified — 1 pass added to your balance.</p>
+            <p className="text-xs text-muted mt-0.5">A receipt is on its way to your email.</p>
           </div>
         </div>
       )}
@@ -241,25 +248,29 @@ export default async function PassesPage({ searchParams }: PageProps) {
           <ShoppingCart className="w-5 h-5 text-sage" />
           {isFullMember ? "Buy guest passes" : "Get a day pass"}
         </h2>
-        <div className="max-w-sm">
-          <BuyPassButton
-            kind="day_pass"
-            className="glass-panel p-5 hover:bg-white/5 transition-colors group block text-left w-full"
-          >
+        <div className="max-w-sm glass-panel p-5 space-y-4">
+          <div>
             <p className="font-semibold mb-1">Single Day Pass</p>
             {isContributingMember ? (
-              <div className="mb-3 flex items-baseline gap-2">
-                <p className="text-3xl font-bold text-gold">$25</p>
-                <p className="text-sm text-muted line-through">$30</p>
+              <div className="flex items-baseline gap-2">
+                <p className="text-3xl font-bold text-gold">${passCents / 100}</p>
+                <p className="text-sm text-muted line-through">${dayPassCentsFor(false) / 100}</p>
                 <span className="text-xs bg-sage/20 text-sage px-2 py-0.5 rounded-full">member rate</span>
               </div>
             ) : (
-              <p className="text-3xl font-bold text-gold mb-3">$30</p>
+              <p className="text-3xl font-bold text-gold">${passCents / 100}</p>
             )}
-            <p className="text-xs text-muted group-hover:text-foreground transition-colors">
-              1 door code &rarr; full day access &rarr;
-            </p>
-          </BuyPassButton>
+            <p className="text-xs text-muted mt-1">1 door code &rarr; full day access</p>
+          </div>
+          <div className="space-y-2">
+            <BuyPassButton kind="day_pass" className="btn-primary-glass w-full rounded-md px-4 py-2 text-sm font-medium">
+              Pay with card
+            </BuyPassButton>
+            {usdcEnabled && <CryptoPassButton amountCents={passCents} />}
+          </div>
+          {usdcEnabled && (
+            <p className="text-[11px] text-muted">USDC on OP Mainnet, same price. RegenHub covers the network fee.</p>
+          )}
         </div>
       </div>
 
@@ -277,7 +288,7 @@ export default async function PassesPage({ searchParams }: PageProps) {
                 key: `p-${p.id}`,
                 date: p.created_at,
                 icon: <ShoppingCart className="w-4 h-4 text-sage" />,
-                title: p.kind === "five_pack" ? "5-Pack purchased (legacy)" : "Day Pass purchased",
+                title: p.kind === "five_pack" ? "5-Pack purchased (legacy)" : p.onchain_invoice_id ? "Day Pass purchased · USDC" : "Day Pass purchased",
                 amount: `$${p.amount_cents / 100}`,
                 detail: `+${p.passes_granted} pass${p.passes_granted === 1 ? "" : "es"}`,
               })),

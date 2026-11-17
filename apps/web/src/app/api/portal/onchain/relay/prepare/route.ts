@@ -49,7 +49,7 @@ export async function POST(request: Request) {
   const admin = createServiceClient();
   const { data: invoice, error: invoiceError } = await admin
     .from("onchain_invoices")
-    .select("id, member_id, subscription_id, status, submitted_tx_hash, amount_usdc_micros, chain_id, token_contract, treasury_address")
+    .select("id, member_id, subscription_id, kind, wallet_id, status, submitted_tx_hash, amount_usdc_micros, chain_id, token_contract, treasury_address")
     .eq("id", body!.invoice_id!)
     .eq("member_id", session.member.id)
     .maybeSingle();
@@ -72,20 +72,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: "submitted", txHash: invoice.submitted_tx_hash });
   }
 
-  const { data: subscription } = await admin
-    .from("subscriptions")
-    .select("wallet_id, payment_rail")
-    .eq("id", invoice.subscription_id)
-    .eq("member_id", session.member.id)
-    .eq("payment_rail", "onchain")
-    .single();
-  if (!subscription?.wallet_id) {
+  // A day pass pays from the wallet frozen on its invoice; a membership
+  // invoice from its subscription's wallet.
+  let walletId: number | null = invoice.kind === "day_pass" ? invoice.wallet_id : null;
+  if (invoice.kind !== "day_pass") {
+    const { data: subscription } = await admin
+      .from("subscriptions")
+      .select("wallet_id, payment_rail")
+      .eq("id", invoice.subscription_id)
+      .eq("member_id", session.member.id)
+      .eq("payment_rail", "onchain")
+      .single();
+    walletId = subscription?.wallet_id ?? null;
+  }
+  if (!walletId) {
     return NextResponse.json({ error: "Verified payment wallet not found" }, { status: 409 });
   }
   const { data: wallet } = await admin
     .from("member_wallets")
     .select("address")
-    .eq("id", subscription.wallet_id)
+    .eq("id", walletId)
     .eq("member_id", session.member.id)
     .eq("verification_method", "signature")
     .is("revoked_at", null)
@@ -146,7 +152,7 @@ export async function POST(request: Request) {
   const values = {
     invoice_id: invoice.id,
     member_id: session.member.id,
-    wallet_id: subscription.wallet_id,
+    wallet_id: walletId,
     from_address: wallet.address.toLowerCase(),
     token_contract: invoice.token_contract,
     treasury_address: invoice.treasury_address,

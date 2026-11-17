@@ -49,10 +49,14 @@ export async function POST(req: Request) {
     console.error("[OnchainBilling] Plan switch sweep failed:", cause);
     return { error: cause instanceof Error ? cause.message : "unknown" };
   });
+  // Unpaid USDC day pass purchases past their hour: expire them (never one with a payment on its way).
+  const { data: passesExpired, error: expireError } = await admin.rpc("expire_onchain_pass_invoices", {});
+  if (expireError) console.error("[OnchainBilling] Pass purchase expiry failed:", expireError);
   const created = await generateUpcomingOnchainInvoices(admin);
   const { data: unsentReminders, error: reminderQueryError } = await admin
     .from("onchain_invoices")
     .select("*")
+    .eq("kind", "membership")
     .in("status", ["open", "submitted", "detected"])
     .is("reminder_sent_at", null)
     .order("due_at", { ascending: true })
@@ -90,5 +94,5 @@ export async function POST(req: Request) {
   }
   const effectsFailures = await retryPendingOnchainEffects(admin);
   const finalized = await advanceFinalizedOnchainPayments(admin);
-  return NextResponse.json({ gaslessRelays, adminCancels, planSwitchRequests, planSwitches, invoicesCreated: created.length, remindersSent, pastDue, confirmations, effectsFailures, finalized });
+  return NextResponse.json({ gaslessRelays, adminCancels, planSwitchRequests, planSwitches, passesExpired: (passesExpired as unknown[] | null)?.length ?? 0, invoicesCreated: created.length, remindersSent, pastDue, confirmations, effectsFailures, finalized });
 }

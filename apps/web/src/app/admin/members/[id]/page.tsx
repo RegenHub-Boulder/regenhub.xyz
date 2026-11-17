@@ -94,7 +94,7 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
       .limit(50),
     adminClient
       .from("onchain_invoices")
-      .select("id, period_start, period_end, amount_cents, status")
+      .select("id, kind, period_start, period_end, amount_cents, status")
       .eq("member_id", member.id)
       .order("period_start", { ascending: false })
       .limit(6),

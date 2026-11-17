@@ -36,7 +36,9 @@ const ACTION_LABELS: Record<string, string> = {
   plan_switch_scheduled:  "Member scheduled a switch off their desk",
   plan_switch_canceled:   "Pending plan switch canceled",
   plan_switch_completed:  "Plan switch took effect",
-  onchain_payment_after_void: "Member reported paying a voided invoice (unverified; check, then refund)",
+  onchain_payment_after_void: "Member reported paying a voided or expired invoice (unverified; check, then refund)",
+  onchain_day_pass_purchased: "Bought a day pass with USDC",
+  onchain_pass_payment_exception: "USDC day pass payment didn't match (not credited; check, then refund)",
   email_sent:             "Email sent",
   batch_email_sent:       "Batch email sent",
   free_day_approved:      "Free-day claim approved",
@@ -59,6 +61,10 @@ function summary(row: ActionRow): string | null {
       return typeof p.subject === "string" ? p.subject : null;
     case "onchain_payment_after_void":
       return typeof p.tx_hash === "string" ? `Invoice #${String(p.invoice_id)} · tx ${p.tx_hash}` : null;
+    case "onchain_day_pass_purchased":
+      return `+1 day pass · $${typeof p.amount_cents === "number" ? (p.amount_cents / 100).toFixed(2) : "?"} USDC · invoice #${String(p.invoice_id)} · tx ${String(p.tx_hash)}`;
+    case "onchain_pass_payment_exception":
+      return `Invoice #${String(p.invoice_id)} · tx ${String(p.tx_hash)} · ${String(p.reason ?? "")}`;
     case "plan_switch_scheduled":
     case "plan_switch_canceled": {
       const plans = `${planLabel(String(p.from ?? "?"))} → ${planLabel(String(p.to ?? "?"))}`;
