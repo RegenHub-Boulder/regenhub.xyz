@@ -134,6 +134,7 @@ describe("fetchUpcomingRegenosEvents", () => {
     // Not strict (the landing page, /events): unchanged from before T-482, an answer from the listings alone.
     expect(await fetchCollectiveEvents()).toEqual([]);
   });
+
   it("with its own events unread, a public page still shows the collective's nights through their own listings", async () => {
     const ownUri = `at://${SCENE}/community.lexicon.calendar.event/3kownnight22`;
     const techne = fakeTechne([
@@ -147,7 +148,6 @@ describe("fetchUpcomingRegenosEvents", () => {
     }) as typeof fetch);
     expect((await fetchCollectiveEvents())?.map((e) => e.name)).toEqual(["Agents Night"]);
   });
-
 
   it("with strict, a list cut short by a failed later page is unread, not short", async () => {
     // The own-events query answers page 1 with a cursor, then fails page 2; listings are empty.

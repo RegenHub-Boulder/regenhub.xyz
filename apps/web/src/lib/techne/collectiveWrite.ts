@@ -36,7 +36,7 @@ export type WriteOutcome =
 const REJECTED = new Set([400, 404, 409, 413, 415, 422]);
 
 /** Error names an atproto PDS gives a token it no longer accepts (as opposed to a write it won't allow). */
-const LAPSED_TOKEN = new Set(["ExpiredToken", "InvalidToken", "invalid_token", "invalid_dpop_proof"]);
+const LAPSED_TOKEN = new Set(["ExpiredToken", "InvalidToken", "invalid_token"]);
 
 export async function sendCollectiveBatch(session: Session, config: TechneConfig, batch: CollectiveBatch): Promise<WriteOutcome> {
   try {
@@ -46,9 +46,10 @@ export async function sendCollectiveBatch(session: Session, config: TechneConfig
     if (err instanceof XrpcError) {
       // The one record of why a write as the collective didn't land, for whoever debugs the first real post.
       console.warn(`[techne] ${COLLECTIVE_WRITE_METHOD} as ${batch.input.repo}: ${err.status} ${err.error ?? ""}`.trim(), err.message);
-      // A token the PDS no longer takes: named as such (some PDSes answer expiry with 400), or a bare 401.
-      const lapsed = err.error ? LAPSED_TOKEN.has(err.error) : err.status === 401;
-      if ((err.status === 401 || err.status === 400) && lapsed) return { ok: false, kind: "signin", message: err.message };
+      // A token the PDS names as no longer good (some PDSes answer expiry with 400).
+      if ((err.status === 401 || err.status === 400) && err.error && LAPSED_TOKEN.has(err.error)) {
+        return { ok: false, kind: "signin", message: err.message };
+      }
       if (err.status === 401 || err.status === 403) return { ok: false, kind: "refused", status: err.status, message: err.message };
       if (REJECTED.has(err.status)) return { ok: false, kind: "failed", message: err.message };
     }
@@ -66,7 +67,7 @@ export async function sendCollectiveBatch(session: Session, config: TechneConfig
 export function writeErrorText(out: Exclude<WriteOutcome, { ok: true }>): string {
   switch (out.kind) {
     case "refused":
-      return `Techne didn't accept a post as RegenHub from this account. Techne said: ${out.message}`;
+      return `Techne didn't accept a post as RegenHub from this account. Techne said: ${out.message}. If you think it should have, sign out of Techne and sign in again, then retry.`;
     case "signin":
       return `Your Techne sign-in has lapsed. Sign out of Techne and sign in again, then retry. (${out.message})`;
     case "unknown":
