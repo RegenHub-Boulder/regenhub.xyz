@@ -301,6 +301,14 @@ describe("stuck or stale purchases", () => {
     expect(await balance()).toBe(0);
   });
 
+  it("another account taking the wallet over drops the unpaid purchase made from it", async () => {
+    const { body } = await start();
+    await asWriter("insert into members (id, name, email, member_type) values (8, 'Sam Example', 'sam@example.test', 'day_pass');");
+    const moved = await db.rpc("move_member_wallet", { p_member_id: 8, p_address: WALLET, p_from_wallet_id: 3 });
+    expect(moved.error).toBeNull();
+    expect((await one("select status from onchain_invoices where id = $1", [body.invoice.id])).status).toBe("expired");
+  });
+
   it("never gives up on a transaction whose gasless authorization was used on chain", async () => {
     const { body } = await start();
     await db.sql("update onchain_invoices set status = 'submitted', submitted_tx_hash = $2, submitted_at = now() - interval '25 hours' where id = $1", [body.invoice.id, TX]);
@@ -313,7 +321,11 @@ describe("stuck or stale purchases", () => {
       readContract: async () => true, // authorizationState: used, so USDC may have moved
     } as never);
     expect(await processOnchainInvoice(db as never, body.invoice.id)).toMatchObject({ status: "submitted" });
+    expect(await processOnchainInvoice(db as never, body.invoice.id)).toMatchObject({ status: "submitted" });
     expect((await one("select status, submitted_tx_hash from onchain_invoices where id = $1", [body.invoice.id]))).toEqual({ status: "submitted", submitted_tx_hash: TX });
+    // An admin hears about it, once.
+    expect(await audits("onchain_pass_payment_exception")).toEqual([expect.objectContaining({
+      payload: expect.objectContaining({ tx_hash: TX, reason: expect.stringMatching(/authorization used on chain/) }) })]);
   });
 
   it("keeps waiting on a transaction submitted recently", async () => {
@@ -333,8 +345,12 @@ describe("stuck or stale purchases", () => {
       method: "POST", body: JSON.stringify({ invoice_id: body.invoice.id }),
     }));
     expect(res.status).toBe(409);
-    expect((await res.json()).error).toMatch(/price hold has ended/);
+    expect((await res.json()).error).toMatch(/price hold is ending/);
     expect(await db.sql("select invoice_id from onchain_relay_jobs")).toEqual([]);
+    // Starting again gives a fresh purchase, not the same one (no loop).
+    const again = await start();
+    expect(again.body.invoice.id).not.toBe(body.invoice.id);
+    expect(new Date(again.body.invoice.due_at).getTime() - Date.now()).toBeGreaterThan(55 * 60 * 1000);
   });
 
   it("linking another wallet drops an unpaid purchase made from the old one, never one with a payment on its way", async () => {
@@ -352,7 +368,17 @@ describe("stuck or stale purchases", () => {
     expect((await one("select w.address from onchain_invoices i join member_wallets w on w.id = i.wallet_id where i.id = $1", [next.body.invoice.id])).address)
       .toBe(OTHER);
 
+    // Removing the wallet drops it too.
+    await db.sql("update onchain_invoices set status = 'expired' where id = $1", [next.body.invoice.id]);
+    const third = await start();
+    const otherWalletId = Number((await one("select id from member_wallets where member_id = 7 and revoked_at is null")).id);
+    expect((await db.rpc("unlink_member_wallet", { p_member_id: 7, p_wallet_id: otherWalletId })).error).toBeNull();
+    expect((await one("select status from onchain_invoices where id = $1", [third.body.invoice.id])).status).toBe("expired");
+    expect((await db.rpc("bind_member_wallet", { p_member_id: 7, p_address: OTHER, p_verification_method: "signature" })).error).toBeNull();
+
     // With a payment on its way, the switch is refused and the purchase kept.
+    await db.sql("update onchain_invoices set status = 'open' where id = $1", [next.body.invoice.id]);
+    await db.sql("update onchain_invoices set wallet_id = (select id from member_wallets where member_id = 7 and revoked_at is null) where id = $1", [next.body.invoice.id]);
     await db.sql("update onchain_invoices set status = 'submitted', submitted_tx_hash = $2 where id = $1", [next.body.invoice.id, TX]);
     const refused = await db.rpc("bind_member_wallet", { p_member_id: 7, p_address: WALLET, p_verification_method: "signature" });
     expect(refused.error?.message).toMatch(/current wallet in use: open_invoice/);

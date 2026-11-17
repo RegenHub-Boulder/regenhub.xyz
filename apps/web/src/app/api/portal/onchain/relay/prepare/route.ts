@@ -13,10 +13,9 @@ import {
 import { publicAuthorization, type RelayJob } from "@/lib/onchain/gaslessRelay";
 import { requirePortalMember } from "@/lib/onchain/portalMember";
 import { invoicePayerWalletId } from "@/lib/onchain/invoicePayer";
+import { PASS_SIGNING_WINDOW_SECONDS } from "@/lib/onchain/passPurchase";
 
 const AUTHORIZATION_LIFETIME_SECONDS = 30 * 60;
-/** Time left in a day pass's price hold below which no new authorization is issued: enough to switch network and sign. */
-const PASS_SIGNING_WINDOW_SECONDS = 5 * 60;
 const USDC_BALANCE_ABI = parseAbi([
   "function balanceOf(address account) view returns (uint256)",
 ]);
@@ -112,7 +111,7 @@ export async function POST(request: Request) {
   // purchase can then expire cleanly). One already signed is answered above.
   const holdEnds = invoice.kind === "day_pass" ? Math.floor(Date.parse(invoice.due_at) / 1000) : Infinity;
   if (holdEnds <= now + PASS_SIGNING_WINDOW_SECONDS) {
-    return NextResponse.json({ error: "This purchase's price hold has ended. Start again for a fresh price." }, { status: 409 });
+    return NextResponse.json({ error: "This purchase's price hold is ending. Start again for a fresh price." }, { status: 409 });
   }
 
   let authorizationFromBlock: number;

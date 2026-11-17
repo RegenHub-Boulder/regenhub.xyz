@@ -388,7 +388,14 @@ export async function processOnchainInvoice(
   } catch (error) {
     if (error instanceof Error && /not found|could not be found/i.test(error.message)) {
       const submittedAt = invoice.submitted_at ? Date.parse(invoice.submitted_at) : Date.now();
-      if (isPass && Date.now() - submittedAt > PASS_TX_NOT_FOUND_MS && !(await passAuthorizationUsed(admin, client, invoice.id))) {
+      if (isPass && Date.now() - submittedAt > PASS_TX_NOT_FOUND_MS && await passAuthorizationUsed(admin, client, invoice.id)) {
+        // The authorization was used, so USDC may well have moved, under a
+        // hash we don't have. Don't give up on it; tell an admin (once).
+        await recordPassPaymentException(admin, invoice, txHash,
+          "authorization used on chain but this transaction wasn't found after 24 hours; check the treasury and settle by hand");
+        return { status: "submitted", txHash };
+      }
+      if (isPass && Date.now() - submittedAt > PASS_TX_NOT_FOUND_MS) {
         // A pass whose transaction never showed up (dropped, or a hash that
         // isn't a payment) would otherwise hold the member's purchase
         // forever. Given up only if its gasless authorization (if any) was

@@ -286,7 +286,11 @@ begin
     for update skip locked
   loop
     v_job := null;
-    select j.status into v_job from onchain_relay_jobs j where j.invoice_id = v_id for update;
+    -- A relay job locked right now is being signed or sent: leave the
+    -- purchase for the next run rather than wait (a wallet revoke holds the
+    -- wallet lock that signing also needs).
+    select j.status into v_job from onchain_relay_jobs j where j.invoice_id = v_id for update skip locked;
+    continue when not found and exists (select 1 from onchain_relay_jobs j where j.invoice_id = v_id);
     continue when v_job in ('signed', 'submitting', 'submitted');
     update onchain_invoices set status = 'expired' where id = v_id;
     if v_job = 'prepared' then
@@ -328,6 +332,11 @@ as $$
   end
 $$;
 
+-- Best effort by design: an invoice or relay job locked at that moment (a
+-- submit or a signing in flight) is skipped, not waited on, since waiting
+-- could deadlock with them on the wallet lock. A purchase left behind on a
+-- revoked wallet can't be paid (the payer must be active) and is replaced
+-- when the member next starts a purchase (startOnchainPassPurchase).
 create function drop_pass_purchases_on_wallet_revoke()
 returns trigger
 language plpgsql

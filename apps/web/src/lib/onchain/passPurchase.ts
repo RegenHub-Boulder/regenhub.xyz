@@ -6,6 +6,8 @@ type ServiceClient = ReturnType<typeof createServiceClient>;
 
 /** How long an unpaid USDC day pass purchase holds its price before it expires. */
 export const ONCHAIN_PASS_INVOICE_MINUTES = 60;
+/** Hold left below which a new payment authorization isn't issued (relay prepare): enough to switch network and sign. */
+export const PASS_SIGNING_WINDOW_SECONDS = 5 * 60;
 
 // Still payable: an exception (wrong amount, or a reverted relay that is retried) too, until it expires.
 const UNPAID = ["open", "submitted", "detected", "exception"] as const;
@@ -77,9 +79,10 @@ export async function startOnchainPassPurchase(admin: ServiceClient, memberId: n
   if (walletError) throw walletError;
   if (!wallet) throw new PassPurchaseError("Connect and verify a wallet first.", 409);
 
-  // Finish off this member's stale purchase before looking: the cron does
-  // the same for everyone, this just doesn't wait for it.
-  const { error: expireError } = await admin.rpc("expire_onchain_pass_invoices", { p_now: now.toISOString(), p_member_id: memberId });
+  // Finish off this member's stale purchase before looking (the cron does
+  // the same for everyone): one too close to its end to sign counts as stale.
+  const staleBy = new Date(now.getTime() + PASS_SIGNING_WINDOW_SECONDS * 1000).toISOString();
+  const { error: expireError } = await admin.rpc("expire_onchain_pass_invoices", { p_now: staleBy, p_member_id: memberId });
   if (expireError) throw expireError;
 
   const findOpen = async () => {
@@ -90,15 +93,18 @@ export async function startOnchainPassPurchase(admin: ServiceClient, memberId: n
   };
   let open = await findOpen();
   if (open && open.wallet_id !== wallet.id) {
-    // Bought from a wallet that isn't the member's any more (the revoke
-    // trigger normally drops it): drop it unless a payment is on its way.
+    // Bought from a wallet that isn't the member's any more: the revoke
+    // trigger drops these, but skips one that was locked at that moment
+    // (063). It can't be paid from a revoked wallet; drop it unless a
+    // payment is on its way.
     const { error } = await admin.rpc("expire_onchain_pass_invoices", { p_now: "infinity", p_member_id: memberId, p_wallet_id: open.wallet_id });
     if (error) throw error;
     open = await findOpen();
   }
   if (open) {
-    return setup({ id: open.id, amount_cents: open.amount_cents, amount_usdc_micros: open.amount_usdc_micros,
-      due_at: open.due_at, status: open.status, submitted_tx_hash: open.submitted_tx_hash });
+    const invoice: Partial<typeof open> = { ...open };
+    delete invoice.wallet_id;
+    return setup(invoice as PassInvoiceSetup["invoice"]);
   }
 
   const { cents } = await dayPassCentsForMember(admin, memberId);
