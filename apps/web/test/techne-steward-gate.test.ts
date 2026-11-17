@@ -114,3 +114,21 @@ describe("GET /api/portal/events/standing", () => {
     expect((await call(ME)).status).toBe(404);
   });
 });
+
+describe("the staging portal session stays shut outside staging", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it("is 404 without the stand-in, for regenhub.xyz, and without a loopback Supabase", async () => {
+    const { GET } = await import("@/app/staging/portal-session/route");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://preview.test");
+    vi.stubEnv("SUPABASE_INTERNAL_URL", "http://127.0.0.1:18604");
+    vi.stubEnv("TECHNE_STAGING_STANDIN", "");
+    expect(GET().status).toBe(404);
+    vi.stubEnv("TECHNE_STAGING_STANDIN", "1");
+    expect(GET().status).toBe(307);
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://regenhub.xyz");
+    expect(GET().status).toBe(404);
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://preview.test");
+    vi.stubEnv("SUPABASE_INTERNAL_URL", "https://supabase.example");
+    expect(GET().status).toBe(404);
+  });
+});
