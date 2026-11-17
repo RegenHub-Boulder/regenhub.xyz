@@ -168,12 +168,15 @@ function toCollectiveEvent(r: TechneRecord<CalendarEventValue>): CollectiveEvent
 }
 
 /** How far back the series pages, event pages and the stewards' page read past nights. */
-export const PAST_WINDOW_MS = 365 * 86_400_000;
+const PAST_WINDOW_MS = 365 * 86_400_000;
 
 /** The start of that window, for `fetchCollectiveEvents({ after })`. */
 export function pastWindowStart(now = new Date()): string {
   return new Date(now.getTime() - PAST_WINDOW_MS).toISOString();
 }
+
+/** Pages of 100 a strict read follows before it gives up (2000 records). */
+const STRICT_MAX_PAGES = 20;
 
 export interface CollectiveEventsOptions {
   /** Only events starting after this instant (RFC 3339), or `$now`. */
@@ -182,7 +185,7 @@ export interface CollectiveEventsOptions {
   before?: string;
   /** Seconds the shared cache may hold the answer. */
   revalidate?: number;
-  /** A list cut short (a later page failed, or the page cap was hit) counts as unread: null. */
+  /** Any part unread (a failed page or read, or more than STRICT_MAX_PAGES pages) makes the answer null. */
   strict?: boolean;
 }
 
@@ -210,6 +213,8 @@ export async function fetchCollectiveEvents(opts: CollectiveEventsOptions = {}):
   const collective = regenosCollectiveDid();
   if (!collective || !isRegenosEventsConfigured()) return null;
   const read = { revalidate: opts.revalidate ?? 300 };
+  // A strict read may be long (a year of nights); it fails rather than come back short.
+  const strictRead = opts.strict ? { ...read, strict: true, maxPages: STRICT_MAX_PAGES } : read;
 
   // One role and one operator per leaf (techne.computer: "A leaf names one role and one operator").
   const win = dayAlignedWindow(opts);
@@ -228,15 +233,16 @@ export async function fetchCollectiveEvents(opts: CollectiveEventsOptions = {}):
       },
       order: "start",
     },
-    { ...read, strict: opts.strict },
+    strictRead,
   );
   const listings = listRecords<{ event?: { uri?: string } }>(
     { where: { all: [{ type: { is: EVENT_LISTING_NSID } }, { author: { is: collective } }] } },
-    read,
+    strictRead,
   );
   const [ownRows, listingRows] = await Promise.all([own, listings]);
   // The collective's own events are the calendar: without them, every confirmed night would look unposted.
   if (ownRows === null) return null;
+  if (opts.strict && listingRows === null) return null;
 
   const byUri = new Map<string, CollectiveEvent>();
   for (const r of ownRows ?? []) {
@@ -249,7 +255,9 @@ export async function fetchCollectiveEvents(opts: CollectiveEventsOptions = {}):
     ),
   ];
   for (let i = 0; i < listed.length; i += 100) {
-    for (const r of (await getRecords<CalendarEventValue>(listed.slice(i, i + 100), read)) ?? []) {
+    const rows = await getRecords<CalendarEventValue>(listed.slice(i, i + 100), read);
+    if (rows === null && opts.strict) return null;
+    for (const r of rows ?? []) {
       const e = toCollectiveEvent(r);
       if (e) byUri.set(e.uri, e);
     }

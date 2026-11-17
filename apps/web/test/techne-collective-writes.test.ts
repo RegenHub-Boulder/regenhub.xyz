@@ -104,10 +104,9 @@ describe("the batch", () => {
 describe("what the steward is told when a write doesn't land", () => {
   const config = { clientId: "https://preview.test/techne/client-metadata.json", redirectUri: "https://preview.test/techne/callback" };
   const batch = () => putEventBatch(HUB, night(), null);
-  it("a session the OAuth library gave up on means sign in again", async () => {
-    class TokenRevokedError extends Error {}
-    const s = { did: STEWARD, fetchHandler: async () => { throw new TokenRevokedError("revoked"); } };
-    expect(await sendCollectiveBatch(s, config, batch())).toMatchObject({ ok: false, kind: "signin" });
+  it("a 5xx from the proxy hop may have landed: check before retrying", async () => {
+    const s = { did: STEWARD, fetchHandler: async () => Response.json({ error: "UpstreamTimeout" }, { status: 504 }) };
+    expect(await sendCollectiveBatch(s, config, batch())).toMatchObject({ ok: false, kind: "unknown" });
   });
   it("no answer at all may have landed: check before retrying", async () => {
     const s = { did: STEWARD, fetchHandler: async () => { throw new TypeError("fetch failed"); } };

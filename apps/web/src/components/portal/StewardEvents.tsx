@@ -17,7 +17,7 @@ import type { TechneConfig } from "@/lib/techne/config";
 import type { Standing } from "@/lib/techne/standing";
 import type { PlannedNight } from "@/lib/series";
 import type { PostedNight } from "@/lib/seriesNights";
-import { STEWARD_PATH, grantsStewardWrites } from "@/lib/techne/session";
+import { STEWARD_PATH, grantsStewardWrites, isLoopbackPage } from "@/lib/techne/session";
 import { deleteEventBatch, putEventBatch, type EventInput, type ExistingEvent } from "@/lib/techne/collectiveEvents";
 import { sendCollectiveBatch } from "@/lib/techne/collectiveWrite";
 import type { Session } from "@/lib/techne/call";
@@ -137,7 +137,7 @@ export function StewardEvents({
     );
   }
 
-  if (!grantsStewardWrites(scope)) {
+  if (!isLoopbackPage() && !grantsStewardWrites(scope)) {
     return (
       <div className="space-y-4">
         {who}
@@ -175,7 +175,7 @@ export function StewardEvents({
         : out.kind === "signin"
           ? `Your Techne sign-in has lapsed. Sign out of Techne and sign in again, then retry. (${out.message})`
           : out.kind === "unknown"
-            ? `Couldn't tell whether Techne took that. Reload to see the calendar before trying again. (${out.message})`
+            ? `Couldn't tell whether Techne took that. Reload to see the calendar before trying again; if this keeps happening, sign out of Techne and sign in again. (${out.message})`
             : `Techne said no, nothing changed. Try again. (${out.message})`,
     );
   };

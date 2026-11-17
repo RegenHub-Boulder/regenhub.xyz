@@ -134,12 +134,14 @@ describe("fetchUpcomingRegenosEvents", () => {
   });
 
   it("with strict, a list cut short by a failed later page is unread, not short", async () => {
-    let calls = 0;
-    vi.stubGlobal("fetch", (async () => {
-      calls++;
-      if (calls % 2 === 1) return Response.json({ records: [{ uri: `at://${SCENE}/community.lexicon.calendar.event/a`, cid: "c", author: SCENE, collection: "community.lexicon.calendar.event", value: { name: "A", startsAt: "2026-12-01T01:30:00Z" } }], cursor: "next" });
-      return new Response("{}", { status: 503 });
+    // The own-events query answers page 1 with a cursor, then fails page 2; listings are empty.
+    vi.stubGlobal("fetch", (async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      if (!(url.searchParams.get("query") ?? "").includes("community.lexicon.calendar.event")) return Response.json({ records: [] });
+      if (url.searchParams.get("cursor")) return new Response("{}", { status: 503 });
+      return Response.json({ records: [{ uri: `at://${SCENE}/community.lexicon.calendar.event/a`, cid: "c", author: SCENE, collection: "community.lexicon.calendar.event", value: { name: "A", startsAt: "2026-12-01T01:30:00Z" } }], cursor: "next" });
     }) as typeof fetch);
+    expect(await fetchCollectiveEvents({ revalidate: 0 })).toHaveLength(1); // not strict: the short list
     expect(await fetchCollectiveEvents({ strict: true, revalidate: 0 })).toBeNull();
   });
 

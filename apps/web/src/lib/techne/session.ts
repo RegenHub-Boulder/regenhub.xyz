@@ -44,6 +44,12 @@ export function grantsStewardWrites(granted: string | null | undefined): boolean
 
 let standInFor: string | null = null;
 
+/** A localhost page: techne-sdk signs in as atproto's loopback client there (dev only). Its token can't
+ *  carry the posting rpc scope, so the steward page doesn't ask for it; the write's answer is the check. */
+export function isLoopbackPage(): boolean {
+  return typeof location !== "undefined" && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+}
+
 export async function authOptions(config: TechneConfig, level: SignInLevel = "member"): Promise<ClientOptions> {
   if (config.standIn && standInFor !== config.standIn) {
     const [{ setOAuthClientFactory }, { standInClient }] = await Promise.all([
@@ -57,10 +63,9 @@ export async function authOptions(config: TechneConfig, level: SignInLevel = "me
   // an explicit scope list (keyed to the https client id) would be wrong there, so it builds its own from
   // `types`. The loopback id is built from its scope, so both levels use one list (one client, one
   // session); posting as the collective then lacks its rpc scope: dev only.
-  const loopback = typeof location !== "undefined" && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
   return {
     clientId: config.clientId,
-    ...(loopback && !config.standIn
+    ...(isLoopbackPage() && !config.standIn
       ? { types: [...RSVP_TYPES, ...COLLECTIVE_EVENT_TYPES] }
       : { scope: signInScope(config, level) }),
     ...(config.pds ? { pds: config.pds } : {}),
