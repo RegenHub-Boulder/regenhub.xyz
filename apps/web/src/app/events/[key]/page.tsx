@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { eventDetailsLinkText } from "@/lib/techne/rsvpCopy";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, CalendarDays, CalendarPlus, MapPin } from "lucide-react";
@@ -70,7 +71,7 @@ export default async function SeriesPage({ params }: PageProps) {
           </p>
           {o.next?.url ? (
             <Link href={o.next.url} className="inline-block text-sage hover:underline">
-              Details and RSVP →
+              {eventDetailsLinkText()}
             </Link>
           ) : (
             <p className="text-sm text-muted">Open to anyone. The calendar feed below keeps you up to date.</p>

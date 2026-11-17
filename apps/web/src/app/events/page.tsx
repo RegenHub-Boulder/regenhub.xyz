@@ -6,6 +6,7 @@ import { fetchUpcomingEvents } from "@/lib/events";
 import { isRegenosEventsConfigured } from "@/lib/regenos/config";
 import { CalendarSubscribeNote, EventList, LumaEmbed } from "@/components/events/EventList";
 import { SeriesCards } from "@/components/events/SeriesCards";
+import { eventsPageRsvpLine } from "@/lib/techne/rsvpCopy";
 import { fetchSeriesOverviews } from "@/lib/seriesEvents";
 
 /**
@@ -81,7 +82,7 @@ export default async function EventsPage() {
 
         <div className="glass-panel p-6 text-center space-y-3">
           <p className="text-muted">
-            RSVP on each event&apos;s page with a Techne account. Want to work here too?
+            {eventsPageRsvpLine()}
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link href="/portal">
