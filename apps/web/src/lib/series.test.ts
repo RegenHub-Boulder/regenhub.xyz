@@ -25,6 +25,7 @@ describe("series keys", () => {
     expect(seriesOf({ name: "agents night: local models" })?.slug).toBe("agents-night");
     expect(seriesOf({ name: "Civic Tech Night — transit data" })?.slug).toBe("civic-tech-night");
     expect(seriesOf({ name: "Civic Tech Night | Dec" })?.slug).toBe("civic-tech-night");
+    expect(seriesOf({ name: "Agents Night:" })?.slug).toBe("agents-night");
   });
 
   it("does not claim near-misses", () => {

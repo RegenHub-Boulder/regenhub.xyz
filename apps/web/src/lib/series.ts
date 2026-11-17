@@ -165,7 +165,7 @@ export function seriesOf(event: SeriesMatchable): Series | null {
   if (!name) return null;
   for (const s of SERIES) {
     const base = s.name.toLowerCase();
-    if (name === base || topicOf(s, event.name ?? "") !== null) return s;
+    if (name === base || /^\s*[:\-–—|]/.test(name.startsWith(base) ? name.slice(base.length) : "x")) return s;
   }
   return null;
 }
