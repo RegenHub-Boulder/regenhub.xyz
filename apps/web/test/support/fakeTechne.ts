@@ -5,7 +5,9 @@
  * network edge (global fetch) and run every line of our own code.
  *
  * Supports the query grammar the site sends: `all`/`any`/`not` of `type`,
- * `author`, `subject` (`is`/`in`) and `start` (`after`/`before`), `order: "start"`.
+ * `author`, `subject`, `references` (`is`/`in`) and `start` (`after`/`before`), `order: "start"`.
+ * `references` follows each type's registry query document: a membership's `subject` as
+ * `at://{did}` (registry.getType pub.techne.draft.membership), an event's `locations[].uri`.
  */
 
 class BadQuery extends Error {}
@@ -25,6 +27,15 @@ function collectionOf(uri: string) {
   return uri.split("/")[3] ?? "";
 }
 
+function referencesOf(r: FakeRecord): string[] {
+  const c = collectionOf(r.uri);
+  if (c === "pub.techne.draft.membership") return typeof r.value.subject === "string" && r.value.subject.startsWith("did:") ? [`at://${r.value.subject}`] : [];
+  if (c === "community.lexicon.calendar.event") {
+    return ((r.value.locations as { uri?: string }[] | undefined) ?? []).map((l) => l.uri).filter((u): u is string => !!u);
+  }
+  return [];
+}
+
 function matches(r: FakeRecord, node: Node, now: number): boolean {
   if (Array.isArray(node.all)) return (node.all as Node[]).every((n) => matches(r, n, now));
   if (Array.isArray(node.any)) return (node.any as Node[]).some((n) => matches(r, n, now));
@@ -33,6 +44,12 @@ function matches(r: FakeRecord, node: Node, now: number): boolean {
   // The real platform refuses these (400 "start takes exactly one operator"); so does the fake.
   if (entries.length !== 1 || Object.keys(entries[0][1]).length !== 1) throw new BadQuery("a leaf names one role and one operator");
   const [[role, cond]] = entries;
+  if (role === "references") {
+    const refs = referencesOf(r);
+    if (cond.is !== undefined) return refs.includes(String(cond.is));
+    if (Array.isArray(cond.in)) return refs.some((x) => (cond.in as string[]).includes(x));
+    return false;
+  }
   const value =
     role === "type"
       ? collectionOf(r.uri)
