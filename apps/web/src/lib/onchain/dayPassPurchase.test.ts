@@ -47,7 +47,6 @@ import { POST as buyWithCard } from "@/app/api/portal/buy-passes/route";
 import { POST as submitPayment } from "@/app/api/portal/onchain/submit/route";
 import { POST as onchainCron } from "@/app/api/cron/onchain-billing/route";
 import { POST as prepareRelay } from "@/app/api/portal/onchain/relay/prepare/route";
-import { abandonPassPurchasesOnWalletChange } from "@/lib/onchain/walletMove";
 
 const WALLET = "0x1111111111111111111111111111111111111111" as const;
 const TX = `0x${"a".repeat(64)}`;
@@ -302,6 +301,21 @@ describe("stuck or stale purchases", () => {
     expect(await balance()).toBe(0);
   });
 
+  it("never gives up on a transaction whose gasless authorization was used on chain", async () => {
+    const { body } = await start();
+    await db.sql("update onchain_invoices set status = 'submitted', submitted_tx_hash = $2, submitted_at = now() - interval '25 hours' where id = $1", [body.invoice.id, TX]);
+    await db.sql(`insert into onchain_relay_jobs(invoice_id, member_id, wallet_id, from_address, token_contract, treasury_address,
+        amount_usdc_micros, authorization_nonce, valid_after, valid_before, status, authorization_from_block, submitted_tx_hash)
+      values ($1, 7, 3, $2, $3, $4, 30000000, $5, 0, 1, 'submitted', 1, $6)`,
+    [body.invoice.id, WALLET, NATIVE_USDC_ADDRESS, TREASURY_ADDRESS, `0x${"e".repeat(64)}`, TX]);
+    vi.mocked(getOpPublicClient).mockReturnValue({
+      getTransactionReceipt: async () => { throw new Error("Transaction receipt could not be found"); },
+      readContract: async () => true, // authorizationState: used, so USDC may have moved
+    } as never);
+    expect(await processOnchainInvoice(db as never, body.invoice.id)).toMatchObject({ status: "submitted" });
+    expect((await one("select status, submitted_tx_hash from onchain_invoices where id = $1", [body.invoice.id]))).toEqual({ status: "submitted", submitted_tx_hash: TX });
+  });
+
   it("keeps waiting on a transaction submitted recently", async () => {
     const { body } = await start();
     await db.sql("update onchain_invoices set status = 'submitted', submitted_tx_hash = $2, submitted_at = now() where id = $1", [body.invoice.id, TX]);
@@ -313,7 +327,8 @@ describe("stuck or stale purchases", () => {
 
   it("won't prepare a payment once the price hold has ended", async () => {
     const { body } = await start();
-    await db.sql("update onchain_invoices set due_at = now() - interval '1 minute' where id = $1", [body.invoice.id]);
+    // Two minutes left: too little to switch network and sign.
+    await db.sql("update onchain_invoices set due_at = now() + interval '2 minutes' where id = $1", [body.invoice.id]);
     const res = await prepareRelay(new Request("http://localhost/api/portal/onchain/relay/prepare", {
       method: "POST", body: JSON.stringify({ invoice_id: body.invoice.id }),
     }));
@@ -322,17 +337,25 @@ describe("stuck or stale purchases", () => {
     expect(await db.sql("select invoice_id from onchain_relay_jobs")).toEqual([]);
   });
 
-  it("drops an unpaid purchase when the member switches to another wallet, and only then", async () => {
+  it("linking another wallet drops an unpaid purchase made from the old one, never one with a payment on its way", async () => {
+    const OTHER = "0x2222222222222222222222222222222222222222";
     const { body } = await start();
-    expect(await abandonPassPurchasesOnWalletChange(db as never, 7, WALLET)).toBeNull(); // same wallet: kept
-    expect((await one("select status from onchain_invoices where id = $1", [body.invoice.id])).status).toBe("open");
-    expect(await abandonPassPurchasesOnWalletChange(db as never, 7, "0x2222222222222222222222222222222222222222")).toBeNull();
-    expect((await one("select status from onchain_invoices where id = $1", [body.invoice.id])).status).toBe("expired");
+    // The same wallet again (every "Pay with USDC" re-proves it): the purchase is resumed.
+    expect((await db.rpc("bind_member_wallet", { p_member_id: 7, p_address: WALLET, p_verification_method: "signature" })).error).toBeNull();
+    expect((await start()).body.invoice.id).toBe(body.invoice.id);
 
-    // One with a payment on its way is never dropped.
+    // Another wallet: the old purchase goes with the old wallet, and the next one pays from the new.
+    expect((await db.rpc("bind_member_wallet", { p_member_id: 7, p_address: OTHER, p_verification_method: "signature" })).error).toBeNull();
+    expect((await one("select status from onchain_invoices where id = $1", [body.invoice.id])).status).toBe("expired");
     const next = await start();
+    expect(next.body.invoice.id).not.toBe(body.invoice.id);
+    expect((await one("select w.address from onchain_invoices i join member_wallets w on w.id = i.wallet_id where i.id = $1", [next.body.invoice.id])).address)
+      .toBe(OTHER);
+
+    // With a payment on its way, the switch is refused and the purchase kept.
     await db.sql("update onchain_invoices set status = 'submitted', submitted_tx_hash = $2 where id = $1", [next.body.invoice.id, TX]);
-    await abandonPassPurchasesOnWalletChange(db as never, 7, null);
+    const refused = await db.rpc("bind_member_wallet", { p_member_id: 7, p_address: WALLET, p_verification_method: "signature" });
+    expect(refused.error?.message).toMatch(/current wallet in use: open_invoice/);
     expect((await one("select status from onchain_invoices where id = $1", [next.body.invoice.id])).status).toBe("submitted");
   });
 });

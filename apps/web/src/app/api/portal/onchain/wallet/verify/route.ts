@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getAddress, isAddress, verifyMessage, type Hex } from "viem";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { requirePortalMember } from "@/lib/onchain/portalMember";
-import { abandonPassPurchasesOnWalletChange, WALLET_LINKED_ELSEWHERE, walletInUse, walletRpcErrorResponse } from "@/lib/onchain/walletMove";
+import { WALLET_LINKED_ELSEWHERE, walletInUse, walletRpcErrorResponse } from "@/lib/onchain/walletMove";
 
 export async function POST(request: Request) {
   const session = await requirePortalMember();
@@ -49,12 +49,6 @@ export async function POST(request: Request) {
   if (consumeError || !consumed) {
     return NextResponse.json({ error: "Wallet challenge was already consumed" }, { status: 409 });
   }
-
-  // Switching to a different wallet drops an unpaid USDC day pass purchase
-  // tied to the old one (only one with nothing on its way), which would
-  // otherwise block the switch until it expired. A new purchase uses the new wallet.
-  const abandoned = await abandonPassPurchasesOnWalletChange(admin, session.member.id, address);
-  if (abandoned) return abandoned;
 
   // The wallet's own signature on a move challenge is the consent to move it.
   // A move challenge with no other holder recorded just links the wallet.

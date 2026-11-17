@@ -13,7 +13,10 @@
 --
 -- Additive: existing rows become kind 'membership' and keep their behaviour.
 -- Reverse (only while no day_pass invoice exists):
---   drop function expire_onchain_pass_invoices(timestamptz, integer);
+--   drop trigger member_wallets_drop_pass_purchases on member_wallets;
+--   drop function drop_pass_purchases_on_wallet_revoke();
+--   drop function expire_onchain_pass_invoices(timestamptz, integer, bigint);
+--   re-run 058's member_payment_blocker;
 --   drop trigger onchain_invoices_active_pass_wallet on onchain_invoices;
 --   drop function assert_pass_invoice_wallet_active();
 --   recreate 057's price_onchain_invoice and 058's onchain_invoices_active_member_wallet
@@ -260,9 +263,10 @@ $$;
 -- (credit and reprice order), so it can't cross a submit or a signing: the
 -- loser of each race sees the other's committed state. An expired purchase
 -- is final; a payment reported for it afterwards is kept for an admin.
--- p_member_id: only that member's (a purchase start, or a wallet change, which
--- passes p_now => 'infinity' to drop an unpaid purchase tied to the old wallet).
-create function expire_onchain_pass_invoices(p_now timestamptz default now(), p_member_id integer default null)
+-- p_member_id / p_wallet_id: only that member's, or only those paying from
+-- that wallet (a wallet revoke passes p_now => 'infinity', see below).
+create function expire_onchain_pass_invoices(p_now timestamptz default now(), p_member_id integer default null,
+  p_wallet_id bigint default null)
 returns setof bigint
 language plpgsql
 security definer
@@ -277,6 +281,7 @@ begin
     where i.kind = 'day_pass' and i.status in ('open', 'exception')
       and i.submitted_tx_hash is null and i.due_at <= p_now
       and (p_member_id is null or i.member_id = p_member_id)
+      and (p_wallet_id is null or i.wallet_id = p_wallet_id)
     order by i.id
     for update skip locked
   loop
@@ -293,8 +298,56 @@ begin
 end;
 $$;
 
+-- A wallet change never waits on a pass purchase with nothing on its way:
+-- 058's guard (member_payment_blocker) ignores it, and when its wallet is
+-- revoked (bind to another address, move, unlink) it is dropped in the same
+-- transaction, after the wallet functions have locked the wallet and checked
+-- the guard. One with a submitted transaction or a signed authorization still
+-- blocks, as any unsettled payment does.
+create or replace function member_payment_blocker(p_member_id integer)
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case
+    when exists (
+      select 1 from onchain_invoices i
+      where i.member_id = p_member_id
+        and i.status in ('open', 'submitted', 'detected', 'exception')
+        and not (i.kind = 'day_pass' and i.status in ('open', 'exception') and i.submitted_tx_hash is null
+          and not exists (select 1 from onchain_relay_jobs j
+            where j.invoice_id = i.id and j.status in ('signed', 'submitting', 'submitted')))
+    ) then 'open_invoice'
+    when exists (
+      select 1 from onchain_relay_jobs j
+      where j.member_id = p_member_id
+        and j.status in ('signed', 'submitting')
+    ) then 'relay_in_flight'
+  end
+$$;
+
+create function drop_pass_purchases_on_wallet_revoke()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform expire_onchain_pass_invoices('infinity', new.member_id, new.id);
+  return null;
+end;
+$$;
+
+create trigger member_wallets_drop_pass_purchases
+  after update of revoked_at on member_wallets
+  for each row when (old.revoked_at is null and new.revoked_at is not null)
+  execute function drop_pass_purchases_on_wallet_revoke();
+
 revoke all on function credit_onchain_invoice(bigint, text, integer, bigint, text, text, text, text, bigint, text, jsonb) from public, anon, authenticated;
 grant execute on function credit_onchain_invoice(bigint, text, integer, bigint, text, text, text, text, bigint, text, jsonb) to service_role;
-revoke all on function expire_onchain_pass_invoices(timestamptz, integer) from public, anon, authenticated;
-grant execute on function expire_onchain_pass_invoices(timestamptz, integer) to service_role;
+revoke all on function expire_onchain_pass_invoices(timestamptz, integer, bigint) from public, anon, authenticated;
+grant execute on function expire_onchain_pass_invoices(timestamptz, integer, bigint) to service_role;
+revoke all on function drop_pass_purchases_on_wallet_revoke() from public, anon, authenticated;
 revoke all on function assert_pass_invoice_wallet_active() from public, anon, authenticated;

@@ -2,6 +2,7 @@ import { withLockWriter } from "@regenhub/shared";
 import {
   decodeEventLog,
   getAddress,
+  parseAbi,
   parseAbiItem,
   type Address,
   type Hash,
@@ -285,6 +286,38 @@ export async function finishOnchainPlanSwitches(admin: ServiceClient, now = new 
   return results;
 }
 
+const AUTHORIZATION_STATE_ABI = parseAbi(["function authorizationState(address authorizer, bytes32 nonce) view returns (bool)"]);
+
+/** Whether this pass invoice's gasless authorization (if it has one) has been used on chain: then USDC may have moved. */
+async function passAuthorizationUsed(admin: ServiceClient, client: ReturnType<typeof getOpPublicClient>, invoiceId: number) {
+  const { data: job, error } = await admin.from("onchain_relay_jobs")
+    .select("from_address, authorization_nonce, token_contract").eq("invoice_id", invoiceId).maybeSingle();
+  if (error) throw error;
+  if (!job) return false;
+  return client.readContract({
+    address: getAddress(job.token_contract),
+    abi: AUTHORIZATION_STATE_ABI,
+    functionName: "authorizationState",
+    args: [getAddress(job.from_address), job.authorization_nonce as Hash],
+  });
+}
+
+/** A pass transaction that wasn't credited, kept once for an admin to check on chain and refund. */
+async function recordPassPaymentException(
+  admin: ServiceClient,
+  invoice: { id: number; member_id: number; amount_usdc_micros: number },
+  txHash: string,
+  reason: string,
+) {
+  await logAction({
+    action: AuditAction.ONCHAIN_PASS_PAYMENT_EXCEPTION,
+    actorMemberId: invoice.member_id,
+    target: { table: "members", id: invoice.member_id },
+    idempotencyKey: `onchain-pass-exception:${invoice.id}:${txHash}`,
+    payload: { invoice_id: invoice.id, tx_hash: txHash, reason, expected_usdc_micros: invoice.amount_usdc_micros },
+  }, admin);
+}
+
 /** The card path's receipt (passFulfillment.ts), for a pass paid in USDC. Best effort, as there. */
 async function sendPassReceipt(admin: ServiceClient, memberId: number, amountCents: number) {
   try {
@@ -355,25 +388,24 @@ export async function processOnchainInvoice(
   } catch (error) {
     if (error instanceof Error && /not found|could not be found/i.test(error.message)) {
       const submittedAt = invoice.submitted_at ? Date.parse(invoice.submitted_at) : Date.now();
-      if (isPass && Date.now() - submittedAt > PASS_TX_NOT_FOUND_MS) {
+      if (isPass && Date.now() - submittedAt > PASS_TX_NOT_FOUND_MS && !(await passAuthorizationUsed(admin, client, invoice.id))) {
         // A pass whose transaction never showed up (dropped, or a hash that
-        // isn't a payment) would otherwise hold the member's purchase and
-        // wallet forever. Not credited; kept for an admin; the purchase can
-        // then expire. A relayed authorization is long past its window.
+        // isn't a payment) would otherwise hold the member's purchase
+        // forever. Given up only if its gasless authorization (if any) was
+        // never used on chain; not credited; kept for an admin; the purchase
+        // can then expire.
         const reason = "transaction not found on chain after 24 hours";
-        await admin.from("onchain_invoices")
+        const { data: gaveUp, error: giveUpError } = await admin.from("onchain_invoices")
           .update({ status: "exception", exception_reason: reason, submitted_tx_hash: null, submitted_at: null })
-          .eq("id", invoice.id).eq("submitted_tx_hash", txHash);
-        await admin.from("onchain_relay_jobs")
+          .eq("id", invoice.id).eq("submitted_tx_hash", txHash).in("status", ["submitted", "detected"])
+          .select("id").maybeSingle();
+        if (giveUpError) throw giveUpError;
+        if (!gaveUp) return { status: "submitted", txHash }; // paid or changed meanwhile
+        const { error: jobError } = await admin.from("onchain_relay_jobs")
           .update({ status: "expired", last_error: reason })
           .eq("invoice_id", invoice.id).eq("submitted_tx_hash", txHash);
-        await logAction({
-          action: AuditAction.ONCHAIN_PASS_PAYMENT_EXCEPTION,
-          actorMemberId: invoice.member_id,
-          target: { table: "members", id: invoice.member_id },
-          idempotencyKey: `onchain-pass-exception:${invoice.id}:${txHash}`,
-          payload: { invoice_id: invoice.id, tx_hash: txHash, reason, expected_usdc_micros: invoice.amount_usdc_micros },
-        }, admin);
+        if (jobError) throw jobError;
+        await recordPassPaymentException(admin, invoice, txHash, reason);
         return { status: "exception", txHash, reason };
       }
       return { status: "submitted", txHash };
@@ -430,17 +462,9 @@ export async function processOnchainInvoice(
       .update({ status: "expired", last_error: reason })
       .eq("invoice_id", invoice.id)
       .eq("submitted_tx_hash", txHash);
-    if (isPass) {
-      // The invoice clears its tx hash so a correct payment can follow; keep
-      // this one (once) for an admin to check on chain and refund.
-      await logAction({
-        action: AuditAction.ONCHAIN_PASS_PAYMENT_EXCEPTION,
-        actorMemberId: invoice.member_id,
-        target: { table: "members", id: invoice.member_id },
-        idempotencyKey: `onchain-pass-exception:${invoice.id}:${txHash}`,
-        payload: { invoice_id: invoice.id, tx_hash: txHash, reason, expected_usdc_micros: invoice.amount_usdc_micros },
-      }, admin);
-    }
+    // The invoice clears its tx hash so a correct payment can follow; keep
+    // this one (once) for an admin to check on chain and refund.
+    if (isPass) await recordPassPaymentException(admin, invoice, txHash, reason);
     return { status: "exception", txHash, reason };
   }
 

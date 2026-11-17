@@ -82,16 +82,24 @@ export async function startOnchainPassPurchase(admin: ServiceClient, memberId: n
   const { error: expireError } = await admin.rpc("expire_onchain_pass_invoices", { p_now: now.toISOString(), p_member_id: memberId });
   if (expireError) throw expireError;
 
-  const { data: open, error: openError } = await admin
-    .from("onchain_invoices")
-    .select(SETUP_COLUMNS)
-    .eq("member_id", memberId)
-    .eq("kind", "day_pass")
-    .in("status", [...UNPAID])
-    .maybeSingle();
-  if (openError) throw openError;
-
-  if (open) return setup(open as PassInvoiceSetup["invoice"]);
+  const findOpen = async () => {
+    const { data, error } = await admin.from("onchain_invoices").select(`${SETUP_COLUMNS}, wallet_id`)
+      .eq("member_id", memberId).eq("kind", "day_pass").in("status", [...UNPAID]).maybeSingle();
+    if (error) throw error;
+    return data as (PassInvoiceSetup["invoice"] & { wallet_id: number }) | null;
+  };
+  let open = await findOpen();
+  if (open && open.wallet_id !== wallet.id) {
+    // Bought from a wallet that isn't the member's any more (the revoke
+    // trigger normally drops it): drop it unless a payment is on its way.
+    const { error } = await admin.rpc("expire_onchain_pass_invoices", { p_now: "infinity", p_member_id: memberId, p_wallet_id: open.wallet_id });
+    if (error) throw error;
+    open = await findOpen();
+  }
+  if (open) {
+    return setup({ id: open.id, amount_cents: open.amount_cents, amount_usdc_micros: open.amount_usdc_micros,
+      due_at: open.due_at, status: open.status, submitted_tx_hash: open.submitted_tx_hash });
+  }
 
   const { cents } = await dayPassCentsForMember(admin, memberId);
   const { data: invoice, error: insertError } = await admin
