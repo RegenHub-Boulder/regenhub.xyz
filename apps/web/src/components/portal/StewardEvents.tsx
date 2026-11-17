@@ -137,7 +137,8 @@ export function StewardEvents({
     );
   }
 
-  if (!isLoopbackPage() && !grantsStewardWrites(scope)) {
+  // Real localhost dev (not the staging stand-in) can't carry the scope; there the write's answer decides.
+  if (!(isLoopbackPage() && !config.standIn) && !grantsStewardWrites(scope)) {
     return (
       <div className="space-y-4">
         {who}

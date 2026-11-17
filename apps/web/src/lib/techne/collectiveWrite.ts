@@ -30,7 +30,8 @@ export async function sendCollectiveBatch(session: Session, config: TechneConfig
   } catch (err) {
     if (err instanceof XrpcError && err.status === 403) return { ok: false, kind: "refused", message: err.message };
     if (err instanceof XrpcError && err.status === 401) return { ok: false, kind: "signin", message: err.message };
-    if (err instanceof XrpcError && err.status < 500) return { ok: false, kind: "failed", message: err.message };
+    // A 408 is a timeout on the way: like a 5xx, the platform may have applied it.
+    if (err instanceof XrpcError && err.status < 500 && err.status !== 408) return { ok: false, kind: "failed", message: err.message };
     return { ok: false, kind: "unknown", message: err instanceof Error ? err.message : "no answer from Techne" };
   }
   // Courtesy hints: the platform also learns of the records from the network.

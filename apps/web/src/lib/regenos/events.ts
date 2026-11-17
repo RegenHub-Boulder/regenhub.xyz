@@ -235,9 +235,11 @@ export async function fetchCollectiveEvents(opts: CollectiveEventsOptions = {}):
     },
     strictRead,
   );
+  // Listings have no date to window on and grow with every night posted (each own event has its `-ctx`
+  // listing), so they are never read strictly to the end: only a failed first page counts as unread.
   const listings = listRecords<{ event?: { uri?: string } }>(
     { where: { all: [{ type: { is: EVENT_LISTING_NSID } }, { author: { is: collective } }] } },
-    strictRead,
+    read,
   );
   const [ownRows, listingRows] = await Promise.all([own, listings]);
   // The collective's own events are the calendar: without them, every confirmed night would look unposted.
@@ -249,18 +251,22 @@ export async function fetchCollectiveEvents(opts: CollectiveEventsOptions = {}):
     const e = toCollectiveEvent(r);
     if (e) byUri.set(e.uri, e);
   }
+  // Only events from other calendars: the collective's own are read above, in their window.
+  const ownPrefix = `at://${collective}/${EVENT_NSID}/`;
   const listed = [
     ...new Set(
-      (listingRows ?? []).map((l) => l.value.event?.uri).filter((u): u is string => !!u && !byUri.has(u)),
+      (listingRows ?? [])
+        .map((l) => l.value.event?.uri)
+        .filter((u): u is string => !!u && !u.startsWith(ownPrefix) && !byUri.has(u)),
     ),
   ];
-  for (let i = 0; i < listed.length; i += 100) {
-    const rows = await getRecords<CalendarEventValue>(listed.slice(i, i + 100), read);
-    if (rows === null && opts.strict) return null;
-    for (const r of rows ?? []) {
-      const e = toCollectiveEvent(r);
-      if (e) byUri.set(e.uri, e);
-    }
+  const chunks: string[][] = [];
+  for (let i = 0; i < listed.length; i += 100) chunks.push(listed.slice(i, i + 100));
+  const answers = await Promise.all(chunks.map((c) => getRecords<CalendarEventValue>(c, read)));
+  if (opts.strict && answers.some((a) => a === null)) return null;
+  for (const r of answers.flatMap((a) => a ?? [])) {
+    const e = toCollectiveEvent(r);
+    if (e) byUri.set(e.uri, e);
   }
 
   const afterMs = opts.after && opts.after !== "$now" ? Date.parse(opts.after) : opts.after ? Date.now() : null;
