@@ -58,7 +58,7 @@ async function linkWallet(wallet: PrivateKeyAccount, intent?: "membership" | "da
   });
 }
 
-function chainPays(amountMicros: bigint, from: `0x${string}`) {
+function chainPays(amountMicros: bigint, from: `0x${string}`, sentAt = Date.now()) {
   const transfer = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
   vi.mocked(getOpPublicClient).mockReturnValue({
     getTransactionReceipt: async () => ({
@@ -68,7 +68,8 @@ function chainPays(amountMicros: bigint, from: `0x${string}`) {
         topics: encodeEventTopics({ abi: [transfer], eventName: "Transfer", args: { from, to: TREASURY_ADDRESS } }),
       }],
     }),
-    getBlock: async () => ({ number: 0n, hash: `0x${"c".repeat(64)}`, timestamp: 0n }),
+    // The transfer's block: sent now, unless a test says when.
+    getBlock: async () => ({ number: 0n, hash: `0x${"c".repeat(64)}`, timestamp: BigInt(Math.floor(sentAt / 1000)) }),
   } as never);
 }
 

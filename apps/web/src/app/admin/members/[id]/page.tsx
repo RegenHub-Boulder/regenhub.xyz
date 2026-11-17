@@ -15,6 +15,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Key, AlertCircle, ShieldCheck, Mail, AtSign } from "lucide-react";
 import { planLabel } from "@/lib/plans";
 import { isLiveSubscription } from "@/lib/subscriptionStatus";
+import { membershipInvoices } from "@/lib/onchain/invoiceKind";
 
 export const metadata = { title: "Edit Member — Admin" };
 
@@ -92,14 +93,16 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
       .eq("target_id", String(member.id))
       .order("created_at", { ascending: false })
       .limit(50),
-    adminClient
-      .from("onchain_invoices")
-      .select("id, kind, period_start, period_end, amount_cents, status")
-      .eq("member_id", member.id)
-      // The cancel card's invoices are membership periods; USDC day passes show under purchases and activity.
-      .eq("kind", "membership")
-      .order("period_start", { ascending: false })
-      .limit(6),
+    // The cancel card's invoices are membership periods; USDC day passes show under purchases and activity.
+    membershipInvoices((kindColumn) => {
+      const query = adminClient
+        .from("onchain_invoices")
+        .select("id, period_start, period_end, amount_cents, status")
+        .eq("member_id", member.id);
+      return (kindColumn ? query.eq("kind", "membership") : query)
+        .order("period_start", { ascending: false })
+        .limit(6);
+    }),
   ]);
   const actorIds = Array.from(
     new Set((rawActions ?? []).map((r) => r.actor_member_id).filter((id): id is number => id != null)),

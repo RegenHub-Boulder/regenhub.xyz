@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/admin";
 import { dayPassCentsForMember } from "@/lib/dayPassPrice";
 import { NATIVE_USDC_ADDRESS, ONCHAIN_CHAIN_ID, TREASURY_ADDRESS } from "./config";
+import { isMissingFunction } from "./invoiceKind";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -98,6 +99,8 @@ export async function startOnchainPassPurchase(admin: ServiceClient, memberId: n
   // Finish off this member's stale purchase before looking: the cron does
   // the same for everyone, this just doesn't wait for it.
   const { error: expireError } = await admin.rpc("expire_onchain_pass_invoices", { p_now: now.toISOString(), p_member_id: memberId });
+  // Deployed ahead of migration 063 (the page hides the button then, but a tab may be open).
+  if (isMissingFunction(expireError)) throw new PassPurchaseError("Paying for a day pass in USDC isn't open yet. Pay with card for now.", 503);
   if (expireError) throw expireError;
 
   const findOpen = async () => {

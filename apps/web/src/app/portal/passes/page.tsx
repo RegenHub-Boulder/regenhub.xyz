@@ -12,6 +12,7 @@ import { CryptoPassButton } from "@/components/portal/CryptoPassButton";
 import { isContributingMember as contributingMember } from "@/lib/dayPassPrice";
 import { dayPassCentsFor } from "@/lib/plans";
 import { isGaslessRelayConfigured } from "@/lib/onchain/config";
+import { onchainPassesReady } from "@/lib/onchain/invoiceKind";
 import { Ticket, Clock, ShoppingCart, Key, ArrowRight, CheckCircle, XCircle, Receipt, Gift } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -86,7 +87,7 @@ export default async function PassesPage({ searchParams }: PageProps) {
 
   const isFullMember = member.member_type !== "day_pass";
 
-  const [{ data: activeCodes }, { data: recentPurchases }, { data: recentGrants }, isContributingMember] = await Promise.all([
+  const [{ data: activeCodes }, { data: recentPurchases }, { data: recentGrants }, isContributingMember, passesReady] = await Promise.all([
     supabase
       .from("day_codes")
       .select("*")
@@ -95,7 +96,8 @@ export default async function PassesPage({ searchParams }: PageProps) {
       .order("expires_at", { ascending: true, nullsFirst: false }),
     supabase
       .from("purchases")
-      .select("id, kind, amount_cents, passes_granted, onchain_invoice_id, created_at")
+      // `*`: `onchain_invoice_id` arrives with migration 063.
+      .select("*")
       .eq("member_id", member.id)
       .order("created_at", { ascending: false })
       .limit(10),
@@ -107,10 +109,12 @@ export default async function PassesPage({ searchParams }: PageProps) {
       .limit(10),
     // Contributing-member rate ($25 vs $30): the same check both purchase routes use.
     contributingMember(supabase, member.id).catch(() => false),
+    // USDC passes need migration 063; until it runs, offer the card only.
+    onchainPassesReady(supabase),
   ]);
   const passCents = dayPassCentsFor(isContributingMember);
   // The USDC flow is the gasless one (as on /membership), so it needs the relayer too.
-  const usdcEnabled = isGaslessRelayConfigured();
+  const usdcEnabled = isGaslessRelayConfigured() && passesReady;
   // The USDC flow lands here with ?onchain=paid once the server credited the
   // pass; say so only if a USDC purchase really landed in the last few minutes.
   const usdcJustLanded = params.onchain === "paid" && (recentPurchases ?? []).some(

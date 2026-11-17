@@ -277,10 +277,14 @@ async function assertRelayJobStillPayable(admin: ServiceClient, job: RelayJob) {
   assertRelayJobMatchesConfig(job);
   const { data: invoice, error: invoiceError } = await admin
     .from("onchain_invoices")
-    .select("member_id, subscription_id, kind, wallet_id, status, submitted_tx_hash, amount_usdc_micros, token_contract, treasury_address")
+    // `*`, not a column list: before migration 063 there is no kind/wallet_id
+    // (every invoice is a membership, paid from its subscription's wallet).
+    .select("*")
     .eq("id", job.invoice_id)
-    .single();
-  if (invoiceError || !invoice) throw new InvalidRelayJobError("relay invoice not found");
+    .maybeSingle();
+  // A failed lookup is retried; only a missing row ends the job.
+  if (invoiceError) throw new Error(`relay invoice lookup failed: ${invoiceError.message}`);
+  if (!invoice) throw new InvalidRelayJobError("relay invoice not found");
   if (invoice.member_id !== job.member_id) throw new InvalidRelayJobError("relay invoice member changed");
   if (!["open", "exception", "submitted", "detected"].includes(invoice.status)) {
     throw new InvalidRelayJobError(`invoice is not relayable (status=${invoice.status})`);

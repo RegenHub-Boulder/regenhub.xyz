@@ -51,7 +51,8 @@ export async function POST(request: Request) {
   const admin = createServiceClient();
   const { data: invoice, error: invoiceError } = await admin
     .from("onchain_invoices")
-    .select("id, member_id, subscription_id, kind, wallet_id, due_at, status, submitted_tx_hash, amount_usdc_micros, chain_id, token_contract, treasury_address")
+    // `*`: before migration 063 there is no kind/wallet_id; every invoice is then a membership.
+    .select("*")
     .eq("id", body!.invoice_id!)
     .eq("member_id", session.member.id)
     .maybeSingle();

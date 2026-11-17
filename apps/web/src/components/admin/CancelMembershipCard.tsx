@@ -11,7 +11,7 @@ import type { CancelMembershipResult, CancelMode } from "@/lib/membershipCancel"
 import { planLabel } from "@/lib/plans";
 import { isLiveSubscription } from "@/lib/subscriptionStatus";
 
-type InvoiceRow = Pick<OnchainInvoice, "id" | "kind" | "period_start" | "period_end" | "amount_cents" | "status">;
+type InvoiceRow = Pick<OnchainInvoice, "id" | "period_start" | "period_end" | "amount_cents" | "status">;
 
 interface Props {
   memberId: number;
@@ -172,7 +172,7 @@ export function CancelMembershipCard({ memberId, memberName, subscription, invoi
                 {invoices.map((inv) => (
                   <tr key={inv.id} className="border-t border-white/5">
                     <td className="py-1.5 pr-3 font-mono text-muted">{inv.id}</td>
-                    <td className="py-1.5 pr-3">{inv.kind === "day_pass" ? `Day pass · ${fmtDate(inv.period_start)}` : `${fmtDate(inv.period_start)} – ${fmtDate(inv.period_end)}`}</td>
+                    <td className="py-1.5 pr-3">{fmtDate(inv.period_start)} – {fmtDate(inv.period_end)}</td>
                     <td className="py-1.5 pr-3">${(inv.amount_cents / 100).toFixed(2)} USDC</td>
                     <td className="py-1.5">
                       <Badge className={`text-xs ${invoiceStyle[inv.status] ?? "border-white/20"}`}>{inv.status}</Badge>

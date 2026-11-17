@@ -18,11 +18,14 @@ import { dayPassReceiptEmail, sendEmail } from "@/lib/email";
 import { assertOpPublicClient, getOpPublicClient } from "./config";
 import { findUsedAuthorization, UntraceableAuthorizationError } from "./gaslessRelay";
 import { invoicePayerWalletId } from "./invoicePayer";
+import { membershipInvoices } from "./invoiceKind";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 const EFFECTS_CLAIM_LEASE_MS = 5 * 60 * 1000;
 /** A day pass whose submitted transaction still isn't on chain after this is given up on (kept for an admin). */
 const PASS_TX_NOT_FOUND_MS = 24 * 60 * 60 * 1000;
+/** Clock slack between this server and OP block times when checking a pass transfer isn't older than its purchase. */
+const PASS_TRANSFER_CLOCK_SLACK_MS = 10 * 60 * 1000;
 
 const TRANSFER_EVENT = parseAbiItem(
   "event Transfer(address indexed from, address indexed to, uint256 value)",
@@ -176,12 +179,15 @@ export async function reconcileOnchainAccess(
   if (currentError) throw currentError;
   if (!isLiveSubscription(current.status) || current.admin_cancel_mode === "now") return false;
   // Period order, rather than arrival/retry order, governs door access.
-  const { data: latest, error: latestError } = await admin.from("onchain_invoices")
-    .select("plan_key, subscriptions(plan_key)")
-    // A day pass bought with USDC is not a membership period.
-    .eq("member_id", args.memberId).eq("kind", "membership").eq("status", "paid")
-    .order("period_start", { ascending: false }).order("id", { ascending: false })
-    .limit(1).maybeSingle();
+  // A day pass bought with USDC is not a membership period.
+  const { data: latest, error: latestError } = await membershipInvoices((kindColumn) => {
+    const query = admin.from("onchain_invoices")
+      .select("plan_key, subscriptions(plan_key)")
+      .eq("member_id", args.memberId).eq("status", "paid");
+    return (kindColumn ? query.eq("kind", "membership") : query)
+      .order("period_start", { ascending: false }).order("id", { ascending: false })
+      .limit(1).maybeSingle();
+  });
   if (latestError) throw latestError;
   const subscription = latest?.subscriptions as unknown as { plan_key: string } | null;
   const planKey = latest?.plan_key ?? subscription?.plan_key;
@@ -236,11 +242,14 @@ export async function reconcileOnchainAccess(
 /** The paid desk invoice whose period is running for this member now, if any. */
 async function deskPeriodRunning(admin: ServiceClient, memberId: number, now: Date): Promise<{ planKey: string; periodEnd: string } | null> {
   const nowIso = now.toISOString();
-  const { data: running, error } = await admin.from("onchain_invoices")
-    .select("plan_key, period_end, subscriptions(plan_key)")
-    .eq("member_id", memberId).eq("kind", "membership").eq("status", "paid")
-    .lte("period_start", nowIso).gt("period_end", nowIso)
-    .order("period_start", { ascending: false }).limit(1).maybeSingle();
+  const { data: running, error } = await membershipInvoices((kindColumn) => {
+    const query = admin.from("onchain_invoices")
+      .select("plan_key, period_end, subscriptions(plan_key)")
+      .eq("member_id", memberId).eq("status", "paid")
+      .lte("period_start", nowIso).gt("period_end", nowIso);
+    return (kindColumn ? query.eq("kind", "membership") : query)
+      .order("period_start", { ascending: false }).limit(1).maybeSingle();
+  });
   if (error) throw error;
   const runningSub = running?.subscriptions as unknown as { plan_key: string } | null;
   const planKey = running?.plan_key ?? runningSub?.plan_key;
@@ -486,6 +495,13 @@ export async function processOnchainInvoice(
     return { status: "exception", txHash, reason };
   }
 
+  // A pass is paid after it's bought: an older transfer of the same amount
+  // (one never credited, perhaps already refunded by hand) can't pay it.
+  // Read before matching, so an RPC failure here is retried, not an exception.
+  const transferredAt = isPass
+    ? Number((await client.getBlock({ blockNumber: receipt.blockNumber })).timestamp) * 1000
+    : null;
+
   let transfer: DecodedTransfer;
   try {
     transfer = selectExpectedTransfer(decodeTransfers(receipt.logs), {
@@ -494,6 +510,9 @@ export async function processOnchainInvoice(
       to: invoice.treasury_address,
       amount: BigInt(invoice.amount_usdc_micros),
     });
+    if (transferredAt !== null && transferredAt < Date.parse(invoice.created_at) - PASS_TRANSFER_CLOCK_SLACK_MS) {
+      throw new Error("transfer was sent before this purchase began");
+    }
   } catch (error) {
     const reason = error instanceof Error ? error.message : "payment did not match invoice";
     await admin

@@ -69,8 +69,8 @@ async function asWriter(statements: string) {
     select release_lock_writer('${token}');`);
 }
 
-/** The OP receipt: one USDC Transfer of `amountMicros` from `from` to the treasury. */
-function chainPays(amountMicros: bigint, from: `0x${string}` = WALLET) {
+/** The OP receipt: one USDC Transfer of `amountMicros` from `from` to the treasury, in a block mined at `sentAt`. */
+function chainPays(amountMicros: bigint, from: `0x${string}` = WALLET, sentAt = Date.now()) {
   const transfer = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
   vi.mocked(getOpPublicClient).mockReturnValue({
     getTransactionReceipt: async () => ({
@@ -80,7 +80,8 @@ function chainPays(amountMicros: bigint, from: `0x${string}` = WALLET) {
         topics: encodeEventTopics({ abi: [transfer], eventName: "Transfer", args: { from, to: TREASURY_ADDRESS } }),
       }],
     }),
-    getBlock: async () => ({ number: 0n, hash: `0x${"c".repeat(64)}`, timestamp: 0n }),
+    // The transfer's block: sent now, unless a test says when.
+    getBlock: async () => ({ number: 0n, hash: `0x${"c".repeat(64)}`, timestamp: BigInt(Math.floor(sentAt / 1000)) }),
   } as never);
 }
 
@@ -224,6 +225,22 @@ describe("crediting", () => {
     expect(await balance()).toBe(1);
   });
 
+  it("doesn't credit a transfer sent before the purchase began; keeps it for an admin", async () => {
+    // e.g. an earlier payment reported after its purchase expired, perhaps already refunded by hand.
+    const { body } = await start();
+    chainPays(30_000_000n, WALLET, Date.now() - 2 * 60 * 60 * 1000);
+    expect((await submit(body.invoice.id)).body).toMatchObject({ status: "exception" });
+    expect(await balance()).toBe(0);
+    expect(await audits("onchain_pass_payment_exception")).toEqual([expect.objectContaining({
+      payload: expect.objectContaining({ tx_hash: TX, reason: "transfer was sent before this purchase began" }),
+    })]);
+
+    // A transfer sent after it began still pays it.
+    chainPays(30_000_000n);
+    expect((await submit(body.invoice.id, TX2)).body).toMatchObject({ status: "paid", wasNew: true });
+    expect(await balance()).toBe(1);
+  });
+
   it("doesn't credit a transfer from another wallet", async () => {
     const { body } = await start();
     chainPays(30_000_000n, "0x2222222222222222222222222222222222222222");
@@ -316,7 +333,10 @@ describe("stuck or stale purchases", () => {
         throw new Error("Transaction receipt could not be found");
       },
       getBlockNumber: async () => 10n,
-      getBlock: async () => ({ number: 1n, timestamp: 100n, hash: `0x${"c".repeat(64)}` }),
+      // Block 5 holds the replacement transfer, mined now; the rest are old.
+      getBlock: async ({ blockNumber }: { blockNumber?: bigint }) => blockNumber === 5n
+        ? { number: 5n, timestamp: BigInt(Math.floor(Date.now() / 1000)), hash: `0x${"c".repeat(64)}` }
+        : { number: 1n, timestamp: 100n, hash: `0x${"c".repeat(64)}` },
       readContract: async () => authorization !== "unused",
       getLogs: async () => authorization === "unused" ? [] : [{
         eventName: authorization === "canceled" ? "AuthorizationCanceled" : "AuthorizationUsed",

@@ -5,6 +5,7 @@ import type { createServiceClient } from "@/lib/supabase/admin";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
 import { getPlan, isDeskPlan, planLabel } from "@/lib/plans";
 import { AuditAction, logAction } from "@/lib/auditLog";
+import { membershipInvoices } from "@/lib/onchain/invoiceKind";
 import { withLockWriter } from "@regenhub/shared";
 import { CancelMembershipError, cancelMembership, type CancelMode } from "@/lib/membershipCancel";
 import {
@@ -219,8 +220,8 @@ type OnchainInvoiceRow = {
   base_amount_cents: number; coupon_code: string | null; coupon_discount_cents: number; amount_cents: number; status: string;
   submitted_tx_hash: string | null; paid_at: string | null; exception_reason: string | null;
 };
-const ONCHAIN_INVOICE_COLUMNS = "id, subscription_id, kind, member_id, period_start, period_end, due_at, plan_key, base_amount_cents, coupon_code, " +
-  "coupon_discount_cents, amount_cents, status, submitted_tx_hash, paid_at, exception_reason";
+// `*` rather than the OnchainInvoiceRow columns: before migration 063 there is no `kind` (every invoice is a membership).
+const ONCHAIN_INVOICE_COLUMNS = "*";
 
 function onchainInvoiceLine(i: OnchainInvoiceRow, now = Date.now()): string {
   if (i.kind === "day_pass") {
@@ -266,7 +267,7 @@ export async function getMemberBillingHandler(admin: ServiceClient, auth: McpAut
   const [invoices, pools, purchases, grants, cancels, switches] = await Promise.all([
     admin.from("onchain_invoices").select(ONCHAIN_INVOICE_COLUMNS).eq("member_id", member.id).order("period_start", { ascending: false }).limit(24),
     admin.from("day_passes").select("id, allowed_uses, used_count, expires_at, created_at").eq("member_id", member.id).order("created_at", { ascending: false }),
-    admin.from("purchases").select("id, kind, amount_cents, passes_granted, onchain_invoice_id, created_at").eq("member_id", member.id).order("created_at", { ascending: false }).limit(24),
+    admin.from("purchases").select("*").eq("member_id", member.id).order("created_at", { ascending: false }).limit(24),
     admin.from("pass_grants").select("id, plan_key, passes_granted, stripe_invoice_id, created_at").eq("member_id", member.id).order("created_at", { ascending: false }).limit(12),
     subIds.length ? admin.from("admin_cancel_operations").select("id, subscription_id, mode, created_at, recorded_at, finished_at")
       .in("subscription_id", subIds).order("id", { ascending: false }).limit(5) : none,
@@ -413,7 +414,10 @@ export async function billingSummaryHandler(admin: ServiceClient, auth: McpAuthI
   if (denied) return denied;
   const [subs, overdue, balances, pools] = await Promise.all([
     admin.from("subscriptions").select("id, plan_key, payment_rail, status, monthly_cents, net_cents, cancel_at_period_end, admin_cancel_mode").in("status", [...LIVE_STATUSES]),
-    admin.from("onchain_invoices").select("id, amount_cents, due_at").eq("kind", "membership").in("status", ["open", "submitted", "detected"]).lt("due_at", new Date().toISOString()),
+    membershipInvoices((kindColumn) => {
+      const query = admin.from("onchain_invoices").select("id, amount_cents, due_at").in("status", ["open", "submitted", "detected"]).lt("due_at", new Date().toISOString());
+      return kindColumn ? query.eq("kind", "membership") : query;
+    }),
     admin.from("members").select("day_passes_balance").gt("day_passes_balance", 0),
     admin.from("day_passes").select("allowed_uses, used_count, expires_at"),
   ]);

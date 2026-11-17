@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isMissingFunction, membershipInvoices } from "@/lib/onchain/invoiceKind";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { generateUpcomingOnchainInvoices, isRenewalInvoice, markDueOnchainSubscriptionsPastDue } from "@/lib/onchain/invoice";
 import { advanceFinalizedOnchainPayments, finishOnchainPlanSwitches, processOnchainInvoice, retryPendingOnchainEffects } from "@/lib/onchain/verifyPayment";
@@ -51,16 +52,19 @@ export async function POST(req: Request) {
   });
   // Unpaid USDC day pass purchases past their hour: expire them (never one with a payment on its way).
   const { data: passesExpired, error: expireError } = await admin.rpc("expire_onchain_pass_invoices", {});
-  if (expireError) console.error("[OnchainBilling] Pass purchase expiry failed:", expireError);
+  // Before migration 063 there is no such function and no pass to expire.
+  if (expireError && !isMissingFunction(expireError)) console.error("[OnchainBilling] Pass purchase expiry failed:", expireError);
   const created = await generateUpcomingOnchainInvoices(admin);
-  const { data: unsentReminders, error: reminderQueryError } = await admin
-    .from("onchain_invoices")
-    .select("*")
-    .eq("kind", "membership")
-    .in("status", ["open", "submitted", "detected"])
-    .is("reminder_sent_at", null)
-    .order("due_at", { ascending: true })
-    .limit(100);
+  const { data: unsentReminders, error: reminderQueryError } = await membershipInvoices((kindColumn) => {
+    const query = admin
+      .from("onchain_invoices")
+      .select("*")
+      .in("status", ["open", "submitted", "detected"])
+      .is("reminder_sent_at", null)
+      .order("due_at", { ascending: true })
+      .limit(100);
+    return kindColumn ? query.eq("kind", "membership") : query;
+  });
   if (reminderQueryError) throw reminderQueryError;
   let remindersSent = 0;
   for (const invoice of unsentReminders ?? []) {
