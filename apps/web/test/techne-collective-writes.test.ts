@@ -164,7 +164,13 @@ describe("end to end through the stand-in", () => {
 
   it("someone who doesn't manage RegenHub is refused, and nothing is written", async () => {
     const out = await sendCollectiveBatch(standInSession(base, MEMBER), config, putEventBatch(HUB, night(), null));
-    expect(out).toMatchObject({ ok: false, refused: true });
+    expect(out).toMatchObject({ ok: false, kind: "refused" });
+    expect(await calendar()).toEqual([]);
+  });
+
+  it("a sign-in the PDS doesn't accept says to sign in again, not that you lack the role", async () => {
+    const lapsed = { did: STEWARD, fetchHandler: (path: string, init: RequestInit) => fetch(`${base}${path}`, init) };
+    expect(await sendCollectiveBatch(lapsed, config, putEventBatch(HUB, night(), null))).toMatchObject({ ok: false, kind: "signin" });
     expect(await calendar()).toEqual([]);
   });
 

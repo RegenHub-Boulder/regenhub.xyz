@@ -162,9 +162,11 @@ export function StewardEvents({
     const out = await sendCollectiveBatch(session as Session, config, batch);
     if (out.ok) return;
     throw new Error(
-      out.refused
-        ? `Techne didn't let you post as RegenHub. Only people who manage RegenHub's membership on Techne can. (${out.message})`
-        : `Couldn't reach Techne, nothing changed. Try again. (${out.message})`,
+      out.kind === "refused"
+        ? `Techne didn't let this post through as RegenHub. Only people who manage RegenHub's membership on Techne can post as it. (${out.message})`
+        : out.kind === "signin"
+          ? `Your Techne sign-in has lapsed. Sign out of Techne and sign in again, then retry. (${out.message})`
+          : `Couldn't reach Techne, nothing changed. Try again. (${out.message})`,
     );
   };
 

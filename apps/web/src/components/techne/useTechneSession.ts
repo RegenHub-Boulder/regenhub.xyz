@@ -6,7 +6,7 @@
  * (techne-sdk/auth keeps one per client id per origin).
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TechneConfig } from "@/lib/techne/config";
 import { authOptions, type SignInLevel } from "@/lib/techne/session";
 import type { Session } from "@/lib/techne/call";
@@ -49,8 +49,12 @@ export function useTechneSession(configProp: TechneConfig, returnPath: string, l
     };
   }, [config, level]);
 
+  const startingRef = useRef(false);
   const start = useCallback(
     async (signUp: boolean) => {
+      // One sign-in redirect at a time: two would race their PKCE state.
+      if (startingRef.current) return;
+      startingRef.current = true;
       setPhase("starting");
       setError(null);
       try {
@@ -59,10 +63,12 @@ export function useTechneSession(configProp: TechneConfig, returnPath: string, l
         await (signUp ? auth.signUp(opts) : auth.signIn(opts));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Couldn't start sign-in.");
-        setPhase("signed-out");
+        // A failed re-consent leaves the existing session as it was.
+        setPhase(session ? "signed-in" : "signed-out");
+        startingRef.current = false;
       }
     },
-    [config, returnPath, level],
+    [config, returnPath, level, session],
   );
 
   const signOut = useCallback(async () => {

@@ -271,8 +271,9 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   `community.lexicon.calendar.event` records plus the `pub.techne.draft.event.listing` records that
   curate others' events onto its calendar, and `getRecords` for one event. **Anonymous**, so private events
   are structurally absent. A query leaf takes ONE operator (a date range is two `start` leaves). Returns
-  `[]`/null on any failure, never throws. Only the steward view (`fetchCollectiveEventsForManagement`)
-  still uses `social.scenius.getEvents/getVisibleEvents` with the steward cookie (it must see private events).
+  `[]`/null on any failure, never throws. `/portal/events` reads the same way; the old lane's
+  `fetchCollectiveEventsForManagement` (`social.scenius.*` with the regenOS cookie) is unused, kept until the
+  lane is removed.
 - `lib/events.ts` — the seam `lib/luma.ts:10-11` promised. One `UpcomingEvent` shape, two sources,
   chosen by config: regenOS first, Luma second.
 - **Series** (`lib/series.ts`, T-482): Agents Night and Civic Tech Night. **No recurring schedule** (Aaron, 11-16:

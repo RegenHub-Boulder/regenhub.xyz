@@ -193,7 +193,7 @@ export function dayAlignedWindow(opts: Pick<CollectiveEventsOptions, "after" | "
 
 /**
  * The collective's public events, soonest first: its own event records plus
- * the events its listings curate. Null when Techne couldn't be read at all
+ * the events its listings curate. Null when its own events couldn't be read
  * (so callers can tell "quiet calendar" from "down" when they need to).
  */
 export async function fetchCollectiveEvents(opts: CollectiveEventsOptions = {}): Promise<CollectiveEvent[] | null> {
@@ -225,7 +225,8 @@ export async function fetchCollectiveEvents(opts: CollectiveEventsOptions = {}):
     read,
   );
   const [ownRows, listingRows] = await Promise.all([own, listings]);
-  if (ownRows === null && listingRows === null) return null;
+  // The collective's own events are the calendar: without them, every confirmed night would look unposted.
+  if (ownRows === null) return null;
 
   const byUri = new Map<string, CollectiveEvent>();
   for (const r of ownRows ?? []) {

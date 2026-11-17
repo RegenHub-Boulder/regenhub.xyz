@@ -5,12 +5,12 @@
  * staging (config.standIn) it installs the stand-in OAuth client first; production never has that set.
  */
 
-import { scopes, type ClientOptions } from "techne-sdk/auth";
+import { TECHNE_PLATFORM_DID, scopes, type ClientOptions } from "techne-sdk/auth";
 import type { TechneConfig } from "./config";
 import { RSVP_TYPES } from "./rsvp";
 import { COLLECTIVE_EVENT_TYPES } from "./collectiveEvents";
 
-const DEFAULT_PLATFORM = "did:web:techne.computer";
+const DEFAULT_PLATFORM = TECHNE_PLATFORM_DID;
 
 /**
  * Two levels of one sign-in, one client id (so one session per origin):
@@ -53,9 +53,15 @@ export async function authOptions(config: TechneConfig, level: SignInLevel = "me
     setOAuthClientFactory(() => standInClient(config.standIn!, window));
     standInFor = config.standIn;
   }
+  // On localhost the SDK signs in as atproto's loopback client, whose private-space scope names no key;
+  // an explicit scope list (keyed to the https client id) would be wrong there, so it builds its own from
+  // `types` (posting as the collective then lacks its rpc scope: dev only).
+  const loopback = typeof location !== "undefined" && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
   return {
     clientId: config.clientId,
-    scope: signInScope(config, level),
+    ...(loopback && !config.standIn
+      ? { types: level === "member" ? [...RSVP_TYPES] : [...RSVP_TYPES, ...COLLECTIVE_EVENT_TYPES] }
+      : { scope: signInScope(config, level) }),
     ...(config.pds ? { pds: config.pds } : {}),
     ...(config.plcUrl ? { plcUrl: config.plcUrl } : {}),
     ...(config.handleDomain ? { handleDomain: config.handleDomain } : {}),

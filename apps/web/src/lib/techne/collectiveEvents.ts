@@ -21,10 +21,9 @@
 
 import { plan } from "techne-sdk/put";
 import { BOULDER, HUB_TIMEZONE } from "@/lib/regenos/eventForm";
+import { EVENT_CONFIG_NSID, EVENT_LISTING_NSID, EVENT_NSID } from "./query";
 
-export const EVENT_NSID = "community.lexicon.calendar.event";
-export const EVENT_CONFIG_NSID = "pub.techne.draft.event.config";
-export const EVENT_LISTING_NSID = "pub.techne.draft.event.listing";
+export { EVENT_CONFIG_NSID, EVENT_LISTING_NSID, EVENT_NSID };
 /** The public types a steward's sign-in writes (one `repo:` scope each). */
 export const COLLECTIVE_EVENT_TYPES = [EVENT_NSID, EVENT_CONFIG_NSID, EVENT_LISTING_NSID] as const;
 

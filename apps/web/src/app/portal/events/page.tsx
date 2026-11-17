@@ -37,9 +37,10 @@ export default async function ManageEventsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect(`/auth/login?next=${encodeURIComponent(STEWARD_PATH)}`);
 
-  const read = await fetchCollectiveEvents({ revalidate: 0 });
-  const events = read ?? [];
+  // A year back is plenty for "Past"; it also keeps upcoming nights inside the read's page cap.
   const now = new Date();
+  const read = await fetchCollectiveEvents({ after: new Date(now.getTime() - 365 * 86_400_000).toISOString(), revalidate: 0 });
+  const events = read ?? [];
   const goingCounts = await Promise.all(
     events.map((e) =>
       e.startAt && Date.parse(e.startAt) > now.getTime() - 86_400_000
@@ -54,10 +55,14 @@ export default async function ManageEventsPage() {
     `at://${collective}/${EVENT_CONFIG_NSID}/${e.rkey}-cfg`,
     `at://${collective}/${EVENT_LISTING_NSID}/${e.rkey}-ctx`,
   ]);
+  const chunks: string[][] = [];
+  for (let i = 0; i < siblingUris.length; i += 100) chunks.push(siblingUris.slice(i, i + 100));
+  const answers = await Promise.all(chunks.map((c) => getRecords(c, { revalidate: 0 })));
+  // Unknown siblings would make an edit create records that exist (the batch fails) or a removal leave
+  // them behind: with any chunk unread, nothing is editable until a reload.
+  const siblingsKnown = answers.every((a) => a !== null);
   const siblings = new Map<string, Record<string, unknown>>();
-  for (let i = 0; i < siblingUris.length; i += 100) {
-    for (const r of (await getRecords(siblingUris.slice(i, i + 100), { revalidate: 0 })) ?? []) siblings.set(r.uri, r.value);
-  }
+  for (const r of answers.flatMap((a) => a ?? [])) siblings.set(r.uri, r.value);
   const manageable: ManageableEvent[] = events.map((e, i) => ({
     uri: e.uri,
     rkey: e.rkey,
@@ -68,7 +73,7 @@ export default async function ManageEventsPage() {
     url: e.url,
     going: goingCounts[i],
     // Only the collective's own events are ours to edit; a listed event belongs to its author.
-    editable: e.did === collective,
+    editable: e.did === collective && siblingsKnown,
     config: siblings.get(`at://${collective}/${EVENT_CONFIG_NSID}/${e.rkey}-cfg`) ?? null,
     hasListing: siblings.has(`at://${collective}/${EVENT_LISTING_NSID}/${e.rkey}-ctx`),
   }));
@@ -95,7 +100,7 @@ export default async function ManageEventsPage() {
         events={manageable}
         nights={nights}
         posted={posted}
-        readFailed={read === null}
+        readFailed={read === null || !siblingsKnown}
       />
     </div>
   );

@@ -13,20 +13,21 @@ import type { CollectiveBatch } from "./collectiveEvents";
 
 export type WriteOutcome =
   | { ok: true }
-  /** Techne said no to this person writing as the collective (or the sign-in lacks the scope). */
-  | { ok: false; refused: true; message: string }
-  /** Anything else: Techne down, a bad answer. Safe to try again. */
-  | { ok: false; refused: false; message: string };
+  /** 403: Techne (the person's PDS or the platform) said no to this write as the collective. */
+  | { ok: false; kind: "refused"; message: string }
+  /** 401: the sign-in itself wasn't accepted (expired, revoked): sign in again. */
+  | { ok: false; kind: "signin"; message: string }
+  /** Anything else: Techne down, a bad answer. Nothing was written; safe to try again. */
+  | { ok: false; kind: "failed"; message: string };
 
 export async function sendCollectiveBatch(session: Session, config: TechneConfig, batch: CollectiveBatch): Promise<WriteOutcome> {
   const proxy = platformProxy(config);
   try {
     await sessionCall(session, "com.atproto.repo.applyWrites", { body: batch.input, proxy });
   } catch (err) {
-    if (err instanceof XrpcError && (err.status === 401 || err.status === 403)) {
-      return { ok: false, refused: true, message: err.message };
-    }
-    return { ok: false, refused: false, message: err instanceof Error ? err.message : "Couldn't reach Techne" };
+    if (err instanceof XrpcError && err.status === 403) return { ok: false, kind: "refused", message: err.message };
+    if (err instanceof XrpcError && err.status === 401) return { ok: false, kind: "signin", message: err.message };
+    return { ok: false, kind: "failed", message: err instanceof Error ? err.message : "Couldn't reach Techne" };
   }
   // Courtesy hints: the platform also learns of the records from the network.
   await Promise.all(

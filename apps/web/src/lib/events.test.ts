@@ -7,7 +7,7 @@ vi.mock("@/lib/luma", () => ({
 }));
 
 import { fetchUpcomingEvents } from "@/lib/events";
-import { fetchPublicRegenosEvent, fetchUpcomingRegenosEvents } from "@/lib/regenos/events";
+import { fetchCollectiveEvents, fetchPublicRegenosEvent, fetchUpcomingRegenosEvents } from "@/lib/regenos/events";
 import { fetchUpcomingLumaEvents } from "@/lib/luma";
 import { fakeTechne, type FakeRecord } from "../../test/support/fakeTechne";
 
@@ -119,6 +119,18 @@ describe("fetchUpcomingRegenosEvents", () => {
       { uri: `at://${SCENE}/pub.techne.draft.event.listing/l1`, value: { event: { uri: other } } },
     ]);
     expect((await fetchUpcomingRegenosEvents()).map((e) => e.name)).toEqual(["Theirs, listed by us", "Ours"]);
+  });
+
+  it("counts the calendar as down when its own events can't be read, even if its listings can", async () => {
+    const techne = fakeTechne([{ uri: `at://${SCENE}/pub.techne.draft.event.listing/l1`, value: { event: { uri: "at://x/y/z" } } }]);
+    vi.stubGlobal("fetch", (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const q = url.searchParams.get("query") ?? "";
+      if (q.includes("community.lexicon.calendar.event")) return new Response("{}", { status: 503 });
+      return techne.fetch(input, init);
+    }) as typeof fetch);
+    // Null, not []: the stewards' page would otherwise offer every confirmed night as unposted.
+    expect(await fetchCollectiveEvents()).toBeNull();
   });
 
   it("returns [] on a non-2xx instead of throwing", async () => {
