@@ -13,10 +13,19 @@ import { endDeskAccessForSwitch } from "@/lib/planSwitch";
 import { grantSubscriptionPasses } from "@/lib/subscriptionPasses";
 import { isLiveSubscription } from "@/lib/subscriptionStatus";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { AuditAction, logAction } from "@/lib/auditLog";
+import { dayPassReceiptEmail, sendEmail } from "@/lib/email";
 import { assertOpPublicClient, getOpPublicClient } from "./config";
+import { findUsedAuthorization, UntraceableAuthorizationError } from "./gaslessRelay";
+import { invoicePayerWalletId } from "./invoicePayer";
+import { membershipInvoices } from "./invoiceKind";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 const EFFECTS_CLAIM_LEASE_MS = 5 * 60 * 1000;
+/** A day pass whose submitted transaction still isn't on chain after this is given up on (kept for an admin). */
+const PASS_TX_NOT_FOUND_MS = 24 * 60 * 60 * 1000;
+/** Clock slack between this server and OP block times when checking a pass transfer isn't older than its purchase. */
+const PASS_TRANSFER_CLOCK_SLACK_MS = 5 * 60 * 1000;
 
 const TRANSFER_EVENT = parseAbiItem(
   "event Transfer(address indexed from, address indexed to, uint256 value)",
@@ -170,11 +179,15 @@ export async function reconcileOnchainAccess(
   if (currentError) throw currentError;
   if (!isLiveSubscription(current.status) || current.admin_cancel_mode === "now") return false;
   // Period order, rather than arrival/retry order, governs door access.
-  const { data: latest, error: latestError } = await admin.from("onchain_invoices")
-    .select("plan_key, subscriptions(plan_key)")
-    .eq("member_id", args.memberId).eq("status", "paid")
-    .order("period_start", { ascending: false }).order("id", { ascending: false })
-    .limit(1).maybeSingle();
+  // A day pass bought with USDC is not a membership period.
+  const { data: latest, error: latestError } = await membershipInvoices((kindColumn) => {
+    const query = admin.from("onchain_invoices")
+      .select("plan_key, subscriptions(plan_key)")
+      .eq("member_id", args.memberId).eq("status", "paid");
+    return (kindColumn ? query.eq("kind", "membership") : query)
+      .order("period_start", { ascending: false }).order("id", { ascending: false })
+      .limit(1).maybeSingle();
+  });
   if (latestError) throw latestError;
   const subscription = latest?.subscriptions as unknown as { plan_key: string } | null;
   const planKey = latest?.plan_key ?? subscription?.plan_key;
@@ -229,11 +242,14 @@ export async function reconcileOnchainAccess(
 /** The paid desk invoice whose period is running for this member now, if any. */
 async function deskPeriodRunning(admin: ServiceClient, memberId: number, now: Date): Promise<{ planKey: string; periodEnd: string } | null> {
   const nowIso = now.toISOString();
-  const { data: running, error } = await admin.from("onchain_invoices")
-    .select("plan_key, period_end, subscriptions(plan_key)")
-    .eq("member_id", memberId).eq("status", "paid")
-    .lte("period_start", nowIso).gt("period_end", nowIso)
-    .order("period_start", { ascending: false }).limit(1).maybeSingle();
+  const { data: running, error } = await membershipInvoices((kindColumn) => {
+    const query = admin.from("onchain_invoices")
+      .select("plan_key, period_end, subscriptions(plan_key)")
+      .eq("member_id", memberId).eq("status", "paid")
+      .lte("period_start", nowIso).gt("period_end", nowIso);
+    return (kindColumn ? query.eq("kind", "membership") : query)
+      .order("period_start", { ascending: false }).limit(1).maybeSingle();
+  });
   if (error) throw error;
   const runningSub = running?.subscriptions as unknown as { plan_key: string } | null;
   const planKey = running?.plan_key ?? runningSub?.plan_key;
@@ -279,6 +295,122 @@ export async function finishOnchainPlanSwitches(admin: ServiceClient, now = new 
   return results;
 }
 
+/**
+ * A day pass whose submitted transaction still isn't on chain after 24 hours
+ * would otherwise hold the member's purchase forever. If it was paid through
+ * the gasless relay, ask the chain what became of the authorization: used by
+ * another transaction (a replaced or rebroadcast one) -> verify that one;
+ * used but its event isn't found -> keep waiting and tell an admin, once.
+ * Otherwise (never used, canceled in the wallet, or a direct transfer that
+ * never showed up) no USDC moved under it: give up, not credited, kept for an
+ * admin; the purchase can then expire.
+ */
+async function settleMissingPassTransaction(
+  admin: ServiceClient,
+  invoice: { id: number; member_id: number; amount_usdc_micros: number },
+  txHash: Hash,
+): Promise<ProcessInvoiceResult> {
+  const { data: job, error: jobLookupError } = await admin.from("onchain_relay_jobs").select("*").eq("invoice_id", invoice.id).maybeSingle();
+  if (jobLookupError) throw jobLookupError;
+  let used: Awaited<ReturnType<typeof findUsedAuthorization>> = null;
+  if (job) {
+    try {
+      used = await findUsedAuthorization(job);
+    } catch (cause) {
+      // Only the relay's own "used, but which tx?" answers mean money may
+      // have moved; anything else (an RPC outage) is retried next run.
+      if (!(cause instanceof UntraceableAuthorizationError)) throw cause;
+      await recordPassPaymentException(admin, invoice, txHash, "untraceable",
+        `authorization used on chain but its transaction can't be traced (${cause.message}); check the treasury and settle by hand`);
+      return { status: "submitted", txHash };
+    }
+  }
+  if (used && used !== "canceled") {
+    if (used.toLowerCase() === txHash.toLowerCase()) {
+      await recordPassPaymentException(admin, invoice, txHash, "same-hash",
+        "authorization used on chain but this transaction wasn't found after 24 hours; check the treasury and settle by hand");
+      return { status: "submitted", txHash };
+    }
+    // Paid under another hash: point the purchase (job first, then invoice:
+    // the verifier finds the job by the invoice's hash) at it and verify that.
+    // submitted_at is kept, so if that one can't be found either, the next
+    // run lands in the branch above and an admin hears.
+    const real = used.toLowerCase();
+    const conflict = () => recordPassPaymentException(admin, invoice, txHash, "conflict",
+      `authorization was used by ${real}, which is already recorded elsewhere; check the treasury and settle by hand`);
+    const { error: jobMoveError } = await admin.from("onchain_relay_jobs").update({ submitted_tx_hash: real }).eq("invoice_id", invoice.id);
+    if (jobMoveError?.code === "23505") { await conflict(); return { status: "submitted", txHash }; }
+    if (jobMoveError) throw jobMoveError;
+    const { data: moved, error: moveError } = await admin.from("onchain_invoices")
+      .update({ submitted_tx_hash: real })
+      .eq("id", invoice.id).eq("submitted_tx_hash", txHash).in("status", ["submitted", "detected"]).select("id").maybeSingle();
+    if (moveError || !moved) {
+      // Undo the job move, unless another runner has since moved the invoice to `real` too.
+      const { data: now } = await admin.from("onchain_invoices").select("submitted_tx_hash").eq("id", invoice.id).single();
+      if (now?.submitted_tx_hash !== real) {
+        const { error: undoError } = await admin.from("onchain_relay_jobs").update({ submitted_tx_hash: txHash })
+          .eq("invoice_id", invoice.id).eq("submitted_tx_hash", real);
+        if (undoError) throw undoError;
+      }
+      if (moveError?.code === "23505") { await conflict(); return { status: "submitted", txHash }; }
+      if (moveError) throw moveError;
+      return { status: "submitted", txHash }; // paid or changed meanwhile
+    }
+    return processOnchainInvoice(admin, invoice.id);
+  }
+  const reason = used === "canceled"
+    ? "payment authorization was canceled in the wallet; nothing was paid"
+    : "transaction not found on chain after 24 hours";
+  const { data: gaveUp, error: giveUpError } = await admin.from("onchain_invoices")
+    .update({ status: "exception", exception_reason: reason, submitted_tx_hash: null, submitted_at: null })
+    .eq("id", invoice.id).eq("submitted_tx_hash", txHash).in("status", ["submitted", "detected"])
+    .select("id").maybeSingle();
+  if (giveUpError) throw giveUpError;
+  if (!gaveUp) return { status: "submitted", txHash }; // paid or changed meanwhile
+  const { error: jobError } = await admin.from("onchain_relay_jobs")
+    .update({ status: "expired", last_error: reason })
+    .eq("invoice_id", invoice.id).eq("submitted_tx_hash", txHash);
+  if (jobError) throw jobError;
+  await recordPassPaymentException(admin, invoice, txHash, "gave-up", reason);
+  return { status: "exception", txHash, reason };
+}
+
+/** A pass transaction that wasn't credited, kept once for an admin to check on chain and refund. */
+async function recordPassPaymentException(
+  admin: ServiceClient,
+  invoice: { id: number; member_id: number; amount_usdc_micros: number },
+  txHash: string,
+  kind: "mismatch" | "gave-up" | "untraceable" | "same-hash" | "conflict",
+  reason: string,
+) {
+  await logAction({
+    action: AuditAction.ONCHAIN_PASS_PAYMENT_EXCEPTION,
+    actorMemberId: invoice.member_id,
+    target: { table: "members", id: invoice.member_id },
+    // Once per invoice, transaction and kind of outcome: a later, different outcome is still recorded.
+    idempotencyKey: `onchain-pass-exception:${invoice.id}:${txHash}:${kind}`,
+    payload: { invoice_id: invoice.id, tx_hash: txHash, reason, expected_usdc_micros: invoice.amount_usdc_micros },
+  }, admin);
+}
+
+/** The card path's receipt (passFulfillment.ts), for a pass paid in USDC. Best effort, as there. */
+async function sendPassReceipt(admin: ServiceClient, memberId: number, amountCents: number) {
+  try {
+    const { data: member } = await admin.from("members").select("name, email, day_passes_balance").eq("id", memberId).single();
+    if (!member?.email) return;
+    const mail = dayPassReceiptEmail({
+      name: member.name ?? "there",
+      quantity: 1,
+      amountDollars: amountCents / 100,
+      newBalance: typeof member.day_passes_balance === "number" ? member.day_passes_balance : null,
+      siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz",
+    });
+    await sendEmail({ to: member.email, subject: mail.subject, html: mail.html, text: mail.text });
+  } catch (error) {
+    console.error("[OnchainPass] Receipt email failed:", error);
+  }
+}
+
 export type ProcessInvoiceResult =
   | { status: "submitted" | "detected"; txHash: string }
   | { status: "paid"; txHash: string; paymentId: number; wasNew: boolean }
@@ -296,13 +428,10 @@ export async function processOnchainInvoice(
     .single();
   if (invoiceError || !invoice?.submitted_tx_hash) throw new Error("submitted invoice not found");
 
-  const { data: subscription } = await admin
-    .from("subscriptions")
-    .select("id, member_id, wallet_id, plan_key")
-    .eq("id", invoice.subscription_id)
-    .eq("payment_rail", "onchain")
-    .single();
-  if (!subscription?.wallet_id) throw new Error("invoice subscription has no verified wallet");
+  const isPass = invoice.kind === "day_pass";
+  const payerWalletId = await invoicePayerWalletId(admin, invoice, invoice.member_id);
+  if (!payerWalletId) throw new Error("invoice has no verified paying wallet");
+  const payer = { memberId: invoice.member_id, walletId: payerWalletId };
   const { data: relayJob, error: relayJobError } = await admin
     .from("onchain_relay_jobs")
     .select("member_id, from_address")
@@ -311,14 +440,14 @@ export async function processOnchainInvoice(
     .maybeSingle();
   if (relayJobError) throw relayJobError;
   let expectedSender = relayJob?.from_address ?? null;
-  if (relayJob && relayJob.member_id !== subscription.member_id) {
+  if (relayJob && relayJob.member_id !== payer.memberId) {
     throw new Error("relay authorization belongs to another member");
   }
   if (!expectedSender) {
     const { data: wallet } = await admin
       .from("member_wallets")
       .select("address")
-      .eq("id", subscription.wallet_id)
+      .eq("id", payer.walletId)
       .is("revoked_at", null)
       .single();
     if (!wallet) throw new Error("verified wallet not found");
@@ -333,6 +462,10 @@ export async function processOnchainInvoice(
     receipt = await client.getTransactionReceipt({ hash: txHash });
   } catch (error) {
     if (error instanceof Error && /not found|could not be found/i.test(error.message)) {
+      const submittedAt = invoice.submitted_at ? Date.parse(invoice.submitted_at) : Date.now();
+      if (isPass && Date.now() - submittedAt > PASS_TX_NOT_FOUND_MS) {
+        return settleMissingPassTransaction(admin, invoice, txHash);
+      }
       return { status: "submitted", txHash };
     }
     throw error;
@@ -362,6 +495,13 @@ export async function processOnchainInvoice(
     return { status: "exception", txHash, reason };
   }
 
+  // A pass is paid after it's bought: an older transfer of the same amount
+  // (one never credited, perhaps already refunded by hand) can't pay it.
+  // Read before matching, so an RPC failure here is retried, not an exception.
+  const transferredAt = isPass
+    ? Number((await client.getBlock({ blockNumber: receipt.blockNumber })).timestamp) * 1000
+    : null;
+
   let transfer: DecodedTransfer;
   try {
     transfer = selectExpectedTransfer(decodeTransfers(receipt.logs), {
@@ -370,6 +510,9 @@ export async function processOnchainInvoice(
       to: invoice.treasury_address,
       amount: BigInt(invoice.amount_usdc_micros),
     });
+    if (transferredAt !== null && transferredAt < Date.parse(invoice.created_at) - PASS_TRANSFER_CLOCK_SLACK_MS) {
+      throw new Error("transfer was sent before this purchase began");
+    }
   } catch (error) {
     const reason = error instanceof Error ? error.message : "payment did not match invoice";
     await admin
@@ -387,6 +530,9 @@ export async function processOnchainInvoice(
       .update({ status: "expired", last_error: reason })
       .eq("invoice_id", invoice.id)
       .eq("submitted_tx_hash", txHash);
+    // The invoice clears its tx hash so a correct payment can follow; keep
+    // this one (once) for an admin to check on chain and refund.
+    if (isPass) await recordPassPaymentException(admin, invoice, txHash, "mismatch", reason);
     return { status: "exception", txHash, reason };
   }
 
@@ -418,6 +564,13 @@ export async function processOnchainInvoice(
   if (credit.match_status === "exception") {
     // Paid after an admin canceled: recorded for reconciliation, not credited.
     return { status: "exception", txHash, reason: "membership was canceled; payment recorded for an admin to reconcile" };
+  }
+
+  if (isPass) {
+    // Pass, purchase row, balance and audit row committed with the credit.
+    // Only the caller that credited it sends the receipt.
+    if (credit.was_new) await sendPassReceipt(admin, invoice.member_id, invoice.amount_cents);
+    return { status: "paid", txHash, paymentId: credit.payment_id, wasNew: credit.was_new };
   }
 
   await completePaymentEffects(admin, {

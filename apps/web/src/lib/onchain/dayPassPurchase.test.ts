@@ -1,0 +1,500 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { encodeAbiParameters, encodeEventTopics, parseAbiItem } from "viem";
+import { makePgDb, type PgDb } from "../../../test/pgDb";
+
+// Buying one day pass with USDC, against a real Postgres with every migration
+// applied (test/pgDb.ts). Fakes: the OP chain (receipts), email, Stripe. The
+// routes, the verifier, credit_onchain_invoice and every SQL guard are real.
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 120_000 });
+
+vi.mock("@/lib/supabase/admin", () => ({ createServiceClient: vi.fn() }));
+vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
+vi.mock("@/lib/email", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/email")>(),
+  sendEmail: vi.fn(async () => true),
+}));
+vi.mock("@/lib/stripe", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/stripe")>(),
+  isStripeConfigured: () => true,
+  createPassCheckoutSession: vi.fn(async () => ({ url: "https://checkout.stripe.test/s" })),
+}));
+vi.mock("@/lib/onchain/config", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/onchain/config")>(),
+  getOpPublicClient: vi.fn(),
+  assertOpPublicClient: vi.fn(async () => {}),
+  isOnchainBillingConfigured: () => true,
+  isGaslessRelayConfigured: () => true,
+}));
+// The door transport is faked; the PIN-writer reservation and slot allocation are real.
+vi.mock("@regenhub/shared", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@regenhub/shared")>(),
+  setUserCode: vi.fn(async () => [{ entity: "lock.front_door_lock", ok: true }]),
+  clearUserCode: vi.fn(async () => [{ entity: "lock.front_door_lock", ok: true }]),
+}));
+vi.mock("@/lib/onchain/portalMember", () => ({
+  requirePortalMember: async () => ({ user: { id: "member-uid" }, member: { id: 7, name: "Pat Example", email: "pat@example.test", disabled: false } }),
+}));
+
+import { createServiceClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { sendEmail } from "@/lib/email";
+import { createPassCheckoutSession } from "@/lib/stripe";
+import { getOpPublicClient, NATIVE_USDC_ADDRESS, TREASURY_ADDRESS } from "@/lib/onchain/config";
+import { processOnchainInvoice, retryPendingOnchainEffects } from "@/lib/onchain/verifyPayment";
+import { fulfillPassPurchase } from "@/lib/passFulfillment";
+import { POST as startPurchase } from "@/app/api/portal/buy-passes/onchain/route";
+import { POST as buyWithCard } from "@/app/api/portal/buy-passes/route";
+import { POST as submitPayment } from "@/app/api/portal/onchain/submit/route";
+import { POST as onchainCron } from "@/app/api/cron/onchain-billing/route";
+import { POST as prepareRelay } from "@/app/api/portal/onchain/relay/prepare/route";
+
+const WALLET = "0x1111111111111111111111111111111111111111" as const;
+const TX = `0x${"a".repeat(64)}`;
+const TX2 = `0x${"d".repeat(64)}`;
+
+let db: PgDb;
+
+const one = async (text: string, args: unknown[] = []) => (await db.sql(text, args))[0];
+const balance = async () => Number((await one("select day_passes_balance from members where id = 7")).day_passes_balance);
+const purchases = () => db.sql("select member_id, kind, amount_cents, passes_granted, onchain_invoice_id, stripe_checkout_session from purchases order by id");
+const audits = (action: string) => db.sql("select actor_member_id, target_table, target_id, payload from admin_actions where action = $1 order by id", [action]);
+
+/** Seed SQL that touches door-code columns, under a PIN-writer reservation like the app's. */
+async function asWriter(statements: string) {
+  const token = "00000000-0000-4000-8000-000005eed000";
+  await db.exec(`select acquire_lock_writer('${token}');
+    select set_config('request.headers', '{"x-lock-writer-token":"${token}"}', false);
+    ${statements}
+    select set_config('request.headers', '{}', false);
+    select release_lock_writer('${token}');`);
+}
+
+/** The OP receipt: one USDC Transfer of `amountMicros` from `from` to the treasury, in a block mined at `sentAt`. */
+function chainPays(amountMicros: bigint, from: `0x${string}` = WALLET, sentAt = Date.now()) {
+  const transfer = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
+  vi.mocked(getOpPublicClient).mockReturnValue({
+    getTransactionReceipt: async () => ({
+      status: "success", blockNumber: 1n, blockHash: `0x${"b".repeat(64)}`,
+      logs: [{
+        address: NATIVE_USDC_ADDRESS, logIndex: 0, data: encodeAbiParameters([{ type: "uint256" }], [amountMicros]),
+        topics: encodeEventTopics({ abi: [transfer], eventName: "Transfer", args: { from, to: TREASURY_ADDRESS } }),
+      }],
+    }),
+    // The transfer's block: sent now, unless a test says when.
+    getBlock: async () => ({ number: 0n, hash: `0x${"c".repeat(64)}`, timestamp: BigInt(Math.floor(sentAt / 1000)) }),
+  } as never);
+}
+
+const start = async () => {
+  const res = await startPurchase();
+  return { status: res.status, body: await res.json() as { invoice: { id: number; amount_cents: number; amount_usdc_micros: number; due_at: string; status: string }; error?: string } };
+};
+const submit = async (invoiceId: number, txHash = TX) => {
+  const res = await submitPayment(new Request("http://localhost/api/portal/onchain/submit", {
+    method: "POST", body: JSON.stringify({ invoice_id: invoiceId, tx_hash: txHash }),
+  }));
+  return { status: res.status, body: await res.json() as { status?: string; wasNew?: boolean; error?: string } };
+};
+const runCron = () => onchainCron(new Request("http://localhost/api/cron/onchain-billing", {
+  method: "POST", headers: { authorization: "Bearer cron-test-secret" },
+}));
+
+/** A member with a live on-chain hot desk subscription paid through `periodEnd` (contributing-member rate). */
+async function subscribe(status = "active") {
+  await db.sql(`insert into subscriptions (id, member_id, payment_rail, wallet_id, plan_key, monthly_cents, net_cents, status, current_period_end)
+    values (50, 7, 'onchain', 3, 'hot_desk', 25000, 25000, $1, now() + interval '20 days')`, [status]);
+}
+
+beforeEach(async () => {
+  vi.clearAllMocks();
+  process.env.CRON_SECRET = "cron-test-secret";
+  db = await makePgDb();
+  vi.mocked(createServiceClient).mockReturnValue(db as never);
+  vi.mocked(createClient).mockResolvedValue({
+    ...db,
+    auth: { getUser: async () => ({ data: { user: { id: "00000000-0000-4000-8000-000000000007" } } }) },
+  } as never);
+  await db.sql("insert into auth.users (id, email) values ('00000000-0000-4000-8000-000000000007', 'pat@example.test')");
+  await asWriter(`insert into members (id, name, email, member_type, supabase_user_id)
+    values (7, 'Pat Example', 'pat@example.test', 'day_pass', '00000000-0000-4000-8000-000000000007');`);
+  await db.sql("insert into member_wallets (id, member_id, address, verification_method) values (3, 7, $1, 'signature')", [WALLET]);
+});
+
+describe("price", () => {
+  it("charges the public rate, and the member rate with a live subscription, frozen on the invoice", async () => {
+    const pub = await start();
+    expect(pub.status).toBe(200);
+    expect(pub.body.invoice).toMatchObject({ amount_cents: 3000, amount_usdc_micros: 30_000_000, status: "open" });
+    const row = await one("select kind, subscription_id, wallet_id, due_at - period_start as hold from onchain_invoices where id = $1", [pub.body.invoice.id]);
+    expect(row).toMatchObject({ kind: "day_pass", subscription_id: null, wallet_id: 3 });
+
+    // Becoming a member later doesn't reprice the purchase already started…
+    await subscribe();
+    expect((await start()).body.invoice).toMatchObject({ id: pub.body.invoice.id, amount_cents: 3000 });
+
+    // …but the next purchase is at the member rate.
+    await db.sql("update onchain_invoices set status = 'expired' where id = $1", [pub.body.invoice.id]);
+    const member = await start();
+    expect(member.body.invoice.id).not.toBe(pub.body.invoice.id);
+    expect(member.body.invoice).toMatchObject({ amount_cents: 2500, amount_usdc_micros: 25_000_000 });
+  });
+
+  it("needs a verified wallet", async () => {
+    await db.sql("update member_wallets set revoked_at = now() where id = 3");
+    const res = await start();
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/verify a wallet/);
+    expect(await db.sql("select id from onchain_invoices")).toEqual([]);
+  });
+});
+
+describe("crediting", () => {
+  it("adds one pass, the purchase row and the audit row, and sends one receipt", async () => {
+    const { body } = await start();
+    chainPays(30_000_000n);
+    const paid = await submit(body.invoice.id);
+    expect(paid.body).toMatchObject({ status: "paid", wasNew: true });
+
+    expect(await balance()).toBe(1);
+    expect(await purchases()).toEqual([{ member_id: 7, kind: "day_pass", amount_cents: 3000, passes_granted: 1, onchain_invoice_id: body.invoice.id, stripe_checkout_session: null }]);
+    expect(await audits("onchain_day_pass_purchased")).toEqual([{
+      actor_member_id: 7, target_table: "members", target_id: "7",
+      payload: expect.objectContaining({ invoice_id: body.invoice.id, tx_hash: TX, amount_cents: 3000, passes_granted: 1 }),
+    }]);
+    expect(await one("select match_status, effects_completed_at is not null as done from onchain_payments")).toEqual({ match_status: "credited", done: true });
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(sendEmail).mock.calls[0][0]).toMatchObject({ to: "pat@example.test", subject: "Your RegenHub day pass — receipt" });
+    // Not a door-access payment: the effects retry has nothing to do.
+    expect(await retryPendingOnchainEffects(db as never)).toEqual([]);
+  });
+
+  it("credits a replayed transaction once: the same invoice again, the cron, and another purchase", async () => {
+    const { body } = await start();
+    chainPays(30_000_000n);
+    expect((await submit(body.invoice.id)).body).toMatchObject({ status: "paid", wasNew: true });
+    expect(await submit(body.invoice.id)).toMatchObject({ status: 404 }); // paid: no longer open
+    expect((await processOnchainInvoice(db as never, body.invoice.id))).toMatchObject({ status: "paid", wasNew: false });
+    await runCron();
+
+    // A new purchase can't claim the transfer that paid the first one.
+    const second = await start();
+    expect(second.body.invoice.id).not.toBe(body.invoice.id);
+    const replay = await submit(second.body.invoice.id);
+    expect(replay.body.status).not.toBe("paid");
+
+    expect(await balance()).toBe(1);
+    expect(await purchases()).toHaveLength(1);
+    expect(await db.sql("select id from onchain_payments")).toHaveLength(1);
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("credits once when two verifications of the same payment interleave", async () => {
+    const { body } = await start();
+    chainPays(30_000_000n);
+    await db.sql("update onchain_invoices set status = 'submitted', submitted_tx_hash = $2, submitted_at = now() where id = $1", [body.invoice.id, TX]);
+    const results = await Promise.all([
+      processOnchainInvoice(db as never, body.invoice.id),
+      processOnchainInvoice(db as never, body.invoice.id),
+      processOnchainInvoice(db as never, body.invoice.id),
+    ]);
+    expect(results.filter((r) => r.status === "paid" && r.wasNew)).toHaveLength(1);
+    expect(results.every((r) => r.status === "paid")).toBe(true);
+    expect(await balance()).toBe(1);
+    expect(await purchases()).toHaveLength(1);
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("doesn't credit a wrong amount; keeps the transaction for an admin; a correct payment still works", async () => {
+    const { body } = await start();
+    chainPays(25_000_000n); // member rate sent for a $30 purchase
+    const wrong = await submit(body.invoice.id);
+    expect(wrong.body).toMatchObject({ status: "exception" });
+    expect(await balance()).toBe(0);
+    expect(await purchases()).toEqual([]);
+    expect(await one("select status, exception_reason, submitted_tx_hash from onchain_invoices where id = $1", [body.invoice.id]))
+      .toEqual({ status: "exception", exception_reason: "transaction has no exact expected USDC transfer", submitted_tx_hash: null });
+    expect(await audits("onchain_pass_payment_exception")).toEqual([{
+      actor_member_id: 7, target_table: "members", target_id: "7",
+      payload: expect.objectContaining({ invoice_id: body.invoice.id, tx_hash: TX, expected_usdc_micros: 30_000_000 }),
+    }]);
+
+    // Clicking again resumes the same purchase (it can still be paid), never a second one beside it.
+    expect((await start()).body.invoice.id).toBe(body.invoice.id);
+    chainPays(30_000_000n);
+    expect((await submit(body.invoice.id, TX2)).body).toMatchObject({ status: "paid", wasNew: true });
+    expect(await balance()).toBe(1);
+  });
+
+  it("doesn't credit a transfer sent before the purchase began; keeps it for an admin", async () => {
+    // e.g. an earlier payment reported after its purchase expired, perhaps already refunded by hand.
+    const { body } = await start();
+    chainPays(30_000_000n, WALLET, Date.now() - 2 * 60 * 60 * 1000);
+    expect((await submit(body.invoice.id)).body).toMatchObject({ status: "exception" });
+    expect(await balance()).toBe(0);
+    expect(await audits("onchain_pass_payment_exception")).toEqual([expect.objectContaining({
+      payload: expect.objectContaining({ tx_hash: TX, reason: "transfer was sent before this purchase began" }),
+    })]);
+
+    // A transfer sent after it began still pays it.
+    chainPays(30_000_000n);
+    expect((await submit(body.invoice.id, TX2)).body).toMatchObject({ status: "paid", wasNew: true });
+    expect(await balance()).toBe(1);
+  });
+
+  it("doesn't credit a transfer from another wallet", async () => {
+    const { body } = await start();
+    chainPays(30_000_000n, "0x2222222222222222222222222222222222222222");
+    expect((await submit(body.invoice.id)).body).toMatchObject({ status: "exception" });
+    expect(await balance()).toBe(0);
+  });
+});
+
+describe("expiry", () => {
+  const expireNow = (id: number) => db.sql("update onchain_invoices set due_at = now() - interval '1 minute' where id = $1", [id]);
+
+  it("expires an unpaid purchase; a payment reported after that is kept for an admin, not credited", async () => {
+    const { body } = await start();
+    expect(new Date(body.invoice.due_at).getTime() - Date.now()).toBeGreaterThan(55 * 60 * 1000);
+    await expireNow(body.invoice.id);
+    const cron = await (await runCron()).json() as { passesExpired: number };
+    expect(cron.passesExpired).toBe(1);
+    expect((await one("select status from onchain_invoices where id = $1", [body.invoice.id])).status).toBe("expired");
+
+    chainPays(30_000_000n);
+    const late = await submit(body.invoice.id);
+    expect(late.status).toBe(409);
+    expect(late.body.error).toMatch(/expired/);
+    expect(await submit(body.invoice.id)).toMatchObject({ status: 409 }); // reported twice, recorded once
+    expect(await audits("onchain_payment_after_void")).toEqual([{
+      actor_member_id: 7, target_table: "members", target_id: "7",
+      payload: { invoice_id: body.invoice.id, tx_hash: TX, verified: false, invoice_status: "expired" },
+    }]);
+    expect(await balance()).toBe(0);
+    expect(await purchases()).toEqual([]);
+
+    // A fresh purchase is a new invoice.
+    expect((await start()).body.invoice.id).not.toBe(body.invoice.id);
+  });
+
+  it("never expires a purchase with a payment on its way", async () => {
+    const { body } = await start();
+    await db.sql("update onchain_invoices set status = 'submitted', submitted_tx_hash = $2 where id = $1", [body.invoice.id, TX]);
+    await expireNow(body.invoice.id);
+    expect(await db.sql("select * from expire_onchain_pass_invoices()")).toEqual([]);
+
+    // Paid an hour late but submitted in time: credited at the frozen price.
+    chainPays(30_000_000n);
+    expect(await processOnchainInvoice(db as never, body.invoice.id)).toMatchObject({ status: "paid", wasNew: true });
+    expect(await balance()).toBe(1);
+  });
+
+  it("keeps a purchase whose gasless authorization is signed, and expires a merely prepared one with it", async () => {
+    const { body } = await start();
+    const job = (status: string) => db.sql(`insert into onchain_relay_jobs(invoice_id, member_id, wallet_id, from_address, token_contract,
+        treasury_address, amount_usdc_micros, authorization_nonce, valid_after, valid_before, status, authorization_from_block)
+      values ($1, 7, 3, $2, $3, $4, 30000000, $5, 0, 9999999999, $6, 1)`,
+    [body.invoice.id, WALLET, NATIVE_USDC_ADDRESS, TREASURY_ADDRESS, `0x${"e".repeat(64)}`, status]);
+    await job("signed");
+    await expireNow(body.invoice.id);
+    expect(await db.sql("select * from expire_onchain_pass_invoices()")).toEqual([]);
+
+    await db.sql("update onchain_relay_jobs set status = 'prepared' where invoice_id = $1", [body.invoice.id]);
+    expect(await db.sql("select * from expire_onchain_pass_invoices()")).toHaveLength(1);
+    expect(await one("select status from onchain_relay_jobs where invoice_id = $1", [body.invoice.id])).toEqual({ status: "expired" });
+  });
+});
+
+describe("stuck or stale purchases", () => {
+  const NONCE = `0x${"e".repeat(64)}`;
+  const OTHER = "0x2222222222222222222222222222222222222222";
+  const status = async (id: number) => (await one("select status from onchain_invoices where id = $1", [id])).status;
+  /** A purchase submitted 25 hours ago with tx TX, paid through the relay (a 'submitted' job) unless `relayed` is false. */
+  async function stuck(relayed = true) {
+    const { body } = await start();
+    await db.sql("update onchain_invoices set status = 'submitted', submitted_tx_hash = $2, submitted_at = now() - interval '25 hours', due_at = now() - interval '24 hours' where id = $1", [body.invoice.id, TX]);
+    if (relayed) {
+      await db.sql(`insert into onchain_relay_jobs(invoice_id, member_id, wallet_id, from_address, token_contract, treasury_address,
+          amount_usdc_micros, authorization_nonce, valid_after, valid_before, status, authorization_from_block, submitted_tx_hash)
+        values ($1, 7, 3, $2, $3, $4, 30000000, $5, 0, 1, 'submitted', 1, $6)`,
+      [body.invoice.id, WALLET, NATIVE_USDC_ADDRESS, TREASURY_ADDRESS, NONCE, TX]);
+    }
+    return body.invoice.id;
+  }
+  /** The chain: TX never found; the authorization used by `usedBy` (a tx hash), canceled, or unused. */
+  function chainSays(authorization: { usedBy: string } | "canceled" | "unused") {
+    const transfer = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
+    vi.mocked(getOpPublicClient).mockReturnValue({
+      getTransactionReceipt: async ({ hash }: { hash: string }) => {
+        if (typeof authorization === "object" && hash === authorization.usedBy && hash !== TX) {
+          return { status: "success", blockNumber: 5n, blockHash: `0x${"b".repeat(64)}`, logs: [{
+            address: NATIVE_USDC_ADDRESS, logIndex: 0, data: encodeAbiParameters([{ type: "uint256" }], [30_000_000n]),
+            topics: encodeEventTopics({ abi: [transfer], eventName: "Transfer", args: { from: WALLET, to: TREASURY_ADDRESS } }) }] };
+        }
+        throw new Error("Transaction receipt could not be found");
+      },
+      getBlockNumber: async () => 10n,
+      // Block 5 holds the replacement transfer, mined now; the rest are old.
+      getBlock: async ({ blockNumber }: { blockNumber?: bigint }) => blockNumber === 5n
+        ? { number: 5n, timestamp: BigInt(Math.floor(Date.now() / 1000)), hash: `0x${"c".repeat(64)}` }
+        : { number: 1n, timestamp: 100n, hash: `0x${"c".repeat(64)}` },
+      readContract: async () => authorization !== "unused",
+      getLogs: async () => authorization === "unused" ? [] : [{
+        eventName: authorization === "canceled" ? "AuthorizationCanceled" : "AuthorizationUsed",
+        args: { authorizer: WALLET, nonce: NONCE },
+        transactionHash: typeof authorization === "object" ? authorization.usedBy : `0x${"f".repeat(64)}`,
+      }],
+    } as never);
+  }
+
+  it("gives up on a direct transaction still not on chain after 24 hours, keeps it for an admin, then expires", async () => {
+    const id = await stuck(false);
+    chainSays("unused");
+    expect(await processOnchainInvoice(db as never, id)).toMatchObject({ status: "exception" });
+    expect(await audits("onchain_pass_payment_exception")).toEqual([expect.objectContaining({
+      payload: expect.objectContaining({ tx_hash: TX, reason: "transaction not found on chain after 24 hours" }) })]);
+    expect(await db.sql("select * from expire_onchain_pass_invoices()")).toHaveLength(1);
+    expect(await balance()).toBe(0);
+  });
+
+  it("gives up when the gasless authorization was canceled in the wallet: nothing was paid", async () => {
+    const id = await stuck();
+    chainSays("canceled");
+    expect(await processOnchainInvoice(db as never, id)).toMatchObject({ status: "exception", reason: expect.stringMatching(/canceled/) });
+    expect(await status(id)).toBe("exception");
+  });
+
+  it("credits the payment when the authorization was used by another transaction", async () => {
+    const id = await stuck();
+    chainSays({ usedBy: TX2 });
+    expect(await processOnchainInvoice(db as never, id)).toMatchObject({ status: "paid", wasNew: true, txHash: TX2 });
+    expect(await balance()).toBe(1);
+  });
+
+  it("never gives up when the authorization was used by this very transaction; an admin hears once", async () => {
+    const id = await stuck();
+    chainSays({ usedBy: TX });
+    expect(await processOnchainInvoice(db as never, id)).toMatchObject({ status: "submitted" });
+    expect(await processOnchainInvoice(db as never, id)).toMatchObject({ status: "submitted" });
+    expect(await status(id)).toBe("submitted");
+    expect(await audits("onchain_pass_payment_exception")).toEqual([expect.objectContaining({
+      payload: expect.objectContaining({ tx_hash: TX, reason: expect.stringMatching(/authorization used on chain/) }) })]);
+  });
+
+  it("keeps waiting on a transaction submitted recently", async () => {
+    const { body } = await start();
+    await db.sql("update onchain_invoices set status = 'submitted', submitted_tx_hash = $2, submitted_at = now() where id = $1", [body.invoice.id, TX]);
+    chainSays("unused");
+    expect(await processOnchainInvoice(db as never, body.invoice.id)).toMatchObject({ status: "submitted" });
+  });
+
+  it("won't issue an authorization with too little of the hold left; starting again gives a fresh purchase", async () => {
+    const { body } = await start();
+    vi.mocked(getOpPublicClient).mockReturnValue({ getBlockNumber: async () => 10n, readContract: async () => 1_000_000_000n } as never);
+    await db.sql("update onchain_invoices set due_at = now() + interval '2 minutes' where id = $1", [body.invoice.id]);
+    const res = await prepareRelay(new Request("http://localhost/api/portal/onchain/relay/prepare", {
+      method: "POST", body: JSON.stringify({ invoice_id: body.invoice.id }),
+    }));
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/price hold is ending/);
+    expect(await db.sql("select invoice_id from onchain_relay_jobs")).toEqual([]);
+    const again = await start();
+    expect(again.body.invoice.id).not.toBe(body.invoice.id);
+    expect(new Date(again.body.invoice.due_at).getTime() - Date.now()).toBeGreaterThan(55 * 60 * 1000);
+  });
+
+  it("near the end of the hold, a prepared authorization with time to sign is resumed, not cancelled under the signer", async () => {
+    const { body } = await start();
+    await db.sql("update onchain_invoices set due_at = now() + interval '4 minutes' where id = $1", [body.invoice.id]);
+    await db.sql(`insert into onchain_relay_jobs(invoice_id, member_id, wallet_id, from_address, token_contract, treasury_address,
+        amount_usdc_micros, authorization_nonce, valid_after, valid_before, status, authorization_from_block)
+      values ($1, 7, 3, $2, $3, $4, 30000000, $5, 0, extract(epoch from now())::bigint + 200, 'prepared', 1)`,
+    [body.invoice.id, WALLET, NATIVE_USDC_ADDRESS, TREASURY_ADDRESS, NONCE]);
+    expect((await start()).body.invoice.id).toBe(body.invoice.id);
+    expect(await one("select status from onchain_relay_jobs where invoice_id = $1", [body.invoice.id])).toEqual({ status: "prepared" });
+
+    // With under two minutes left on it, it isn't worth resuming: a fresh purchase instead.
+    await db.sql("update onchain_relay_jobs set valid_before = extract(epoch from now())::bigint + 60 where invoice_id = $1", [body.invoice.id]);
+    expect((await start()).body.invoice.id).not.toBe(body.invoice.id);
+  });
+
+  it("an RPC outage while checking the authorization is retried, not reported as a payment", async () => {
+    const id = await stuck();
+    chainSays({ usedBy: TX2 }); // authorizationState says used; then reading its logs fails
+    const client = vi.mocked(getOpPublicClient)();
+    vi.mocked(getOpPublicClient).mockReturnValue({ ...client, getLogs: async () => { throw new Error("fetch failed"); } } as never);
+    await expect(processOnchainInvoice(db as never, id)).rejects.toThrow(/fetch failed/);
+    expect(await audits("onchain_pass_payment_exception")).toEqual([]);
+    chainSays("unused");
+    expect(await processOnchainInvoice(db as never, id)).toMatchObject({ status: "exception", reason: "transaction not found on chain after 24 hours" });
+  });
+
+  it("linking another wallet drops an unpaid purchase made from the old one; the next pays from the new", async () => {
+    const { body } = await start();
+    // The same wallet again (every "Pay with USDC" re-proves it): the purchase is resumed.
+    expect((await db.rpc("bind_member_wallet", { p_member_id: 7, p_address: WALLET, p_verification_method: "signature" })).error).toBeNull();
+    expect((await start()).body.invoice.id).toBe(body.invoice.id);
+
+    expect((await db.rpc("bind_member_wallet", { p_member_id: 7, p_address: OTHER, p_verification_method: "signature" })).error).toBeNull();
+    expect(await status(body.invoice.id)).toBe("expired");
+    const next = await start();
+    expect(next.body.invoice.id).not.toBe(body.invoice.id);
+    expect((await one("select w.address from onchain_invoices i join member_wallets w on w.id = i.wallet_id where i.id = $1", [next.body.invoice.id])).address)
+      .toBe(OTHER);
+  });
+
+  it("a wallet switch waits for a purchase with a payment on its way", async () => {
+    const { body } = await start();
+    await db.sql("update onchain_invoices set status = 'submitted', submitted_tx_hash = $2 where id = $1", [body.invoice.id, TX]);
+    const refused = await db.rpc("bind_member_wallet", { p_member_id: 7, p_address: OTHER, p_verification_method: "signature" });
+    expect(refused.error?.message).toMatch(/current wallet in use: open_invoice/);
+    expect(await status(body.invoice.id)).toBe("submitted");
+  });
+
+  it("removing the wallet drops an unpaid purchase made from it", async () => {
+    const { body } = await start();
+    expect((await db.rpc("unlink_member_wallet", { p_member_id: 7, p_wallet_id: 3 })).error).toBeNull();
+    expect(await status(body.invoice.id)).toBe("expired");
+  });
+
+  it("another account taking the wallet over drops the unpaid purchase made from it", async () => {
+    const { body } = await start();
+    await asWriter("insert into members (id, name, email, member_type) values (8, 'Sam Example', 'sam@example.test', 'day_pass');");
+    expect((await db.rpc("move_member_wallet", { p_member_id: 8, p_address: WALLET, p_from_wallet_id: 3 })).error).toBeNull();
+    expect(await status(body.invoice.id)).toBe("expired");
+  });
+});
+
+describe("the rest of the on-chain rail", () => {
+  it("a paid pass doesn't count as a membership period for door access", async () => {
+    await subscribe();
+    // The subscription's paid period, its effects still to run.
+    await db.sql(`insert into onchain_invoices (id, subscription_id, member_id, period_start, period_end, due_at,
+        base_amount_cents, amount_cents, amount_usdc_micros, status, paid_at)
+      values (90, 50, 7, now() - interval '10 days', now() + interval '20 days', now() - interval '10 days', 25000, 25000, 250000000, 'paid', now())`);
+    await db.sql(`insert into onchain_payments (invoice_id, member_id, chain_id, tx_hash, log_index, block_number, block_hash,
+        from_address, to_address, token_contract, amount_micros, chain_status, match_status, credited_at)
+      values (90, 7, 10, $1, 0, 1, $2, $3, $4, $5, 250000000, 'included', 'credited', now())`,
+    [TX2, `0x${"b".repeat(64)}`, WALLET, TREASURY_ADDRESS, NATIVE_USDC_ADDRESS]);
+    // A day pass bought (and paid) after it: the newest paid invoice of the member.
+    const { body } = await start();
+    chainPays(25_000_000n);
+    expect((await submit(body.invoice.id)).body).toMatchObject({ status: "paid" });
+
+    expect(await retryPendingOnchainEffects(db as never)).toEqual([]);
+    expect(await one("select member_type from members where id = 7")).toEqual({ member_type: "hot_desk" });
+  });
+
+  it("the card path is unchanged: same price rule, and a paid checkout still credits once", async () => {
+    await subscribe();
+    const res = await buyWithCard(new Request("http://localhost/api/portal/buy-passes", { method: "POST", body: JSON.stringify({ kind: "day_pass" }) }));
+    expect(res.status).toBe(200);
+    expect(vi.mocked(createPassCheckoutSession).mock.calls[0][0]).toMatchObject({ kind: "day_pass", isMember: true, member: { id: 7 } });
+
+    const session = { id: "cs_test_1", mode: "payment", payment_status: "paid", client_reference_id: "7", metadata: { kind: "day_pass" },
+      amount_total: 2500, payment_intent: "pi_test_1", customer_details: { email: "pat@example.test" } };
+    expect(await fulfillPassPurchase(session as never, db as never)).toMatchObject({ status: "granted", passes_granted: 1 });
+    expect(await fulfillPassPurchase(session as never, db as never)).toMatchObject({ status: "already_processed" });
+    expect(await balance()).toBe(1);
+    expect(await purchases()).toEqual([{ member_id: 7, kind: "day_pass", amount_cents: 2500, passes_granted: 1, onchain_invoice_id: null, stripe_checkout_session: "cs_test_1" }]);
+  });
+});

@@ -55,6 +55,10 @@ export const AuditAction = {
   // On-chain payments
   /** A member reported a transaction for an invoice already voided (unverified): check it on chain, refund by hand. */
   ONCHAIN_PAYMENT_AFTER_VOID: "onchain_payment_after_void",
+  /** A day pass bought with USDC was credited. Written by credit_onchain_invoice (migration 063), with the credit. */
+  ONCHAIN_DAY_PASS_PURCHASED: "onchain_day_pass_purchased",
+  /** A transfer for a USDC day pass didn't match it (amount, sender): not credited; check on chain, refund by hand. */
+  ONCHAIN_PASS_PAYMENT_EXCEPTION: "onchain_pass_payment_exception",
   // MCP
   /** A write tool of the RegenHub MCP (lib/mcp/billingTools.ts): written before it acts, outcome filled in after. */
   MCP_BILLING_WRITE: "mcp_billing_write",

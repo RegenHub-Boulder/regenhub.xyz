@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 
 /**
  * In-memory Postgres with the real on-chain billing migrations (046, 048, 049,
- * 057 and, unless `stopBefore058`, 058) applied, in production order, over a minimal stand-in for the older
+ * 057 and, unless `stopBefore058`, 058 and 063) applied, in production order, over a minimal stand-in for the older
  * tables they build on. Used by the wallet-move migration tests and by the
  * wallet route tests through `pglitePostgrestFetch`.
  */
@@ -25,7 +25,8 @@ export const ONCHAIN_PRELUDE = `
       disabled boolean not null default false,
       is_admin boolean not null default false,
       approved_for_daily boolean not null default false,
-      approved_for_full boolean not null default false
+      approved_for_full boolean not null default false,
+      day_passes_balance integer not null default 0
     );
     create table subscriptions (
       id serial primary key,
@@ -44,6 +45,17 @@ export const ONCHAIN_PRELUDE = `
       created_at timestamptz not null default now()
     );
     create table pass_grants (id serial primary key, stripe_invoice_id text not null);
+    create table purchases (
+      id serial primary key,
+      member_id integer references members(id) on delete set null,
+      stripe_checkout_session text unique,
+      stripe_payment_intent text,
+      kind text not null,
+      amount_cents integer not null,
+      passes_granted integer not null,
+      email text,
+      created_at timestamptz not null default now()
+    );
     create table admin_actions (
       id bigserial primary key,
       actor_member_id integer references members(id) on delete set null,
@@ -63,7 +75,11 @@ export async function createOnchainDb(opts: { stopBefore058?: boolean } = {}) {
   await pg.exec(await migration("048_gasless_usdc_relay.sql"));
   await pg.exec(await migration("049_credit_included_onchain_payments.sql"));
   await pg.exec(await migration("057_onchain_plan_discounts.sql"));
-  if (!opts.stopBefore058) await pg.exec(await migration("058_wallet_move.sql"));
+  if (!opts.stopBefore058) {
+    await pg.exec(await migration("058_wallet_move.sql"));
+    // USDC day passes: the wallet routes drop an unpaid pass purchase on a wallet change.
+    await pg.exec(await migration("063_onchain_day_pass_purchases.sql"));
+  }
   return pg;
 }
 

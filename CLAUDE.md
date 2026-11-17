@@ -128,6 +128,39 @@ row (migration 043), so there's finally a record of what ran, when, and who ran 
 Fallback (MCP down, or the migration itself broke): psql against the container on compute-1 —
 see DEPLOYMENT.md "Run migrations".
 
+### Buy a day pass (card or USDC)
+`/portal/passes` offers "Pay with card" and, when the gasless relay is configured, "Pay with USDC". Same price
+both ways, from `dayPassCentsFor` ($30, $25 with an active/trialing subscription; one check, `lib/dayPassPrice.ts`).
+**Card:** `/api/portal/buy-passes` → Stripe Checkout → `fulfillPassPurchase` (`purchases` row keyed by the session,
++1 `day_passes_balance`, receipt email). **USDC** (migration 063): `/api/portal/buy-passes/onchain` writes an
+`onchain_invoices` row of `kind = 'day_pass'` (no subscription; `wallet_id` is the payer; price frozen; `due_at` =
+one hour; `expire_onchain_pass_invoices()` (billing cron, each new purchase) expires it unless a payment is on its
+way; `member_payment_blocker` ignores such a purchase and a trigger drops it when its wallet is revoked, so a wallet
+change never waits on it; relay prepare needs 5 min of hold left (`passHoldTooShortToSign`) and caps the
+authorization at it; a submitted tx still not on chain after 24 h is settled from the relay authorization's on-chain
+state: used by another tx → that one is verified, canceled or unused → `exception`, used but untraceable → kept and
+an admin is told). Payment then runs the membership rail unchanged: wallet link, gasless relay,
+`/api/portal/onchain/submit`, `processOnchainInvoice`. `credit_onchain_invoice`'s pass branch writes the payment
+(effects complete), the `purchases` row (`onchain_invoice_id`, unique), +1 balance and the
+`onchain_day_pass_purchased` audit row in one transaction, so a transaction credits one purchase once; the
+caller that credited it sends the same receipt email. A wrong amount or sender leaves the invoice in `exception`
+(audit `onchain_pass_payment_exception`, with the tx); a payment reported after expiry is kept as
+`onchain_payment_after_void`, never credited. Code that reads paid invoices as membership periods
+(door-access reconciliation, reminders, past-due marking, MCP overdue counts) filters `kind = 'membership'`.
+A USDC pass can't be refunded through the admin "refund last purchase" (Stripe only); refund it from the treasury by hand.
+Who may buy one: whoever may buy a card pass (any signed-in member row, card members and unapproved people included).
+The wallet link the button runs first sends `intent: "day_pass"`, which skips the challenge route's membership gates
+(card subscription → 409, not approved → 403); `/api/membership/onchain` keeps its own, so a pass wallet never opens a
+crypto membership; the challenge refuses a pass link (503) while passes can't be bought. A pass is only paid by a
+transfer mined after the purchase began (5 min clock slack), so an old uncredited transfer can't pay a new one.
+**Before refunding a transfer by hand** from an `onchain_payment_after_void` or `onchain_pass_payment_exception`
+note, check its tx hash isn't in `onchain_payments` (a transfer reported on an expired purchase may also have paid
+the next one, if mined within those 5 minutes or reported in the other order).
+**Deploy order for 063** (the file ships in the image, so the code runs on the old schema first): deploy web, check
+`onchain_relay_jobs` has no `signed`/`submitting` rows, then `run_migration("063_onchain_day_pass_purchases.sql")`.
+Until it runs the code degrades to membership-only (`lib/onchain/invoiceKind.ts`: a `kind` filter is dropped when
+the column is missing, the passes page hides "Pay with USDC", the purchase route answers 503), so billing carries on.
+
 ### Membership application flow (approve + notify)
 `/apply` (sign-in required) → `/api/portal/application` upserts the application, emails the
 applicant an acknowledgment, and pings the Telegram group with two buttons:

@@ -16,9 +16,9 @@ type Result = { data: unknown; error: { code?: string; message: string } | null;
 type WriteHook = { table: string; run: () => Promise<unknown> | unknown };
 
 const MIGRATIONS = new URL("../../../supabase/migrations/", import.meta.url);
-let base: Promise<PGlite> | null = null;
+const bases = new Map<string, Promise<PGlite>>();
 
-async function migrated(): Promise<PGlite> {
+async function migrated(before: string): Promise<PGlite> {
   const pg = new PGlite();
   // The Supabase pieces the migrations assume exist.
   await pg.exec(`create role anon; create role authenticated; create role service_role bypassrls; create role supabase_admin;
@@ -28,7 +28,7 @@ async function migrated(): Promise<PGlite> {
     create function auth.uid() returns uuid language sql as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
     create function auth.role() returns text language sql as $$ select current_setting('request.jwt.claim.role', true) $$;
     create function auth.jwt() returns jsonb language sql as $$ select '{}'::jsonb $$;`);
-  for (const file of (await readdir(MIGRATIONS)).filter((f) => f.endsWith(".sql")).sort()) {
+  for (const file of (await readdir(MIGRATIONS)).filter((f) => f.endsWith(".sql") && f < before).sort()) {
     await pg.exec(await readFile(new URL(file, MIGRATIONS), "utf8"));
   }
   return pg;
@@ -87,9 +87,13 @@ const ident = (name: string) => {
   return `"${name}"`;
 };
 
-export async function makePgDb() {
-  base ??= migrated();
-  const pg = await (await base).clone();
+/**
+ * `before` stops short of a migration (e.g. "063" applies 001-062), for code
+ * that must keep working between its deploy and that migration being run.
+ */
+export async function makePgDb({ before = "\uffff" }: { before?: string } = {}) {
+  if (!bases.has(before)) bases.set(before, migrated(before));
+  const pg = await (await bases.get(before)!).clone();
   const hooks: WriteHook[] = [];
   let inHook = false;
 
@@ -118,7 +122,24 @@ export async function makePgDb() {
     });
   }
 
+  const tableColumns = new Map<string, Set<string>>();
+  for (const r of (await pg.query<{ t: string; c: string }>(`
+    select table_name t, column_name c from information_schema.columns where table_schema = 'public'`)).rows) {
+    if (!tableColumns.has(r.t)) tableColumns.set(r.t, new Set());
+    tableColumns.get(r.t)!.add(r.c);
+  }
+
   async function project(tx: Transaction, table: string, rows: Row[], projection: Projection): Promise<Row[]> {
+    // As PostgREST does, refuse a column the table doesn't have, rows or not.
+    if (projection.columns !== "*") {
+      for (const col of projection.columns) {
+        // alias:column::cast -> column
+        const name = col.split("::")[0].split(":").pop()!.trim();
+        if (tableColumns.has(table) && !tableColumns.get(table)!.has(name)) {
+          throw Object.assign(new Error(`column ${table}.${name} does not exist`), { code: "42703" });
+        }
+      }
+    }
     const out: Row[] = [];
     for (const row of rows) {
       const shaped: Row = {};

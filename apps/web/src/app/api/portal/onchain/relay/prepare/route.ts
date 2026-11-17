@@ -12,6 +12,8 @@ import {
 } from "@/lib/onchain/config";
 import { publicAuthorization, type RelayJob } from "@/lib/onchain/gaslessRelay";
 import { requirePortalMember } from "@/lib/onchain/portalMember";
+import { invoicePayerWalletId } from "@/lib/onchain/invoicePayer";
+import { PASS_REUSE_AUTHORIZATION_SECONDS, passHoldTooShortToSign } from "@/lib/onchain/passPurchase";
 
 const AUTHORIZATION_LIFETIME_SECONDS = 30 * 60;
 const USDC_BALANCE_ABI = parseAbi([
@@ -49,7 +51,8 @@ export async function POST(request: Request) {
   const admin = createServiceClient();
   const { data: invoice, error: invoiceError } = await admin
     .from("onchain_invoices")
-    .select("id, member_id, subscription_id, status, submitted_tx_hash, amount_usdc_micros, chain_id, token_contract, treasury_address")
+    // `*`: before migration 063 there is no kind/wallet_id; every invoice is then a membership.
+    .select("*")
     .eq("id", body!.invoice_id!)
     .eq("member_id", session.member.id)
     .maybeSingle();
@@ -72,20 +75,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: "submitted", txHash: invoice.submitted_tx_hash });
   }
 
-  const { data: subscription } = await admin
-    .from("subscriptions")
-    .select("wallet_id, payment_rail")
-    .eq("id", invoice.subscription_id)
-    .eq("member_id", session.member.id)
-    .eq("payment_rail", "onchain")
-    .single();
-  if (!subscription?.wallet_id) {
+  const walletId = await invoicePayerWalletId(admin, invoice, session.member.id);
+  if (!walletId) {
     return NextResponse.json({ error: "Verified payment wallet not found" }, { status: 409 });
   }
   const { data: wallet } = await admin
     .from("member_wallets")
     .select("address")
-    .eq("id", subscription.wallet_id)
+    .eq("id", walletId)
     .eq("member_id", session.member.id)
     .eq("verification_method", "signature")
     .is("revoked_at", null)
@@ -109,6 +106,21 @@ export async function POST(request: Request) {
       return NextResponse.json(responseForJob(existing));
     }
   }
+
+  // A day pass holds its price until due_at: no new authorization once too
+  // little of the hold is left to sign it (checked before any chain call, so
+  // it's the answer the member sees), and none that outlives it (the
+  // purchase can then expire cleanly). A prepared one with time left to sign
+  // is still reused.
+  const isPass = invoice.kind === "day_pass";
+  const holdEnding = isPass && passHoldTooShortToSign(invoice.due_at);
+  // Near the end of a hold a prepared one must still leave time to sign; otherwise the usual 30 s.
+  const reusable = existing?.status === "prepared"
+    && existing.valid_before > now + (holdEnding ? PASS_REUSE_AUTHORIZATION_SECONDS : 30);
+  if (holdEnding && !reusable) {
+    return NextResponse.json({ error: "This purchase's price hold is ending. Start again for a fresh price." }, { status: 409 });
+  }
+  const holdEnds = isPass ? Math.floor(Date.parse(invoice.due_at) / 1000) : Infinity;
 
   let authorizationFromBlock: number;
   try {
@@ -139,21 +151,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Could not verify the wallet's OP USDC balance" }, { status: 503 });
   }
 
-  if (existing?.status === "prepared" && existing.valid_before > now + 30) {
+  if (existing && reusable) {
     return NextResponse.json(responseForJob(existing));
   }
 
   const values = {
     invoice_id: invoice.id,
     member_id: session.member.id,
-    wallet_id: subscription.wallet_id,
+    wallet_id: walletId,
     from_address: wallet.address.toLowerCase(),
     token_contract: invoice.token_contract,
     treasury_address: invoice.treasury_address,
     amount_usdc_micros: invoice.amount_usdc_micros,
     authorization_nonce: `0x${randomBytes(32).toString("hex")}`,
     valid_after: Math.max(0, now - 60),
-    valid_before: now + AUTHORIZATION_LIFETIME_SECONDS,
+    valid_before: Math.min(now + AUTHORIZATION_LIFETIME_SECONDS, holdEnds),
     signature: null,
     status: "prepared" as const,
     authorization_from_block: authorizationFromBlock,

@@ -44,6 +44,9 @@ function fmtDate(iso: string | null) {
 }
 
 export function SubscriptionCard({ memberId, memberName, activeSubscription, recentPurchases }: Props) {
+  // Only a card purchase can be refunded from here (the revoke route refunds
+  // through Stripe); a USDC pass is refunded by hand from the treasury.
+  const lastCardPurchase = recentPurchases.find((p) => p.stripe_payment_intent) ?? null;
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -168,7 +171,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
       const res = await fetch(`/api/admin/members/${memberId}/revoke`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refund_last_purchase: refundLast }),
+        body: JSON.stringify({ refund_last_purchase: refundLast && !!lastCardPurchase }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
@@ -418,6 +421,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
                 <li key={p.id} className="flex justify-between gap-2">
                   <span>
                     {p.kind === "five_pack" ? "5-Pack" : "Day Pass"} · ${p.amount_cents / 100}
+                    {p.onchain_invoice_id ? ` USDC (invoice ${p.onchain_invoice_id})` : ""}
                   </span>
                   <span className="text-muted">{fmtDate(p.created_at)}</span>
                 </li>
@@ -516,16 +520,16 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
               )}
               .
             </p>
-            {recentPurchases.length > 0 && (
+            {lastCardPurchase && (
               <label className="flex items-center gap-2 text-xs">
                 <input
                   type="checkbox"
                   checked={refundLast}
                   onChange={(e) => setRefundLast(e.target.checked)}
                 />
-                Also refund their most recent purchase
-                ({recentPurchases[0].kind === "five_pack" ? "5-Pack" : "Day Pass"} · $
-                {recentPurchases[0].amount_cents / 100})
+                Also refund their most recent card purchase
+                ({lastCardPurchase.kind === "five_pack" ? "5-Pack" : "Day Pass"} · $
+                {lastCardPurchase.amount_cents / 100})
               </label>
             )}
             <div className="flex gap-2">

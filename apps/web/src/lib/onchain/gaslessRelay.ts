@@ -20,6 +20,7 @@ import {
   ONCHAIN_CHAIN_ID,
   TREASURY_ADDRESS,
 } from "./config";
+import { invoicePayerWalletId } from "./invoicePayer";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 export type RelayJob = Database["public"]["Tables"]["onchain_relay_jobs"]["Row"];
@@ -27,6 +28,8 @@ export type RelayJob = Database["public"]["Tables"]["onchain_relay_jobs"]["Row"]
 const WORKER_LEASE_MS = 5 * 60 * 1000;
 
 class InvalidRelayJobError extends Error {}
+/** The authorization was used on chain, but which transaction used it can't be told (yet). */
+export class UntraceableAuthorizationError extends Error {}
 
 export const USDC_AUTHORIZATION_TYPES = {
   TransferWithAuthorization: [
@@ -181,6 +184,21 @@ async function recoverUsedAuthorization(
   admin: ServiceClient,
   job: RelayJob,
 ): Promise<Hash | null> {
+  const found = await findUsedAuthorization(job);
+  if (!found) return null;
+  if (found === "canceled") throw new InvalidRelayJobError("payment authorization was canceled in the wallet");
+  await recordSubmittedTransaction(admin, job, found);
+  return found;
+}
+
+/**
+ * Whether a job's EIP-3009 authorization was consumed on chain, and by what:
+ * null = not used; "canceled" = canceled in the wallet (no USDC moved); else
+ * the transaction that used it. Throws while the event isn't available yet.
+ */
+export async function findUsedAuthorization(
+  job: Pick<RelayJob, "token_contract" | "from_address" | "authorization_nonce" | "authorization_from_block" | "valid_before">,
+): Promise<Hash | "canceled" | null> {
   const client = getOpPublicClient();
   await assertOpPublicClient(client);
   const observedBlock = await client.getBlockNumber();
@@ -243,18 +261,15 @@ async function recoverUsedAuthorization(
     .map((log) => log.transactionHash)
     .filter(Boolean))] as Hash[];
   if (hashes.length === 0) {
-    if (canceledLogs.length > 0) {
-      throw new InvalidRelayJobError("payment authorization was canceled in the wallet");
-    }
+    if (canceledLogs.length > 0) return "canceled";
     // Circle reports both used and canceled authorizations as consumed. Do
     // not infer a terminal cancellation from missing logs: a transient RPC
     // inconsistency must remain retryable so a real transfer is not orphaned.
-    throw new Error("payment authorization is consumed but its event is not available yet");
+    throw new UntraceableAuthorizationError("payment authorization is consumed but its event is not available yet");
   }
   if (hashes.length > 1) {
-    throw new Error(`used authorization has ${hashes.length} matching transfer transactions`);
+    throw new UntraceableAuthorizationError(`used authorization has ${hashes.length} matching transfer transactions`);
   }
-  await recordSubmittedTransaction(admin, job, hashes[0]);
   return hashes[0];
 }
 
@@ -262,10 +277,14 @@ async function assertRelayJobStillPayable(admin: ServiceClient, job: RelayJob) {
   assertRelayJobMatchesConfig(job);
   const { data: invoice, error: invoiceError } = await admin
     .from("onchain_invoices")
-    .select("member_id, subscription_id, status, submitted_tx_hash, amount_usdc_micros, token_contract, treasury_address")
+    // `*`, not a column list: before migration 063 there is no kind/wallet_id
+    // (every invoice is a membership, paid from its subscription's wallet).
+    .select("*")
     .eq("id", job.invoice_id)
-    .single();
-  if (invoiceError || !invoice) throw new InvalidRelayJobError("relay invoice not found");
+    .maybeSingle();
+  // A failed lookup is retried; only a missing row ends the job.
+  if (invoiceError) throw new Error(`relay invoice lookup failed: ${invoiceError.message}`);
+  if (!invoice) throw new InvalidRelayJobError("relay invoice not found");
   if (invoice.member_id !== job.member_id) throw new InvalidRelayJobError("relay invoice member changed");
   if (!["open", "exception", "submitted", "detected"].includes(invoice.status)) {
     throw new InvalidRelayJobError(`invoice is not relayable (status=${invoice.status})`);
@@ -281,25 +300,20 @@ async function assertRelayJobStillPayable(admin: ServiceClient, job: RelayJob) {
     throw new InvalidRelayJobError("relay job no longer matches its frozen invoice");
   }
 
-  const { data: subscription } = await admin
-    .from("subscriptions")
-    .select("wallet_id")
-    .eq("id", invoice.subscription_id)
-    .eq("member_id", job.member_id)
-    .eq("payment_rail", "onchain")
-    .single();
-  if (!subscription?.wallet_id) throw new InvalidRelayJobError("relay subscription has no verified wallet");
-  if (subscription.wallet_id !== job.wallet_id) {
+  const payerWalletId = await invoicePayerWalletId(admin, invoice, job.member_id);
+  if (!payerWalletId) throw new InvalidRelayJobError("relay invoice has no verified wallet");
+  if (payerWalletId !== job.wallet_id) {
     throw new InvalidRelayJobError("relay authorization is not for the current verified wallet");
   }
-  const { data: wallet } = await admin
+  const { data: wallet, error: walletError } = await admin
     .from("member_wallets")
     .select("address")
     .eq("id", job.wallet_id)
     .eq("member_id", job.member_id)
     .eq("verification_method", "signature")
     .is("revoked_at", null)
-    .single();
+    .maybeSingle();
+  if (walletError) throw new Error(`relay wallet lookup failed: ${walletError.message}`);
   if (!wallet || getAddress(wallet.address) !== getAddress(job.from_address)) {
     throw new InvalidRelayJobError("relay authorization is not from the current verified wallet");
   }

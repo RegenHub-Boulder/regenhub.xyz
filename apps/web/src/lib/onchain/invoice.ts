@@ -8,6 +8,7 @@ import {
 } from "./config";
 
 import type { OnchainCoupon } from "./discount";
+import { membershipInvoices } from "./invoiceKind";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -112,11 +113,15 @@ export async function markDueOnchainSubscriptionsPastDue(
   now = new Date(),
 ) {
   const nowIso = now.toISOString();
-  const { data: due, error } = await admin
-    .from("onchain_invoices")
-    .select("id, subscription_id")
-    .in("status", ["open", "submitted", "detected"])
-    .lte("due_at", nowIso);
+  const { data: due, error } = await membershipInvoices((kindColumn) => {
+    const query = admin
+      .from("onchain_invoices")
+      .select("id, subscription_id")
+      .in("status", ["open", "submitted", "detected"])
+      .lte("due_at", nowIso);
+    // A day pass's due_at is when the unpaid purchase expires, not a renewal.
+    return kindColumn ? query.eq("kind", "membership") : query;
+  });
   if (error) throw error;
 
   for (const invoice of due ?? []) {

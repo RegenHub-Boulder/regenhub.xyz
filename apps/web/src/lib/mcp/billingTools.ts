@@ -5,6 +5,7 @@ import type { createServiceClient } from "@/lib/supabase/admin";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
 import { getPlan, isDeskPlan, planLabel } from "@/lib/plans";
 import { AuditAction, logAction } from "@/lib/auditLog";
+import { membershipInvoices } from "@/lib/onchain/invoiceKind";
 import { withLockWriter } from "@regenhub/shared";
 import { CancelMembershipError, cancelMembership, type CancelMode } from "@/lib/membershipCancel";
 import {
@@ -215,14 +216,21 @@ async function findMember(admin: ServiceClient, args: { member_id?: number; emai
 }
 
 type OnchainInvoiceRow = {
-  id: number; subscription_id: number; member_id: number; period_start: string; period_end: string; due_at: string; plan_key: string | null;
+  id: number; subscription_id: number | null; kind: string; member_id: number; period_start: string; period_end: string; due_at: string; plan_key: string | null;
   base_amount_cents: number; coupon_code: string | null; coupon_discount_cents: number; amount_cents: number; status: string;
   submitted_tx_hash: string | null; paid_at: string | null; exception_reason: string | null;
 };
-const ONCHAIN_INVOICE_COLUMNS = "id, subscription_id, member_id, period_start, period_end, due_at, plan_key, base_amount_cents, coupon_code, " +
-  "coupon_discount_cents, amount_cents, status, submitted_tx_hash, paid_at, exception_reason";
+// `*` rather than the OnchainInvoiceRow columns: before migration 063 there is no `kind` (every invoice is a membership).
+const ONCHAIN_INVOICE_COLUMNS = "*";
 
 function onchainInvoiceLine(i: OnchainInvoiceRow, now = Date.now()): string {
+  if (i.kind === "day_pass") {
+    // A USDC day pass purchase: due_at is when an unpaid one expires.
+    return `crypto day pass #${i.id} · ${i.status} · ${usd(i.amount_cents)} · bought ${day(i.period_start)}` +
+      `${["open", "submitted", "detected"].includes(i.status) ? ` · expires ${new Date(i.due_at).toISOString().slice(11, 16)} UTC` : ""}` +
+      `${i.paid_at ? ` · paid ${day(i.paid_at)}` : ""}${i.submitted_tx_hash ? ` · tx ${i.submitted_tx_hash.slice(0, 12)}…` : ""}` +
+      `${i.exception_reason ? ` · ${i.exception_reason}` : ""}`;
+  }
   const overdue = ["open", "submitted", "detected"].includes(i.status) && Date.parse(i.due_at) < now ? " · OVERDUE" : "";
   const coupon = i.coupon_code ? ` (code ${i.coupon_code}: −${usd(i.coupon_discount_cents)})` : "";
   return `crypto invoice #${i.id} · ${i.status}${overdue} · ${usd(i.amount_cents)}${coupon} · ${i.plan_key ? planLabel(i.plan_key) : "plan ?"} · ` +
@@ -259,7 +267,7 @@ export async function getMemberBillingHandler(admin: ServiceClient, auth: McpAut
   const [invoices, pools, purchases, grants, cancels, switches] = await Promise.all([
     admin.from("onchain_invoices").select(ONCHAIN_INVOICE_COLUMNS).eq("member_id", member.id).order("period_start", { ascending: false }).limit(24),
     admin.from("day_passes").select("id, allowed_uses, used_count, expires_at, created_at").eq("member_id", member.id).order("created_at", { ascending: false }),
-    admin.from("purchases").select("id, kind, amount_cents, passes_granted, created_at").eq("member_id", member.id).order("created_at", { ascending: false }).limit(24),
+    admin.from("purchases").select("*").eq("member_id", member.id).order("created_at", { ascending: false }).limit(24),
     admin.from("pass_grants").select("id, plan_key, passes_granted, stripe_invoice_id, created_at").eq("member_id", member.id).order("created_at", { ascending: false }).limit(12),
     subIds.length ? admin.from("admin_cancel_operations").select("id, subscription_id, mode, created_at, recorded_at, finished_at")
       .in("subscription_id", subIds).order("id", { ascending: false }).limit(5) : none,
@@ -286,8 +294,11 @@ export async function getMemberBillingHandler(admin: ServiceClient, auth: McpAut
   for (const p of poolRows) {
     lines.push(`- guest-pass pool #${p.id}: ${p.allowed_uses - p.used_count} of ${p.allowed_uses} left${p.expires_at ? ` · expires ${day(p.expires_at)}` : ""} · from ${day(p.created_at)}`);
   }
-  const purchaseRows = (purchases.data ?? []) as { id: number; kind: string; amount_cents: number; passes_granted: number; created_at: string }[];
-  for (const p of purchaseRows) lines.push(`- bought ${p.kind === "five_pack" ? "5-pack" : "day pass"} ${day(p.created_at)}: ${p.passes_granted} pass${p.passes_granted === 1 ? "" : "es"} for ${usd(p.amount_cents)}`);
+  const purchaseRows = (purchases.data ?? []) as { id: number; kind: string; amount_cents: number; passes_granted: number; onchain_invoice_id: number | null; created_at: string }[];
+  for (const p of purchaseRows) {
+    const rail = p.onchain_invoice_id ? ` in USDC (crypto day pass #${p.onchain_invoice_id})` : " by card";
+    lines.push(`- bought ${p.kind === "five_pack" ? "5-pack" : "day pass"} ${day(p.created_at)}: ${p.passes_granted} pass${p.passes_granted === 1 ? "" : "es"} for ${usd(p.amount_cents)}${rail}`);
+  }
   const grantRows = (grants.data ?? []) as { plan_key: string; passes_granted: number; created_at: string }[];
   for (const g of grantRows) lines.push(`- monthly grant ${day(g.created_at)}: ${g.passes_granted} from ${planLabel(g.plan_key)}`);
 
@@ -388,7 +399,8 @@ export async function listOpenInvoicesHandler(admin: ServiceClient, auth: McpAut
   const ids = [...new Set(rows.map((r) => r.member_id))];
   const { data: members } = ids.length ? await admin.from("members").select("id, name").in("id", ids) : { data: [] };
   const names = new Map(((members ?? []) as { id: number; name: string }[]).map((m) => [m.id, m.name]));
-  const overdue = rows.filter((r) => r.status !== "exception" && Date.parse(r.due_at) < Date.now());
+  // A day pass purchase past due_at isn't overdue: the billing cron expires it.
+  const overdue = rows.filter((r) => r.kind !== "day_pass" && r.status !== "exception" && Date.parse(r.due_at) < Date.now());
   lines.push(`${rows.length} unpaid · ${overdue.length} overdue (${usd(overdue.reduce((n, r) => n + r.amount_cents, 0))})`);
   for (const r of rows) lines.push(`- ${onchainInvoiceLine(r)} · ${names.get(r.member_id) ?? "?"} (member ${r.member_id})`);
   return text(lines.join("\n"));
@@ -402,7 +414,10 @@ export async function billingSummaryHandler(admin: ServiceClient, auth: McpAuthI
   if (denied) return denied;
   const [subs, overdue, balances, pools] = await Promise.all([
     admin.from("subscriptions").select("id, plan_key, payment_rail, status, monthly_cents, net_cents, cancel_at_period_end, admin_cancel_mode").in("status", [...LIVE_STATUSES]),
-    admin.from("onchain_invoices").select("id, amount_cents, due_at").in("status", ["open", "submitted", "detected"]).lt("due_at", new Date().toISOString()),
+    membershipInvoices((kindColumn) => {
+      const query = admin.from("onchain_invoices").select("id, amount_cents, due_at").in("status", ["open", "submitted", "detected"]).lt("due_at", new Date().toISOString());
+      return kindColumn ? query.eq("kind", "membership") : query;
+    }),
     admin.from("members").select("day_passes_balance").gt("day_passes_balance", 0),
     admin.from("day_passes").select("allowed_uses, used_count, expires_at"),
   ]);

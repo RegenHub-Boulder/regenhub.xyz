@@ -28,7 +28,9 @@ export async function POST(request: Request) {
     .eq("id", body.invoice_id)
     .eq("member_id", session.member.id)
     .maybeSingle();
-  if (invoice?.status === "void") return reportPaymentAfterVoid(admin, session.member.id, invoice.id, txHash);
+  if (invoice?.status === "void" || invoice?.status === "expired") {
+    return reportPaymentAfterVoid(admin, session.member.id, invoice.id, txHash, invoice.status);
+  }
   if (!invoice || !["open", "submitted", "detected", "exception"].includes(invoice.status)) {
     return NextResponse.json({ error: "Open invoice not found" }, { status: 404 });
   }
@@ -56,7 +58,9 @@ export async function POST(request: Request) {
   if (!submitted) {
     // Paid or voided since it was read.
     const { data: current } = await admin.from("onchain_invoices").select("status").eq("id", invoice.id).single();
-    if (current?.status === "void") return reportPaymentAfterVoid(admin, session.member.id, invoice.id, txHash);
+    if (current?.status === "void" || current?.status === "expired") {
+      return reportPaymentAfterVoid(admin, session.member.id, invoice.id, txHash, current.status);
+    }
     return NextResponse.json({
       error: "This invoice can no longer be paid. If you already sent the payment, contact the hub.",
     }, { status: 409 });
@@ -75,8 +79,8 @@ export async function POST(request: Request) {
 }
 
 /**
- * The invoice was voided (e.g. the membership was canceled), but the member
- * may have sent the money already. Keep their claim, once per transaction,
+ * The invoice was voided (e.g. the membership was canceled) or, for a USDC
+ * day pass, expired unpaid, but the member may have sent the money already. Keep their claim, once per transaction,
  * for an admin to check on chain and refund. Unverified: it is only what the
  * member reported.
  */
@@ -85,6 +89,7 @@ async function reportPaymentAfterVoid(
   memberId: number,
   invoiceId: number,
   txHash: string,
+  status: "void" | "expired",
 ) {
   const { data: earlier, error } = await admin
     .from("admin_actions")
@@ -103,11 +108,13 @@ async function reportPaymentAfterVoid(
       action: AuditAction.ONCHAIN_PAYMENT_AFTER_VOID,
       actorMemberId: memberId,
       target: { table: "members", id: memberId },
-      payload: { invoice_id: invoiceId, tx_hash: txHash, verified: false },
+      payload: { invoice_id: invoiceId, tx_hash: txHash, verified: false, ...(status === "expired" ? { invoice_status: status } : {}) },
     }, admin);
     if (!logged.ok) return failed;
   }
   return NextResponse.json({
-    error: "This invoice was canceled, so it can no longer be paid. If you already sent the payment, the hub has your transaction and will sort it out.",
+    error: status === "expired"
+      ? "This purchase expired before the payment arrived, so it wasn't credited. If you already sent the payment, the hub has your transaction and will sort it out."
+      : "This invoice was canceled, so it can no longer be paid. If you already sent the payment, the hub has your transaction and will sort it out.",
   }, { status: 409 });
 }
