@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getSeries, nextNights, seriesDates, seriesOf, zonedTimeToUtc, type Series } from "./series";
+import { getSeries, nextNights, seriesDates, seriesOf, topicOf, zonedTimeToUtc, type Series } from "./series";
 
 const agents = getSeries("agents-night")!;
 const civic = getSeries("civic-tech-night")!;
@@ -41,6 +41,15 @@ describe("series keys", () => {
     expect(seriesOf({ name: "Agents Night", uris: [{ uri: "https://regenhub.xyz/events/unknown" }] })?.slug).toBe("agents-night");
     // Another site's /events/<slug> page doesn't put an event in our series.
     expect(seriesOf({ name: "Their meetup", uris: [{ uri: "https://lu.ma/events/agents-night" }] })).toBeNull();
+    expect(seriesOf({ name: "Hack Night", uris: [{ uri: "https://site.regenhub.build/events/civic-tech-night" }] })?.slug).toBe(
+      "civic-tech-night",
+    );
+  });
+
+  it("reads a night's topic only after a separator", () => {
+    expect(topicOf(agents, "Agents Night: evals")).toBe("evals");
+    expect(topicOf(agents, "Agents Nightly Hack")).toBeNull();
+    expect(topicOf(agents, "Agents Night")).toBeNull();
   });
 });
 

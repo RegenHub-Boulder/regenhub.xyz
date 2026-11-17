@@ -76,8 +76,7 @@ export function RsvpPanel({ config: configProp, event, going, path }: Props) {
   // router.refresh() re-sends the props as new objects; key the config on its content so the
   // restore below runs once per page, not after every RSVP.
   const configKey = JSON.stringify(configProp);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const config = useMemo(() => configProp, [configKey]);
+  const config = useMemo(() => JSON.parse(configKey) as RsvpConfig, [configKey]);
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("restoring");
   const [session, setSession] = useState<Session | null>(null);
@@ -90,9 +89,15 @@ export function RsvpPanel({ config: configProp, event, going, path }: Props) {
       const all: { uri: string; value: never }[] = [];
       let cursor: string | undefined;
       for (let page = 0; page < 10; page++) {
-        const data = (await sessionCall(s, "com.atproto.repo.listRecords", {
-          query: { repo: s.did, collection: RSVP_NSID, limit: "100", ...(cursor ? { cursor } : {}) },
-        })) as { records?: { uri: string; value: never }[]; cursor?: string };
+        let data: { records?: { uri: string; value: never }[]; cursor?: string };
+        try {
+          data = (await sessionCall(s, "com.atproto.repo.listRecords", {
+            query: { repo: s.did, collection: RSVP_NSID, limit: "100", ...(cursor ? { cursor } : {}) },
+          })) as typeof data;
+        } catch (err) {
+          if (page === 0) throw err;
+          break; // keep what the earlier pages found
+        }
         all.push(...(data.records ?? []));
         cursor = data.cursor;
         if (!cursor || !data.records?.length) break;

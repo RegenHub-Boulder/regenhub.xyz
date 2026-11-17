@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, CalendarDays, CalendarPlus, MapPin, Repeat } from "lucide-react";
-import { getSeries } from "@/lib/series";
-import { formatEventLocation } from "@/lib/regenos/events";
-import { fetchSeriesOverviews } from "@/lib/seriesEvents";
+import { getSeries, topicOf } from "@/lib/series";
+import { fetchCollectiveEvents, formatEventLocation } from "@/lib/regenos/events";
+import { overviewFor } from "@/lib/seriesEvents";
 import { formatEventRange, formatEventWhen } from "@/components/events/EventList";
 import { nextNightLabel } from "@/components/events/SeriesCards";
 
@@ -32,7 +32,9 @@ export default async function SeriesPage({ params }: PageProps) {
   const series = getSeries((await params).key);
   if (!series) notFound();
 
-  const o = (await fetchSeriesOverviews(new Date(), 4)).find((x) => x.series.slug === series.slug)!;
+  const now = new Date();
+  const events = (await fetchCollectiveEvents({ after: new Date(now.getTime() - 365 * 86_400_000).toISOString() })) ?? [];
+  const o = overviewFor(series, events, now, 4);
   const { when, note } = nextNightLabel(o.next);
   const nextHref = o.next?.kind === "posted" ? o.next.event.url : null;
   const later = [
@@ -42,12 +44,7 @@ export default async function SeriesPage({ params }: PageProps) {
       when: formatEventWhen(e.startAt!),
       href: e.url,
       // "Agents Night: evals" → "evals"; a night named otherwise shows its whole name.
-      note:
-        e.name === series.name
-          ? null
-          : e.name.toLowerCase().startsWith(series.name.toLowerCase())
-            ? e.name.slice(series.name.length).replace(/^\s*[:\-–—|]\s*/, "")
-            : e.name,
+      note: e.name.trim().toLowerCase() === series.name.toLowerCase() ? null : (topicOf(series, e.name) ?? e.name),
     })),
     ...o.planned.slice(o.next?.kind === "planned" ? 1 : 0).map((n) => ({
       key: n.date,

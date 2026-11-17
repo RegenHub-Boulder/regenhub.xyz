@@ -113,21 +113,23 @@ export function seriesPageUrl(series: Series, siteUrl = "https://regenhub.xyz"):
   return `${siteUrl.replace(/\/+$/, "")}/events/${series.slug}`;
 }
 
-/** Hosts whose `/events/<slug>` is a RegenHub series page: regenhub.xyz and this deployment's own. */
-function siteHosts(): string[] {
-  const hosts = ["regenhub.xyz", "www.regenhub.xyz"];
+/** Hosts whose `/events/<slug>` is a RegenHub series page: regenhub.xyz, the internal hostname, and this deployment's own. */
+let hostsCache: Set<string> | null = null;
+function siteHosts(): Set<string> {
+  if (hostsCache) return hostsCache;
+  const hosts = new Set(["regenhub.xyz", "www.regenhub.xyz", "site.regenhub.build"]);
   try {
-    if (process.env.NEXT_PUBLIC_SITE_URL) hosts.push(new URL(process.env.NEXT_PUBLIC_SITE_URL).host);
+    if (process.env.NEXT_PUBLIC_SITE_URL) hosts.add(new URL(process.env.NEXT_PUBLIC_SITE_URL).host);
   } catch {
     // an unparseable site URL adds nothing
   }
-  return hosts;
+  return (hostsCache = hosts);
 }
 
 function seriesFromUrl(raw: string): Series | null {
   try {
     const url = new URL(raw);
-    if (!siteHosts().includes(url.host)) return null;
+    if (!siteHosts().has(url.host)) return null;
     const m = /^\/events\/([a-z0-9-]+)\/?$/.exec(url.pathname);
     return m ? getSeries(m[1]) : null;
   } catch {
@@ -163,10 +165,34 @@ export function seriesOf(event: SeriesMatchable): Series | null {
   if (!name) return null;
   for (const s of SERIES) {
     const base = s.name.toLowerCase();
-    if (name === base) return s;
-    if (name.startsWith(base) && /^\s*[:\-–—|]/.test(name.slice(base.length))) return s;
+    if (name === base || topicOf(s, event.name ?? "") !== null) return s;
   }
   return null;
+}
+
+/**
+ * The topic after the series name: "Agents Night: evals" → "evals". Null when the name is the
+ * series name alone, or doesn't start with it followed by a separator ("Agents Nightly" → null).
+ */
+export function topicOf(series: Series, name: string): string | null {
+  const n = name.trim();
+  if (!n.toLowerCase().startsWith(series.name.toLowerCase())) return null;
+  const m = /^\s*[:\-–—|]\s*(.+)$/.exec(n.slice(series.name.length));
+  return m ? m[1] : null;
+}
+
+/** Techne's query document assumes an event with no end runs two hours. */
+export const ASSUMED_DURATION_MS = 2 * 3600_000;
+
+/** Whether an event is over: its end, or its start plus two hours when it has none, is past. */
+export function hasEnded(e: { startAt: string | null; endAt?: string | null }, now = new Date()): boolean {
+  if (e.endAt) return Date.parse(e.endAt) <= now.getTime();
+  return !!e.startAt && Date.parse(e.startAt) + ASSUMED_DURATION_MS <= now.getTime();
+}
+
+/** Whether an event is cancelled (`community.lexicon.calendar.event#cancelled`). */
+export function isCancelled(e: { status?: string | null }): boolean {
+  return !!e.status && /cancel/i.test(e.status);
 }
 
 // ── Dates ─────────────────────────────────────────────────────────────────────

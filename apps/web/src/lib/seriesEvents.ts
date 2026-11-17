@@ -9,7 +9,7 @@
  */
 
 import { fetchCollectiveEvents, formatEventLocation, type CollectiveEvent } from "@/lib/regenos/events";
-import { SERIES, dateIn, nextNights, type PlannedNight, type Series } from "@/lib/series";
+import { SERIES, dateIn, hasEnded, isCancelled, nextNights, type PlannedNight, type Series } from "@/lib/series";
 import { HUB_TIMEZONE } from "@/lib/regenos/eventForm";
 import { siteOrigin } from "@/lib/techne/rsvpConfig";
 import { buildIcs, type IcsEvent } from "@/lib/ics";
@@ -32,26 +32,14 @@ export interface SeriesOverview {
   planned: PlannedNight[];
 }
 
-/** Techne's query document assumes an event with no end runs two hours. */
-const ASSUMED_MS = 2 * 3600_000;
-
-/** Whether an event is cancelled (`community.lexicon.calendar.event#cancelled`). */
-export function isCancelled(e: { status: string | null }): boolean {
-  return !!e.status && /cancel/i.test(e.status);
-}
-
-/** Whether an event is over (its end, or its start when it has none, is past). */
-export function hasEnded(e: { startAt: string | null; endAt: string | null }, now = new Date()): boolean {
-  if (e.endAt) return Date.parse(e.endAt) <= now.getTime();
-  return !!e.startAt && Date.parse(e.startAt) + ASSUMED_MS <= now.getTime();
-}
+export { hasEnded, isCancelled };
 
 /** Pure: one series' overview from the collective's events. */
 export function overviewFor(series: Series, events: CollectiveEvent[], now: Date, plannedCount = 3): SeriesOverview {
   const mine = events.filter((e) => e.series?.slug === series.slug && e.startAt);
   // A cancelled night keeps its date taken (no replacement is planned) but is never "next".
   const upcoming = mine.filter((e) => !hasEnded(e, now) && !isCancelled(e)).sort((a, b) => a.startAt!.localeCompare(b.startAt!));
-  const past = mine.filter((e) => hasEnded(e, now)).sort((a, b) => b.startAt!.localeCompare(a.startAt!));
+  const past = mine.filter((e) => hasEnded(e, now) && !isCancelled(e)).sort((a, b) => b.startAt!.localeCompare(a.startAt!));
   const postedDates = new Set(mine.map((e) => dateIn(e.startAt!, series.timezone)));
   const planned = nextNights(series, now, plannedCount).filter((n) => !postedDates.has(n.date));
 

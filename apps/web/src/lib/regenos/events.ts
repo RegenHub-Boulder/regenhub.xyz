@@ -30,7 +30,7 @@ import {
   splitAtUri,
   type TechneRecord,
 } from "@/lib/techne/query";
-import { seriesOf, type Series } from "@/lib/series";
+import { hasEnded, isCancelled, seriesOf, type Series } from "@/lib/series";
 import { RSVP_NSID, countGoing, type Attendance } from "@/lib/techne/rsvp";
 
 /** The AppView clamps `limit` to 200 on the legacy reads below. */
@@ -264,8 +264,7 @@ export async function fetchUpcomingRegenosEvents(daysAhead = 21): Promise<Regeno
   const before = new Date(now.getTime() + daysAhead * 86_400_000).toISOString();
   const events = (await fetchCollectiveEvents({ after, before })) ?? [];
   return events
-    // No end: Techne's query document assumes two hours.
-    .filter((e) => e.startAt && (e.endAt ? Date.parse(e.endAt) : Date.parse(e.startAt) + 2 * 3600_000) > now.getTime())
+    .filter((e) => e.startAt && !hasEnded(e, now) && !isCancelled(e))
     .map((e) => ({
       uri: e.uri,
       name: e.name,

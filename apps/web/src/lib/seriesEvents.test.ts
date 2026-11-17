@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildEventsFeed, overviewFor } from "./seriesEvents";
-import { fetchCollectiveEvents } from "./regenos/events";
+import { fetchCollectiveEvents, fetchUpcomingRegenosEvents } from "./regenos/events";
 import { getSeries } from "./series";
 import { fakeTechne } from "../../test/support/fakeTechne";
 
@@ -67,6 +67,15 @@ describe("cancelled and open-ended nights", () => {
     const o = overviewFor(agents, (await fetchCollectiveEvents())!, new Date("2026-11-16T12:00:00Z"));
     expect(o.next).toMatchObject({ kind: "planned", night: { date: "2026-12-15" } });
     expect(o.planned.map((n) => n.date)).not.toContain("2026-12-01");
+    // Afterwards it isn't a past night either, and the plain upcoming list never had it.
+    expect(overviewFor(agents, (await fetchCollectiveEvents())!, new Date("2026-12-20T00:00:00Z")).past).toEqual([]);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-16T12:00:00Z"));
+    try {
+      expect(await fetchUpcomingRegenosEvents(30)).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps a night with no end on for two hours after it starts", async () => {
