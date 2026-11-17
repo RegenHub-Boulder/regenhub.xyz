@@ -5,7 +5,7 @@ import { ArrowLeft, CalendarDays, CalendarPlus, MapPin, Layers } from "lucide-re
 import { fetchAttendance, fetchPublicRegenosEvent, formatEventLocation } from "@/lib/regenos/events";
 import { formatEventRange } from "@/components/events/EventList";
 import { RsvpPanel } from "@/components/events/RsvpPanel";
-import { rsvpConfig } from "@/lib/techne/rsvpConfig";
+import { techneConfig } from "@/lib/techne/config";
 import { hasEnded, isCancelled } from "@/lib/seriesEvents";
 
 /**
@@ -16,7 +16,7 @@ import { hasEnded, isCancelled } from "@/lib/seriesEvents";
  * RegenHub collective authored or lists. Anything else (unknown rkey, a private
  * event, Techne down or unconfigured) is `notFound()`: one honest 404.
  *
- * RSVP (behind TECHNE_RSVP_ENABLED) is the attendee's own Techne record; see
+ * RSVP (behind TECHNE_SIGNIN_ENABLED) is the attendee's own Techne record; see
  * components/events/RsvpPanel.tsx. With RSVP off the page says "just come".
  */
 
@@ -47,7 +47,7 @@ export default async function EventDetailPage({ params }: PageProps) {
   const event = await fetchPublicRegenosEvent(did, rkey);
   if (!event) notFound();
 
-  const rsvp = rsvpConfig();
+  const rsvp = techneConfig();
   const attendance = rsvp ? await fetchAttendance(event.uri) : null;
   const ended = hasEnded(event);
   const cancelled = isCancelled(event);

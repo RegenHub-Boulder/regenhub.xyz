@@ -16,20 +16,6 @@ export const RSVP_TYPES = [RSVP_NSID] as const;
 
 export type RsvpStatus = "going" | "interested" | "notgoing";
 
-/** What the browser needs to sign in; null when RSVP is off. Built on the server (rsvpConfig.ts). */
-export interface RsvpConfig {
-  /** The https URL this app serves its client metadata at: its OAuth client id. */
-  clientId: string;
-  redirectUri: string;
-  /** Test-deployment overrides (techne-sdk/auth options); absent = Techne's defaults. */
-  pds?: string;
-  plcUrl?: string;
-  handleDomain?: string;
-  platform?: string;
-  /** Staging only: the stand-in sign-in's base path (lib/techne/standIn.ts). */
-  standIn?: string;
-}
-
 export { tid } from "./tid";
 
 export function rsvpRecord(event: { uri: string; cid: string }, status: RsvpStatus, now = new Date()) {

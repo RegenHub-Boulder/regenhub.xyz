@@ -13,7 +13,7 @@ import { pickedNight, seriesNightInput, type PostedNight } from "@/lib/seriesNig
  * "Add the next nights": the hosts' confirmed nights of each series
  * (lib/series.ts `confirmedDates`) not posted yet, plus any night a steward
  * picks by hand. Ticking some and posting creates each as an ordinary public
- * event of the collective (same createEvent as "New event"), named after the
+ * event of the collective (the same write as "New event"), named after the
  * series so the series page, cards and feeds pick it up. Edit one afterwards
  * for a topic ("Agents Night: local models") or a different time.
  */
@@ -26,7 +26,7 @@ export function AddSeriesNights({
   authority: string;
   nights: PlannedNight[];
   posted: PostedNight[];
-  post: (nsid: string, body: unknown) => Promise<void>;
+  post: (body: Record<string, unknown>) => Promise<void>;
 }) {
   const keyOf = (n: PlannedNight) => `${n.series.slug}:${n.date}`;
   const [added, setAdded] = useState<PlannedNight[]>([]);
@@ -73,7 +73,7 @@ export function AddSeriesNights({
     setError(null);
     try {
       for (const n of all.filter((x) => picked.has(keyOf(x)))) {
-        await post("social.scenius.createEvent", seriesNightInput(n, authority));
+        await post(seriesNightInput(n, authority));
         setPicked((p) => {
           const next = new Set(p);
           next.delete(keyOf(n));

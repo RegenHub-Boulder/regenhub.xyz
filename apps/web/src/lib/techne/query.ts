@@ -14,6 +14,9 @@
 import { REGENOS_TIMEOUT_MS, regenosBaseUrl } from "@/lib/regenos/config";
 
 export const EVENT_NSID = "community.lexicon.calendar.event";
+
+/** Every cached Techne read carries this tag, so a steward's change can clear them all at once. */
+export const TECHNE_READS_TAG = "techne-reads";
 export const EVENT_CONFIG_NSID = "pub.techne.draft.event.config";
 export const EVENT_LISTING_NSID = "pub.techne.draft.event.listing";
 
@@ -49,7 +52,7 @@ async function getJson(path: string, params: URLSearchParams, opts: ReadOptions)
     const res = await fetch(url, {
       headers: { accept: "application/json" },
       signal: AbortSignal.timeout(REGENOS_TIMEOUT_MS),
-      ...(revalidate > 0 ? { next: { revalidate } } : { cache: "no-store" as const }),
+      ...(revalidate > 0 ? { next: { revalidate, tags: [TECHNE_READS_TAG] } } : { cache: "no-store" as const }),
     });
     if (!res.ok) {
       console.warn(`[techne] ${path} returned ${res.status}`);
@@ -70,10 +73,11 @@ function isRecord(r: unknown): r is TechneRecord {
 /**
  * Every record a query names, following cursors up to `maxPages` pages of
  * `limit`. Null when the first page fails; a later failed page ends the list.
+ * With `strict`, a list cut short (a later page failed, or pages left at the cap) is null too.
  */
 export async function listRecords<V = Record<string, unknown>>(
   query: TechneQuery,
-  opts: ReadOptions & { limit?: number; maxPages?: number } = {},
+  opts: ReadOptions & { limit?: number; maxPages?: number; strict?: boolean } = {},
 ): Promise<TechneRecord<V>[] | null> {
   const limit = Math.min(Math.max(opts.limit ?? 100, 1), 100);
   const out: TechneRecord<V>[] = [];
@@ -84,12 +88,12 @@ export async function listRecords<V = Record<string, unknown>>(
     const data = (await getJson("pub.techne.draft.query.listRecords", params, opts)) as
       | { records?: unknown[]; cursor?: string }
       | null;
-    if (!data) return page === 0 ? null : out;
+    if (!data) return page === 0 || opts.strict ? null : out;
     for (const r of data.records ?? []) if (isRecord(r)) out.push(r as TechneRecord<V>);
     cursor = data.cursor;
-    if (!cursor) break;
+    if (!cursor) return out;
   }
-  return out;
+  return opts.strict && cursor ? null : out;
 }
 
 /** Records by AT-URI (public ones, anonymously). Null on failure. */

@@ -16,9 +16,9 @@
  * SAME CONTRACT AS LUMA: every function returns []/null on failure and never
  * throws. Techne being down must never break the landing page or the newsletter.
  *
- * The steward management read at the bottom (`fetchCollectiveEventsForManagement`)
- * still uses the legacy `social.scenius.*` methods with the steward's cookie: it
- * has to see private events, which the documented anonymous read can't.
+ * The legacy steward read at the bottom (`fetchCollectiveEventsForManagement`) is the old
+ * regenOS lane (`social.scenius.*` with the steward's cookie). /portal/events no longer uses it:
+ * stewards see the same documented public reads as everyone (docs/TECHNE-SIGN-IN.md).
  */
 
 import { REGENOS_TIMEOUT_MS, isRegenosEventsConfigured, regenosBaseUrl, regenosCollectiveDid } from "./config";
@@ -139,6 +139,8 @@ export interface CollectiveEvent {
   series: Series | null;
   /** `community.lexicon.calendar.event#cancelled` etc., when set. */
   status: string | null;
+  /** The stored record body, as read (the stewards' edit form prefills from it). */
+  value: CalendarEventValue;
 }
 
 /** Back-compat name used by the detail page. */
@@ -161,8 +163,20 @@ function toCollectiveEvent(r: TechneRecord<CalendarEventValue>): CollectiveEvent
     url: eventUrl(r.uri),
     series: seriesOf(v),
     status: v.status ?? null,
+    value: v,
   };
 }
+
+/** How far back the series pages, event pages and the stewards' page read past nights. */
+const PAST_WINDOW_MS = 365 * 86_400_000;
+
+/** The start of that window, for `fetchCollectiveEvents({ after })`. */
+export function pastWindowStart(now = new Date()): string {
+  return new Date(now.getTime() - PAST_WINDOW_MS).toISOString();
+}
+
+/** Pages of 100 a strict read follows before it gives up (2000 records). */
+const STRICT_MAX_PAGES = 20;
 
 export interface CollectiveEventsOptions {
   /** Only events starting after this instant (RFC 3339), or `$now`. */
@@ -171,6 +185,12 @@ export interface CollectiveEventsOptions {
   before?: string;
   /** Seconds the shared cache may hold the answer. */
   revalidate?: number;
+  /**
+   * Null rather than short: the collective's own events in the window must be read whole (up to
+   * STRICT_MAX_PAGES pages), and the listings' first page and every listed event must read. Listings of
+   * other calendars past their first 500 are best effort (listings have no date to window on).
+   */
+  strict?: boolean;
 }
 
 /**
@@ -190,13 +210,15 @@ export function dayAlignedWindow(opts: Pick<CollectiveEventsOptions, "after" | "
 
 /**
  * The collective's public events, soonest first: its own event records plus
- * the events its listings curate. Null when Techne couldn't be read at all
- * (so callers can tell "quiet calendar" from "down" when they need to).
+ * the events its listings curate. Null when Techne couldn't be read at all, or (strict) when its own
+ * events or listings couldn't (so callers can tell "quiet calendar" from "down" when they need to).
  */
 export async function fetchCollectiveEvents(opts: CollectiveEventsOptions = {}): Promise<CollectiveEvent[] | null> {
   const collective = regenosCollectiveDid();
   if (!collective || !isRegenosEventsConfigured()) return null;
   const read = { revalidate: opts.revalidate ?? 300 };
+  // A strict read may be long (a year of nights); it fails rather than come back short.
+  const strictRead = opts.strict ? { ...read, strict: true, maxPages: STRICT_MAX_PAGES } : read;
 
   // One role and one operator per leaf (techne.computer: "A leaf names one role and one operator").
   const win = dayAlignedWindow(opts);
@@ -215,30 +237,42 @@ export async function fetchCollectiveEvents(opts: CollectiveEventsOptions = {}):
       },
       order: "start",
     },
-    read,
+    strictRead,
   );
+  // Listings have no date to window on and grow with every night posted (each own event has its `-ctx`
+  // listing), so they are never read strictly to the end: only a failed first page counts as unread.
   const listings = listRecords<{ event?: { uri?: string } }>(
     { where: { all: [{ type: { is: EVENT_LISTING_NSID } }, { author: { is: collective } }] } },
     read,
   );
   const [ownRows, listingRows] = await Promise.all([own, listings]);
   if (ownRows === null && listingRows === null) return null;
+  // Strict (the stewards' page, the feeds): the collective's own events are the calendar; without them,
+  // every confirmed night would look unposted, and a feed would drop them.
+  if (opts.strict && (ownRows === null || listingRows === null)) return null;
 
   const byUri = new Map<string, CollectiveEvent>();
   for (const r of ownRows ?? []) {
     const e = toCollectiveEvent(r);
     if (e) byUri.set(e.uri, e);
   }
+  // Only events from other calendars: the collective's own are read above, in their window. If that read
+  // failed (non-strict), its own listings are the only way left to show its nights, so keep them.
+  const ownPrefix = ownRows === null ? null : `at://${collective}/${EVENT_NSID}/`;
   const listed = [
     ...new Set(
-      (listingRows ?? []).map((l) => l.value.event?.uri).filter((u): u is string => !!u && !byUri.has(u)),
+      (listingRows ?? [])
+        .map((l) => l.value.event?.uri)
+        .filter((u): u is string => !!u && !(ownPrefix && u.startsWith(ownPrefix)) && !byUri.has(u)),
     ),
   ];
-  for (let i = 0; i < listed.length; i += 100) {
-    for (const r of (await getRecords<CalendarEventValue>(listed.slice(i, i + 100), read)) ?? []) {
-      const e = toCollectiveEvent(r);
-      if (e) byUri.set(e.uri, e);
-    }
+  const chunks: string[][] = [];
+  for (let i = 0; i < listed.length; i += 100) chunks.push(listed.slice(i, i + 100));
+  const answers = await Promise.all(chunks.map((c) => getRecords<CalendarEventValue>(c, read)));
+  if (opts.strict && answers.some((a) => a === null)) return null;
+  for (const r of answers.flatMap((a) => a ?? [])) {
+    const e = toCollectiveEvent(r);
+    if (e) byUri.set(e.uri, e);
   }
 
   const afterMs = opts.after && opts.after !== "$now" ? Date.parse(opts.after) : opts.after ? Date.now() : null;

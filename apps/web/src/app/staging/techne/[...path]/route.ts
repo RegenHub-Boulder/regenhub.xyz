@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { isStandInEnabled } from "@/lib/techne/rsvpConfig";
+import { isStandInEnabled } from "@/lib/techne/config";
 
 /**
  * STAGING ONLY: carries the browser's "Sign in with Techne" stand-in calls

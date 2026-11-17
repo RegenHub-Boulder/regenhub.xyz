@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
-import type { RsvpConfig } from "@/lib/techne/rsvp";
+import type { TechneConfig } from "@/lib/techne/config";
 import { authOptions, safeReturn } from "@/lib/techne/session";
 
 /** Finishes "Sign in with Techne" (techne-sdk `restore`) and goes back to the page it started on. */
-export function TechneCallback({ config }: { config: RsvpConfig }) {
+export function TechneCallback({ config }: { config: TechneConfig }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     (async () => {

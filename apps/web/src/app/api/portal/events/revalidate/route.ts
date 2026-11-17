@@ -1,21 +1,23 @@
 import { NextResponse } from "next/server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { TECHNE_READS_TAG } from "@/lib/techne/query";
 import { createClient } from "@/lib/supabase/server";
-import { isRegenosLoginEnabled } from "@/lib/regenos/config";
+import { isStewardEventsEnabled, isTechneSignInEnabled } from "@/lib/techne/config";
 
 /**
  * POST /api/portal/events/revalidate
  *
- * The landing page's events call is cached for five minutes
- * (lib/regenos/events.ts `next: { revalidate: 300 }`), which is right for a
- * public page and wrong for the steward who just changed the calendar and
- * wants to see it. This drops that cache for `/` on demand.
+ * Techne reads are cached for five minutes (lib/techne/query.ts, `next: { revalidate: 300 }`), which is
+ * right for public pages and wrong for the steward who just changed the calendar and wants to see it.
+ * This expires `/` and, with the Techne door on, every cached Techne read (their shared tag), so /events and
+ * the series and event pages all show the change on their next request.
  *
  * A signed-in member is enough authorization: the worst a caller can do is make
  * the landing page refetch a public calendar it would have refetched anyway.
  */
 export async function POST() {
-  if (!isRegenosLoginEnabled()) {
+  // Either steward page calls this: the Techne door or the old regenOS lane.
+  if (!isStewardEventsEnabled()) {
     return NextResponse.json({ error: "NotFound" }, { status: 404 });
   }
 
@@ -23,6 +25,7 @@ export async function POST() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  if (isTechneSignInEnabled()) revalidateTag(TECHNE_READS_TAG, { expire: 0 });
   revalidatePath("/");
   return NextResponse.json({ revalidated: true });
 }

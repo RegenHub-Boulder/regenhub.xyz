@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildEventsFeed, nextNightLabel, overviewFor } from "./seriesEvents";
+import { buildEventsFeed, icsResponse, nextNightLabel, overviewFor } from "./seriesEvents";
 import { dayAlignedWindow, fetchCollectiveEvents, fetchUpcomingRegenosEvents } from "./regenos/events";
 import { getSeries } from "./series";
 import { fakeTechne } from "../../test/support/fakeTechne";
@@ -125,7 +125,7 @@ describe("calendar feeds", () => {
   });
 
   it("puts only that series' nights in a series feed, with in-site links and the record URI as UID", async () => {
-    const ics = await buildEventsFeed(getSeries("agents-night"), new Date("2026-11-16T12:00:00Z"));
+    const ics = (await buildEventsFeed(getSeries("agents-night"), new Date("2026-11-16T12:00:00Z")))!;
     expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(1);
     expect(ics).toContain("SUMMARY:Agents Night");
     expect(ics).toContain(`UID:at://${HUB}/community.lexicon.calendar.event/3a`);
@@ -134,17 +134,19 @@ describe("calendar feeds", () => {
   });
 
   it("puts every collective event in /events.ics", async () => {
-    const ics = await buildEventsFeed(null, new Date("2026-11-16T12:00:00Z"));
+    const ics = (await buildEventsFeed(null, new Date("2026-11-16T12:00:00Z")))!;
     expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(3);
     expect(ics).toContain("X-WR-CALNAME:RegenHub events");
   });
 
-  it("still answers a valid, empty calendar when Techne is down", async () => {
+  it("answers 503, never an empty calendar, when Techne is down (subscribers would drop every night)", async () => {
     const down = fakeTechne([]);
     down.failWith = 503;
     vi.stubGlobal("fetch", down.fetch);
     const ics = await buildEventsFeed(null, new Date("2026-11-16T12:00:00Z"));
-    expect(ics).toContain("BEGIN:VCALENDAR");
-    expect(ics).not.toContain("BEGIN:VEVENT");
+    expect(ics).toBeNull();
+    const res = icsResponse(ics, "x.ics");
+    expect(res.status).toBe(503);
+    expect(res.headers.get("retry-after")).toBe("300");
   });
 });

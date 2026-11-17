@@ -1,39 +1,51 @@
 #!/usr/bin/env bash
-# T-482 staging preview, one process tree (run under a systemd user unit):
-#   Postgres 127.0.0.1:18592 (user-space, ~/.cache/t482/pgenv) → fresh database each start
-#   Techne AppView 127.0.0.1:18591 (regenOS origin/main 4a6324cda, built to ~/.cache/t482/target)
-#   seed: "RegenHub (staging)" collective, the first night of each series, sample people
-#   stand-in for the person's PDS 127.0.0.1:18593 (scripts/staging/techne-standin.mjs), sample RSVPs
-#   regenhub.xyz (this worktree's build) 127.0.0.1:18590, served on the tailnet at :8590
-# No production database, no production Techne. Supabase is not running (no Docker here): member
-# pages that need it show their signed-out state.
+# T-482 staging preview, one process tree (run under a systemd user unit). Ports from T482_PORT_BASE (B, default 18590):
+#   Postgres 127.0.0.1:B+2 (user-space, its own data dir) → fresh database each start
+#   Techne AppView 127.0.0.1:B+1 (regenOS origin/main 4a6324cda, built to $T482_BUILD/target)
+#   seed: "RegenHub (staging)" collective (its steward is a sample person too), the first night of each series,
+#         sample people
+#   stand-in for the person's PDS 127.0.0.1:B+3 (scripts/staging/techne-standin.mjs), sample RSVPs
+#   stand-in for Supabase auth 127.0.0.1:B+4 (scripts/staging/supabase-standin.mjs): a sample portal session, so
+#         /portal/events can be reached (open /staging/portal-session)
+#   regenhub.xyz (this worktree's build) 127.0.0.1:B, served on the tailnet by Uni
+# No production database, no production Techne, no production Supabase.
+# Env: T482_STATE (state dir, default ~/.cache/t482), T482_BUILD (where pgenv/, target/ and appview.env live;
+# default T482_STATE), T482_PORT_BASE.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 S="${T482_STATE:-$HOME/.cache/t482}"
-PG="$S/pgenv/bin"
+BUILD="${T482_BUILD:-$S}"
+B="${T482_PORT_BASE:-18590}"
+P_APPVIEW=$((B + 1)) P_PG=$((B + 2)) P_STANDIN=$((B + 3)) P_SUPA=$((B + 4))
+PG="$BUILD/pgenv/bin"
 STATE="$S/state"
 mkdir -p "$STATE" && chmod 700 "$STATE"
 pids=()
 cleanup() { for p in "${pids[@]}"; do kill "$p" 2>/dev/null || true; done; "$PG/pg_ctl" -D "$S/pgdata" stop -m fast >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
-"$PG/pg_ctl" -D "$S/pgdata" status >/dev/null 2>&1 || "$PG/pg_ctl" -D "$S/pgdata" -o "-p 18592 -k $S -c listen_addresses=127.0.0.1" -l "$S/pg.log" -w start
-"$PG/psql" -q -h 127.0.0.1 -p 18592 -U postgres -c "drop database if exists t482" -c "create database t482"
-"$PG/psql" -q -h 127.0.0.1 -p 18592 -U postgres -d t482 -c "create extension if not exists vector"
+[ -d "$S/pgdata" ] || "$PG/initdb" -D "$S/pgdata" -U postgres --auth=trust >/dev/null
+"$PG/pg_ctl" -D "$S/pgdata" status >/dev/null 2>&1 || "$PG/pg_ctl" -D "$S/pgdata" -o "-p $P_PG -k $S -c listen_addresses=127.0.0.1" -l "$S/pg.log" -w start
+"$PG/psql" -q -h 127.0.0.1 -p "$P_PG" -U postgres -c "drop database if exists t482" -c "create database t482"
+"$PG/psql" -q -h 127.0.0.1 -p "$P_PG" -U postgres -d t482 -c "create extension if not exists vector"
 rm -f "$STATE/standin-records.json"
 
-set -a; . "$S/appview.env"; set +a
-"$S/target/debug/migrate" >/dev/null
-"$S/target/debug/regenos-appview" > "$S/appview.log" 2>&1 & pids+=($!)
-for _ in $(seq 60); do curl -sf http://127.0.0.1:18591/health >/dev/null && break; sleep 1; done
-node "$ROOT/scripts/staging/seed.mjs" --appview http://127.0.0.1:18591 --out "$STATE" > "$S/seed.log"
-node "$ROOT/scripts/staging/techne-standin.mjs" --port 18593 --appview http://127.0.0.1:18591 --state "$STATE" > "$S/standin.log" 2>&1 & pids+=($!)
-for _ in $(seq 20); do curl -sf -o /dev/null http://127.0.0.1:18593/signin && break; sleep 0.5; done
-node "$ROOT/scripts/staging/seed-rsvps.mjs" --standin http://127.0.0.1:18593 --state "$STATE" >> "$S/seed.log"
+set -a; . "$BUILD/appview.env"; set +a
+export DATABASE_URL="postgres://postgres@127.0.0.1:$P_PG/t482" BIND_ADDR="127.0.0.1:$P_APPVIEW" \
+  APP_BASE_URL="http://127.0.0.1:$B" VERIFY_BASE_URL="http://127.0.0.1:$B"
+"$BUILD/target/debug/migrate" >/dev/null
+"$BUILD/target/debug/regenos-appview" > "$S/appview.log" 2>&1 & pids+=($!)
+for _ in $(seq 60); do curl -sf "http://127.0.0.1:$P_APPVIEW/health" >/dev/null && break; sleep 1; done
+node "$ROOT/scripts/staging/seed.mjs" --appview "http://127.0.0.1:$P_APPVIEW" --out "$STATE" > "$S/seed.log"
+node "$ROOT/scripts/staging/techne-standin.mjs" --port "$P_STANDIN" --appview "http://127.0.0.1:$P_APPVIEW" --state "$STATE" > "$S/standin.log" 2>&1 & pids+=($!)
+node "$ROOT/scripts/staging/supabase-standin.mjs" --port "$P_SUPA" > "$S/supabase-standin.log" 2>&1 & pids+=($!)
+for _ in $(seq 20); do curl -sf -o /dev/null "http://127.0.0.1:$P_STANDIN/signin" && break; sleep 0.5; done
+node "$ROOT/scripts/staging/seed-rsvps.mjs" --standin "http://127.0.0.1:$P_STANDIN" --state "$STATE" >> "$S/seed.log"
 
 COLLECTIVE="$(node -e 'console.log(require(process.argv[1]).collective)' "$STATE/seed.json")"
 cd "$ROOT/apps/web"
-export REGENOS_BASE_URL=http://127.0.0.1:18593 REGENOS_COLLECTIVE_DID="$COLLECTIVE" \
-  TECHNE_RSVP_ENABLED=true TECHNE_STAGING_STANDIN=1 TECHNE_STANDIN_URL=http://127.0.0.1:18593 \
-  SUPABASE_INTERNAL_URL=http://127.0.0.1:18594 NODE_ENV=production
-exec node_modules/.bin/next start -H 127.0.0.1 -p 18590
+export REGENOS_BASE_URL="http://127.0.0.1:$P_STANDIN" REGENOS_COLLECTIVE_DID="$COLLECTIVE" \
+  TECHNE_SIGNIN_ENABLED=true TECHNE_STAGING_STANDIN=1 TECHNE_STANDIN_URL="http://127.0.0.1:$P_STANDIN" \
+  SUPABASE_INTERNAL_URL="http://127.0.0.1:$P_SUPA" NODE_ENV=production
+# Not exec: the shell stays, so the trap above stops the rest when next exits.
+node_modules/.bin/next start -H 127.0.0.1 -p "$B"

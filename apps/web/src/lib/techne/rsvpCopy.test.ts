@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { eventDetailsLinkText, eventsPageRsvpLine } from "./rsvpCopy";
 
 function setEnv(on: boolean) {
-  vi.stubEnv("TECHNE_RSVP_ENABLED", on ? "true" : "");
+  vi.stubEnv("TECHNE_SIGNIN_ENABLED", on ? "true" : "");
   vi.stubEnv("REGENOS_BASE_URL", "https://regenos.example");
   vi.stubEnv("REGENOS_COLLECTIVE_DID", "did:plc:abc");
 }

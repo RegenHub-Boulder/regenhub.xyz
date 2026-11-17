@@ -7,7 +7,7 @@ vi.mock("@/lib/luma", () => ({
 }));
 
 import { fetchUpcomingEvents } from "@/lib/events";
-import { fetchPublicRegenosEvent, fetchUpcomingRegenosEvents } from "@/lib/regenos/events";
+import { fetchCollectiveEvents, fetchPublicRegenosEvent, fetchUpcomingRegenosEvents } from "@/lib/regenos/events";
 import { fetchUpcomingLumaEvents } from "@/lib/luma";
 import { fakeTechne, type FakeRecord } from "../../test/support/fakeTechne";
 
@@ -119,6 +119,74 @@ describe("fetchUpcomingRegenosEvents", () => {
       { uri: `at://${SCENE}/pub.techne.draft.event.listing/l1`, value: { event: { uri: other } } },
     ]);
     expect((await fetchUpcomingRegenosEvents()).map((e) => e.name)).toEqual(["Theirs, listed by us", "Ours"]);
+  });
+
+  it("with its own events unread: strict counts the calendar as down; a public page keeps the listed ones, as before", async () => {
+    const techne = fakeTechne([{ uri: `at://${SCENE}/pub.techne.draft.event.listing/l1`, value: { event: { uri: "at://x/y/z" } } }]);
+    vi.stubGlobal("fetch", (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const q = url.searchParams.get("query") ?? "";
+      if (q.includes("community.lexicon.calendar.event")) return new Response("{}", { status: 503 });
+      return techne.fetch(input, init);
+    }) as typeof fetch);
+    // Null, not []: the stewards' page would otherwise offer every confirmed night as unposted.
+    expect(await fetchCollectiveEvents({ strict: true })).toBeNull();
+    // Not strict (the landing page, /events): unchanged from before T-482, an answer from the listings alone.
+    expect(await fetchCollectiveEvents()).toEqual([]);
+  });
+
+  it("with its own events unread, a public page still shows the collective's nights through their own listings", async () => {
+    const ownUri = `at://${SCENE}/community.lexicon.calendar.event/3kownnight22`;
+    const techne = fakeTechne([
+      { uri: ownUri, value: { name: "Agents Night", startsAt: "2026-12-02T01:30:00Z" } },
+      { uri: `at://${SCENE}/pub.techne.draft.event.listing/3kownnight22-ctx`, value: { event: { uri: ownUri } } },
+    ]);
+    vi.stubGlobal("fetch", (async (input: string | URL | Request, init?: RequestInit) => {
+      const q = new URL(String(input)).searchParams.get("query") ?? "";
+      if (q.includes("community.lexicon.calendar.event")) return new Response("{}", { status: 503 });
+      return techne.fetch(input, init);
+    }) as typeof fetch);
+    expect((await fetchCollectiveEvents())?.map((e) => e.name)).toEqual(["Agents Night"]);
+  });
+
+  it("with strict, a list cut short by a failed later page is unread, not short", async () => {
+    // The own-events query answers page 1 with a cursor, then fails page 2; listings are empty.
+    vi.stubGlobal("fetch", (async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      if (!(url.searchParams.get("query") ?? "").includes("community.lexicon.calendar.event")) return Response.json({ records: [] });
+      if (url.searchParams.get("cursor")) return new Response("{}", { status: 503 });
+      return Response.json({ records: [{ uri: `at://${SCENE}/community.lexicon.calendar.event/a`, cid: "c", author: SCENE, collection: "community.lexicon.calendar.event", value: { name: "A", startsAt: "2026-12-01T01:30:00Z" } }], cursor: "next" });
+    }) as typeof fetch);
+    expect(await fetchCollectiveEvents({ revalidate: 0 })).toHaveLength(1); // not strict: the short list
+    expect(await fetchCollectiveEvents({ strict: true, revalidate: 0 })).toBeNull();
+  });
+
+  it("reads listed events from other calendars only, and a strict read fails if one can't be read", async () => {
+    const other = "at://did:plc:someoneelse/community.lexicon.calendar.event/3kother";
+    const own = `at://${SCENE}/community.lexicon.calendar.event/old`;
+    const techne = fakeTechne([
+      eventRow("now", "Ours", "2026-08-20T18:00:00Z"),
+      { uri: own, value: { name: "Ours, last year", startsAt: "2025-01-01T18:00:00Z" } },
+      { uri: other, value: { name: "Theirs", startsAt: "2026-08-19T18:00:00Z" } },
+      { uri: `at://${SCENE}/pub.techne.draft.event.listing/a`, value: { event: { uri: other } } },
+      { uri: `at://${SCENE}/pub.techne.draft.event.listing/old-ctx`, value: { event: { uri: own } } },
+    ]);
+    const asked: string[][] = [];
+    let failGet = false;
+    vi.stubGlobal("fetch", (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("getRecords")) {
+        asked.push(url.searchParams.getAll("uris"));
+        if (failGet) return new Response("{}", { status: 503 });
+      }
+      return techne.fetch(input, init);
+    }) as typeof fetch);
+    const after = "2026-08-01T00:00:00Z";
+    expect((await fetchCollectiveEvents({ after, revalidate: 0, strict: true }))!.map((e) => e.name)).toEqual(["Theirs", "Ours"]);
+    expect(asked).toEqual([[other]]); // the collective's own events aren't fetched again through their listings
+    failGet = true;
+    expect(await fetchCollectiveEvents({ after, revalidate: 0, strict: true })).toBeNull();
+    expect((await fetchCollectiveEvents({ after, revalidate: 0 }))!.map((e) => e.name)).toEqual(["Ours"]);
   });
 
   it("returns [] on a non-2xx instead of throwing", async () => {

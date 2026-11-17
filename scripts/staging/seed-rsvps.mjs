@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Sample RSVPs, each written as the sample person's own community.lexicon.calendar.rsvp through
-// the staging stand-in (the same putRecord the RSVP button sends). Lee has none: the walkthrough's person.
+// the staging stand-in (the same putRecord the RSVP button sends). people[0] is the steward; Lee has none:
+// the walkthrough's person.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 const arg = (k, d) => {
@@ -11,7 +12,7 @@ const STANDIN = arg("--standin", "http://127.0.0.1:18593");
 const STATE = arg("--state", ".");
 const seed = JSON.parse(readFileSync(join(STATE, "seed.json"), "utf8"));
 const people = JSON.parse(readFileSync(join(STATE, "people.json"), "utf8"));
-const going = [[0, "agents-night"], [1, "agents-night"], [2, "civic-tech-night"]];
+const going = [[1, "agents-night"], [2, "agents-night"], [3, "civic-tech-night"]].filter(([, slug]) => seed.events[slug]);
 const B32 = "234567abcdefghijklmnopqrstuvwxyz";
 let us = BigInt(Date.now()) * 1000n;
 const tid = () => {

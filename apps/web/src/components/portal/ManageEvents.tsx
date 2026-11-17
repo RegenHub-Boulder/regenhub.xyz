@@ -20,7 +20,6 @@ import {
   type EventFormValues,
   type EventVisibility,
 } from "@/lib/regenos/eventForm";
-import { ImportLumaCard } from "@/components/portal/ImportLumaCard";
 import { AddSeriesNights } from "@/components/portal/AddSeriesNights";
 import type { PlannedNight } from "@/lib/series";
 import type { PostedNight } from "@/lib/seriesNights";
@@ -36,6 +35,12 @@ export interface ManageableEvent {
   url: string | null;
   /** How many have RSVP'd going (their own Techne records), when known. */
   going?: number | null;
+  /** In the collective's own repo (a listed event belongs to its author: shown, not edited). */
+  editable?: boolean;
+  /** Its `pub.techne.draft.event.config` ({rkey}-cfg), null when there is none. */
+  config?: Record<string, unknown> | null;
+  /** Whether its `pub.techne.draft.event.listing` ({rkey}-ctx) exists. */
+  hasListing?: boolean;
 }
 
 /** RegenHub is in Boulder; pinning the zone keeps server and client renders identical. */
@@ -55,27 +60,27 @@ function formatWhen(iso: string | null): string {
   });
 }
 
-/** Every mutation is a same-origin `/xrpc` POST; the regenOS session cookie rides along by itself. */
-async function xrpcPost(nsid: string, body: unknown): Promise<void> {
-  const res = await fetch(`/xrpc/${nsid}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const json = await res.json().catch(() => null);
-    throw new Error(json?.message ?? json?.error ?? `regenOS returned ${res.status}`);
-  }
-}
+/**
+ * How the steward's change reaches the collective's calendar: create, update or delete, with the
+ * bodies lib/regenos/eventForm.ts builds (TID keys, the hub's timezone, series names), and the event
+ * being changed. StewardEvents sends them as the collective (lib/techne/collectiveEvents.ts).
+ */
+export type EventWrite = (
+  op: "create" | "update" | "delete",
+  input: Record<string, unknown>,
+  existing?: ManageableEvent,
+) => Promise<void>;
 
 export function ManageEvents({
   authority,
   events,
   nights = [],
   posted = [],
+  write,
 }: {
   authority: string;
   events: ManageableEvent[];
+  write: EventWrite;
   /** Confirmed series nights not posted yet ("Add the next nights"). */
   nights?: PlannedNight[];
   /** Each posted event's series and start, so a hand-picked night isn't posted twice. */
@@ -118,15 +123,10 @@ export function ManageEvents({
     setError(null);
     try {
       if (editing) {
-        await xrpcPost(
-          "social.scenius.updateEvent",
-          buildUpdateEventInput(form, { authority, rkey: editing }),
-        );
+        const existing = events.find((ev) => ev.rkey === editing);
+        await write("update", buildUpdateEventInput(form, { authority, rkey: editing }), existing);
       } else {
-        await xrpcPost(
-          "social.scenius.createEvent",
-          buildCreateEventInput(form, { authority, rkey: mintRkey() }),
-        );
+        await write("create", buildCreateEventInput(form, { authority, rkey: mintRkey() }));
       }
       setEditing(null);
       await refresh();
@@ -138,16 +138,17 @@ export function ManageEvents({
   }
 
   async function handleCancel(event: ManageableEvent) {
-    if (!window.confirm(`Cancel "${event.name}"? Anyone who RSVP'd will be told it's called off.`)) {
+    if (
+      !window.confirm(
+        `Remove "${event.name}" from RegenHub's calendar? It is deleted on Techne. People who RSVP'd aren't told automatically.`,
+      )
+    ) {
       return;
     }
     setBusyRkey(event.rkey);
     setError(null);
     try {
-      await xrpcPost(
-        "social.scenius.deleteEvent",
-        buildDeleteEventInput({ authority, rkey: event.rkey }),
-      );
+      await write("delete", buildDeleteEventInput({ authority, rkey: event.rkey }), event);
       if (editing === event.rkey) setEditing(null);
       await refresh();
     } catch (err) {
@@ -181,12 +182,11 @@ export function ManageEvents({
             authority={authority}
             nights={nights}
             posted={posted}
-            post={async (nsid, body) => {
-              await xrpcPost(nsid, body);
+            post={async (body) => {
+              await write("create", body);
               await refresh();
             }}
           />
-          <ImportLumaCard authority={authority} onImported={refresh} />
         </>
       ) : (
         <Card className="glass-panel">
@@ -284,36 +284,21 @@ export function ManageEvents({
 
               {editing ? (
                 <p className="text-xs text-muted">
-                  This event is {form.visibility === "private" ? "private" : "public"}. Visibility and
-                  sign-up mode are set when an event is created and can&apos;t be changed here — cancel
-                  and recreate it if you need to change them.
+                  Public on Techne. Sign-up mode stays as it was set when the event was posted.
                 </p>
               ) : (
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="ev-visibility">Visibility</Label>
-                    <select
-                      id="ev-visibility"
-                      value={form.visibility}
-                      onChange={set("visibility")}
-                      className="glass-input w-full px-3 py-2 rounded text-sm"
-                    >
-                      <option value="public">Public — anyone can see it</option>
-                      <option value="private">Private — members and invitees only</option>
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="ev-attendance">Sign-up</Label>
-                    <select
-                      id="ev-attendance"
-                      value={form.attendance}
-                      onChange={set("attendance")}
-                      className="glass-input w-full px-3 py-2 rounded text-sm"
-                    >
-                      <option value="open">Open — RSVP is a seat</option>
-                      <option value="approval">Approval — you confirm each person</option>
-                    </select>
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ev-attendance">Sign-up</Label>
+                  <select
+                    id="ev-attendance"
+                    value={form.attendance}
+                    onChange={set("attendance")}
+                    className="glass-input w-full px-3 py-2 rounded text-sm"
+                  >
+                    <option value="open">Open — RSVP is a seat</option>
+                    <option value="approval">Approval — you confirm each person</option>
+                  </select>
+                  <p className="text-xs text-muted">Public: anyone can see it.</p>
                 </div>
               )}
 
@@ -367,8 +352,8 @@ function EventList({
   events: ManageableEvent[];
   emptyLabel: string;
   busyRkey: string | null;
-  onEdit: (e: ManageableEvent) => void;
-  onCancel: (e: ManageableEvent) => void;
+  onEdit: ((e: ManageableEvent) => void) | null;
+  onCancel: ((e: ManageableEvent) => void) | null;
 }) {
   return (
     <div className="space-y-3">
@@ -403,24 +388,26 @@ function EventList({
                   </Link>
                 )}
               </div>
-              <div className="flex gap-2 shrink-0">
-                <Button onClick={() => onEdit(event)} className="btn-glass gap-2 px-4">
-                  <Pencil className="w-3.5 h-3.5" />
-                  Edit
-                </Button>
-                <Button
-                  onClick={() => onCancel(event)}
-                  disabled={busyRkey === event.rkey}
-                  className="btn-glass gap-2 px-4 text-red-400"
-                >
-                  {busyRkey === event.rkey ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Trash2 className="w-3.5 h-3.5" />
-                  )}
-                  Cancel event
-                </Button>
-              </div>
+              {onEdit && onCancel && event.editable !== false && (
+                <div className="flex gap-2 shrink-0">
+                  <Button onClick={() => onEdit(event)} className="btn-glass gap-2 px-4">
+                    <Pencil className="w-3.5 h-3.5" />
+                    Edit
+                  </Button>
+                  <Button
+                    onClick={() => onCancel(event)}
+                    disabled={busyRkey === event.rkey}
+                    className="btn-glass gap-2 px-4 text-red-400"
+                  >
+                    {busyRkey === event.rkey ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-3.5 h-3.5" />
+                    )}
+                    Remove
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         ))

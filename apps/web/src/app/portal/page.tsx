@@ -16,6 +16,7 @@ import { MembershipStatusCard } from "@/components/portal/MembershipStatusCard";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { planLabel, getPlan } from "@/lib/plans";
 import { isRegenosLoginEnabled } from "@/lib/regenos/config";
+import { isStewardEventsEnabled, isTechneSignInEnabled } from "@/lib/techne/config";
 import { isSyntheticEmail } from "@/lib/regenos/syntheticEmail";
 import { LinkRegenOSCard } from "@/components/portal/LinkRegenOSCard";
 import { OnchainBillingCard } from "@/components/portal/OnchainBillingCard";
@@ -475,14 +476,16 @@ export default async function PortalPage() {
           </Card>
         </Link>
 
-        {/* Flag-gated only — steward-ness is a regenOS read the page itself does. */}
-        {isRegenosLoginEnabled() && (
+        {/* Flag-gated only — the page itself says what you may do (the Techne door, or the old regenOS lane). */}
+        {isStewardEventsEnabled() && (
           <Link href="/portal/events">
             <Card className="glass-panel hover-lift cursor-pointer">
               <CardContent className="p-6">
                 <CalendarDays className="w-8 h-8 text-sage mb-3" />
                 <h3 className="font-semibold mb-1">Manage Events</h3>
-                <p className="text-sm text-muted">Create and edit the collective&apos;s calendar</p>
+                <p className="text-sm text-muted">
+                  {isTechneSignInEnabled() ? "RegenHub's calendar on Techne, for stewards" : "Create and edit the collective's calendar"}
+                </p>
               </CardContent>
             </Card>
           </Link>

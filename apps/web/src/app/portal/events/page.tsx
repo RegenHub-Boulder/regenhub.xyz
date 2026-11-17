@@ -1,145 +1,127 @@
 import { notFound, redirect } from "next/navigation";
-import Link from "next/link";
-import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
-import { Button } from "@/components/ui/button";
-import { CalendarDays, KeyRound, ShieldQuestion } from "lucide-react";
-import { isRegenosEventsConfigured, isRegenosLoginEnabled, regenosCollectiveDid } from "@/lib/regenos/config";
-import { fetchRegenosIdentity, fetchRegenosSceneStanding } from "@/lib/regenos/auth";
-import { fetchAttendance, fetchCollectiveEventsForManagement } from "@/lib/regenos/events";
-import { SERIES, isCancelled, seriesOf } from "@/lib/series";
+import { CalendarDays } from "lucide-react";
+import { regenosCollectiveDid } from "@/lib/regenos/config";
+import { techneConfig } from "@/lib/techne/config";
+import { fetchAttendance, fetchCollectiveEvents, pastWindowStart } from "@/lib/regenos/events";
+import { getRecords } from "@/lib/techne/query";
+import { EVENT_CONFIG_NSID, EVENT_LISTING_NSID } from "@/lib/techne/collectiveEvents";
+import { SERIES, isCancelled } from "@/lib/series";
 import { unpostedNights } from "@/lib/seriesNights";
-import { ManageEvents, type ManageableEvent } from "@/components/portal/ManageEvents";
+import type { ManageableEvent } from "@/components/portal/ManageEvents";
+import { StewardEvents } from "@/components/portal/StewardEvents";
+import { STEWARD_PATH } from "@/lib/techne/session";
+import { isRegenosLoginEnabled } from "@/lib/regenos/config";
+import { OldStewardPage } from "@/components/portal/legacy/OldStewardPage";
+import Link from "next/link";
 
 export const metadata = { title: "Manage Events — RegenHub" };
 
-/** Every read here is per-caller and per-cookie; nothing about this page is cacheable. */
+/** Per-request reads (going counts, the calendar right after a change). */
 export const dynamic = "force-dynamic";
 
-function Explainer({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="glass-panel p-8 max-w-lg">
-      <h2 className="text-xl font-semibold mb-3">{title}</h2>
-      <div className="text-muted text-sm space-y-3 leading-relaxed">{children}</div>
-    </div>
-  );
-}
-
+/**
+ * Manage Events. With TECHNE_SIGNIN_ENABLED off this is the old regenOS-lane page, unchanged
+ * (components/portal/legacy/OldStewardPage.tsx). With it on, RegenHub's calendar on Techne:
+ *
+ * Two doors, as everywhere in the portal: the Supabase sign-in gets you into the portal, and
+ * "Sign in with Techne" (the site's one Techne session, shared with RSVP) says who you are on
+ * Techne. The calendar is the documented public read every visitor gets (lib/regenos/events.ts).
+ * Anyone signed in with Techne gets the form; Techne decides on each write whether they may post as
+ * RegenHub (components/portal/StewardEvents.tsx). The old page stays at /portal/events/old while the
+ * regenOS lane is on ("Old steward page").
+ */
 export default async function ManageEventsPage() {
-  // The whole lane rides the login flag: no regenOS session, no way to authenticate a write.
-  if (!isRegenosLoginEnabled()) notFound();
+  const config = techneConfig();
+  if (!config) return <OldStewardPage />;
+  const collective = regenosCollectiveDid();
+  if (!collective) notFound();
 
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/auth/login");
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect(`/auth/login?next=${encodeURIComponent(STEWARD_PATH)}`);
 
-  const header = (
-    <div>
-      <h1 className="text-3xl font-bold text-forest flex items-center gap-3">
-        <CalendarDays className="w-7 h-7 text-sage" />
-        Manage Events
-      </h1>
-      <p className="text-muted mt-1">RegenHub&apos;s calendar on the commons, edited here.</p>
-    </div>
-  );
-
-  const collectiveDid = regenosCollectiveDid();
-  if (!isRegenosEventsConfigured() || !collectiveDid) {
-    return (
-      <div className="space-y-8">
-        {header}
-        <Explainer title="Events aren't wired up yet">
-          <p>
-            The collective&apos;s calendar lives in regenOS, and this deployment doesn&apos;t have a
-            collective configured yet. An admin needs to set <code>REGENOS_COLLECTIVE_DID</code>.
-          </p>
-        </Explainer>
-      </div>
-    );
-  }
-
-  // The regenOS session cookie was set on THIS origin by the /xrpc proxy, so we
-  // can replay the caller's own cookies to the AppView and ask who they are.
-  const cookieHeader = (await cookies()).toString();
-  const identity = await fetchRegenosIdentity(cookieHeader);
-
-  if (!identity) {
-    return (
-      <div className="space-y-8">
-        {header}
-        <Explainer title="Sign in with regenOS to manage events">
-          <p>
-            You&apos;re signed in to RegenHub, but events live on the commons and need your regenOS
-            identity — that&apos;s what proves to the calendar that you&apos;re a steward here.
-          </p>
-          <p>Sign in through the regenOS lane and come back.</p>
-          <Link href="/auth/login" className="inline-block pt-1">
-            <Button className="btn-primary-glass gap-2 px-6">
-              <KeyRound className="w-4 h-4" />
-              Sign in with regenOS
-            </Button>
-          </Link>
-        </Explainer>
-      </div>
-    );
-  }
-
-  const standing = await fetchRegenosSceneStanding(cookieHeader, collectiveDid, identity.did);
-
-  if (!standing.canManageEvents) {
-    return (
-      <div className="space-y-8">
-        {header}
-        <Explainer title="Only stewards edit the calendar">
-          <p>
-            You&apos;re signed in as{" "}
-            <strong className="text-foreground">{identity.handle ?? identity.did}</strong>, but the
-            collective lists you as{" "}
-            <strong className="text-foreground">{standing.role ?? "not a member"}</strong>. Creating
-            and editing RegenHub events needs Builder or higher.
-          </p>
-          <p className="flex items-start gap-2">
-            <ShieldQuestion className="w-4 h-4 mt-0.5 shrink-0 text-sage" />
-            <span>
-              If that&apos;s wrong, ask a steward to update your role in the collective — the calendar
-              reads it live, so it takes effect as soon as they do.
-            </span>
-          </p>
-        </Explainer>
-      </div>
-    );
-  }
-
-  const events = await fetchCollectiveEventsForManagement(cookieHeader);
+  // Strict: a list cut short would make posted nights look unposted, and they'd be offered again.
   const now = new Date();
-  const goingCounts = await Promise.all(
+  const read = await fetchCollectiveEvents({ after: pastWindowStart(now), revalidate: 0, strict: true });
+  const events = read ?? [];
+  const goingCountsRead = Promise.all(
     events.map((e) =>
-      e.visibility === "public" && e.startAt && Date.parse(e.startAt) > now.getTime() - 86_400_000
+      e.startAt && Date.parse(e.startAt) > now.getTime() - 86_400_000
         ? fetchAttendance(e.uri).then((a) => a?.going ?? null)
         : Promise.resolve(null),
     ),
   );
+  // Each event's config and listing in the collective's repo, so an edit keeps the config and a removal
+  // deletes exactly what is there.
+  const own = events.filter((e) => e.did === collective);
+  const siblingUris = own.flatMap((e) => [
+    `at://${collective}/${EVENT_CONFIG_NSID}/${e.rkey}-cfg`,
+    `at://${collective}/${EVENT_LISTING_NSID}/${e.rkey}-ctx`,
+  ]);
+  const chunks: string[][] = [];
+  for (let i = 0; i < siblingUris.length; i += 100) chunks.push(siblingUris.slice(i, i + 100));
+  const [goingCounts, answers] = await Promise.all([
+    goingCountsRead,
+    Promise.all(chunks.map((c) => getRecords(c, { revalidate: 0 }))),
+  ]);
+  // Unknown siblings would make an edit create records that exist (the batch fails) or a removal leave
+  // them behind: with any chunk unread, nothing is editable until a reload.
+  const siblingsKnown = answers.every((a) => a !== null);
+  const siblings = new Map<string, Record<string, unknown>>();
+  for (const r of answers.flatMap((a) => a ?? [])) siblings.set(r.uri, r.value);
   const manageable: ManageableEvent[] = events.map((e, i) => ({
     uri: e.uri,
     rkey: e.rkey,
     name: e.name,
     startAt: e.startAt,
-    visibility: e.visibility,
+    visibility: "public",
     value: e.value,
     url: e.url,
     going: goingCounts[i],
+    // Only the collective's own events are ours to edit; a listed event belongs to its author.
+    editable: e.did === collective && siblingsKnown,
+    config: siblings.get(`at://${collective}/${EVENT_CONFIG_NSID}/${e.rkey}-cfg`) ?? null,
+    hasListing: siblings.has(`at://${collective}/${EVENT_LISTING_NSID}/${e.rkey}-ctx`),
   }));
   const posted = events.map((e) => ({
-    seriesSlug: seriesOf(e.value)?.slug ?? null,
+    seriesSlug: e.series?.slug ?? null,
     startAt: e.startAt,
-    cancelled: isCancelled(e.value),
+    cancelled: isCancelled(e),
   }));
-  const nights = SERIES.flatMap((s) => unpostedNights(s, posted, now));
+  // With the calendar unreadable, every confirmed night would look unposted: suggest none.
+  const nights = read ? SERIES.flatMap((s) => unpostedNights(s, posted, now)) : [];
 
   return (
     <div className="space-y-8">
-      {header}
-      <ManageEvents authority={collectiveDid} events={manageable} nights={nights} posted={posted} />
+      <div>
+        <h1 className="text-3xl font-bold text-forest flex items-center gap-3">
+          <CalendarDays className="w-7 h-7 text-sage" />
+          Manage Events
+        </h1>
+        <p className="text-muted mt-1">
+          RegenHub&apos;s calendar on Techne.
+          {isRegenosLoginEnabled() && (
+            <>
+              {" "}
+              <Link href="/portal/events/old" className="underline underline-offset-2 hover:text-foreground">
+                Old steward page
+              </Link>
+            </>
+          )}
+        </p>
+      </div>
+      <StewardEvents
+        config={config}
+        authority={collective}
+        events={manageable}
+        nights={nights}
+        posted={posted}
+        readFailed={read === null}
+        editingOff={read !== null && !siblingsKnown}
+      />
     </div>
   );
 }
