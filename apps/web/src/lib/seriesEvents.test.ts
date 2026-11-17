@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { NO_NEXT_NIGHT, buildEventsFeed, overviewFor } from "./seriesEvents";
-import { nextNightLabel } from "../components/events/SeriesCards";
-import { fetchCollectiveEvents, fetchUpcomingRegenosEvents } from "./regenos/events";
+import { buildEventsFeed, nextNightLabel, overviewFor } from "./seriesEvents";
+import { dayAlignedWindow, fetchCollectiveEvents, fetchUpcomingRegenosEvents } from "./regenos/events";
 import { getSeries } from "./series";
 import { fakeTechne } from "../../test/support/fakeTechne";
 
@@ -31,9 +30,8 @@ describe("series overview", () => {
     const o = overviewFor(agents, (await fetchCollectiveEvents())!, new Date("2026-11-16T12:00:00Z"));
     expect(o.next).toBeNull();
     expect(o.upcoming).toEqual([]);
-    expect(nextNightLabel(o)).toBe(NO_NEXT_NIGHT);
-    expect(NO_NEXT_NIGHT).toBe("Next date coming soon");
-    expect(nextNightLabel(overviewFor(agents, [], new Date("2026-11-16T12:00:00Z")))).toBe("Next date coming soon");
+    expect(nextNightLabel(o, (iso) => iso)).toBe("Next date coming soon");
+    expect(nextNightLabel(overviewFor(agents, [], new Date("2026-11-16T12:00:00Z")), (iso) => iso)).toBe("Next date coming soon");
   });
 
   it("leads with the soonest posted night and sorts past nights newest first", async () => {
@@ -49,7 +47,7 @@ describe("series overview", () => {
     const events = (await fetchCollectiveEvents())!;
     const o = overviewFor(agents, events, new Date("2026-11-16T12:00:00Z"));
     expect(o.next).toMatchObject({ rkey: "3a" });
-    expect(nextNightLabel(o)).not.toBe(NO_NEXT_NIGHT);
+    expect(nextNightLabel(o, (iso) => iso)).toBe("Next: 2026-12-02T01:30:00.000Z");
     expect(o.past.map((e) => e.rkey)).toEqual(["3b", "3c"]);
   });
 });
@@ -90,6 +88,27 @@ describe("cancelled and open-ended nights", () => {
     const events = (await fetchCollectiveEvents())!;
     expect(overviewFor(agents, events, new Date("2026-12-02T03:00:00Z")).next).toMatchObject({ rkey: "3a" });
     expect(overviewFor(agents, events, new Date("2026-12-02T03:31:00Z")).next).toBeNull();
+  });
+});
+
+describe("query window", () => {
+  it("widens to whole days, so the Techne query (and its cache key) is the same all day", () => {
+    const a = dayAlignedWindow({ after: "2026-11-16T00:00:01.000Z", before: "2026-12-07T00:00:01.000Z" });
+    const b = dayAlignedWindow({ after: "2026-11-16T23:59:59.999Z", before: "2026-12-07T23:59:59.999Z" });
+    expect(a).toEqual(b);
+    expect(a).toEqual({ after: "2026-11-16T00:00:00.000Z", before: "2026-12-08T00:00:00.000Z" });
+    expect(dayAlignedWindow({ after: "$now" })).toEqual({ after: "$now", before: undefined });
+  });
+
+  it("still applies the exact bounds after the wider read", async () => {
+    vi.stubGlobal(
+      "fetch",
+      fakeTechne([
+        ev("3a", "Early", "2026-11-16T01:00:00.000Z"),
+        ev("3b", "Later", "2026-11-16T20:00:00.000Z"),
+      ]).fetch,
+    );
+    expect((await fetchCollectiveEvents({ after: "2026-11-16T12:00:00.000Z" }))!.map((e) => e.rkey)).toEqual(["3b"]);
   });
 });
 

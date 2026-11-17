@@ -38,10 +38,18 @@ export function overviewFor(series: Series, events: CollectiveEvent[], now: Date
   return { series, next: upcoming[0] ?? null, upcoming, past };
 }
 
-/** Every series' overview (past nights from the last year). Techne down ⇒ no nights, never an error. */
+/**
+ * Every series' overview (past nights from the last year). Techne down or slow ⇒ no nights, so every
+ * series says "Next date coming soon" until the next read works; the page never errors.
+ */
 export async function fetchSeriesOverviews(now = new Date()): Promise<SeriesOverview[]> {
   const events = (await fetchCollectiveEvents({ after: new Date(now.getTime() - 365 * 86_400_000).toISOString() })) ?? [];
   return SERIES.map((s) => overviewFor(s, events, now));
+}
+
+/** What a series card says about the next night: its date, or "Next date coming soon". */
+export function nextNightLabel(o: SeriesOverview, formatWhen: (iso: string) => string): string {
+  return o.next?.startAt ? `Next: ${formatWhen(o.next.startAt)}` : NO_NEXT_NIGHT;
 }
 
 /** When the next night of a series starts, for ordering cards soonest first (none ⇒ last). */

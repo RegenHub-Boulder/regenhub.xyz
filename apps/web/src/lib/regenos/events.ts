@@ -174,6 +174,21 @@ export interface CollectiveEventsOptions {
 }
 
 /**
+ * The query's start bounds widened to whole UTC days (`after` down, `before` up), so the Techne
+ * query URL, and with it the fetch cache key, stays the same all day. The exact bounds are applied
+ * after the read. `$now` passes through.
+ */
+export function dayAlignedWindow(opts: Pick<CollectiveEventsOptions, "after" | "before">): { after?: string; before?: string } {
+  const align = (iso: string | undefined, up: boolean) => {
+    if (!iso || iso === "$now" || Number.isNaN(Date.parse(iso))) return iso;
+    const d = new Date(iso);
+    const floor = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    return new Date(up && floor !== d.getTime() ? floor + 86_400_000 : floor).toISOString();
+  };
+  return { after: align(opts.after, false), before: align(opts.before, true) };
+}
+
+/**
  * The collective's public events, soonest first: its own event records plus
  * the events its listings curate. Null when Techne couldn't be read at all
  * (so callers can tell "quiet calendar" from "down" when they need to).
@@ -184,9 +199,10 @@ export async function fetchCollectiveEvents(opts: CollectiveEventsOptions = {}):
   const read = { revalidate: opts.revalidate ?? 300 };
 
   // One role and one operator per leaf (techne.computer: "A leaf names one role and one operator").
+  const win = dayAlignedWindow(opts);
   const startLeaves = [
-    ...(opts.after ? [{ start: { after: opts.after } }] : []),
-    ...(opts.before ? [{ start: { before: opts.before } }] : []),
+    ...(win.after ? [{ start: { after: win.after } }] : []),
+    ...(win.before ? [{ start: { before: win.before } }] : []),
   ];
   const own = listRecords<CalendarEventValue>(
     {

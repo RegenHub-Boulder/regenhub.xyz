@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CalendarPlus, Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -36,6 +36,9 @@ export function AddSeriesNights({
   const [pickError, setPickError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Today in the hub's timezone, set after mount so server and browser render the same HTML.
+  const [today, setToday] = useState<string | undefined>(undefined);
+  useEffect(() => setToday(dateIn(new Date().toISOString(), SERIES[0].timezone)), []);
 
   const all = [...nights, ...added.filter((a) => !nights.some((n) => keyOf(n) === keyOf(a)))];
   const bySeries = SERIES.map((s) => ({
@@ -125,7 +128,7 @@ export function AddSeriesNights({
             type="date"
             aria-label="Date"
             value={date}
-            min={dateIn(new Date().toISOString(), SERIES[0].timezone)}
+            min={today}
             onChange={(e) => setDate(e.target.value)}
             className="w-auto"
           />

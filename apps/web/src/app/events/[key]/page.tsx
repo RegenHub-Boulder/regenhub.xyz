@@ -73,7 +73,7 @@ export default async function SeriesPage({ params }: PageProps) {
               Details and RSVP →
             </Link>
           ) : (
-            <p className="text-sm text-muted">Open to anyone. Add the calendar feed below to hear when a night is posted.</p>
+            <p className="text-sm text-muted">Open to anyone. The calendar feed below keeps you up to date.</p>
           )}
         </section>
 

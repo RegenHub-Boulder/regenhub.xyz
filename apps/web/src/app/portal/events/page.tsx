@@ -7,7 +7,7 @@ import { CalendarDays, KeyRound, ShieldQuestion } from "lucide-react";
 import { isRegenosEventsConfigured, isRegenosLoginEnabled, regenosCollectiveDid } from "@/lib/regenos/config";
 import { fetchRegenosIdentity, fetchRegenosSceneStanding } from "@/lib/regenos/auth";
 import { fetchAttendance, fetchCollectiveEventsForManagement } from "@/lib/regenos/events";
-import { SERIES, seriesOf } from "@/lib/series";
+import { SERIES, isCancelled, seriesOf } from "@/lib/series";
 import { unpostedNights } from "@/lib/seriesNights";
 import { ManageEvents, type ManageableEvent } from "@/components/portal/ManageEvents";
 
@@ -129,7 +129,11 @@ export default async function ManageEventsPage() {
     url: e.url,
     going: goingCounts[i],
   }));
-  const posted = events.map((e) => ({ seriesSlug: seriesOf(e.value)?.slug ?? null, startAt: e.startAt }));
+  const posted = events.map((e) => ({
+    seriesSlug: seriesOf(e.value)?.slug ?? null,
+    startAt: e.startAt,
+    cancelled: isCancelled(e.value),
+  }));
   const nights = SERIES.flatMap((s) => unpostedNights(s, posted, now));
 
   return (

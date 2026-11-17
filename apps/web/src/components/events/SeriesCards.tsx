@@ -1,17 +1,13 @@
 import Link from "next/link";
 import { ArrowRight, CalendarDays } from "lucide-react";
 import { formatEventWhen } from "@/components/events/EventList";
-import { NO_NEXT_NIGHT, nextStart, type SeriesOverview } from "@/lib/seriesEvents";
+import { nextNightLabel, nextStart, type SeriesOverview } from "@/lib/seriesEvents";
 
 /**
  * The series nights, each as a card with its next posted date: what `/` and
  * `/events` lead with. A posted night links to its own page (where RSVP
  * lives); with none posted the card says so and links to the series page.
  */
-
-export function nextNightLabel(o: SeriesOverview): string {
-  return o.next?.startAt ? formatEventWhen(o.next.startAt) : NO_NEXT_NIGHT;
-}
 
 export function SeriesCard({ overview }: { overview: SeriesOverview }) {
   const { series, next } = overview;
@@ -23,7 +19,7 @@ export function SeriesCard({ overview }: { overview: SeriesOverview }) {
         <p className="text-sm text-muted">{series.blurb}</p>
         <p className="mt-auto pt-2 flex items-center gap-2 text-sm">
           <CalendarDays className="w-4 h-4 text-sage shrink-0" />
-          <span>{next ? `Next: ${nextNightLabel(overview)}` : NO_NEXT_NIGHT}</span>
+          <span>{nextNightLabel(overview, formatEventWhen)}</span>
           <ArrowRight className="w-4 h-4 text-sage ml-auto shrink-0" />
         </p>
       </div>

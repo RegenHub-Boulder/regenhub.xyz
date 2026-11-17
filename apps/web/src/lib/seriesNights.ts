@@ -8,18 +8,23 @@
 import { dateIn, plannedNight, type PlannedNight, type Series } from "@/lib/series";
 import { HUB_TIMEZONE, mintRkey } from "@/lib/regenos/eventForm";
 
-export type PostedNight = { seriesSlug: string | null; startAt: string | null };
+export type PostedNight = { seriesSlug: string | null; startAt: string | null; cancelled?: boolean };
 
-/** The dates (in the series' timezone) that already have a posted night of the series. */
-function takenDates(series: Series, posted: PostedNight[]): Set<string> {
+/** The dates (in the series' timezone) that have a posted night of the series; cancelled ones only if asked. */
+function takenDates(series: Series, posted: PostedNight[], withCancelled: boolean): Set<string> {
   return new Set(
-    posted.filter((e) => e.seriesSlug === series.slug && e.startAt).map((e) => dateIn(e.startAt!, series.timezone)),
+    posted
+      .filter((e) => e.seriesSlug === series.slug && e.startAt && (withCancelled || !e.cancelled))
+      .map((e) => dateIn(e.startAt!, series.timezone)),
   );
 }
 
-/** The series' confirmed nights that aren't posted yet and haven't ended by `now`, soonest first. */
+/**
+ * The series' confirmed nights that aren't posted yet and haven't ended by `now`, soonest first.
+ * A cancelled night isn't suggested again (the hosts called it off); a steward can still pick it by hand.
+ */
 export function unpostedNights(series: Series, posted: PostedNight[], now: Date): PlannedNight[] {
-  const taken = takenDates(series, posted);
+  const taken = takenDates(series, posted, true);
   return [...series.confirmedDates]
     .sort()
     .filter((d) => !taken.has(d))
@@ -29,7 +34,7 @@ export function unpostedNights(series: Series, posted: PostedNight[], now: Date)
 
 /**
  * A night a steward picked by hand (`YYYY-MM-DD`), at the series' default times;
- * or why it can't be added: not a date, already over, or already posted.
+ * or why it can't be added: not a date, already over, or already posted (and not cancelled).
  */
 export function pickedNight(
   series: Series,
@@ -43,7 +48,7 @@ export function pickedNight(
   }
   const night = plannedNight(series, date);
   if (Date.parse(night.endsAt) <= now.getTime()) return { error: "That night is already over" };
-  if (takenDates(series, posted).has(date)) return { error: `${series.name} is already posted for that date` };
+  if (takenDates(series, posted, false).has(date)) return { error: `${series.name} is already posted for that date` };
   return { night };
 }
 

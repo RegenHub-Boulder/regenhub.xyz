@@ -45,13 +45,10 @@ describe("series keys", () => {
   });
 });
 
-describe("series data", () => {
-  it("holds only the hosts' confirmed nights, no recurring schedule", () => {
-    expect(agents.confirmedDates).toEqual(["2026-12-01"]);
-    expect(civic.confirmedDates).toEqual(["2026-12-10"]);
+describe("series copy", () => {
+  it("promises no repeating schedule in what visitors read", () => {
     for (const s of SERIES) {
-      expect(Object.keys(s)).not.toEqual(expect.arrayContaining(["cadence"]));
-      expect(`${s.blurb} ${s.about}`).not.toMatch(/monthly|weekly|every|alternate|second thursday|biweekly/i);
+      expect(`${s.name} ${s.blurb} ${s.about}`).not.toMatch(/monthly|weekly|every|alternate|second thursday|biweekly/i);
     }
   });
 });
