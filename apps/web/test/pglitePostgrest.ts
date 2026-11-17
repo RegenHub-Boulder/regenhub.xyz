@@ -139,6 +139,13 @@ export function pglitePostgrest(pg: PGlite, users: Map<string, FakeAuthUser>) {
       const args: unknown[] = [];
       const named = Object.entries(body).map(([k, v]) => { args.push(v); return `${ident(k)} => $${args.length}`; });
       try {
+        // A set-returning (`returns table` / `setof`) function answers with an array of rows, as PostgREST does.
+        const proc = (await pg.query<{ retset: boolean }>(
+          "select bool_or(proretset) retset from pg_proc where proname = $1 and pronamespace = 'public'::regnamespace", [rpc[1]])).rows[0];
+        if (proc?.retset) {
+          const rows = await pg.query(`select * from ${ident(rpc[1])}(${named.join(", ")})`, args);
+          return json(200, rows.rows);
+        }
         const result = await pg.query(`select ${ident(rpc[1])}(${named.join(", ")}) as result`, args);
         return json(200, (result.rows[0] as { result: unknown }).result);
       } catch (error) { return pgError(error); }

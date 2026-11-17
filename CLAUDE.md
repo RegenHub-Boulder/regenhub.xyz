@@ -125,6 +125,23 @@ row (migration 043), so there's finally a record of what ran, when, and who ran 
 Fallback (MCP down, or the migration itself broke): psql against the container on compute-1 —
 see DEPLOYMENT.md "Run migrations".
 
+### Buy a day pass (card or USDC)
+`/portal/passes` offers "Pay with card" and, when the gasless relay is configured, "Pay with USDC". Same price
+both ways, from `dayPassCentsFor` ($30, $25 with an active/trialing subscription; one check, `lib/dayPassPrice.ts`).
+**Card:** `/api/portal/buy-passes` → Stripe Checkout → `fulfillPassPurchase` (`purchases` row keyed by the session,
++1 `day_passes_balance`, receipt email). **USDC** (migration 063): `/api/portal/buy-passes/onchain` writes an
+`onchain_invoices` row of `kind = 'day_pass'` (no subscription; `wallet_id` is the payer; price frozen; `due_at` =
+one hour, after which `expire_onchain_pass_invoices()` (billing cron, and each new purchase) expires it unless a
+payment is on its way). Payment then runs the membership rail unchanged: wallet link, gasless relay,
+`/api/portal/onchain/submit`, `processOnchainInvoice`. `credit_onchain_invoice`'s pass branch writes the payment
+(effects complete), the `purchases` row (`onchain_invoice_id`, unique), +1 balance and the
+`onchain_day_pass_purchased` audit row in one transaction, so a transaction credits one purchase once; the
+caller that credited it sends the same receipt email. A wrong amount or sender leaves the invoice in `exception`
+(audit `onchain_pass_payment_exception`, with the tx); a payment reported after expiry is kept as
+`onchain_payment_after_void`, never credited. Code that reads paid invoices as membership periods
+(door-access reconciliation, reminders, past-due marking, MCP overdue counts) filters `kind = 'membership'`.
+A USDC pass can't be refunded through the admin "refund last purchase" (Stripe only); refund it from the treasury by hand.
+
 ### Membership application flow (approve + notify)
 `/apply` (sign-in required) → `/api/portal/application` upserts the application, emails the
 applicant an acknowledgment, and pings the Telegram group with two buttons:

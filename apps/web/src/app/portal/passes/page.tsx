@@ -111,6 +111,11 @@ export default async function PassesPage({ searchParams }: PageProps) {
   const passCents = dayPassCentsFor(isContributingMember);
   // The USDC flow is the gasless one (as on /membership), so it needs the relayer too.
   const usdcEnabled = isGaslessRelayConfigured();
+  // The USDC flow lands here with ?onchain=paid once the server credited the
+  // pass; say so only if a USDC purchase really landed in the last few minutes.
+  const usdcJustLanded = params.onchain === "paid" && (recentPurchases ?? []).some(
+    (p) => p.onchain_invoice_id && Date.now() - new Date(p.created_at).getTime() < 15 * 60 * 1000,
+  );
 
   return (
     <div className="space-y-8 max-w-3xl">
@@ -137,7 +142,7 @@ export default async function PassesPage({ searchParams }: PageProps) {
           </div>
         </div>
       )}
-      {params.onchain === "paid" && !justPurchased && (
+      {usdcJustLanded && !justPurchased && (
         <div className="glass-panel p-4 border border-emerald-500/30 bg-emerald-500/5 flex items-start gap-3">
           <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
           <div>
@@ -288,9 +293,9 @@ export default async function PassesPage({ searchParams }: PageProps) {
                 key: `p-${p.id}`,
                 date: p.created_at,
                 icon: <ShoppingCart className="w-4 h-4 text-sage" />,
-                title: p.kind === "five_pack" ? "5-Pack purchased (legacy)" : p.onchain_invoice_id ? "Day Pass purchased · USDC" : "Day Pass purchased",
+                title: p.kind === "five_pack" ? "5-Pack purchased (legacy)" : "Day Pass purchased",
                 amount: `$${p.amount_cents / 100}`,
-                detail: `+${p.passes_granted} pass${p.passes_granted === 1 ? "" : "es"}`,
+                detail: `+${p.passes_granted} pass${p.passes_granted === 1 ? "" : "es"}${p.onchain_invoice_id ? " · paid in USDC" : ""}`,
               })),
               ...(recentGrants ?? []).map((g) => ({
                 key: `g-${g.id}`,

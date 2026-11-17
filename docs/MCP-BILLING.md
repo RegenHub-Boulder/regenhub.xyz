@@ -61,22 +61,25 @@ Example: `list_members({ "plan_key": "member_basic", "rail": "onchain" })`
 ### `get_member_billing`
 One member's whole billing picture, by `member_id` or `email`: every subscription (with any admin
 cancel or pending plan switch), crypto invoices (newest 24, overdue flagged), day-pass balance,
-guest-pass pools with uses left, day-pass and 5-pack purchases, monthly pass grants, recent cancel and
-switch operations, and, read live from Stripe, the customer's subscriptions and invoices.
+guest-pass pools with uses left, day-pass and 5-pack purchases (each marked `by card` or `in USDC`), monthly
+pass grants, recent cancel and switch operations, and, read live from Stripe, the customer's subscriptions
+and invoices. A day pass bought with USDC shows among the crypto invoices as `crypto day pass #N`.
 
 Example: `get_member_billing({ "email": "pat@example.test" })`
 
 ### `list_open_invoices`
 Every unpaid invoice. Card: open Stripe invoices with failed-attempt counts, the member, the plan, and
 `⚠️ its subscription (#60) is canceled: likely voidable` when the subscription already ended. Crypto:
-invoices that are open, submitted, detected or in exception, with `OVERDUE` flags.
+invoices that are open, submitted, detected or in exception, with `OVERDUE` flags. A USDC day pass
+purchase in progress shows as `crypto day pass #N` with the time its price hold expires; it is never
+counted as overdue (the billing cron expires it after an hour).
 
 Example: `list_open_invoices({})`. Today this should show the two open invoices on canceled
 subscriptions (Brent Porter's Hot Desk and Aaron's Cold Desk), flagged as likely voidable.
 
 ### `billing_summary`
 MRR by plan, net of discounts and at list price; live subscriptions by rail; past-due and ending
-counts; overdue crypto invoices; prepaid days outstanding (day-pass balances plus unused guest-pass
+counts; overdue crypto membership invoices; prepaid days outstanding (day-pass balances plus unused guest-pass
 pool uses). Past-due rows count toward MRR until they end.
 
 Example: `billing_summary({})`

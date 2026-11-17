@@ -47,7 +47,7 @@ import { POST as buyWithCard } from "@/app/api/portal/buy-passes/route";
 import { POST as submitPayment } from "@/app/api/portal/onchain/submit/route";
 import { POST as onchainCron } from "@/app/api/cron/onchain-billing/route";
 
-const WALLET = "0x1111111111111111111111111111111111111111";
+const WALLET = "0x1111111111111111111111111111111111111111" as const;
 const TX = `0x${"a".repeat(64)}`;
 const TX2 = `0x${"d".repeat(64)}`;
 
@@ -69,7 +69,7 @@ async function asWriter(statements: string) {
 }
 
 /** The OP receipt: one USDC Transfer of `amountMicros` from `from` to the treasury. */
-function chainPays(amountMicros: bigint, from = WALLET) {
+function chainPays(amountMicros: bigint, from: `0x${string}` = WALLET) {
   const transfer = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
   vi.mocked(getOpPublicClient).mockReturnValue({
     getTransactionReceipt: async () => ({
