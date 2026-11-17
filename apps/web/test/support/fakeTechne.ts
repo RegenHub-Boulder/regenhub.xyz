@@ -8,6 +8,8 @@
  * `author`, `subject` (`is`/`in`) and `start` (`after`/`before`), `order: "start"`.
  */
 
+class BadQuery extends Error {}
+
 export interface FakeRecord {
   uri: string;
   cid?: string;
@@ -27,7 +29,10 @@ function matches(r: FakeRecord, node: Node, now: number): boolean {
   if (Array.isArray(node.all)) return (node.all as Node[]).every((n) => matches(r, n, now));
   if (Array.isArray(node.any)) return (node.any as Node[]).some((n) => matches(r, n, now));
   if (node.not) return !matches(r, node.not as Node, now);
-  const [[role, cond]] = Object.entries(node) as [string, Record<string, unknown>][];
+  const entries = Object.entries(node) as [string, Record<string, unknown>][];
+  // The real platform refuses these (400 "start takes exactly one operator"); so does the fake.
+  if (entries.length !== 1 || Object.keys(entries[0][1]).length !== 1) throw new BadQuery("a leaf names one role and one operator");
+  const [[role, cond]] = entries;
   const value =
     role === "type"
       ? collectionOf(r.uri)
@@ -75,7 +80,13 @@ export function fakeTechne(records: FakeRecord[] = []): FakeTechne {
       });
       if (url.pathname.endsWith("/pub.techne.draft.query.listRecords")) {
         const q = JSON.parse(url.searchParams.get("query") ?? "{}") as { where: Node; order?: string };
-        let rows = self.records.filter((r) => matches(r, q.where, Date.now()));
+        let rows: FakeRecord[];
+        try {
+          rows = self.records.filter((r) => matches(r, q.where, Date.now()));
+        } catch (err) {
+          if (err instanceof BadQuery) return Response.json({ error: "InvalidRequest", message: err.message }, { status: 400 });
+          throw err;
+        }
         if (q.order === "start") {
           rows = rows
             .filter((r) => r.value.startsAt)

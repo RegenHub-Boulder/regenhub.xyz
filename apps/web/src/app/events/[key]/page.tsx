@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, CalendarDays, CalendarPlus, MapPin, Repeat } from "lucide-react";
-import { getSeries, SERIES } from "@/lib/series";
+import { getSeries } from "@/lib/series";
 import { fetchCollectiveEvents, formatEventLocation } from "@/lib/regenos/events";
 import { overviewFor } from "@/lib/seriesEvents";
 import { formatEventRange, formatEventWhen } from "@/components/events/EventList";
@@ -14,11 +14,9 @@ import { nextNightLabel } from "@/components/events/SeriesCards";
  * series' calendar feed. RSVP lives on each night's own page.
  */
 
-export const revalidate = 300;
+// Rendered per request; the Techne reads underneath carry their own 5-minute cache.
+export const dynamic = "force-dynamic";
 
-export function generateStaticParams() {
-  return SERIES.map((s) => ({ key: s.slug }));
-}
 
 interface PageProps {
   params: Promise<{ key: string }>;

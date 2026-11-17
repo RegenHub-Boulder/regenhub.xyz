@@ -39,7 +39,8 @@ export function dateIn(iso: string, timeZone: string): string {
   );
 }
 
-function hasEnded(e: { startAt: string | null; endAt: string | null }, now: Date): boolean {
+/** Whether an event is over (its end, or its start when it has none, is past). */
+export function hasEnded(e: { startAt: string | null; endAt: string | null }, now = new Date()): boolean {
   const end = e.endAt ?? e.startAt;
   return !!end && Date.parse(end) <= now.getTime();
 }

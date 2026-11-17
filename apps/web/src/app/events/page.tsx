@@ -29,6 +29,9 @@ export const metadata: Metadata = {
     "Upcoming public events at RegenHub Boulder — community building, learning, and collaboration in the cooperative workspace.",
 };
 
+// Rendered per request; the Techne reads underneath carry their own 5-minute cache.
+export const dynamic = "force-dynamic";
+
 /** A longer look-ahead than the landing page's 60 days — this is the whole calendar. */
 const HORIZON_DAYS = 120;
 

@@ -183,16 +183,18 @@ export async function fetchCollectiveEvents(opts: CollectiveEventsOptions = {}):
   if (!collective || !isRegenosEventsConfigured()) return null;
   const read = { revalidate: opts.revalidate ?? 300 };
 
-  const startLeaf: Record<string, string> = {};
-  if (opts.after) startLeaf.after = opts.after;
-  if (opts.before) startLeaf.before = opts.before;
+  // One role and one operator per leaf (techne.computer: "A leaf names one role and one operator").
+  const startLeaves = [
+    ...(opts.after ? [{ start: { after: opts.after } }] : []),
+    ...(opts.before ? [{ start: { before: opts.before } }] : []),
+  ];
   const own = listRecords<CalendarEventValue>(
     {
       where: {
         all: [
           { type: { is: EVENT_NSID } },
           { author: { is: collective } },
-          ...(Object.keys(startLeaf).length ? [{ start: startLeaf }] : []),
+          ...startLeaves,
         ],
       },
       order: "start",

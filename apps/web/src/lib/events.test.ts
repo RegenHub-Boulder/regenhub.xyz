@@ -98,7 +98,7 @@ describe("fetchUpcomingRegenosEvents", () => {
   });
 
   // regenhub.xyz IS the experience — an event link never leaves the site, and
-  // never depends on REGENOS_WEB_URL (which now only feeds the ICS feed).
+  // never depends on REGENOS_WEB_URL (no longer read at all; the feed is /events.ics).
   it("links events in-site, whether or not REGENOS_WEB_URL is set", async () => {
     const expected = `/events/${encodeURIComponent(SCENE)}/abc123`;
 

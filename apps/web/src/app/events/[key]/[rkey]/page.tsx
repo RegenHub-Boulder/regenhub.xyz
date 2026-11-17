@@ -6,6 +6,7 @@ import { fetchAttendance, fetchPublicRegenosEvent, formatEventLocation } from "@
 import { formatEventRange } from "@/components/events/EventList";
 import { RsvpPanel } from "@/components/events/RsvpPanel";
 import { rsvpConfig } from "@/lib/techne/rsvpConfig";
+import { hasEnded } from "@/lib/seriesEvents";
 
 /**
  * One public event, on regenhub.xyz: `/events/<did>/<rkey>`.
@@ -48,7 +49,7 @@ export default async function EventDetailPage({ params }: PageProps) {
 
   const rsvp = rsvpConfig();
   const attendance = rsvp ? await fetchAttendance(event.uri) : null;
-  const ended = !!(event.endAt ?? event.startAt) && Date.parse((event.endAt ?? event.startAt)!) < Date.now();
+  const ended = hasEnded(event);
   const when = formatEventRange(event.startAt, event.endAt);
   const recordType = "https://techne.pub/community.lexicon.calendar.event/";
   const location = event.location ? formatEventLocation(event.location) : "";
@@ -87,7 +88,7 @@ export default async function EventDetailPage({ params }: PageProps) {
               <p className="flex items-start gap-2 text-muted">
                 <Repeat className="w-5 h-5 text-sage shrink-0 mt-0.5" />
                 <Link href={`/events/${event.series.slug}`} className="hover:text-sage underline">
-                  {event.series.name}, {event.series.rhythm.toLowerCase()}
+                  Part of {event.series.name} ({event.series.rhythm})
                 </Link>
               </p>
             )}
@@ -126,8 +127,8 @@ export default async function EventDetailPage({ params }: PageProps) {
               {event.series ? `Add ${event.series.name} to your calendar` : "Add RegenHub events to your calendar"}
             </a>
           </p>
-          <p className="break-all">
-            This event is a Techne record: <code className="text-xs">{event.uri}</code> (
+          <p>
+            This event is a Techne record: <code className="text-xs break-all">{event.uri}</code> (
             <a href={recordType} className="underline hover:text-sage">
               its type on techne.pub
             </a>
