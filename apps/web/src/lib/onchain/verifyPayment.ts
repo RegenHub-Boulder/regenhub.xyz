@@ -16,7 +16,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { AuditAction, logAction } from "@/lib/auditLog";
 import { dayPassReceiptEmail, sendEmail } from "@/lib/email";
 import { assertOpPublicClient, getOpPublicClient } from "./config";
-import { findUsedAuthorization } from "./gaslessRelay";
+import { findUsedAuthorization, UntraceableAuthorizationError } from "./gaslessRelay";
 import { invoicePayerWalletId } from "./invoicePayer";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
@@ -310,16 +310,15 @@ async function settleMissingPassTransaction(
     } catch (cause) {
       // Only the relay's own "used, but which tx?" answers mean money may
       // have moved; anything else (an RPC outage) is retried next run.
-      const message = cause instanceof Error ? cause.message : "";
-      if (!/consumed but its event is not available|matching transfer transactions/.test(message)) throw cause;
+      if (!(cause instanceof UntraceableAuthorizationError)) throw cause;
       await recordPassPaymentException(admin, invoice, txHash, "untraceable",
-        `authorization used on chain but its transaction can't be traced (${message}); check the treasury and settle by hand`);
+        `authorization used on chain but its transaction can't be traced (${cause.message}); check the treasury and settle by hand`);
       return { status: "submitted", txHash };
     }
   }
   if (used && used !== "canceled") {
     if (used.toLowerCase() === txHash.toLowerCase()) {
-      await recordPassPaymentException(admin, invoice, txHash, "untraceable",
+      await recordPassPaymentException(admin, invoice, txHash, "same-hash",
         "authorization used on chain but this transaction wasn't found after 24 hours; check the treasury and settle by hand");
       return { status: "submitted", txHash };
     }
@@ -328,7 +327,7 @@ async function settleMissingPassTransaction(
     // submitted_at is kept, so if that one can't be found either, the next
     // run lands in the branch above and an admin hears.
     const real = used.toLowerCase();
-    const conflict = () => recordPassPaymentException(admin, invoice, txHash, "untraceable",
+    const conflict = () => recordPassPaymentException(admin, invoice, txHash, "conflict",
       `authorization was used by ${real}, which is already recorded elsewhere; check the treasury and settle by hand`);
     const { error: jobMoveError } = await admin.from("onchain_relay_jobs").update({ submitted_tx_hash: real }).eq("invoice_id", invoice.id);
     if (jobMoveError?.code === "23505") { await conflict(); return { status: "submitted", txHash }; }
@@ -337,7 +336,13 @@ async function settleMissingPassTransaction(
       .update({ submitted_tx_hash: real })
       .eq("id", invoice.id).eq("submitted_tx_hash", txHash).in("status", ["submitted", "detected"]).select("id").maybeSingle();
     if (moveError || !moved) {
-      await admin.from("onchain_relay_jobs").update({ submitted_tx_hash: txHash }).eq("invoice_id", invoice.id).eq("submitted_tx_hash", real);
+      // Undo the job move, unless another runner has since moved the invoice to `real` too.
+      const { data: now } = await admin.from("onchain_invoices").select("submitted_tx_hash").eq("id", invoice.id).single();
+      if (now?.submitted_tx_hash !== real) {
+        const { error: undoError } = await admin.from("onchain_relay_jobs").update({ submitted_tx_hash: txHash })
+          .eq("invoice_id", invoice.id).eq("submitted_tx_hash", real);
+        if (undoError) throw undoError;
+      }
       if (moveError?.code === "23505") { await conflict(); return { status: "submitted", txHash }; }
       if (moveError) throw moveError;
       return { status: "submitted", txHash }; // paid or changed meanwhile
@@ -366,7 +371,7 @@ async function recordPassPaymentException(
   admin: ServiceClient,
   invoice: { id: number; member_id: number; amount_usdc_micros: number },
   txHash: string,
-  kind: "mismatch" | "gave-up" | "untraceable",
+  kind: "mismatch" | "gave-up" | "untraceable" | "same-hash" | "conflict",
   reason: string,
 ) {
   await logAction({

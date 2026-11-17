@@ -112,9 +112,11 @@ export async function POST(request: Request) {
   // purchase can then expire cleanly). A prepared one with time left to sign
   // is still reused.
   const isPass = invoice.kind === "day_pass";
+  const holdEnding = isPass && passHoldTooShortToSign(invoice.due_at);
+  // Near the end of a hold a prepared one must still leave time to sign; otherwise the usual 30 s.
   const reusable = existing?.status === "prepared"
-    && existing.valid_before > now + (isPass ? PASS_REUSE_AUTHORIZATION_SECONDS : 30);
-  if (isPass && !reusable && passHoldTooShortToSign(invoice.due_at)) {
+    && existing.valid_before > now + (holdEnding ? PASS_REUSE_AUTHORIZATION_SECONDS : 30);
+  if (holdEnding && !reusable) {
     return NextResponse.json({ error: "This purchase's price hold is ending. Start again for a fresh price." }, { status: 409 });
   }
   const holdEnds = isPass ? Math.floor(Date.parse(invoice.due_at) / 1000) : Infinity;

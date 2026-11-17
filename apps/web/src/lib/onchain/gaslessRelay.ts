@@ -28,6 +28,8 @@ export type RelayJob = Database["public"]["Tables"]["onchain_relay_jobs"]["Row"]
 const WORKER_LEASE_MS = 5 * 60 * 1000;
 
 class InvalidRelayJobError extends Error {}
+/** The authorization was used on chain, but which transaction used it can't be told (yet). */
+export class UntraceableAuthorizationError extends Error {}
 
 export const USDC_AUTHORIZATION_TYPES = {
   TransferWithAuthorization: [
@@ -263,10 +265,10 @@ export async function findUsedAuthorization(
     // Circle reports both used and canceled authorizations as consumed. Do
     // not infer a terminal cancellation from missing logs: a transient RPC
     // inconsistency must remain retryable so a real transfer is not orphaned.
-    throw new Error("payment authorization is consumed but its event is not available yet");
+    throw new UntraceableAuthorizationError("payment authorization is consumed but its event is not available yet");
   }
   if (hashes.length > 1) {
-    throw new Error(`used authorization has ${hashes.length} matching transfer transactions`);
+    throw new UntraceableAuthorizationError(`used authorization has ${hashes.length} matching transfer transactions`);
   }
   return hashes[0];
 }
