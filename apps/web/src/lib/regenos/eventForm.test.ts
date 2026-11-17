@@ -90,6 +90,7 @@ describe("buildCreateEventInput", () => {
         "region",
         "rkey",
         "startsAt",
+        "timezone",
         "visibility",
       ].sort(),
     );
@@ -164,9 +165,10 @@ describe("eventBodyToFormValues", () => {
 });
 
 describe("mintRkey", () => {
-  it("stays inside the atproto rkey charset and is unique per call", () => {
-    const keys = new Set(Array.from({ length: 50 }, mintRkey));
-    expect(keys.size).toBe(50);
-    for (const k of keys) expect(k).toMatch(/^[A-Za-z0-9._:~-]{1,512}$/);
+  it("mints a TID (the lexicon's key type), unique and increasing per call", () => {
+    const keys = Array.from({ length: 50 }, mintRkey);
+    expect(new Set(keys).size).toBe(50);
+    for (const k of keys) expect(k).toMatch(/^[234567abcdefghij][234567abcdefghijklmnopqrstuvwxyz]{12}$/);
+    expect([...keys].sort()).toEqual(keys);
   });
 });

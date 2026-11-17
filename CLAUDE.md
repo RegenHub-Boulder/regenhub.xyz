@@ -47,7 +47,10 @@ The `.dockerignore` has an exception (`!**/.env.production`) so the file is avai
 | `TELEGRAM_BOT_TOKEN` | Bot (runtime) | |
 | `REGENOS_BASE_URL` | Web (runtime) | regenOS AppView base URL, no trailing slash. Unset = events fall back to the Luma embed and one-login stays off. |
 | `REGENOS_COLLECTIVE_DID` | Web (runtime) | The RegenHub collective's `did:plc:…`. Required alongside the base URL for the events swap. |
-| `REGENOS_WEB_URL` | Web (runtime) | Public regenOS web origin. **Only** used for the subscribable `calendar.ics` feed URL — event *pages* are in-site (`/events/<did>/<rkey>`) and never depend on this. Unset = no "Subscribe to the calendar" line. |
+| `REGENOS_WEB_URL` | Web (runtime) | **No longer read** (T-482): the calendar feed is regenhub.xyz's own `/events.ics`. Safe to remove from Coolify. |
+| `TECHNE_RSVP_ENABLED` | Web (runtime) | **Default off.** `true` turns on "Sign in with Techne" + RSVP on event pages and serves `/techne/client-metadata.json`. Needs the events vars above. |
+| `TECHNE_PDS_URL` / `TECHNE_PLC_URL` / `TECHNE_HANDLE_DOMAIN` / `TECHNE_PLATFORM_DID` | Web (runtime) | Test deployments only; production leaves them unset (techne-sdk defaults). |
+| `TECHNE_STAGING_STANDIN` / `TECHNE_STANDIN_URL` | Web (runtime) | **Staging only**, never production: the sign-in stand-in. Refused for the regenhub.xyz origin. |
 | `REGENOS_LOGIN_ENABLED` | Web (runtime) | **Default off.** `true`/`1`/`yes` turns on the regenOS login lane + the `/xrpc` proxy. |
 | `CRON_SECRET` | Web (runtime) | Bearer token required by every `/api/cron/*` route. |
 | `NEWSLETTER_UNSUBSCRIBE_SECRET` | Web (runtime) | Signs newsletter unsubscribe links. Give it its own value — those links sit in inboxes forever and shouldn't share the cron bearer token. Falls back to `CRON_SECRET` if unset (already-mailed links keep verifying); in production, with neither set, signing throws instead of using a default. |
@@ -263,27 +266,48 @@ two independently-switchable things. Both degrade to today's behaviour when unco
 **Events (on whenever `REGENOS_BASE_URL` + `REGENOS_COLLECTIVE_DID` are set).** The landing page's
 "Upcoming Events" section renders the collective's public calendar instead of the Luma iframe.
 
-- `lib/regenos/events.ts` — `GET /xrpc/social.scenius.getEvents?scene=<did>&limit=200`, **anonymous**
-  (the AppView handler takes no viewer input, so member and non-member callers get byte-identical
-  responses and permissioned events are structurally absent). Returns `[]` on any failure, never throws.
-  The AppView orders by *indexing* time, not start time — we filter + sort on `startsAt` here.
+- `lib/regenos/events.ts` + `lib/techne/query.ts` — reads through **Techne's documented public query**
+  (techne.computer/reference.html): `pub.techne.draft.query.listRecords` for the collective's own
+  `community.lexicon.calendar.event` records plus the `pub.techne.draft.event.listing` records that
+  curate others' events onto its calendar, and `getRecords` for one event. **Anonymous**, so private events
+  are structurally absent. A query leaf takes ONE operator (a date range is two `start` leaves). Returns
+  `[]`/null on any failure, never throws. Only the steward view (`fetchCollectiveEventsForManagement`)
+  still uses `social.scenius.getEvents/getVisibleEvents` with the steward cookie (it must see private events).
 - `lib/events.ts` — the seam `lib/luma.ts:10-11` promised. One `UpcomingEvent` shape, two sources,
   chosen by config: regenOS first, Luma second.
+- **Series** (`lib/series.ts`, T-482): Agents Night and Civic Tech Night. **No recurring schedule** (Aaron, 11-16:
+  not committing to recurring times yet): the site promises no rhythm and generates no dates. A series' nights are
+  the ones posted to the collective's calendar. `confirmedDates` (Agents Night 2026-12-01, Civic Tech Night
+  2026-12-10) and 6:30–9pm America/Denver placeholder times are EDITABLE DATA there, used only as suggestions in
+  the portal. Techne has no series type: a night is an ordinary event named after the series ("Agents Night", or
+  "Agents Night: topic"), or with a `uris` entry ending `/events/<slug>`. Event keys are TIDs (`mintRkey`), as the
+  lexicon declares; old `ev-…` keys still read. Every create/edit sends `timezone: "America/Denver"`.
+  `/events/<slug>` is the series page (next posted night, posted nights after it, past nights; with none upcoming
+  it says "Next date coming soon"), built from `lib/seriesEvents.ts`. `/` (right under the hero) and `/events`
+  lead with the series cards. `/portal/events` → **Add the next nights** offers the confirmed dates not yet posted
+  plus a date picker for any later night, posts them via `createEvent` (`lib/seriesNights.ts`) and shows "N going"
+  per event.
+- **Feeds:** `/events.ics` (everything) and `/events/<slug>.ics` (a rewrite to `/events/<slug>/calendar.ics`),
+  built by `lib/ics.ts`; UID = the event's AT-URI. `REGENOS_WEB_URL` is no longer read.
 - `components/landing/UpcomingEvents.tsx` — async server component. **Zero events for any reason
   (quiet calendar, AppView down, timeout) falls back to the Luma embed.** The site never breaks
   because regenOS is down.
 - **`/events` + `/events/<did>/<rkey>` — the whole event experience is in-site.** Per Aaron, an
-  event link never leaves regenhub.xyz: no lu.ma, no scenius.social. `/events` is the public
-  calendar at a 120-day horizon (same Luma fallback contract as the landing section); the detail
-  page reads ONE event via anonymous `GET /xrpc/social.scenius.getEvent?uri=at://<did>/community.lexicon.calendar.event/<rkey>`
-  and `notFound()`s on anything that isn't a public event (unknown rkey, private event, AppView
-  down) — one honest 404, never a leak that a private event exists. No public RSVP; the CTA sends
-  people to `/auth/login` + `/portal`. Card/date rendering is shared with the landing section in
-  `components/events/EventList.tsx`; a site-relative URL renders as a `next/link`, an absolute one
-  (the Luma fallback) keeps the new-tab treatment.
-- `lib/regenos/events.ts` `eventUrl()` returns the **site-relative** `/events/<did>/<rkey>` and is
-  env-independent. `regenosCalendarIcsUrl()` still points at REGENOS_WEB_URL on purpose — an ICS
-  feed is a calendar-app subscription URL, not a page a person navigates to.
+  event link never leaves regenhub.xyz. The detail page shows only events the collective authored or
+  lists, and `notFound()`s anything else — one honest 404. Card/date rendering is shared in
+  `components/events/EventList.tsx`.
+- **RSVP + "Sign in with Techne"** (`TECHNE_RSVP_ENABLED`, default OFF; T-482). regenhub.xyz is its own
+  atproto OAuth client via `techne-sdk/auth` (the docs' way): client metadata at
+  `/techne/client-metadata.json` (scope: `repo:community.lexicon.calendar.rsvp` + the SDK's default reads),
+  callback `/techne/callback`. The RSVP is the attendee's OWN `community.lexicon.calendar.rsvp` written with
+  `com.atproto.repo.putRecord` on their PDS, then hinted with `pub.techne.draft.sync.indexRecord`
+  (`components/events/RsvpPanel.tsx`, `lib/techne/rsvp.ts`); "N going" is the documented query
+  `{type rsvp, subject <event>}`, latest per person. No `/xrpc` proxy change and no platform origin
+  allowlist is involved. This door does NOT sign anyone into the RegenHub portal; Supabase login stays the
+  member door. Optional test-deployment overrides: `TECHNE_PDS_URL`, `TECHNE_PLC_URL`, `TECHNE_HANDLE_DOMAIN`,
+  `TECHNE_PLATFORM_DID`. **Staging only:** `TECHNE_STAGING_STANDIN=1` + `TECHNE_STANDIN_URL` swap the OAuth
+  for a stand-in (`lib/techne/standIn.ts`, `app/staging/techne`, `scripts/staging/`); refused for the
+  regenhub.xyz origin. Staging recipe: `scripts/staging/preview.sh`.
 - Deliberately NOT changed: the newsletter still reads Luma directly (`lib/newsletter.ts:142`). Its
   copy is Luma-branded end to end; switching it is a product decision, not a plumbing one.
 

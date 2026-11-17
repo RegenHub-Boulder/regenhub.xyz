@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { CalendarPlus, Loader2, Lock, Globe, Pencil, Trash2, X, ArrowRight } from "lucide-react";
 import {
   EMPTY_EVENT_FORM,
+  HUB_TIMEZONE,
   buildCreateEventInput,
   buildDeleteEventInput,
   buildUpdateEventInput,
@@ -20,6 +21,9 @@ import {
   type EventVisibility,
 } from "@/lib/regenos/eventForm";
 import { ImportLumaCard } from "@/components/portal/ImportLumaCard";
+import { AddSeriesNights } from "@/components/portal/AddSeriesNights";
+import type { PlannedNight } from "@/lib/series";
+import type { PostedNight } from "@/lib/seriesNights";
 
 export interface ManageableEvent {
   uri: string;
@@ -30,10 +34,12 @@ export interface ManageableEvent {
   /** The stored `community.lexicon.calendar.event` body — the edit form's source of truth. */
   value: CalendarEventBody;
   url: string | null;
+  /** How many have RSVP'd going (their own Techne records), when known. */
+  going?: number | null;
 }
 
 /** RegenHub is in Boulder; pinning the zone keeps server and client renders identical. */
-const TZ = "America/Denver";
+const TZ = HUB_TIMEZONE;
 
 function formatWhen(iso: string | null): string {
   if (!iso) return "No time set";
@@ -65,9 +71,15 @@ async function xrpcPost(nsid: string, body: unknown): Promise<void> {
 export function ManageEvents({
   authority,
   events,
+  nights = [],
+  posted = [],
 }: {
   authority: string;
   events: ManageableEvent[];
+  /** Confirmed series nights not posted yet ("Add the next nights"). */
+  nights?: PlannedNight[];
+  /** Each posted event's series and start, so a hand-picked night isn't posted twice. */
+  posted?: PostedNight[];
 }) {
   // `null` = no form open; a string = the rkey being edited; "" = the new-event form.
   const [editing, setEditing] = useState<string | null>(null);
@@ -165,6 +177,15 @@ export function ManageEvents({
               New event
             </Button>
           </div>
+          <AddSeriesNights
+            authority={authority}
+            nights={nights}
+            posted={posted}
+            post={async (nsid, body) => {
+              await xrpcPost(nsid, body);
+              await refresh();
+            }}
+          />
           <ImportLumaCard authority={authority} onImported={refresh} />
         </>
       ) : (
@@ -367,7 +388,10 @@ function EventList({
                     <Globe className="w-3.5 h-3.5 text-sage shrink-0" aria-label="Public" />
                   )}
                 </div>
-                <p className="text-sm text-muted mt-0.5">{formatWhen(event.startAt)}</p>
+                <p className="text-sm text-muted mt-0.5">
+                  {formatWhen(event.startAt)}
+                  {typeof event.going === "number" && ` · ${event.going} going`}
+                </p>
                 {/* In-site now (`/events/<did>/<rkey>`), so a plain internal link — and only for a
                     PUBLIC event, since the public page 404s anything the AppView keeps private. */}
                 {event.url && event.visibility === "public" && (
