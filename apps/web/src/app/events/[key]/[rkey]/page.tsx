@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, CalendarDays, CalendarPlus, MapPin, Repeat } from "lucide-react";
+import { ArrowLeft, CalendarDays, CalendarPlus, MapPin, Layers } from "lucide-react";
 import { fetchAttendance, fetchPublicRegenosEvent, formatEventLocation } from "@/lib/regenos/events";
 import { formatEventRange } from "@/components/events/EventList";
 import { RsvpPanel } from "@/components/events/RsvpPanel";
@@ -87,9 +87,9 @@ export default async function EventDetailPage({ params }: PageProps) {
             )}
             {event.series && (
               <p className="flex items-start gap-2 text-muted">
-                <Repeat className="w-5 h-5 text-sage shrink-0 mt-0.5" />
+                <Layers className="w-5 h-5 text-sage shrink-0 mt-0.5" />
                 <Link href={`/events/${event.series.slug}`} className="hover:text-sage underline">
-                  Part of {event.series.name} ({event.series.rhythm})
+                  Part of {event.series.name}
                 </Link>
               </p>
             )}

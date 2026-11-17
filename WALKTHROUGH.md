@@ -14,11 +14,11 @@ pages say enough, and whether "Sign in with Techne" → "I'm going" feels simple
 
 ## Steps
 1. **Home** (`01-home-mobile.png`, `05-home-desktop.png`): right under the hero, "Come to a night" with the two
-   cards and their next dates. *"The home page now leads with the two regular nights."*
-2. **Events** (`02`, `06`): the regular nights first, then anything else on the calendar, and the calendar feed.
+   cards and their next dates. *"The home page now leads with the two community nights."*
+2. **Events** (`02`, `06`): the community nights first, then anything else on the calendar, and the calendar feed.
    *"Agents Night and Civic Tech Night come first, each with its next date."*
-3. **Series page** (`03`, `07`; Civic `04`, `08`): what the night is, the next night, planned nights marked "to be
-   confirmed", and "Add Agents Night to your calendar" (`/events/agents-night.ics`). *"One link adds the series to
+3. **Series page** (`03`, `07`; Civic `04`, `08`): what the night is, the next posted night (no repeating schedule
+   is promised; with none posted it says "Next date coming soon"), and "Add Agents Night to your calendar" (`/events/agents-night.ics`). *"One link adds the series to
    your calendar and keeps it up to date."*
 4. **A night's page, signed out** (`09-night-signed-out.png`): RSVP card with the count and "Sign in with Techne".
    *"RSVP starts with Sign in with Techne, the way the Techne docs describe it."*

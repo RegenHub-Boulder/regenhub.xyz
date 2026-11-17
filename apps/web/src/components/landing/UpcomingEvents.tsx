@@ -9,7 +9,7 @@ import { SeriesCards } from "@/components/events/SeriesCards";
 /**
  * The landing page's "Upcoming Events" body.
  *
- * Async server component. Leads with the regular nights (series cards with
+ * Async server component. Leads with the community nights (series cards with
  * their next date), then the rest of the calendar. Three states:
  *
  *  1. regenOS not configured  → the Luma embed, byte-identical to before.
@@ -34,7 +34,7 @@ export default async function UpcomingEvents() {
   if (!isRegenosEventsConfigured()) return <LumaEmbed />;
 
   const [{ source, events }, overviews] = await Promise.all([fetchUpcomingEvents(HORIZON_DAYS), fetchSeriesOverviews()]);
-  // The regular nights lead the page from the hero (NextNights); list the rest here.
+  // The community nights lead the page from the hero (NextNights); list the rest here.
   const others = events.filter((e) => !overviews.some((o) => o.upcoming.some((u) => u.uri === e.id))).slice(0, 6);
 
   return (
@@ -64,11 +64,11 @@ export default async function UpcomingEvents() {
   );
 }
 
-/** The regular nights, right under the hero: what the home page leads with. */
+/** The community nights, right under the hero: what the home page leads with. */
 export async function NextNights() {
   const overviews = await fetchSeriesOverviews();
   return (
-    <section className="relative px-6 pb-4" aria-label="Regular nights">
+    <section className="relative px-6 pb-4" aria-label="Community nights">
       <div className="max-w-4xl mx-auto space-y-3">
         <h2 className="text-xl font-semibold text-forest text-center">Come to a night</h2>
         <SeriesCards overviews={overviews} />

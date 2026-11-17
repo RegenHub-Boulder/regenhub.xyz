@@ -12,19 +12,13 @@
  * wherever Techne events show. Record keys stay TIDs, as the lexicon declares
  * (`"key": "tid"`); the series is never encoded in the key.
  *
- * Times and cadence below are EDITABLE DATA. 6:30–9pm is a placeholder until
- * the hosts confirm; Agents Night's fortnightly rhythm past the first night is
- * proposed, not confirmed (`confirmedThrough`).
+ * A series has no recurring schedule and promises none. Its nights are
+ * the ones a steward posts. `confirmedDates` and the times below are EDITABLE
+ * DATA, used only to suggest nights in /portal/events; 6:30–9pm is a
+ * placeholder until the hosts confirm.
  */
 
 export type SeriesSlug = "agents-night" | "civic-tech-night";
-
-/** How often a series meets. Dates are calendar dates in the series' timezone. */
-export type Cadence =
-  /** Every `intervalWeeks` weeks on the weekday of `firstDate`. */
-  | { kind: "weekly"; intervalWeeks: number }
-  /** The `nth` (1–4) weekday of each month, the weekday of `firstDate`. */
-  | { kind: "monthly"; nth: 1 | 2 | 3 | 4 };
 
 export interface SeriesPlace {
   name: string;
@@ -42,14 +36,12 @@ export interface Series {
   blurb: string;
   /** A short paragraph for the series page. */
   about: string;
-  /** "Alternate Tuesdays", "Second Thursday of the month": what a person reads. */
-  rhythm: string;
-  /** The first night, `YYYY-MM-DD` in `timezone`. */
-  firstDate: string;
-  /** Dates after this one are proposed, not confirmed; null = all confirmed. */
-  confirmedThrough: string | null;
-  cadence: Cadence;
-  /** Local wall-clock `HH:mm` in `timezone`. */
+  /**
+   * Nights the hosts have confirmed, `YYYY-MM-DD` in `timezone`. Only suggestions for
+   * "Add the next nights" in /portal/events; visitors see a night once it is posted.
+   */
+  confirmedDates: readonly string[];
+  /** Default local wall-clock `HH:mm` in `timezone` for a new night. */
   startTime: string;
   endTime: string;
   timezone: string;
@@ -75,10 +67,7 @@ export const SERIES: readonly Series[] = [
     about:
       "Bring what you're building with AI agents, or come to see what others are building. A few short demos, " +
       "then open tables to compare notes. Open to anyone; no membership needed.",
-    rhythm: "Alternate Tuesdays",
-    firstDate: "2026-12-01",
-    confirmedThrough: "2026-12-01",
-    cadence: { kind: "weekly", intervalWeeks: 2 },
+    confirmedDates: ["2026-12-01"],
     startTime: "18:30",
     endTime: "21:00",
     timezone: "America/Denver",
@@ -90,12 +79,9 @@ export const SERIES: readonly Series[] = [
     name: "Civic Tech Night",
     blurb: "Bring your project, or your neighborhood group's stuck problem.",
     about:
-      "A monthly night for people who build tools for their town and people who need them. Bring a project, " +
+      "A night for people who build tools for their town and people who need them. Bring a project, " +
       "or a problem your neighborhood group is stuck on, and work on it with others. Open to anyone.",
-    rhythm: "Second Thursday of the month",
-    firstDate: "2026-12-10",
-    confirmedThrough: "2026-12-10",
-    cadence: { kind: "monthly", nth: 2 },
+    confirmedDates: ["2026-12-10"],
     startTime: "18:30",
     endTime: "21:00",
     timezone: "America/Denver",
@@ -197,45 +183,6 @@ export function isCancelled(e: { status?: string | null }): boolean {
 
 // ── Dates ─────────────────────────────────────────────────────────────────────
 
-/** `YYYY-MM-DD` → a UTC-midnight Date used only for calendar arithmetic. */
-function day(date: string): Date {
-  const [y, m, d] = date.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d));
-}
-
-function iso(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
-function addDays(date: string, n: number): string {
-  const d = day(date);
-  d.setUTCDate(d.getUTCDate() + n);
-  return iso(d);
-}
-
-/** The `nth` occurrence of `weekday` (0 = Sunday) in the month of `year`/`month0`. */
-function nthWeekday(year: number, month0: number, weekday: number, nth: number): string {
-  const first = new Date(Date.UTC(year, month0, 1));
-  const offset = (weekday - first.getUTCDay() + 7) % 7;
-  return iso(new Date(Date.UTC(year, month0, 1 + offset + (nth - 1) * 7)));
-}
-
-/** The series' meeting dates, in order, from its first night, without end. */
-export function* seriesDates(series: Series): Generator<string> {
-  const c = series.cadence;
-  if (c.kind === "weekly") {
-    for (let d = series.firstDate; ; d = addDays(d, 7 * c.intervalWeeks)) yield d;
-  }
-  const first = day(series.firstDate);
-  const weekday = first.getUTCDay();
-  for (let i = 0; ; i++) {
-    const y = first.getUTCFullYear() + Math.floor((first.getUTCMonth() + i) / 12);
-    const m = (first.getUTCMonth() + i) % 12;
-    const d = nthWeekday(y, m, weekday, c.nth);
-    if (d >= series.firstDate) yield d;
-  }
-}
-
 /**
  * The UTC instant of wall-clock `time` on `date` in IANA `timeZone`, DST-correct.
  * Guess the instant as if the zone were UTC, read what the zone calls that
@@ -263,6 +210,7 @@ export function zonedTimeToUtc(date: string, time: string, timeZone: string): Da
   return new Date(guess);
 }
 
+/** A night of a series at its default times, not posted yet. */
 export interface PlannedNight {
   series: Series;
   /** `YYYY-MM-DD` in the series' timezone. */
@@ -270,8 +218,6 @@ export interface PlannedNight {
   /** ISO UTC instants. */
   startsAt: string;
   endsAt: string;
-  /** False when the date comes from the cadence past `confirmedThrough`. */
-  confirmed: boolean;
 }
 
 export function plannedNight(series: Series, date: string): PlannedNight {
@@ -280,21 +226,5 @@ export function plannedNight(series: Series, date: string): PlannedNight {
     date,
     startsAt: zonedTimeToUtc(date, series.startTime, series.timezone).toISOString(),
     endsAt: zonedTimeToUtc(date, series.endTime, series.timezone).toISOString(),
-    confirmed: series.confirmedThrough === null || date <= series.confirmedThrough,
   };
-}
-
-/**
- * The next `count` nights of a series that haven't ended by `now`.
- * A night still running at `now` counts as upcoming.
- */
-export function nextNights(series: Series, now: Date, count: number): PlannedNight[] {
-  const out: PlannedNight[] = [];
-  for (const date of seriesDates(series)) {
-    const night = plannedNight(series, date);
-    if (Date.parse(night.endsAt) <= now.getTime()) continue;
-    out.push(night);
-    if (out.length >= count) break;
-  }
-  return out;
 }

@@ -1,27 +1,50 @@
 /**
- * "Add the next nights" for a series (/portal/events): which planned nights
- * aren't posted yet, and the createEvent body that posts one as an ordinary
- * Techne event of the collective. Pure, so it's tested in node.
+ * "Add the next nights" for a series (/portal/events): which nights to suggest
+ * (the hosts' confirmed dates, lib/series.ts, not posted or over yet), the check
+ * on a night a steward picks by hand, and the createEvent body that posts one as
+ * an ordinary Techne event of the collective. Pure, so it's tested in node.
  */
 
-import { dateIn, nextNights, type PlannedNight, type Series } from "@/lib/series";
+import { dateIn, plannedNight, type PlannedNight, type Series } from "@/lib/series";
 import { HUB_TIMEZONE, mintRkey } from "@/lib/regenos/eventForm";
 
-/**
- * The next `count` planned nights of a series with no posted event of the
- * series on that date. `posted` is the collective's events (any shape with a
- * name and a start).
- */
-export function unpostedNights(
-  series: Series,
-  posted: { seriesSlug: string | null; startAt: string | null }[],
-  now: Date,
-  count = 4,
-): PlannedNight[] {
-  const taken = new Set(
+export type PostedNight = { seriesSlug: string | null; startAt: string | null };
+
+/** The dates (in the series' timezone) that already have a posted night of the series. */
+function takenDates(series: Series, posted: PostedNight[]): Set<string> {
+  return new Set(
     posted.filter((e) => e.seriesSlug === series.slug && e.startAt).map((e) => dateIn(e.startAt!, series.timezone)),
   );
-  return nextNights(series, now, count + taken.size).filter((n) => !taken.has(n.date)).slice(0, count);
+}
+
+/** The series' confirmed nights that aren't posted yet and haven't ended by `now`, soonest first. */
+export function unpostedNights(series: Series, posted: PostedNight[], now: Date): PlannedNight[] {
+  const taken = takenDates(series, posted);
+  return [...series.confirmedDates]
+    .sort()
+    .filter((d) => !taken.has(d))
+    .map((d) => plannedNight(series, d))
+    .filter((n) => Date.parse(n.endsAt) > now.getTime());
+}
+
+/**
+ * A night a steward picked by hand (`YYYY-MM-DD`), at the series' default times;
+ * or why it can't be added: not a date, already over, or already posted.
+ */
+export function pickedNight(
+  series: Series,
+  date: string,
+  posted: PostedNight[],
+  now: Date,
+): { night: PlannedNight } | { error: string } {
+  const asDate = /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00Z`) : null;
+  if (!asDate || Number.isNaN(asDate.getTime()) || asDate.toISOString().slice(0, 10) !== date) {
+    return { error: "Pick a date" };
+  }
+  const night = plannedNight(series, date);
+  if (Date.parse(night.endsAt) <= now.getTime()) return { error: "That night is already over" };
+  if (takenDates(series, posted).has(date)) return { error: `${series.name} is already posted for that date` };
+  return { night };
 }
 
 /** The createEvent body for one night: named after the series, so lib/series.ts `seriesOf` finds it. */

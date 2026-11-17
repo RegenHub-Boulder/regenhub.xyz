@@ -130,12 +130,12 @@ export default async function ManageEventsPage() {
     going: goingCounts[i],
   }));
   const posted = events.map((e) => ({ seriesSlug: seriesOf(e.value)?.slug ?? null, startAt: e.startAt }));
-  const nights = SERIES.flatMap((s) => unpostedNights(s, posted, now, 3));
+  const nights = SERIES.flatMap((s) => unpostedNights(s, posted, now));
 
   return (
     <div className="space-y-8">
       {header}
-      <ManageEvents authority={collectiveDid} events={manageable} nights={nights} />
+      <ManageEvents authority={collectiveDid} events={manageable} nights={nights} posted={posted} />
     </div>
   );
 }

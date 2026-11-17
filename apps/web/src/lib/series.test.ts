@@ -1,17 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { getSeries, nextNights, seriesDates, seriesOf, topicOf, zonedTimeToUtc, type Series } from "./series";
+import { SERIES, getSeries, plannedNight, seriesOf, topicOf, zonedTimeToUtc } from "./series";
 
 const agents = getSeries("agents-night")!;
 const civic = getSeries("civic-tech-night")!;
-
-function first(series: Series, n: number) {
-  const out: string[] = [];
-  for (const d of seriesDates(series)) {
-    out.push(d);
-    if (out.length === n) break;
-  }
-  return out;
-}
 
 describe("series keys", () => {
   it("knows both series by slug and nothing else", () => {
@@ -54,32 +45,29 @@ describe("series keys", () => {
   });
 });
 
-describe("next-date logic", () => {
-  it("starts Agents Night on Tue 1 Dec and repeats every other Tuesday", () => {
-    expect(first(agents, 4)).toEqual(["2026-12-01", "2026-12-15", "2026-12-29", "2027-01-12"]);
+describe("series data", () => {
+  it("holds only the hosts' confirmed nights, no recurring schedule", () => {
+    expect(agents.confirmedDates).toEqual(["2026-12-01"]);
+    expect(civic.confirmedDates).toEqual(["2026-12-10"]);
+    for (const s of SERIES) {
+      expect(Object.keys(s)).not.toEqual(expect.arrayContaining(["cadence"]));
+      expect(`${s.blurb} ${s.about}`).not.toMatch(/monthly|weekly|every|alternate|second thursday|biweekly/i);
+    }
   });
+});
 
-  it("starts Civic Tech Night on Thu 10 Dec and keeps the second Thursday of each month", () => {
-    expect(first(civic, 4)).toEqual(["2026-12-10", "2027-01-14", "2027-02-11", "2027-03-11"]);
-  });
-
+describe("times", () => {
   it("turns Boulder wall-clock time into UTC on both sides of daylight saving", () => {
     expect(zonedTimeToUtc("2026-12-01", "18:30", "America/Denver").toISOString()).toBe("2026-12-02T01:30:00.000Z");
     expect(zonedTimeToUtc("2027-07-08", "18:30", "America/Denver").toISOString()).toBe("2027-07-09T00:30:00.000Z");
     expect(zonedTimeToUtc("2027-03-14", "18:30", "America/Denver").toISOString()).toBe("2027-03-15T00:30:00.000Z");
   });
 
-  it("gives the next nights from now, keeps a night that's still on, and flags unconfirmed dates", () => {
-    const before = nextNights(agents, new Date("2026-11-16T12:00:00Z"), 2);
-    expect(before.map((n) => [n.date, n.confirmed])).toEqual([
-      ["2026-12-01", true],
-      ["2026-12-15", false],
-    ]);
-    expect(before[0].startsAt).toBe("2026-12-02T01:30:00.000Z");
-    expect(before[0].endsAt).toBe("2026-12-02T04:00:00.000Z");
-    // 8pm Denver on the night: still on.
-    expect(nextNights(agents, new Date("2026-12-02T03:00:00Z"), 1)[0].date).toBe("2026-12-01");
-    // After 9pm: the next one.
-    expect(nextNights(agents, new Date("2026-12-02T04:00:00Z"), 1)[0].date).toBe("2026-12-15");
+  it("puts a night on its date at the series' 6:30–9pm", () => {
+    expect(plannedNight(agents, "2026-12-01")).toMatchObject({
+      date: "2026-12-01",
+      startsAt: "2026-12-02T01:30:00.000Z",
+      endsAt: "2026-12-02T04:00:00.000Z",
+    });
   });
 });

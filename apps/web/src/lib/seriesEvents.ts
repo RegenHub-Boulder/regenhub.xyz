@@ -1,69 +1,52 @@
 /**
- * The series as visitors see them: each series' posted nights (Techne records
- * from the collective's calendar) beside its planned nights (lib/series.ts
- * cadence), and the calendar feeds built from them.
+ * The series as visitors see them: each series' nights as posted to the
+ * collective's calendar (Techne records), and the calendar feeds built from them.
  *
- * A planned night is only a date from the cadence. It becomes a real night when
- * a steward posts it from /portal/events ("Add the next nights"); until then
- * cards show the date and say whether it's confirmed.
+ * Only posted nights show. A series has no schedule here, so when no night is
+ * posted ahead the cards and the series page say "Next date coming soon".
+ * Stewards post nights from /portal/events ("Add the next nights").
  */
 
 import { fetchCollectiveEvents, formatEventLocation, type CollectiveEvent } from "@/lib/regenos/events";
-import { SERIES, dateIn, hasEnded, isCancelled, nextNights, type PlannedNight, type Series } from "@/lib/series";
+import { SERIES, hasEnded, isCancelled, type Series } from "@/lib/series";
 import { HUB_TIMEZONE } from "@/lib/regenos/eventForm";
 import { siteOrigin } from "@/lib/techne/rsvpConfig";
 import { buildIcs, type IcsEvent } from "@/lib/ics";
 
 export const siteUrl = siteOrigin;
 
-/** The next night of a series: a posted Techne event when there is one, else the planned date. */
-export type NextNight =
-  | { kind: "posted"; event: CollectiveEvent }
-  | { kind: "planned"; night: PlannedNight };
+/** What a card or series page says when no night is posted ahead. */
+export const NO_NEXT_NIGHT = "Next date coming soon";
 
 export interface SeriesOverview {
   series: Series;
-  next: NextNight | null;
-  /** Posted nights that haven't ended, soonest first. */
+  /** The soonest posted night that hasn't ended and isn't cancelled; null = none posted yet. */
+  next: CollectiveEvent | null;
+  /** Posted nights that haven't ended, soonest first (`next` is the first). */
   upcoming: CollectiveEvent[];
   /** Posted nights that have ended, newest first. */
   past: CollectiveEvent[];
-  /** Planned dates in the next few that no posted night covers yet. */
-  planned: PlannedNight[];
 }
 
 export { hasEnded, isCancelled };
 
-/** Pure: one series' overview from the collective's events. */
-export function overviewFor(series: Series, events: CollectiveEvent[], now: Date, plannedCount = 3): SeriesOverview {
-  const mine = events.filter((e) => e.series?.slug === series.slug && e.startAt);
-  // A cancelled night keeps its date taken (no replacement is planned) but is never "next".
-  const upcoming = mine.filter((e) => !hasEnded(e, now) && !isCancelled(e)).sort((a, b) => a.startAt!.localeCompare(b.startAt!));
-  const past = mine.filter((e) => hasEnded(e, now) && !isCancelled(e)).sort((a, b) => b.startAt!.localeCompare(a.startAt!));
-  const postedDates = new Set(mine.map((e) => dateIn(e.startAt!, series.timezone)));
-  const planned = nextNights(series, now, plannedCount).filter((n) => !postedDates.has(n.date));
-
-  const firstPosted = upcoming[0];
-  const firstPlanned = planned[0];
-  let next: NextNight | null = null;
-  if (firstPosted && (!firstPlanned || firstPosted.startAt! <= firstPlanned.startsAt)) {
-    next = { kind: "posted", event: firstPosted };
-  } else if (firstPlanned) {
-    next = { kind: "planned", night: firstPlanned };
-  }
-  return { series, next, upcoming, past, planned };
+/** Pure: one series' overview from the collective's events. Cancelled nights are left out. */
+export function overviewFor(series: Series, events: CollectiveEvent[], now: Date): SeriesOverview {
+  const mine = events.filter((e) => e.series?.slug === series.slug && e.startAt && !isCancelled(e));
+  const upcoming = mine.filter((e) => !hasEnded(e, now)).sort((a, b) => a.startAt!.localeCompare(b.startAt!));
+  const past = mine.filter((e) => hasEnded(e, now)).sort((a, b) => b.startAt!.localeCompare(a.startAt!));
+  return { series, next: upcoming[0] ?? null, upcoming, past };
 }
 
-/** Every series' overview (past nights from the last year). Techne down ⇒ planned dates only, never an error. */
-export async function fetchSeriesOverviews(now = new Date(), plannedCount = 3): Promise<SeriesOverview[]> {
+/** Every series' overview (past nights from the last year). Techne down ⇒ no nights, never an error. */
+export async function fetchSeriesOverviews(now = new Date()): Promise<SeriesOverview[]> {
   const events = (await fetchCollectiveEvents({ after: new Date(now.getTime() - 365 * 86_400_000).toISOString() })) ?? [];
-  return SERIES.map((s) => overviewFor(s, events, now, plannedCount));
+  return SERIES.map((s) => overviewFor(s, events, now));
 }
 
-/** When the next night of a series starts, for ordering cards soonest first. */
+/** When the next night of a series starts, for ordering cards soonest first (none ⇒ last). */
 export function nextStart(o: SeriesOverview): string {
-  if (!o.next) return "9999";
-  return o.next.kind === "posted" ? o.next.event.startAt! : o.next.night.startsAt;
+  return o.next?.startAt ?? "9999";
 }
 
 function toIcs(e: CollectiveEvent, base: string): IcsEvent | null {

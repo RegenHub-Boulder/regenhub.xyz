@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildEventsFeed, overviewFor } from "./seriesEvents";
+import { NO_NEXT_NIGHT, buildEventsFeed, overviewFor } from "./seriesEvents";
+import { nextNightLabel } from "../components/events/SeriesCards";
 import { fetchCollectiveEvents, fetchUpcomingRegenosEvents } from "./regenos/events";
 import { getSeries } from "./series";
 import { fakeTechne } from "../../test/support/fakeTechne";
@@ -24,12 +25,18 @@ afterEach(() => {
 describe("series overview", () => {
   const agents = getSeries("agents-night")!;
 
-  it("shows the planned first night when nothing is posted", () => {
-    const o = overviewFor(agents, [], new Date("2026-11-16T12:00:00Z"));
-    expect(o.next).toMatchObject({ kind: "planned", night: { date: "2026-12-01" } });
+  it("says 'Next date coming soon' when no upcoming night is posted, and invents no date", async () => {
+    // Only a past night is posted: nothing upcoming, so no next night from any schedule.
+    vi.stubGlobal("fetch", fakeTechne([ev("3c", "Agents Night", "2026-10-21T01:30:00.000Z", "2026-10-21T04:00:00.000Z")]).fetch);
+    const o = overviewFor(agents, (await fetchCollectiveEvents())!, new Date("2026-11-16T12:00:00Z"));
+    expect(o.next).toBeNull();
+    expect(o.upcoming).toEqual([]);
+    expect(nextNightLabel(o)).toBe(NO_NEXT_NIGHT);
+    expect(NO_NEXT_NIGHT).toBe("Next date coming soon");
+    expect(nextNightLabel(overviewFor(agents, [], new Date("2026-11-16T12:00:00Z")))).toBe("Next date coming soon");
   });
 
-  it("prefers the posted night, drops its planned twin, and sorts past nights newest first", async () => {
+  it("leads with the soonest posted night and sorts past nights newest first", async () => {
     vi.stubGlobal(
       "fetch",
       fakeTechne([
@@ -41,8 +48,8 @@ describe("series overview", () => {
     );
     const events = (await fetchCollectiveEvents())!;
     const o = overviewFor(agents, events, new Date("2026-11-16T12:00:00Z"));
-    expect(o.next).toMatchObject({ kind: "posted", event: { rkey: "3a" } });
-    expect(o.planned.map((n) => n.date)).not.toContain("2026-12-01");
+    expect(o.next).toMatchObject({ rkey: "3a" });
+    expect(nextNightLabel(o)).not.toBe(NO_NEXT_NIGHT);
     expect(o.past.map((e) => e.rkey)).toEqual(["3b", "3c"]);
   });
 });
@@ -50,7 +57,7 @@ describe("series overview", () => {
 describe("cancelled and open-ended nights", () => {
   const agents = getSeries("agents-night")!;
 
-  it("never offers a cancelled night as next, and doesn't plan a replacement for its date", async () => {
+  it("never offers a cancelled night as next", async () => {
     vi.stubGlobal(
       "fetch",
       fakeTechne([
@@ -65,8 +72,8 @@ describe("cancelled and open-ended nights", () => {
       ]).fetch,
     );
     const o = overviewFor(agents, (await fetchCollectiveEvents())!, new Date("2026-11-16T12:00:00Z"));
-    expect(o.next).toMatchObject({ kind: "planned", night: { date: "2026-12-15" } });
-    expect(o.planned.map((n) => n.date)).not.toContain("2026-12-01");
+    expect(o.next).toBeNull();
+    expect(o.upcoming).toEqual([]);
     // Afterwards it isn't a past night either, and the plain upcoming list never had it.
     expect(overviewFor(agents, (await fetchCollectiveEvents())!, new Date("2026-12-20T00:00:00Z")).past).toEqual([]);
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -81,8 +88,8 @@ describe("cancelled and open-ended nights", () => {
   it("keeps a night with no end on for two hours after it starts", async () => {
     vi.stubGlobal("fetch", fakeTechne([ev("3a", "Agents Night", "2026-12-02T01:30:00.000Z")]).fetch);
     const events = (await fetchCollectiveEvents())!;
-    expect(overviewFor(agents, events, new Date("2026-12-02T03:00:00Z")).next).toMatchObject({ kind: "posted" });
-    expect(overviewFor(agents, events, new Date("2026-12-02T03:31:00Z")).next).toMatchObject({ kind: "planned" });
+    expect(overviewFor(agents, events, new Date("2026-12-02T03:00:00Z")).next).toMatchObject({ rkey: "3a" });
+    expect(overviewFor(agents, events, new Date("2026-12-02T03:31:00Z")).next).toBeNull();
   });
 });
 

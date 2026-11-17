@@ -20,10 +20,9 @@ BASE = 'http://127.0.0.1:18590'
 W, H, FPS = 1920, 1080, 24
 go = lambda path: f"location.href = {path!r}"  # noqa: E731
 STEPS = [
-    {'id': 'home', 'scroll': 'section[aria-label="Regular nights"]', 'mark': 'section[aria-label="Regular nights"] h2', 'quiet': True, 'after': 300},
+    {'id': 'home', 'scroll': 'section[aria-label="Community nights"]', 'mark': 'section[aria-label="Community nights"] h2', 'quiet': True, 'after': 300},
     {'id': 'events', 'js': go('/events'), 'wait': 2500, 'mark': '[data-testid=series-card-agents-night]', 'after': 300},
     {'id': 'series', 'js': go('/events/agents-night'), 'wait': 2500, 'mark': '[data-testid=series-next]', 'quiet': True, 'after': 300},
-    {'id': 'later', 'mark': 'h2:has-text("After that")', 'quiet': True, 'after': 200},
     {'id': 'feed', 'mark': 'a[href="/events/agents-night.ics"]', 'after': 200},
     {'id': 'civic', 'js': go('/events/civic-tech-night'), 'wait': 2500, 'mark': '[data-testid=series-next]', 'quiet': True, 'after': 300},
     {'id': 'back', 'js': go('/events/agents-night'), 'wait': 2500, 'mark': 'a:has-text("Details and RSVP")', 'after': 200},
@@ -34,12 +33,11 @@ STEPS = [
     {'id': 'record', 'mark': 'code', 'after': 200},
 ]
 V = Voice([
-    ('home', 'This is regenhub dot x y z on staging, with sample data. The home page now [home]leads with the two regular nights.', {'gap': .9}),
+    ('home', 'This is regenhub dot x y z on staging, with sample data. The home page now [home]leads with the two community nights.', {'gap': .9}),
     ('events', 'On the [events]events page, Agents Night and Civic Tech Night come first, each with its next date.', {'gap': .9}),
     ('series', 'Each series has its own [series]page: what the night is, and when it is next.', {'gap': .4}),
-    ('later', 'The [later]nights after that are planned, and marked to be confirmed.', {'gap': .5}),
     ('feed', 'One link [feed]adds the series to your calendar, and keeps it up to date.', {'gap': .9}),
-    ('civic', '[civic]Civic Tech Night works the same way, on the second Thursday of each month.', {'gap': .8}),
+    ('civic', '[civic]Civic Tech Night works the same way. Only nights that are posted show, so nothing promises a schedule.', {'gap': .8}),
     ('back', 'Back on Agents Night, the [back]first night is already posted, as a real Techne event.', {'gap': .5}),
     ('night', '[night]Open it to R S V P.', {'gap': .8}),
     ('signin', 'R S V P starts with [signin]Sign in with Techne, the way the Techne docs describe it.', {'gap': .5}),

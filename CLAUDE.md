@@ -242,15 +242,18 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   still uses `social.scenius.getEvents/getVisibleEvents` with the steward cookie (it must see private events).
 - `lib/events.ts` — the seam `lib/luma.ts:10-11` promised. One `UpcomingEvent` shape, two sources,
   chosen by config: regenOS first, Luma second.
-- **Series** (`lib/series.ts`, T-482): Agents Night (alternate Tuesdays from 2026-12-01) and Civic Tech Night
-  (second Thursday from 2026-12-10), 6:30–9pm America/Denver placeholder times, all EDITABLE DATA there. Techne
-  has no series type: a night is an ordinary event named after the series ("Agents Night", or "Agents Night:
-  topic"), or with a `uris` entry ending `/events/<slug>`. Event keys are TIDs (`mintRkey`), as the lexicon
-  declares; old `ev-…` keys still read. Every create/edit sends `timezone: "America/Denver"`.
-  `/events/<slug>` is the series page (next night, planned dates flagged "to be confirmed", past nights);
-  `lib/seriesEvents.ts` merges posted nights with the cadence. `/` (right under the hero) and `/events` lead
-  with the series cards. `/portal/events` → **Add the next nights** posts planned nights via `createEvent`
-  (`lib/seriesNights.ts`) and shows "N going" per event.
+- **Series** (`lib/series.ts`, T-482): Agents Night and Civic Tech Night. **No recurring schedule** (Aaron, 11-16:
+  not committing to recurring times yet): the site promises no rhythm and generates no dates. A series' nights are
+  the ones posted to the collective's calendar. `confirmedDates` (Agents Night 2026-12-01, Civic Tech Night
+  2026-12-10) and 6:30–9pm America/Denver placeholder times are EDITABLE DATA there, used only as suggestions in
+  the portal. Techne has no series type: a night is an ordinary event named after the series ("Agents Night", or
+  "Agents Night: topic"), or with a `uris` entry ending `/events/<slug>`. Event keys are TIDs (`mintRkey`), as the
+  lexicon declares; old `ev-…` keys still read. Every create/edit sends `timezone: "America/Denver"`.
+  `/events/<slug>` is the series page (next posted night, posted nights after it, past nights; with none upcoming
+  it says "Next date coming soon"), built from `lib/seriesEvents.ts`. `/` (right under the hero) and `/events`
+  lead with the series cards. `/portal/events` → **Add the next nights** offers the confirmed dates not yet posted
+  plus a date picker for any later night, posts them via `createEvent` (`lib/seriesNights.ts`) and shows "N going"
+  per event.
 - **Feeds:** `/events.ics` (everything) and `/events/<slug>.ics` (a rewrite to `/events/<slug>/calendar.ics`),
   built by `lib/ics.ts`; UID = the event's AT-URI. `REGENOS_WEB_URL` is no longer read.
 - `components/landing/UpcomingEvents.tsx` — async server component. **Zero events for any reason

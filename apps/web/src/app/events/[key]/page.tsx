@@ -1,17 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, CalendarDays, CalendarPlus, MapPin, Repeat } from "lucide-react";
+import { ArrowLeft, CalendarDays, CalendarPlus, MapPin } from "lucide-react";
 import { getSeries, topicOf } from "@/lib/series";
 import { fetchCollectiveEvents, formatEventLocation } from "@/lib/regenos/events";
-import { overviewFor } from "@/lib/seriesEvents";
+import { NO_NEXT_NIGHT, overviewFor } from "@/lib/seriesEvents";
 import { formatEventRange, formatEventWhen } from "@/components/events/EventList";
-import { nextNightLabel } from "@/components/events/SeriesCards";
 
 /**
  * A series page: `/events/agents-night`, `/events/civic-tech-night`.
- * What the night is, the next date, the nights after it, past nights, and the
- * series' calendar feed. RSVP lives on each night's own page.
+ * What the night is, the next posted night (or "Next date coming soon"), the
+ * posted nights after it, past nights, and the series' calendar feed. RSVP lives
+ * on each night's own page.
  */
 
 // Rendered per request; the Techne reads underneath carry their own 5-minute cache.
@@ -34,33 +34,16 @@ export default async function SeriesPage({ params }: PageProps) {
 
   const now = new Date();
   const events = (await fetchCollectiveEvents({ after: new Date(now.getTime() - 365 * 86_400_000).toISOString() })) ?? [];
-  const o = overviewFor(series, events, now, 4);
-  const { when, note } = nextNightLabel(o.next);
-  const nextHref = o.next?.kind === "posted" ? o.next.event.url : null;
-  const later = [
-    ...o.upcoming.slice(o.next?.kind === "posted" ? 1 : 0).map((e) => ({
-      key: e.uri,
-      start: e.startAt!,
-      when: formatEventWhen(e.startAt!),
-      href: e.url,
-      // "Agents Night: evals" → "evals"; a night named otherwise shows its whole name.
-      note: e.name.trim().toLowerCase() === series.name.toLowerCase() ? null : (topicOf(series, e.name) ?? e.name),
-    })),
-    ...o.planned.slice(o.next?.kind === "planned" ? 1 : 0).map((n) => ({
-      key: n.date,
-      start: n.startsAt,
-      when: formatEventWhen(n.startsAt),
-      href: null,
-      note: n.confirmed ? "Planned" : "Planned, to be confirmed",
-    })),
-  ]
-    .sort((a, b) => a.start.localeCompare(b.start))
-    .slice(0, 4);
+  const o = overviewFor(series, events, now);
+  const later = o.upcoming.slice(1, 5).map((e) => ({
+    key: e.uri,
+    when: formatEventWhen(e.startAt!),
+    href: e.url,
+    // "Agents Night: evals" → "evals"; a night named otherwise shows its whole name.
+    note: e.name.trim().toLowerCase() === series.name.toLowerCase() ? null : (topicOf(series, e.name) ?? e.name),
+  }));
   const place = formatEventLocation(series.place);
-  const nightTimes = formatEventRange(
-    o.next?.kind === "posted" ? o.next.event.startAt : o.next?.night.startsAt ?? null,
-    o.next?.kind === "posted" ? o.next.event.endAt : o.next?.night.endsAt ?? null,
-  );
+  const nightTimes = o.next ? formatEventRange(o.next.startAt, o.next.endAt) || formatEventWhen(o.next.startAt!) : null;
 
   return (
     <div className="px-6 py-10">
@@ -72,9 +55,6 @@ export default async function SeriesPage({ params }: PageProps) {
         </p>
 
         <header className="space-y-2">
-          <p className="text-sm uppercase tracking-wide text-sage flex items-center gap-1.5">
-            <Repeat className="w-4 h-4" /> {series.rhythm}
-          </p>
           <h1 className="text-3xl md:text-4xl font-bold text-forest leading-tight">{series.name}</h1>
           <p className="text-lg text-muted">{series.about}</p>
           <p className="flex items-start gap-2 text-muted">
@@ -86,15 +66,14 @@ export default async function SeriesPage({ params }: PageProps) {
           <h2 className="text-sm uppercase tracking-wide text-muted">Next night</h2>
           <p className="text-2xl font-semibold flex items-start gap-2">
             <CalendarDays className="w-6 h-6 text-sage shrink-0 mt-1" />
-            <span>{nightTimes || when}</span>
+            <span>{nightTimes ?? NO_NEXT_NIGHT}</span>
           </p>
-          {note && <p className="text-sm text-muted">{note}</p>}
-          {nextHref ? (
-            <Link href={nextHref} className="inline-block text-sage hover:underline">
+          {o.next?.url ? (
+            <Link href={o.next.url} className="inline-block text-sage hover:underline">
               Details and RSVP →
             </Link>
           ) : (
-            <p className="text-sm text-muted">Open to anyone. Just come; RSVP opens when the night is posted.</p>
+            <p className="text-sm text-muted">Open to anyone. Add the calendar feed below to hear when a night is posted.</p>
           )}
         </section>
 

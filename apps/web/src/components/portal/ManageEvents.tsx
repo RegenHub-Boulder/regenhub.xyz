@@ -23,6 +23,7 @@ import {
 import { ImportLumaCard } from "@/components/portal/ImportLumaCard";
 import { AddSeriesNights } from "@/components/portal/AddSeriesNights";
 import type { PlannedNight } from "@/lib/series";
+import type { PostedNight } from "@/lib/seriesNights";
 
 export interface ManageableEvent {
   uri: string;
@@ -71,11 +72,14 @@ export function ManageEvents({
   authority,
   events,
   nights = [],
+  posted = [],
 }: {
   authority: string;
   events: ManageableEvent[];
-  /** Planned series nights not posted yet ("Add the next nights"). */
+  /** Confirmed series nights not posted yet ("Add the next nights"). */
   nights?: PlannedNight[];
+  /** Each posted event's series and start, so a hand-picked night isn't posted twice. */
+  posted?: PostedNight[];
 }) {
   // `null` = no form open; a string = the rkey being edited; "" = the new-event form.
   const [editing, setEditing] = useState<string | null>(null);
@@ -176,6 +180,7 @@ export function ManageEvents({
           <AddSeriesNights
             authority={authority}
             nights={nights}
+            posted={posted}
             post={async (nsid, body) => {
               await xrpcPost(nsid, body);
               await refresh();
