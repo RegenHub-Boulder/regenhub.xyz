@@ -1,54 +1,104 @@
 "use client";
 
 /**
- * RSVP on the event's own page, with a Techne account.
+ * RSVP on an event's page, with "Sign in with Techne" as the door.
  *
- * Signed out: "Sign in to RSVP" → /auth/login?next=<this page>. The login lane
- * makes a techne.town account for a first-timer (email link) and lands the
- * Techne session on this origin, then brings them back here.
- * Signed in: "I'm going" / "Can't make it", via `social.scenius.rsvp` through
- * the same-origin /xrpc proxy (lib/regenos/rsvp.ts says what it writes).
+ * Signed out: the "Sign in with Techne" button (techne-sdk/auth `signIn`; the
+ * label and busy behaviour follow the docs' <SignInWithTechne />, which isn't in
+ * techne-sdk 0.4.0 yet) and "Make a Techne account" (`signUp`).
+ * Signed in: "I'm going" / "Can't make it" write the person's own
+ * `community.lexicon.calendar.rsvp` (lib/techne/rsvp.ts) to their PDS with
+ * their session, then hint the platform so the count updates at once.
  */
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, Users } from "lucide-react";
+import { Check, Loader2, LogOut, UserPlus, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { attendanceQuery, buildRsvpInput, goingLine, seatLabel, type RsvpIntent } from "@/lib/regenos/rsvp";
+import { RSVP_NSID, findOwnRsvp, goingLine, rsvpRecord, tid, type RsvpConfig, type RsvpStatus } from "@/lib/techne/rsvp";
+import { authOptions, platformProxy } from "@/lib/techne/session";
+
+interface Session {
+  did: string;
+  fetchHandler: (path: string, init: RequestInit) => Promise<Response>;
+}
 
 interface Props {
-  event: { did: string; rkey: string };
-  attendance: { going: number; waitlisted: number; maxAttendees: number | null };
-  /** This page's path, to come back to after sign-in. */
+  config: RsvpConfig;
+  event: { uri: string; cid: string };
+  going: number;
+  /** This page's path: where sign-in comes back to. */
   path: string;
 }
 
-type Phase = "checking" | "signed-out" | "ready" | "saving";
+type Phase = "restoring" | "signed-out" | "starting" | "ready" | "saving";
 
-export function RsvpPanel({ event, attendance, path }: Props) {
+/** One XRPC call over the person's session (their PDS; `proxy` forwards it to the platform). */
+export async function sessionCall(
+  session: Session,
+  nsid: string,
+  init: { body?: unknown; query?: Record<string, string>; proxy?: string },
+): Promise<unknown> {
+  const qs = init.query ? `?${new URLSearchParams(init.query)}` : "";
+  const headers: Record<string, string> = { accept: "application/json" };
+  if (init.body !== undefined) headers["content-type"] = "application/json";
+  if (init.proxy) headers["atproto-proxy"] = init.proxy;
+  const res = await session.fetchHandler(`/xrpc/${nsid}${qs}`, {
+    method: init.body !== undefined ? "POST" : "GET",
+    headers,
+    body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+  });
+  if (!res.ok) throw new Error(`${nsid} answered ${res.status}`);
+  return res.json().catch(() => ({}));
+}
+
+/** Write (or rewrite) the person's RSVP, then hint the platform. Answers the record key. */
+export async function writeRsvp(
+  session: Session,
+  config: RsvpConfig,
+  event: { uri: string; cid: string },
+  status: RsvpStatus,
+  existingRkey?: string,
+): Promise<string> {
+  const rkey = existingRkey ?? tid();
+  const out = (await sessionCall(session, "com.atproto.repo.putRecord", {
+    body: { repo: session.did, collection: RSVP_NSID, rkey, record: rsvpRecord(event, status) },
+  })) as { uri?: string };
+  const uri = out.uri ?? `at://${session.did}/${RSVP_NSID}/${rkey}`;
+  // A courtesy: the platform also learns of the record from the network.
+  await sessionCall(session, "pub.techne.draft.sync.indexRecord", { body: { uri }, proxy: platformProxy(config) }).catch(
+    () => {},
+  );
+  return rkey;
+}
+
+export function RsvpPanel({ config, event, going, path }: Props) {
   const router = useRouter();
-  const [phase, setPhase] = useState<Phase>("checking");
-  const [handle, setHandle] = useState<string | null>(null);
-  const [seat, setSeat] = useState<string | null>(null);
+  const [phase, setPhase] = useState<Phase>("restoring");
+  const [session, setSession] = useState<Session | null>(null);
+  const [own, setOwn] = useState<{ rkey: string; status: RsvpStatus | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const loadSeat = useCallback(async () => {
-    const res = await fetch(`/xrpc/social.scenius.getEventAttendance?${attendanceQuery(event)}`, { cache: "no-store" });
-    if (res.ok) setSeat(((await res.json()) as { mySeat?: string | null }).mySeat ?? null);
-  }, [event]);
+  const loadOwn = useCallback(
+    async (s: Session) => {
+      const data = (await sessionCall(s, "com.atproto.repo.listRecords", {
+        query: { repo: s.did, collection: RSVP_NSID, limit: "100" },
+      })) as { records?: { uri: string; value: never }[] };
+      setOwn(findOwnRsvp(data.records ?? [], event.uri));
+    },
+    [event.uri],
+  );
 
   useEffect(() => {
     let live = true;
     (async () => {
       try {
-        const res = await fetch("/xrpc/social.scenius.getSession", { cache: "no-store" });
+        const { restore } = await import("techne-sdk/auth");
+        const s = (await restore(await authOptions(config))) as Session | null;
         if (!live) return;
-        if (!res.ok) return setPhase("signed-out");
-        const s = (await res.json()) as { did?: string; handle?: string };
-        if (!s.did) return setPhase("signed-out");
-        setHandle(s.handle ?? s.did);
-        await loadSeat().catch(() => {});
+        if (!s) return setPhase("signed-out");
+        setSession(s);
+        await loadOwn(s).catch(() => setOwn(null));
         if (live) setPhase("ready");
       } catch {
         if (live) setPhase("signed-out");
@@ -57,20 +107,38 @@ export function RsvpPanel({ event, attendance, path }: Props) {
     return () => {
       live = false;
     };
-  }, [loadSeat]);
+  }, [config, loadOwn]);
 
-  async function answer(intent: RsvpIntent) {
+  async function start(signUp: boolean) {
+    if (phase === "starting") return;
+    setPhase("starting");
+    setError(null);
+    try {
+      const auth = await import("techne-sdk/auth");
+      const opts = { ...(await authOptions(config)), state: path };
+      await (signUp ? auth.signUp(opts) : auth.signIn(opts));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't start sign-in.");
+      setPhase("signed-out");
+    }
+  }
+
+  async function signOut() {
+    if (!session) return;
+    const auth = await import("techne-sdk/auth");
+    await auth.signOut({ ...(await authOptions(config)), session: session as never }).catch(() => {});
+    setSession(null);
+    setOwn(null);
+    setPhase("signed-out");
+  }
+
+  async function answer(status: RsvpStatus) {
+    if (!session) return;
     setPhase("saving");
     setError(null);
     try {
-      const res = await fetch("/xrpc/social.scenius.rsvp", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(buildRsvpInput(event, intent)),
-      });
-      const out = (await res.json().catch(() => ({}))) as { state?: string; message?: string };
-      if (!res.ok) throw new Error(out.message ?? `RSVP failed (${res.status})`);
-      setSeat(intent === "notgoing" ? "declined" : (out.state ?? null));
+      const rkey = await writeRsvp(session, config, event, status, own?.rkey);
+      setOwn({ rkey, status });
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't save your RSVP.");
@@ -79,49 +147,59 @@ export function RsvpPanel({ event, attendance, path }: Props) {
     }
   }
 
-  const going = seat === "confirmed" || seat === "waitlisted" || seat === "requested";
-  const label = seatLabel(seat);
+  const isGoing = own?.status === "going";
 
   return (
     <div className="glass-panel p-6 md:p-8 text-center space-y-4" data-testid="rsvp-panel">
       <h2 className="text-xl font-semibold">RSVP</h2>
       <p className="flex items-center justify-center gap-2 text-sm text-muted" data-testid="rsvp-count">
         <Users className="w-4 h-4 text-sage" />
-        {goingLine(attendance)}
+        {goingLine({ going })}
       </p>
 
-      {phase === "checking" && <Loader2 className="w-5 h-5 animate-spin mx-auto text-muted" aria-label="Loading" />}
+      {phase === "restoring" && <Loader2 className="w-5 h-5 animate-spin mx-auto text-muted" aria-label="Loading" />}
 
-      {phase === "signed-out" && (
-        <div className="space-y-2 max-w-sm mx-auto">
-          <Link href={`/auth/login?next=${encodeURIComponent(path)}`}>
-            <Button className="btn-primary-glass px-6">Sign in to RSVP</Button>
-          </Link>
+      {(phase === "signed-out" || phase === "starting") && (
+        <div className="space-y-3 max-w-sm mx-auto">
+          <Button
+            type="button"
+            disabled={phase === "starting"}
+            aria-busy={phase === "starting"}
+            onClick={() => void start(false)}
+            className="btn-primary-glass px-6"
+          >
+            Sign in with Techne
+          </Button>
           <p className="text-xs text-muted leading-relaxed">
-            New here? Sign in with your email and you get a Techne account: one account for every Techne app.
+            One Techne account works on every Techne app.{" "}
+            <button type="button" onClick={() => void start(true)} className="text-sage hover:underline inline-flex items-center gap-1">
+              <UserPlus className="w-3 h-3" /> Make one
+            </button>
           </p>
         </div>
       )}
 
-      {(phase === "ready" || phase === "saving") && (
+      {(phase === "ready" || phase === "saving") && session && (
         <div className="space-y-3">
-          {label && (
-            <p className="flex items-center justify-center gap-2 font-medium text-sage" data-testid="rsvp-seat">
-              {going && <Check className="w-5 h-5" />} {label}
+          {isGoing ? (
+            <p className="flex items-center justify-center gap-2 font-medium text-sage" data-testid="rsvp-mine">
+              <Check className="w-5 h-5" /> You&apos;re going
             </p>
-          )}
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            {!going ? (
-              <Button disabled={phase === "saving"} onClick={() => void answer("going")} className="btn-primary-glass px-6">
-                {phase === "saving" ? <Loader2 className="w-4 h-4 animate-spin" /> : "I'm going"}
-              </Button>
-            ) : (
-              <Button disabled={phase === "saving"} onClick={() => void answer("notgoing")} className="btn-glass px-6">
-                {phase === "saving" ? <Loader2 className="w-4 h-4 animate-spin" /> : "Can't make it"}
-              </Button>
-            )}
-          </div>
-          {handle && <p className="text-xs text-muted">Signed in as {handle}</p>}
+          ) : own?.status === "notgoing" ? (
+            <p className="text-sm text-muted" data-testid="rsvp-mine">You said you can&apos;t make it.</p>
+          ) : null}
+          <Button
+            disabled={phase === "saving"}
+            onClick={() => void answer(isGoing ? "notgoing" : "going")}
+            className={isGoing ? "btn-glass px-6" : "btn-primary-glass px-6"}
+          >
+            {phase === "saving" ? <Loader2 className="w-4 h-4 animate-spin" /> : isGoing ? "Can't make it" : "I'm going"}
+          </Button>
+          <p>
+            <button type="button" onClick={() => void signOut()} className="text-xs text-muted hover:text-foreground inline-flex items-center gap-1">
+              <LogOut className="w-3 h-3" /> Sign out of Techne
+            </button>
+          </p>
         </div>
       )}
 

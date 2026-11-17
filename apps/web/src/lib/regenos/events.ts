@@ -31,6 +31,7 @@ import {
   type TechneRecord,
 } from "@/lib/techne/query";
 import { seriesOf, type Series } from "@/lib/series";
+import { RSVP_NSID, countGoing, type Attendance } from "@/lib/techne/rsvp";
 
 /** The AppView clamps `limit` to 200 on the legacy reads below. */
 const FETCH_LIMIT = 200;
@@ -293,56 +294,17 @@ export async function fetchPublicRegenosEvent(did: string, rkey: string): Promis
   return listings?.some((l) => l.value.event?.uri === uri) ? event : null;
 }
 
-/** An event's attendance as the platform's seat engine reports it. */
-export interface Attendance {
-  /** Confirmed seats. */
-  going: number;
-  waitlisted: number;
-  maxAttendees: number | null;
-  /** Public guest list: handles of confirmed guests (DID when no handle). */
-  guests: string[];
-}
-
 /**
- * `social.scenius.getEventAttendance`, anonymously: for a public event anyone
- * reads the counts and the open guest list. (The seat engine applies capacity,
- * waitlist and approval; a plain count of rsvp records would not.) Null on any
- * failure.
+ * Who is going to one event: the attendees' own `community.lexicon.calendar.rsvp`
+ * records naming it, read with Techne's documented public query, latest per
+ * person. Null when Techne couldn't be read.
  */
 export async function fetchAttendance(eventUri: string): Promise<Attendance | null> {
-  const base = regenosBaseUrl();
-  const parts = splitAtUri(eventUri);
-  if (!base || !parts) return null;
-  const url = new URL(`${base}/xrpc/social.scenius.getEventAttendance`);
-  url.searchParams.set("eventDid", parts.did);
-  url.searchParams.set("eventRkey", parts.rkey);
-  try {
-    const res = await fetch(url, {
-      headers: { accept: "application/json" },
-      signal: AbortSignal.timeout(REGENOS_TIMEOUT_MS),
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    return parseAttendance(await res.json());
-  } catch {
-    return null;
-  }
-}
-
-/** Pure: the wire answer of getEventAttendance → what the page shows. */
-export function parseAttendance(data: unknown): Attendance {
-  const d = (data ?? {}) as {
-    confirmed?: number;
-    waitlisted?: number;
-    maxAttendees?: number | null;
-    guests?: { did?: string; handle?: string | null }[];
-  };
-  return {
-    going: Number(d.confirmed ?? 0) || 0,
-    waitlisted: Number(d.waitlisted ?? 0) || 0,
-    maxAttendees: typeof d.maxAttendees === "number" ? d.maxAttendees : null,
-    guests: (d.guests ?? []).map((g) => g.handle || g.did || "").filter(Boolean),
-  };
+  const rows = await listRecords<{ status?: string; subject?: { uri?: string }; createdAt?: string }>(
+    { where: { all: [{ type: { is: RSVP_NSID } }, { subject: { is: eventUri } }] } },
+    { revalidate: 0 },
+  );
+  return rows ? countGoing(rows, eventUri) : null;
 }
 
 /** One of the collective's events as the in-portal manager sees it: whole, editable, past or future. */

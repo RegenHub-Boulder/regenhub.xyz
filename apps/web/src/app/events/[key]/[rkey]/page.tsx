@@ -5,7 +5,7 @@ import { ArrowLeft, CalendarDays, CalendarPlus, MapPin, Repeat } from "lucide-re
 import { fetchAttendance, fetchPublicRegenosEvent, formatEventLocation } from "@/lib/regenos/events";
 import { formatEventRange } from "@/components/events/EventList";
 import { RsvpPanel } from "@/components/events/RsvpPanel";
-import { isRsvpEnabled } from "@/lib/techne/rsvpConfig";
+import { rsvpConfig } from "@/lib/techne/rsvpConfig";
 
 /**
  * One public event, on regenhub.xyz: `/events/<did>/<rkey>`.
@@ -46,7 +46,7 @@ export default async function EventDetailPage({ params }: PageProps) {
   const event = await fetchPublicRegenosEvent(did, rkey);
   if (!event) notFound();
 
-  const rsvp = isRsvpEnabled();
+  const rsvp = rsvpConfig();
   const attendance = rsvp ? await fetchAttendance(event.uri) : null;
   const ended = !!(event.endAt ?? event.startAt) && Date.parse((event.endAt ?? event.startAt)!) < Date.now();
   const when = formatEventRange(event.startAt, event.endAt);
@@ -106,8 +106,9 @@ export default async function EventDetailPage({ params }: PageProps) {
             <div className="glass-panel p-6 text-center text-sm text-muted">This night has happened.</div>
           ) : (
             <RsvpPanel
-              event={{ did: event.did, rkey: event.rkey }}
-              attendance={attendance ?? { going: 0, waitlisted: 0, maxAttendees: null }}
+              config={rsvp}
+              event={{ uri: event.uri, cid: event.cid }}
+              going={attendance?.going ?? 0}
               path={`/events/${encodeURIComponent(event.did)}/${event.rkey}`}
             />
           )

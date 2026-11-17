@@ -23,7 +23,6 @@
  */
 import { type NextRequest, NextResponse } from "next/server";
 import { isRegenosLoginEnabled, regenosBaseUrl, REGENOS_TIMEOUT_MS } from "@/lib/regenos/config";
-import { isRsvpEnabled } from "@/lib/techne/rsvpConfig";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -46,11 +45,6 @@ export const runtime = "nodejs";
  * - createEvent / updateEvent / deleteEvent — /portal/events, the stewards'
  *   in-portal calendar. Each write is gated server-side by the AppView
  *   (`require_owner_or_builder`), so the proxy widens reach, never authority.
- * - rsvp / getEventAttendance — RSVP on an event page (components/events/RsvpPanel.tsx):
- *   the visitor's own seat, written as THEIR record with THEIR session; the
- *   AppView applies the event's stored capacity and approval rules.
- * - checkIn — /portal/events guest list; the AppView requires Builder+ of the
- *   event's collective (`check_in`), so again reach, not authority.
  * Membership-claim sync does NOT go through this proxy: the admin route talks
  * to the AppView server-to-server with the steward cookie, and also requires
  * RegenHub `requireAdmin`.
@@ -70,13 +64,7 @@ const ALLOWED_NSIDS = new Set([
   "social.scenius.createEvent",
   "social.scenius.updateEvent",
   "social.scenius.deleteEvent",
-  "social.scenius.rsvp",
-  "social.scenius.getEventAttendance",
-  "social.scenius.checkIn",
 ]);
-
-/** The RSVP methods also need TECHNE_RSVP_ENABLED (lib/techne/rsvpConfig.ts). */
-const RSVP_NSIDS = new Set(["social.scenius.rsvp", "social.scenius.getEventAttendance"]);
 
 // Request headers we must NOT blindly forward (hop-by-hop / host-rewriting),
 // plus every way the edge spells "the visitor's IP address" — handing the
@@ -149,7 +137,7 @@ async function proxy(req: NextRequest, nsid: string[]): Promise<NextResponse> {
   }
 
   const method = nsid.join("/");
-  if (!ALLOWED_NSIDS.has(method) || (RSVP_NSIDS.has(method) && !isRsvpEnabled())) {
+  if (!ALLOWED_NSIDS.has(method)) {
     return NextResponse.json({ error: "NotFound" }, { status: 404 });
   }
 

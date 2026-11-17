@@ -18,8 +18,13 @@
  * address on purpose, so `exact` is both honest and lossless here.
  */
 
+import { tid } from "@/lib/techne/tid";
+
 /** The RegenHub collective sits in Boulder; the address lexicon REQUIRES `country`. */
 export const BOULDER = { locality: "Boulder", region: "CO", country: "US" } as const;
+
+/** Every RegenHub event happens in Boulder. */
+export const HUB_TIMEZONE = "America/Denver";
 
 export type EventVisibility = "public" | "private";
 export type EventAttendance = "open" | "approval";
@@ -74,13 +79,12 @@ export function isoToLocalInput(iso: string | null | undefined): string {
 }
 
 /**
- * A fresh base record key for `createEvent`. Time-ordered so the collection
- * sorts sensibly, and inside atproto's rkey charset (`[A-Za-z0-9._:~-]`).
+ * A fresh base record key for `createEvent`: a TID, as the event lexicon
+ * declares (`"key": "tid"`, techne.pub community.lexicon.calendar.event).
+ * Older RegenHub events carry `ev-…` keys; they still read and edit fine.
  */
 export function mintRkey(): string {
-  const stamp = Date.now().toString(36);
-  const noise = Math.random().toString(36).slice(2, 8);
-  return `ev-${stamp}${noise}`;
+  return tid();
 }
 
 /** Trim, and treat blank as absent — the AppView trims too, but an omitted field reads clearer on the wire. */
@@ -105,6 +109,9 @@ function describedEvent(
     rkey: target.rkey,
     name: values.name.trim(),
     publicFace: "exact",
+    // The hub's zone, so every Techne app shows the night at Boulder time (techne.pub
+    // pub.techne.draft.event.config `timezone`). The form's times are entered in it too.
+    timezone: HUB_TIMEZONE,
     ...BOULDER,
   };
   const description = present(values.description);
