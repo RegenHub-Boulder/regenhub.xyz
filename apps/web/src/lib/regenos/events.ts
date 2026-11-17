@@ -167,6 +167,14 @@ function toCollectiveEvent(r: TechneRecord<CalendarEventValue>): CollectiveEvent
   };
 }
 
+/** How far back the series pages, event pages and the stewards' page read past nights. */
+export const PAST_WINDOW_MS = 365 * 86_400_000;
+
+/** The start of that window, for `fetchCollectiveEvents({ after })`. */
+export function pastWindowStart(now = new Date()): string {
+  return new Date(now.getTime() - PAST_WINDOW_MS).toISOString();
+}
+
 export interface CollectiveEventsOptions {
   /** Only events starting after this instant (RFC 3339), or `$now`. */
   after?: string;
@@ -174,6 +182,8 @@ export interface CollectiveEventsOptions {
   before?: string;
   /** Seconds the shared cache may hold the answer. */
   revalidate?: number;
+  /** A list cut short (a later page failed, or the page cap was hit) counts as unread: null. */
+  strict?: boolean;
 }
 
 /**
@@ -218,7 +228,7 @@ export async function fetchCollectiveEvents(opts: CollectiveEventsOptions = {}):
       },
       order: "start",
     },
-    read,
+    { ...read, strict: opts.strict },
   );
   const listings = listRecords<{ event?: { uri?: string } }>(
     { where: { all: [{ type: { is: EVENT_LISTING_NSID } }, { author: { is: collective } }] } },

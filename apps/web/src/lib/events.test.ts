@@ -133,6 +133,16 @@ describe("fetchUpcomingRegenosEvents", () => {
     expect(await fetchCollectiveEvents()).toBeNull();
   });
 
+  it("with strict, a list cut short by a failed later page is unread, not short", async () => {
+    let calls = 0;
+    vi.stubGlobal("fetch", (async () => {
+      calls++;
+      if (calls % 2 === 1) return Response.json({ records: [{ uri: `at://${SCENE}/community.lexicon.calendar.event/a`, cid: "c", author: SCENE, collection: "community.lexicon.calendar.event", value: { name: "A", startsAt: "2026-12-01T01:30:00Z" } }], cursor: "next" });
+      return new Response("{}", { status: 503 });
+    }) as typeof fetch);
+    expect(await fetchCollectiveEvents({ strict: true, revalidate: 0 })).toBeNull();
+  });
+
   it("returns [] on a non-2xx instead of throwing", async () => {
     stubTechne([], { status: 503 });
     expect(await fetchUpcomingRegenosEvents()).toEqual([]);

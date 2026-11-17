@@ -73,10 +73,11 @@ function isRecord(r: unknown): r is TechneRecord {
 /**
  * Every record a query names, following cursors up to `maxPages` pages of
  * `limit`. Null when the first page fails; a later failed page ends the list.
+ * With `strict`, a list cut short (a later page failed, or pages left at the cap) is null too.
  */
 export async function listRecords<V = Record<string, unknown>>(
   query: TechneQuery,
-  opts: ReadOptions & { limit?: number; maxPages?: number } = {},
+  opts: ReadOptions & { limit?: number; maxPages?: number; strict?: boolean } = {},
 ): Promise<TechneRecord<V>[] | null> {
   const limit = Math.min(Math.max(opts.limit ?? 100, 1), 100);
   const out: TechneRecord<V>[] = [];
@@ -87,12 +88,12 @@ export async function listRecords<V = Record<string, unknown>>(
     const data = (await getJson("pub.techne.draft.query.listRecords", params, opts)) as
       | { records?: unknown[]; cursor?: string }
       | null;
-    if (!data) return page === 0 ? null : out;
+    if (!data) return page === 0 || opts.strict ? null : out;
     for (const r of data.records ?? []) if (isRecord(r)) out.push(r as TechneRecord<V>);
     cursor = data.cursor;
-    if (!cursor) break;
+    if (!cursor) return out;
   }
-  return out;
+  return opts.strict && cursor ? null : out;
 }
 
 /** Records by AT-URI (public ones, anonymously). Null on failure. */

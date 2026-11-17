@@ -50,6 +50,16 @@ export function useTechneSession(configProp: TechneConfig, returnPath: string, l
   }, [config, level]);
 
   const startingRef = useRef(false);
+  // Back from the PDS's page restores this one from the bfcache, still "starting": let sign-in run again.
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => {
+      if (!e.persisted) return;
+      startingRef.current = false;
+      setPhase((p) => (p === "starting" ? (session ? "signed-in" : "signed-out") : p));
+    };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+  }, [session]);
   const start = useCallback(
     async (signUp: boolean) => {
       // One sign-in redirect at a time: two would race their PKCE state.

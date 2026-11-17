@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { CalendarDays } from "lucide-react";
 import { regenosCollectiveDid } from "@/lib/regenos/config";
 import { techneConfig } from "@/lib/techne/config";
-import { fetchAttendance, fetchCollectiveEvents } from "@/lib/regenos/events";
+import { fetchAttendance, fetchCollectiveEvents, pastWindowStart } from "@/lib/regenos/events";
 import { getRecords } from "@/lib/techne/query";
 import { EVENT_CONFIG_NSID, EVENT_LISTING_NSID } from "@/lib/techne/collectiveEvents";
 import { SERIES, isCancelled } from "@/lib/series";
@@ -37,11 +37,11 @@ export default async function ManageEventsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect(`/auth/login?next=${encodeURIComponent(STEWARD_PATH)}`);
 
-  // A year back is plenty for "Past"; it also keeps upcoming nights inside the read's page cap.
+  // Strict: a list cut short would make posted nights look unposted, and they'd be offered again.
   const now = new Date();
-  const read = await fetchCollectiveEvents({ after: new Date(now.getTime() - 365 * 86_400_000).toISOString(), revalidate: 0 });
+  const read = await fetchCollectiveEvents({ after: pastWindowStart(now), revalidate: 0, strict: true });
   const events = read ?? [];
-  const goingCounts = await Promise.all(
+  const goingCountsRead = Promise.all(
     events.map((e) =>
       e.startAt && Date.parse(e.startAt) > now.getTime() - 86_400_000
         ? fetchAttendance(e.uri).then((a) => a?.going ?? null)
@@ -57,7 +57,10 @@ export default async function ManageEventsPage() {
   ]);
   const chunks: string[][] = [];
   for (let i = 0; i < siblingUris.length; i += 100) chunks.push(siblingUris.slice(i, i + 100));
-  const answers = await Promise.all(chunks.map((c) => getRecords(c, { revalidate: 0 })));
+  const [goingCounts, answers] = await Promise.all([
+    goingCountsRead,
+    Promise.all(chunks.map((c) => getRecords(c, { revalidate: 0 }))),
+  ]);
   // Unknown siblings would make an edit create records that exist (the batch fails) or a removal leave
   // them behind: with any chunk unread, nothing is editable until a reload.
   const siblingsKnown = answers.every((a) => a !== null);
@@ -100,7 +103,8 @@ export default async function ManageEventsPage() {
         events={manageable}
         nights={nights}
         posted={posted}
-        readFailed={read === null || !siblingsKnown}
+        readFailed={read === null}
+        editingOff={read !== null && !siblingsKnown}
       />
     </div>
   );

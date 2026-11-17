@@ -45,6 +45,7 @@ export function StewardEvents({
   nights,
   posted,
   readFailed,
+  editingOff,
 }: {
   config: TechneConfig;
   authority: string;
@@ -53,6 +54,8 @@ export function StewardEvents({
   posted: PostedNight[];
   /** Techne couldn't be read for the calendar itself. */
   readFailed: boolean;
+  /** The calendar read, but not each event's config and listing: editing waits for a reload. */
+  editingOff: boolean;
 }) {
   const { config, phase, session, scope, error, start, signOut } = useTechneSession(configProp, STEWARD_PATH, "steward");
   const [lastCheck, setCheck] = useState<Check | null>(null);
@@ -143,6 +146,11 @@ export function StewardEvents({
             You signed in to RSVP, which lets RegenHub write only your own RSVPs. Posting RegenHub&apos;s events needs
             your OK on Techne once more.
           </p>
+          {error && (
+            <p className="text-red-300" role="alert">
+              {error}
+            </p>
+          )}
           <div className="pt-1">
             <Button type="button" onClick={() => void start(false)} className="btn-primary-glass px-6">
               Continue with Techne
@@ -166,7 +174,9 @@ export function StewardEvents({
         ? `Techne didn't let this post through as RegenHub. Only people who manage RegenHub's membership on Techne can post as it. (${out.message})`
         : out.kind === "signin"
           ? `Your Techne sign-in has lapsed. Sign out of Techne and sign in again, then retry. (${out.message})`
-          : `Couldn't reach Techne, nothing changed. Try again. (${out.message})`,
+          : out.kind === "unknown"
+            ? `Couldn't tell whether Techne took that. Reload to see the calendar before trying again. (${out.message})`
+            : `Techne said no, nothing changed. Try again. (${out.message})`,
     );
   };
 
@@ -176,6 +186,11 @@ export function StewardEvents({
       {readFailed && (
         <p className="text-sm text-red-300" role="alert">
           Couldn&apos;t read the calendar from Techne just now. Reload to try again.
+        </p>
+      )}
+      {editingOff && (
+        <p className="text-sm text-red-300" role="alert">
+          Couldn&apos;t read each event&apos;s settings from Techne, so Edit and Remove are off. Reload to try again.
         </p>
       )}
       <ManageEvents authority={authority} events={events} nights={nights} posted={posted} write={write} />

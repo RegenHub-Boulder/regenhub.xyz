@@ -17,8 +17,13 @@ export type WriteOutcome =
   | { ok: false; kind: "refused"; message: string }
   /** 401: the sign-in itself wasn't accepted (expired, revoked): sign in again. */
   | { ok: false; kind: "signin"; message: string }
-  /** Anything else: Techne down, a bad answer. Nothing was written; safe to try again. */
-  | { ok: false; kind: "failed"; message: string };
+  /** Another error answer: applyWrites is atomic, so nothing was written; safe to try again. */
+  | { ok: false; kind: "failed"; message: string }
+  /** No answer (network, timeout): it may or may not have been written. Reload before retrying. */
+  | { ok: false; kind: "unknown"; message: string };
+
+/** @atproto/oauth-client's errors for a session that can't be used any more (refresh failed, revoked). */
+const LAPSED = /^Token(Refresh|Revoked|Invalid)Error$/;
 
 export async function sendCollectiveBatch(session: Session, config: TechneConfig, batch: CollectiveBatch): Promise<WriteOutcome> {
   const proxy = platformProxy(config);
@@ -27,7 +32,12 @@ export async function sendCollectiveBatch(session: Session, config: TechneConfig
   } catch (err) {
     if (err instanceof XrpcError && err.status === 403) return { ok: false, kind: "refused", message: err.message };
     if (err instanceof XrpcError && err.status === 401) return { ok: false, kind: "signin", message: err.message };
-    return { ok: false, kind: "failed", message: err instanceof Error ? err.message : "Couldn't reach Techne" };
+    if (err instanceof XrpcError) return { ok: false, kind: "failed", message: err.message };
+    const e = err as { name?: string; constructor?: { name?: string }; message?: string } | null;
+    if (e && (LAPSED.test(e.constructor?.name ?? "") || LAPSED.test(e.name ?? ""))) {
+      return { ok: false, kind: "signin", message: e.message ?? "sign-in lapsed" };
+    }
+    return { ok: false, kind: "unknown", message: e?.message ?? "no answer from Techne" };
   }
   // Courtesy hints: the platform also learns of the records from the network.
   await Promise.all(

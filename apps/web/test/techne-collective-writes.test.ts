@@ -101,6 +101,24 @@ describe("the batch", () => {
   });
 });
 
+describe("what the steward is told when a write doesn't land", () => {
+  const config = { clientId: "https://preview.test/techne/client-metadata.json", redirectUri: "https://preview.test/techne/callback" };
+  const batch = () => putEventBatch(HUB, night(), null);
+  it("a session the OAuth library gave up on means sign in again", async () => {
+    class TokenRevokedError extends Error {}
+    const s = { did: STEWARD, fetchHandler: async () => { throw new TokenRevokedError("revoked"); } };
+    expect(await sendCollectiveBatch(s, config, batch())).toMatchObject({ ok: false, kind: "signin" });
+  });
+  it("no answer at all may have landed: check before retrying", async () => {
+    const s = { did: STEWARD, fetchHandler: async () => { throw new TypeError("fetch failed"); } };
+    expect(await sendCollectiveBatch(s, config, batch())).toMatchObject({ ok: false, kind: "unknown" });
+  });
+  it("an error answer wrote nothing", async () => {
+    const s = { did: STEWARD, fetchHandler: async () => Response.json({ error: "InvalidRequest" }, { status: 400 }) };
+    expect(await sendCollectiveBatch(s, config, batch())).toMatchObject({ ok: false, kind: "failed" });
+  });
+});
+
 describe("the steward's sign-in", () => {
   const config = { clientId: "https://regenhub.xyz/techne/client-metadata.json" };
   it("members ask for RSVP only; stewards add the collective's types and the platform's applyWrites", () => {

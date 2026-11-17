@@ -7,7 +7,7 @@
  * Stewards post nights from /portal/events ("Add the next nights").
  */
 
-import { fetchCollectiveEvents, formatEventLocation, type CollectiveEvent } from "@/lib/regenos/events";
+import { pastWindowStart, fetchCollectiveEvents, formatEventLocation, type CollectiveEvent } from "@/lib/regenos/events";
 import { SERIES, hasEnded, isCancelled, type Series } from "@/lib/series";
 import { HUB_TIMEZONE } from "@/lib/regenos/eventForm";
 import { siteOrigin } from "@/lib/techne/config";
@@ -43,7 +43,7 @@ export function overviewFor(series: Series, events: CollectiveEvent[], now: Date
  * series says "Next date coming soon" until the next read works; the page never errors.
  */
 export async function fetchSeriesOverviews(now = new Date()): Promise<SeriesOverview[]> {
-  const events = (await fetchCollectiveEvents({ after: new Date(now.getTime() - 365 * 86_400_000).toISOString() })) ?? [];
+  const events = (await fetchCollectiveEvents({ after: pastWindowStart(now) })) ?? [];
   return SERIES.map((s) => overviewFor(s, events, now));
 }
 
@@ -76,12 +76,13 @@ function toIcs(e: CollectiveEvent, base: string): IcsEvent | null {
  * `series` is null. Posted nights only: a feed entry is a promise someone
  * will be there. Past nights of the last 90 days stay so calendars keep them.
  */
-export async function buildEventsFeed(series: Series | null, now = new Date()): Promise<string> {
+export async function buildEventsFeed(series: Series | null, now = new Date()): Promise<string | null> {
   const base = siteUrl();
   const after = new Date(now.getTime() - 90 * 86_400_000).toISOString();
-  const events = ((await fetchCollectiveEvents({ after, revalidate: 300 })) ?? []).filter(
-    (e) => !series || e.series?.slug === series.slug,
-  );
+  // Unread is not empty: an empty feed would make subscribed calendars drop every night.
+  const read = await fetchCollectiveEvents({ after, revalidate: 300, strict: true });
+  if (!read) return null;
+  const events = read.filter((e) => !series || e.series?.slug === series.slug);
   return buildIcs({
     name: series ? `${series.name} at RegenHub` : "RegenHub events",
     description: series ? series.blurb : "Public events at RegenHub, 1515 Walnut St, Boulder.",
@@ -91,7 +92,14 @@ export async function buildEventsFeed(series: Series | null, now = new Date()): 
   });
 }
 
-export function icsResponse(body: string, filename: string): Response {
+/** The feed, or a 503 while Techne can't be read (calendar apps keep their last copy and retry). */
+export function icsResponse(body: string | null, filename: string): Response {
+  if (body === null) {
+    return new Response("Techne can't be read right now; try again shortly.\n", {
+      status: 503,
+      headers: { "content-type": "text/plain; charset=utf-8", "retry-after": "300", "cache-control": "no-store" },
+    });
+  }
   return new Response(body, {
     headers: {
       "content-type": "text/calendar; charset=utf-8",

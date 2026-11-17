@@ -55,12 +55,13 @@ export async function authOptions(config: TechneConfig, level: SignInLevel = "me
   }
   // On localhost the SDK signs in as atproto's loopback client, whose private-space scope names no key;
   // an explicit scope list (keyed to the https client id) would be wrong there, so it builds its own from
-  // `types` (posting as the collective then lacks its rpc scope: dev only).
+  // `types`. The loopback id is built from its scope, so both levels use one list (one client, one
+  // session); posting as the collective then lacks its rpc scope: dev only.
   const loopback = typeof location !== "undefined" && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
   return {
     clientId: config.clientId,
     ...(loopback && !config.standIn
-      ? { types: level === "member" ? [...RSVP_TYPES] : [...RSVP_TYPES, ...COLLECTIVE_EVENT_TYPES] }
+      ? { types: [...RSVP_TYPES, ...COLLECTIVE_EVENT_TYPES] }
       : { scope: signInScope(config, level) }),
     ...(config.pds ? { pds: config.pds } : {}),
     ...(config.plcUrl ? { plcUrl: config.plcUrl } : {}),

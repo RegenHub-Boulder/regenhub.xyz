@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, CalendarDays, CalendarPlus, MapPin } from "lucide-react";
 import { getSeries, topicOf } from "@/lib/series";
-import { fetchCollectiveEvents, formatEventLocation } from "@/lib/regenos/events";
+import { fetchCollectiveEvents, formatEventLocation, pastWindowStart } from "@/lib/regenos/events";
 import { NO_NEXT_NIGHT, overviewFor } from "@/lib/seriesEvents";
 import { formatEventRange, formatEventWhen } from "@/components/events/EventList";
 
@@ -34,7 +34,7 @@ export default async function SeriesPage({ params }: PageProps) {
   if (!series) notFound();
 
   const now = new Date();
-  const events = (await fetchCollectiveEvents({ after: new Date(now.getTime() - 365 * 86_400_000).toISOString() })) ?? [];
+  const events = (await fetchCollectiveEvents({ after: pastWindowStart(now) })) ?? [];
   const o = overviewFor(series, events, now);
   const later = o.upcoming.slice(1, 5).map((e) => ({
     key: e.uri,
