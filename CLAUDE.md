@@ -48,7 +48,7 @@ The `.dockerignore` has an exception (`!**/.env.production`) so the file is avai
 | `REGENOS_BASE_URL` | Web (runtime) | regenOS AppView base URL, no trailing slash. Unset = events fall back to the Luma embed and one-login stays off. |
 | `REGENOS_COLLECTIVE_DID` | Web (runtime) | The RegenHub collective's `did:plc:…`. Required alongside the base URL for the events swap. |
 | `REGENOS_WEB_URL` | Web (runtime) | **No longer read** (T-482): the calendar feed is regenhub.xyz's own `/events.ics`. Safe to remove from Coolify. |
-| `TECHNE_RSVP_ENABLED` | Web (runtime) | **Default off.** `true` turns on "Sign in with Techne" + RSVP on event pages and serves `/techne/client-metadata.json`. Needs the events vars above. |
+| `TECHNE_SIGNIN_ENABLED` | Web (runtime) | **Default off.** `true` turns on "Sign in with Techne": RSVP on event pages, the stewards' `/portal/events`, and `/techne/client-metadata.json`. Needs the events vars above. (Was `TECHNE_RSVP_ENABLED`.) |
 | `TECHNE_PDS_URL` / `TECHNE_PLC_URL` / `TECHNE_HANDLE_DOMAIN` / `TECHNE_PLATFORM_DID` | Web (runtime) | Test deployments only; production leaves them unset (techne-sdk defaults). |
 | `TECHNE_STAGING_STANDIN` / `TECHNE_STANDIN_URL` | Web (runtime) | **Staging only**, never production: the sign-in stand-in. Refused for the regenhub.xyz origin. |
 | `REGENOS_LOGIN_ENABLED` | Web (runtime) | **Default off.** `true`/`1`/`yes` turns on the regenOS login lane + the `/xrpc` proxy. |
@@ -285,8 +285,9 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   `/events/<slug>` is the series page (next posted night, posted nights after it, past nights; with none upcoming
   it says "Next date coming soon"), built from `lib/seriesEvents.ts`. `/` (right under the hero) and `/events`
   lead with the series cards. `/portal/events` → **Add the next nights** offers the confirmed dates not yet posted
-  plus a date picker for any later night, posts them via `createEvent` (`lib/seriesNights.ts`) and shows "N going"
-  per event.
+  plus a date picker for any later night (`lib/seriesNights.ts`) and shows "N going" per event. Posting is off
+  until Techne documents a write as the collective (below, and `docs/TECHNE-SIGN-IN.md`); meanwhile the page lists
+  the confirmed nights not yet posted.
 - **Feeds:** `/events.ics` (everything) and `/events/<slug>.ics` (a rewrite to `/events/<slug>/calendar.ics`),
   built by `lib/ics.ts`; UID = the event's AT-URI. `REGENOS_WEB_URL` is no longer read.
 - `components/landing/UpcomingEvents.tsx` — async server component. **Zero events for any reason
@@ -296,10 +297,12 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   event link never leaves regenhub.xyz. The detail page shows only events the collective authored or
   lists, and `notFound()`s anything else — one honest 404. Card/date rendering is shared in
   `components/events/EventList.tsx`.
-- **RSVP + "Sign in with Techne"** (`TECHNE_RSVP_ENABLED`, default OFF; T-482). regenhub.xyz is its own
-  atproto OAuth client via `techne-sdk/auth` (the docs' way): client metadata at
-  `/techne/client-metadata.json` (scope: `repo:community.lexicon.calendar.rsvp` + the SDK's default reads),
-  callback `/techne/callback`. The RSVP is the attendee's OWN `community.lexicon.calendar.rsvp` written with
+- **"Sign in with Techne"** (`TECHNE_SIGNIN_ENABLED`, default OFF; T-482): one door, one session, for RSVP
+  and the stewards' `/portal/events`. regenhub.xyz is its own atproto OAuth client via `techne-sdk/auth` (the
+  docs' way): client metadata at `/techne/client-metadata.json` (scope: `repo:community.lexicon.calendar.rsvp` +
+  the SDK's default reads; `lib/techne/session.ts` `SIGNIN_TYPES`), callback `/techne/callback`. Config:
+  `lib/techne/config.ts`; the browser side is `components/techne/useTechneSession.ts` + `SignInWithTechne.tsx`,
+  used by both pages. The RSVP is the attendee's OWN `community.lexicon.calendar.rsvp` written with
   `com.atproto.repo.putRecord` on their PDS, then hinted with `pub.techne.draft.sync.indexRecord`
   (`components/events/RsvpPanel.tsx`, `lib/techne/rsvp.ts`); "N going" is the documented query
   `{type rsvp, subject <event>}`, latest per person. No `/xrpc` proxy change and no platform origin
@@ -364,9 +367,18 @@ Both doors land the AppView's session cookie on this origin then call the one sh
   `verified === true` and ignore every other channel.
 - `members.did` (migration `042`) is **server-written only** and deliberately absent from the profile
   self-edit whitelist (`api/portal/profile/route.ts:63-65`).
-- `/portal/events` — **Manage Events**, the stewards' in-portal calendar (no link-out to scenius).
+- `/portal/events` — **Manage Events**, the stewards' in-portal calendar. Since T-482 part 2 it is on the
+  Techne door, not this lane (`TECHNE_SIGNIN_ENABLED`): Supabase session for the portal, then "Sign in with
+  Techne" (the same session as RSVP). The calendar is the documented public read (`fetchCollectiveEvents`); the
+  steward check is the collective's public `pub.techne.draft.membership` claims naming the person, role ≥ 20
+  (`lib/techne/standing.ts`, `GET /api/portal/events/standing`). It decides what the page shows; the platform
+  checks every write. **Posting is off**: Techne documents no app method that writes a *public* record as a
+  collective (`permissioned.putRecord` hands over the collective's pen for space-bound records only), so
+  `ManageEvents` takes a `write` seam that is `null` and shows "Posting from here is off for now". The form
+  rules below (TID keys, America/Denver, `publicFace: "exact"`, resend every field) still shape the bodies.
+  What follows describes the old lane's version, kept until it is removed (`docs/TECHNE-SIGN-IN.md`).
   **Import from Luma** pastes public luma.com / lu.ma URLs/HTML, parses JSON-LD (no Pro API), then
-  `createEvent`s the selected rows. `/admin/members` **Sync claims to regenOS** admits paid desk
+  `createEvent`s the selected rows (old lane only; not shown on the Techne page). `/admin/members` **Sync claims to regenOS** admits paid desk
   and hub friends, plus `day_pass` rows with a live subscription (`active`/`trialing`/`past_due`
   — the $30/$50/$100 ladder). One-off day-pass checkouts (no sub) are revoked. Admins/ops as
   `steward`. Builder grants stay explicit on regenOS — those roles can write events.
