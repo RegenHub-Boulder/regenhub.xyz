@@ -7,7 +7,11 @@ import { createWalletChallenge } from "@/lib/onchain/walletChallenge";
 export async function POST(request: Request) {
   const session = await requirePortalMember();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const body = await request.json().catch(() => null) as { address?: string; move?: boolean } | null;
+  const body = await request.json().catch(() => null) as {
+    address?: string;
+    move?: boolean;
+    intent?: "membership" | "day_pass";
+  } | null;
   if (!body?.address || !isAddress(body.address)) {
     return NextResponse.json({ error: "Valid EVM address required" }, { status: 400 });
   }
@@ -23,7 +27,11 @@ export async function POST(request: Request) {
   if (subscriptionError) {
     return NextResponse.json({ error: "Could not check membership billing" }, { status: 500 });
   }
-  if (subscription?.payment_rail !== "onchain") {
+  // A wallet linked to buy a day pass is only a payer: anyone who may buy a
+  // pass with a card may link one (card members included). It doesn't open a
+  // crypto membership: /api/membership/onchain keeps its own approval and
+  // live-membership checks.
+  if (body.intent !== "day_pass" && subscription?.payment_rail !== "onchain") {
     if (subscription) {
       return NextResponse.json({ error: "A card membership is already active" }, { status: 409 });
     }

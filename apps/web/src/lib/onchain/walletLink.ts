@@ -27,11 +27,17 @@ export async function linkWalletWithSignature(args: {
   address: Address;
   signMessage: (message: string) => Promise<Hex>;
   move?: boolean;
+  /** What the wallet will pay for; a day pass doesn't need an approved membership. */
+  intent?: "membership" | "day_pass";
 }): Promise<WalletLinkResult> {
   const challengeRes = await fetch("/api/portal/onchain/wallet/challenge", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address: args.address, ...(args.move ? { move: true } : {}) }),
+    body: JSON.stringify({
+      address: args.address,
+      ...(args.move ? { move: true } : {}),
+      ...(args.intent ? { intent: args.intent } : {}),
+    }),
   });
   const challenge = await challengeRes.json();
   if (!challengeRes.ok) throw new WalletLinkError(challenge.error ?? "Could not create wallet challenge");

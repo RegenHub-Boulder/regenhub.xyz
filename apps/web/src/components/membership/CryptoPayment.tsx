@@ -71,6 +71,7 @@ const PHASE_LABELS: Record<Exclude<Phase, "idle" | "complete">, string> = {
 function purposeOf({ planKey, dayPass, discountCode }: Props) {
   return dayPass
     ? {
+        intent: "day_pass" as const,
         setupUrl: "/api/portal/buy-passes/onchain",
         setupBody: "{}",
         successHref: "/portal/passes?onchain=paid",
@@ -81,6 +82,7 @@ function purposeOf({ planKey, dayPass, discountCode }: Props) {
         fallbackCents: dayPass.amountCents,
       }
     : {
+        intent: "membership" as const,
         setupUrl: "/api/membership/onchain",
         setupBody: JSON.stringify({ plan_key: planKey, discount_code: discountCode }),
         successHref: "/portal?onchain=paid",
@@ -95,7 +97,7 @@ function purposeOf({ planKey, dayPass, discountCode }: Props) {
 function CryptoSubscribeButtonInner(props: Props) {
   const { className, autoStart = false } = props;
   const purpose = purposeOf(props);
-  const { setupUrl, setupBody, successHref, startError } = purpose;
+  const { intent, setupUrl, setupBody, successHref, startError } = purpose;
   const { address, chainId, connector, isConnected } = useAccount();
   const { openConnectModal, connectModalOpen } = useConnectModal();
   const { signMessageAsync } = useSignMessage();
@@ -241,6 +243,7 @@ function CryptoSubscribeButtonInner(props: Props) {
         address,
         signMessage: (message) => signMessageAsync({ account: address, message }),
         move,
+        intent,
       });
 
       setPhase("preparing");
@@ -274,7 +277,7 @@ function CryptoSubscribeButtonInner(props: Props) {
       }
       setPhase("idle");
     }
-  }, [address, confirmSubmittedPayment, preparePayment, setupBody, setupUrl, signMessageAsync, startError]);
+  }, [address, confirmSubmittedPayment, intent, preparePayment, setupBody, setupUrl, signMessageAsync, startError]);
 
   useEffect(() => {
     if (!connectIntent || !isConnected || !address) return;
