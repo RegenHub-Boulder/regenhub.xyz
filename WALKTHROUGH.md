@@ -24,6 +24,8 @@ cd apps/web && NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:18595 NEXT_PUBLIC_SUPAB
 PLAYWRIGHT_MODULE=$HOME/.local/share/mise/installs/npm-playwright/latest/node_modules/playwright/index.mjs \
   node apps/web/test/preview/walkthrough.mjs walkthrough
 ```
+`PREVIEW_BUYER=card node apps/web/test/preview/server.mjs` seeds Pat as a card-paying hot desk member never
+approved for a crypto membership instead: the same run buys the pass at $25 (checked 2026-11-17, PR review B1).
 Signed-in user: Pat (sample, day-pass member, no wallet yet); `curl 127.0.0.1:18595/preview/session` gives
 the cookie (`?as=admin` for Ada, an admin). A browser on the tailnet has no wallet that talks to the fake chain,
 so the purchase itself is driven by `walkthrough.mjs`; a person can click through the pages.

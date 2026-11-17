@@ -45,6 +45,15 @@ await pg.exec(`insert into auth.users (id, email) values ('${PAT.id}', '${PAT.em
   select set_config('request.headers', '{}', false);
   select release_lock_writer('${writer}');`);
 
+// PREVIEW_BUYER=card: Pat instead pays a hot desk by card and was never approved for a
+// crypto membership (USDC passes are for anyone the card button serves).
+if (process.env.PREVIEW_BUYER === "card") {
+  await pg.exec(`update members set approved_for_daily = false, member_type = 'hot_desk', stripe_customer_id = 'cus_preview_7' where id = 7;
+    insert into subscriptions (member_id, payment_rail, stripe_subscription_id, stripe_customer_id, stripe_price_id,
+      plan_key, monthly_cents, net_cents, status, current_period_end)
+    values (7, 'stripe', 'sub_preview_7', 'cus_preview_7', 'price_preview', 'hot_desk', 25000, 25000, 'active', now() + interval '20 days');`);
+}
+
 const fetchFromPglite = pglitePostgrest(pg, new Map([[TOKEN, PAT], [ADMIN_TOKEN, ADA]]));
 const cookie = { name: SESSION_COOKIE, value: sessionCookieValue(TOKEN, PAT) };
 const adminCookie = { name: SESSION_COOKIE, value: sessionCookieValue(ADMIN_TOKEN, ADA) };
