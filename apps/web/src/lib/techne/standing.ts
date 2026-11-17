@@ -21,10 +21,12 @@ import { listRecords } from "./query";
 export const MEMBERSHIP_NSID = "pub.techne.draft.membership";
 
 /**
- * Builder and up post and edit the collective's events: the bar the old createEvent gate used and
- * the event-detail space's `memberRole atLeast: 20` (techne.computer/docs/spaces.html).
+ * Facilitator and up post and edit the collective's events: writing as the collective is for "whoever
+ * manages its own member space" (lexicon pub.techne.draft.identity.createCollective), and a collective's
+ * manage leg is facilitator (30) and up (pub.techne.draft.appAccess: "Facilitator and up for a
+ * collective's"). The platform enforces it on the write; this only decides what the page offers.
  */
-export const EVENT_STEWARD_ROLE = 20;
+export const EVENT_STEWARD_ROLE = 30;
 
 const ROLE_NAMES: Record<number, string> = { 10: "member", 20: "builder", 30: "facilitator", 40: "steward" };
 

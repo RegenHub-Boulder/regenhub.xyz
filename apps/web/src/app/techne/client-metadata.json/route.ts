@@ -1,12 +1,13 @@
 import { clientMetadata } from "techne-sdk/auth";
 import { techneConfig } from "@/lib/techne/config";
-import { SIGNIN_TYPES } from "@/lib/techne/session";
+import { signInScope } from "@/lib/techne/session";
 
 /**
  * regenhub.xyz as a Techne app: its atproto OAuth client metadata
  * (techne.computer/docs/building-an-app.md "Sign-in": the document's own URL is
  * the client id). Built by techne-sdk's `clientMetadata`, asking only for what
- * the door needs (lib/techne/session.ts SIGNIN_TYPES). 404 while the door is off.
+ * the door needs: the steward level, the most any sign-in here asks for (lib/techne/session.ts
+ * signInScope). 404 while the door is off.
  */
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,7 @@ export function GET() {
     clientUri: origin,
     logoUri: `${origin}/regenhub-logo.svg`,
     redirectUris: [config.redirectUri],
-    types: SIGNIN_TYPES,
+    scope: signInScope(config, "steward"),
     ...(config.platform ? { platform: config.platform } : {}),
   });
   return Response.json(doc, { headers: { "cache-control": "public, max-age=300" } });

@@ -10,6 +10,10 @@
 //   - POST /xrpc/pub.techne.draft.sync.indexRecord  accepted (the record is already readable)
 //   - GET  /xrpc/pub.techne.draft.query.listRecords  the AppView's answer, plus the stand-in's
 //          records when the query names their type (as the firehose would have indexed them)
+//   - POST /xrpc/com.atproto.repo.applyWrites   a person's own repo, or (with atproto-proxy naming the
+//          platform) a collective's repo, as Techne's platform does for "whoever manages its own member
+//          space": here, a live public membership claim from that collective at role >= 30. Else 403.
+//   - GET  /xrpc/pub.techne.draft.query.getRecords   the AppView's answer with the stand-in's writes applied
 //   - everything else under /xrpc is passed to the AppView unchanged.
 // It also serves the collective's public membership claim for its steward (seed.json), as production
 // Techne does for a collective's founder (`mb-self-<did>`, role 40); the local AppView writes none.
@@ -29,6 +33,9 @@ const STORE = join(STATE, "standin-records.json");
 
 const people = () => JSON.parse(readFileSync(join(STATE, "people.json"), "utf8"));
 let records = existsSync(STORE) ? JSON.parse(readFileSync(STORE, "utf8")) : [];
+// URIs deleted here that the AppView may still answer (records the seed wrote there).
+const gone = new Set(records.filter((r) => r.deleted).map((r) => r.uri));
+records = records.filter((r) => !r.deleted);
 const SEED = join(STATE, "seed.json");
 if (existsSync(SEED)) {
   const { collective, steward } = JSON.parse(readFileSync(SEED, "utf8"));
@@ -41,7 +48,21 @@ if (existsSync(SEED)) {
     });
   }
 }
-const save = () => writeFileSync(STORE, JSON.stringify(records, null, 2));
+const save = () => writeFileSync(STORE, JSON.stringify([...records, ...[...gone].map((uri) => ({ uri, deleted: true }))], null, 2));
+
+/** May `did` write as `repo`? Their own repo, or a collective whose live public claim gives them >= 30. */
+function holdsPen(did, repo) {
+  if (did === repo) return true;
+  const now = Date.now();
+  return records.some(
+    (r) =>
+      r.collection === "pub.techne.draft.membership" &&
+      r.author === repo &&
+      r.value?.subject === did &&
+      Number(r.value?.role) >= 30 &&
+      !(r.value?.validUntil && Date.parse(r.value.validUntil) <= now),
+  );
+}
 
 const json = (res, status, body) => {
   res.writeHead(status, { "content-type": "application/json" });
@@ -67,6 +88,14 @@ function matches(r, node) {
     // A membership's subject is its reference, as `at://{did}` (its registry query document).
     const refs = r.collection === "pub.techne.draft.membership" && r.value?.subject ? [`at://${r.value.subject}`] : [];
     return cond.is !== undefined ? refs.includes(cond.is) : !!cond.in && refs.some((x) => cond.in.includes(x));
+  }
+  if (role === "start") {
+    const t = Date.parse(r.value?.startsAt ?? "");
+    if (Number.isNaN(t)) return false;
+    const at = (x) => (x === "$now" ? Date.now() : Date.parse(x));
+    if (cond.after !== undefined) return t > at(cond.after);
+    if (cond.before !== undefined) return t < at(cond.before);
+    return false;
   }
   const v = role === "type" ? r.collection : role === "author" ? r.author : role === "subject" ? r.value?.subject?.uri : undefined;
   if (v === undefined) return false;
@@ -119,6 +148,35 @@ li a:hover{background:#eef4f0}span{color:#666;font-size:.9rem}</style>
       const col = url.searchParams.get("collection");
       return json(res, 200, { records: records.filter((r) => r.author === repo && r.collection === col).map(({ uri, cid, value }) => ({ uri, cid, value })) });
     }
+    if (path === "/xrpc/com.atproto.repo.applyWrites" && req.method === "POST") {
+      if (!did) return json(res, 401, { error: "AuthenticationRequired" });
+      const b = JSON.parse(await readBody(req));
+      const viaPlatform = !!req.headers["atproto-proxy"];
+      if (b.repo !== did && !viaPlatform) return json(res, 403, { error: "Forbidden", message: "a PDS writes only your own repo" });
+      if (!holdsPen(did, b.repo)) return json(res, 403, { error: "Forbidden", message: "you don't manage this collective's member space" });
+      const results = [];
+      const next = [...records];
+      for (const w of b.writes ?? []) {
+        const uri = `at://${b.repo}/${w.collection}/${w.rkey}`;
+        const i = next.findIndex((r) => r.uri === uri);
+        const kind = String(w.$type).split("#")[1];
+        if (kind === "delete") {
+          if (i >= 0) next.splice(i, 1);
+          gone.add(uri);
+          results.push({ $type: "com.atproto.repo.applyWrites#deleteResult" });
+          continue;
+        }
+        if (w.value?.$type !== w.collection) return json(res, 400, { error: "InvalidRequest", message: `${uri}: $type must be ${w.collection}` });
+        const rec = { uri, cid: cid(), author: b.repo, collection: w.collection, value: w.value, source: "public", time: new Date().toISOString() };
+        if (i >= 0) next[i] = rec;
+        else next.push(rec);
+        gone.delete(uri);
+        results.push({ $type: `com.atproto.repo.applyWrites#${kind}Result`, uri, cid: rec.cid });
+      }
+      records = next;
+      save();
+      return json(res, 200, { results });
+    }
     if (path === "/xrpc/pub.techne.draft.sync.indexRecord") return json(res, 200, {});
 
     if (path.startsWith("/xrpc/")) {
@@ -128,15 +186,21 @@ li a:hover{background:#eef4f0}span{color:#666;font-size:.9rem}</style>
       delete headers["content-length"];
       const up = await fetch(`${APPVIEW}${req.url}`, { method: req.method, headers, body });
       let text = await up.text();
+      // The stand-in's writes win over the AppView's copy of the same record; its deletes hide them.
+      const mine = new Set(records.map((r) => r.uri));
+      const keep = (r) => !gone.has(r.uri) && !mine.has(r.uri);
       if (path === "/xrpc/pub.techne.draft.query.listRecords" && up.ok) {
         const q = JSON.parse(url.searchParams.get("query") ?? "{}");
         const types = typesIn(q.where);
-        const mine = records.filter((r) => types.includes(r.collection) && matches(r, q.where));
-        if (mine.length) {
-          const d = JSON.parse(text);
-          d.records = [...(d.records ?? []), ...mine];
-          text = JSON.stringify(d);
-        }
+        const d = JSON.parse(text);
+        d.records = [...(d.records ?? []).filter(keep), ...records.filter((r) => types.includes(r.collection) && matches(r, q.where))];
+        text = JSON.stringify(d);
+      }
+      if (path === "/xrpc/pub.techne.draft.query.getRecords" && up.ok) {
+        const uris = url.searchParams.getAll("uris");
+        const d = JSON.parse(text);
+        d.records = [...(d.records ?? []).filter(keep), ...records.filter((r) => uris.includes(r.uri))];
+        text = JSON.stringify(d);
       }
       res.writeHead(up.status, { "content-type": up.headers.get("content-type") ?? "application/json" });
       res.end(text);

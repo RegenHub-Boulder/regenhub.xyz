@@ -5,21 +5,46 @@
  * staging (config.standIn) it installs the stand-in OAuth client first; production never has that set.
  */
 
-import type { ClientOptions } from "techne-sdk/auth";
+import { scopes, type ClientOptions } from "techne-sdk/auth";
 import type { TechneConfig } from "./config";
 import { RSVP_TYPES } from "./rsvp";
+import { COLLECTIVE_EVENT_TYPES } from "./collectiveEvents";
+
+const DEFAULT_PLATFORM = "did:web:techne.computer";
 
 /**
- * The public types regenhub.xyz writes in the signed-in person's own repo: one `repo:` scope each
- * (building-an-app.md "Permissions"). The client metadata and every signIn name this same list.
- * Stewards add nothing yet: their check is a public read and posting as the collective waits on
- * Techne (docs/TECHNE-SIGN-IN.md).
+ * Two levels of one sign-in, one client id (so one session per origin):
+ *   member   — RSVP: `repo:community.lexicon.calendar.rsvp` plus techne-sdk's default reads.
+ *   steward  — that, plus `repo:` for the collective's event, config and listing, and
+ *              `rpc:com.atproto.repo.applyWrites` at the platform (the write as the collective goes there;
+ *              lib/techne/collectiveEvents.ts).
+ * The client metadata declares the steward list, the most any sign-in may ask for; a member's sign-in
+ * asks for less (techne-sdk/auth: "the PDS refuses a request beyond what the metadata declares").
  */
-export const SIGNIN_TYPES = RSVP_TYPES;
+export type SignInLevel = "member" | "steward";
+
+export const STEWARD_WRITE_METHOD = "com.atproto.repo.applyWrites";
+
+export function signInScope(config: Pick<TechneConfig, "clientId" | "platform">, level: SignInLevel): string[] {
+  const platform = config.platform ?? DEFAULT_PLATFORM;
+  if (level === "member") return scopes({ clientId: config.clientId, platform, types: [...RSVP_TYPES] });
+  return [
+    ...scopes({ clientId: config.clientId, platform, types: [...RSVP_TYPES, ...COLLECTIVE_EVENT_TYPES] }),
+    `rpc:${STEWARD_WRITE_METHOD}?aud=${platform}%23atproto_appview`,
+  ];
+}
+
+/** Whether a session's granted scope covers posting as the collective. Unknown (no token info) = yes:
+ *  the write itself is the last word. */
+export function grantsStewardWrites(granted: string | null | undefined): boolean {
+  if (!granted) return true;
+  const have = granted.split(/\s+/);
+  return have.some((s) => s.startsWith(`rpc:${STEWARD_WRITE_METHOD}?`)) && have.some((s) => s.startsWith("repo") && s.includes("community.lexicon.calendar.event"));
+}
 
 let standInFor: string | null = null;
 
-export async function authOptions(config: TechneConfig): Promise<ClientOptions> {
+export async function authOptions(config: TechneConfig, level: SignInLevel = "member"): Promise<ClientOptions> {
   if (config.standIn && standInFor !== config.standIn) {
     const [{ setOAuthClientFactory }, { standInClient }] = await Promise.all([
       import("techne-sdk/auth"),
@@ -30,7 +55,7 @@ export async function authOptions(config: TechneConfig): Promise<ClientOptions> 
   }
   return {
     clientId: config.clientId,
-    types: SIGNIN_TYPES,
+    scope: signInScope(config, level),
     ...(config.pds ? { pds: config.pds } : {}),
     ...(config.plcUrl ? { plcUrl: config.plcUrl } : {}),
     ...(config.handleDomain ? { handleDomain: config.handleDomain } : {}),
@@ -40,7 +65,7 @@ export async function authOptions(config: TechneConfig): Promise<ClientOptions> 
 
 /** Platform calls go through the person's PDS with this `atproto-proxy` header. */
 export function platformProxy(config: TechneConfig): string {
-  return `${config.platform ?? "did:web:techne.computer"}#atproto_appview`;
+  return `${config.platform ?? DEFAULT_PLATFORM}#atproto_appview`;
 }
 
 /** The stewards' page: where its sign-in comes back to. */

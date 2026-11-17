@@ -22,7 +22,8 @@ const claim = (repo: string, subject: string, role: number, extra: Record<string
 });
 
 describe("standingFrom", () => {
-  it("a builder-or-higher claim by the collective makes a steward", () => {
+  it("a facilitator-or-higher claim by the collective makes a steward; a builder isn't one", () => {
+    expect(standingFrom([claim(HUB, ME, 20)], HUB, ME, NOW)).toEqual({ role: 20, roleName: "builder", canManageEvents: false });
     const s = standingFrom([claim(HUB, ME, 40)], HUB, ME, NOW);
     expect(s).toEqual({ role: 40, roleName: "steward", canManageEvents: true });
     expect(standingFrom([claim(HUB, ME, EVENT_STEWARD_ROLE)], HUB, ME, NOW).canManageEvents).toBe(true);

@@ -4,6 +4,8 @@ import { CalendarDays } from "lucide-react";
 import { regenosCollectiveDid } from "@/lib/regenos/config";
 import { techneConfig } from "@/lib/techne/config";
 import { fetchAttendance, fetchCollectiveEvents } from "@/lib/regenos/events";
+import { getRecords } from "@/lib/techne/query";
+import { EVENT_CONFIG_NSID, EVENT_LISTING_NSID } from "@/lib/techne/collectiveEvents";
 import { SERIES, isCancelled } from "@/lib/series";
 import { unpostedNights } from "@/lib/seriesNights";
 import type { ManageableEvent } from "@/components/portal/ManageEvents";
@@ -45,6 +47,17 @@ export default async function ManageEventsPage() {
         : Promise.resolve(null),
     ),
   );
+  // Each event's config and listing in the collective's repo, so an edit keeps the config and a removal
+  // deletes exactly what is there.
+  const own = events.filter((e) => e.did === collective);
+  const siblingUris = own.flatMap((e) => [
+    `at://${collective}/${EVENT_CONFIG_NSID}/${e.rkey}-cfg`,
+    `at://${collective}/${EVENT_LISTING_NSID}/${e.rkey}-ctx`,
+  ]);
+  const siblings = new Map<string, Record<string, unknown>>();
+  for (let i = 0; i < siblingUris.length; i += 100) {
+    for (const r of (await getRecords(siblingUris.slice(i, i + 100), { revalidate: 0 })) ?? []) siblings.set(r.uri, r.value);
+  }
   const manageable: ManageableEvent[] = events.map((e, i) => ({
     uri: e.uri,
     rkey: e.rkey,
@@ -54,6 +67,10 @@ export default async function ManageEventsPage() {
     value: e.value,
     url: e.url,
     going: goingCounts[i],
+    // Only the collective's own events are ours to edit; a listed event belongs to its author.
+    editable: e.did === collective,
+    config: siblings.get(`at://${collective}/${EVENT_CONFIG_NSID}/${e.rkey}-cfg`) ?? null,
+    hasListing: siblings.has(`at://${collective}/${EVENT_LISTING_NSID}/${e.rkey}-ctx`),
   }));
   const posted = events.map((e) => ({
     seriesSlug: e.series?.slug ?? null,

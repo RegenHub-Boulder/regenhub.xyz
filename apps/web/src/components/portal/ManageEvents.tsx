@@ -35,6 +35,12 @@ export interface ManageableEvent {
   url: string | null;
   /** How many have RSVP'd going (their own Techne records), when known. */
   going?: number | null;
+  /** In the collective's own repo (a listed event belongs to its author: shown, not edited). */
+  editable?: boolean;
+  /** Its `pub.techne.draft.event.config` ({rkey}-cfg), null when there is none. */
+  config?: Record<string, unknown> | null;
+  /** Whether its `pub.techne.draft.event.listing` ({rkey}-ctx) exists. */
+  hasListing?: boolean;
 }
 
 /** RegenHub is in Boulder; pinning the zone keeps server and client renders identical. */
@@ -56,11 +62,14 @@ function formatWhen(iso: string | null): string {
 
 /**
  * How the steward's change reaches the collective's calendar: create, update or delete, with the
- * bodies lib/regenos/eventForm.ts builds (TID keys, the hub's timezone, series names). Null while
- * Techne has no documented way for an app to post as the collective (docs/TECHNE-SIGN-IN.md); the
- * page then shows the calendar and says why posting is off.
+ * bodies lib/regenos/eventForm.ts builds (TID keys, the hub's timezone, series names), and the event
+ * being changed. StewardEvents sends them as the collective (lib/techne/collectiveEvents.ts).
  */
-export type EventWrite = (op: "create" | "update" | "delete", input: Record<string, unknown>) => Promise<void>;
+export type EventWrite = (
+  op: "create" | "update" | "delete",
+  input: Record<string, unknown>,
+  existing?: ManageableEvent,
+) => Promise<void>;
 
 export function ManageEvents({
   authority,
@@ -71,8 +80,7 @@ export function ManageEvents({
 }: {
   authority: string;
   events: ManageableEvent[];
-  /** Null = posting is off (see EventWrite). */
-  write: EventWrite | null;
+  write: EventWrite;
   /** Confirmed series nights not posted yet ("Add the next nights"). */
   nights?: PlannedNight[];
   /** Each posted event's series and start, so a hand-picked night isn't posted twice. */
@@ -111,12 +119,12 @@ export function ManageEvents({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!write) return;
     setSaving(true);
     setError(null);
     try {
       if (editing) {
-        await write("update", buildUpdateEventInput(form, { authority, rkey: editing }));
+        const existing = events.find((ev) => ev.rkey === editing);
+        await write("update", buildUpdateEventInput(form, { authority, rkey: editing }), existing);
       } else {
         await write("create", buildCreateEventInput(form, { authority, rkey: mintRkey() }));
       }
@@ -130,14 +138,17 @@ export function ManageEvents({
   }
 
   async function handleCancel(event: ManageableEvent) {
-    if (!write) return;
-    if (!window.confirm(`Cancel "${event.name}"? Anyone who RSVP'd will be told it's called off.`)) {
+    if (
+      !window.confirm(
+        `Remove "${event.name}" from RegenHub's calendar? It is deleted on Techne. People who RSVP'd aren't told automatically.`,
+      )
+    ) {
       return;
     }
     setBusyRkey(event.rkey);
     setError(null);
     try {
-      await write("delete", buildDeleteEventInput({ authority, rkey: event.rkey }));
+      await write("delete", buildDeleteEventInput({ authority, rkey: event.rkey }), event);
       if (editing === event.rkey) setEditing(null);
       await refresh();
     } catch (err) {
@@ -159,9 +170,7 @@ export function ManageEvents({
         </div>
       )}
 
-      {!write ? (
-        <PostingWaits nights={nights} />
-      ) : editing === null ? (
+      {editing === null ? (
         <>
           <div className="flex flex-wrap gap-3">
             <Button onClick={openCreate} className="btn-primary-glass gap-2 px-6">
@@ -275,36 +284,21 @@ export function ManageEvents({
 
               {editing ? (
                 <p className="text-xs text-muted">
-                  This event is {form.visibility === "private" ? "private" : "public"}. Visibility and
-                  sign-up mode are set when an event is created and can&apos;t be changed here — cancel
-                  and recreate it if you need to change them.
+                  Public on Techne. Sign-up mode stays as it was set when the event was posted.
                 </p>
               ) : (
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="ev-visibility">Visibility</Label>
-                    <select
-                      id="ev-visibility"
-                      value={form.visibility}
-                      onChange={set("visibility")}
-                      className="glass-input w-full px-3 py-2 rounded text-sm"
-                    >
-                      <option value="public">Public — anyone can see it</option>
-                      <option value="private">Private — members and invitees only</option>
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="ev-attendance">Sign-up</Label>
-                    <select
-                      id="ev-attendance"
-                      value={form.attendance}
-                      onChange={set("attendance")}
-                      className="glass-input w-full px-3 py-2 rounded text-sm"
-                    >
-                      <option value="open">Open — RSVP is a seat</option>
-                      <option value="approval">Approval — you confirm each person</option>
-                    </select>
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ev-attendance">Sign-up</Label>
+                  <select
+                    id="ev-attendance"
+                    value={form.attendance}
+                    onChange={set("attendance")}
+                    className="glass-input w-full px-3 py-2 rounded text-sm"
+                  >
+                    <option value="open">Open — RSVP is a seat</option>
+                    <option value="approval">Approval — you confirm each person</option>
+                  </select>
+                  <p className="text-xs text-muted">Public: anyone can see it.</p>
                 </div>
               )}
 
@@ -327,8 +321,8 @@ export function ManageEvents({
         events={upcoming}
         emptyLabel="Nothing on the calendar yet."
         busyRkey={busyRkey}
-        onEdit={write ? openEdit : null}
-        onCancel={write ? handleCancel : null}
+        onEdit={openEdit}
+        onCancel={handleCancel}
       />
       {past.length > 0 && (
         <EventList
@@ -336,8 +330,8 @@ export function ManageEvents({
           events={past}
           emptyLabel=""
           busyRkey={busyRkey}
-          onEdit={write ? openEdit : null}
-          onCancel={write ? handleCancel : null}
+          onEdit={openEdit}
+          onCancel={handleCancel}
         />
       )}
 
@@ -394,7 +388,7 @@ function EventList({
                   </Link>
                 )}
               </div>
-              {onEdit && onCancel && (
+              {onEdit && onCancel && event.editable !== false && (
                 <div className="flex gap-2 shrink-0">
                   <Button onClick={() => onEdit(event)} className="btn-glass gap-2 px-4">
                     <Pencil className="w-3.5 h-3.5" />
@@ -410,39 +404,13 @@ function EventList({
                     ) : (
                       <Trash2 className="w-3.5 h-3.5" />
                     )}
-                    Cancel event
+                    Remove
                   </Button>
                 </div>
               )}
             </CardContent>
           </Card>
         ))
-      )}
-    </div>
-  );
-}
-
-/** What a steward sees in place of the posting controls while Techne has no documented write. */
-function PostingWaits({ nights }: { nights: PlannedNight[] }) {
-  return (
-    <div className="glass-panel p-5 space-y-2 text-sm" data-testid="posting-waits">
-      <p className="font-medium">Posting from here is off for now</p>
-      <p className="text-muted leading-relaxed">
-        Techne&apos;s published methods let an app write your own records, not the collective&apos;s. We&apos;ve asked
-        Techne how a steward posts as RegenHub; posting comes back here once they answer. The calendar below is what
-        everyone sees.
-      </p>
-      {nights.length > 0 && (
-        <p className="text-muted" data-testid="nights-not-posted">
-          Confirmed but not posted yet:{" "}
-          {nights.map((n, i) => (
-            <span key={`${n.series.slug}:${n.date}`}>
-              {i > 0 && "; "}
-              <span className="text-foreground">{n.series.name}</span>, {formatWhen(n.startsAt)}
-            </span>
-          ))}
-          .
-        </p>
       )}
     </div>
   );

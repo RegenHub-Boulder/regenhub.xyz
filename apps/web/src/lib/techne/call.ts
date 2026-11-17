@@ -4,6 +4,18 @@ export interface Session {
   fetchHandler: (path: string, init: RequestInit) => Promise<Response>;
 }
 
+/** A call the PDS or the platform answered with an error: its HTTP status and XRPC error name. */
+export class XrpcError extends Error {
+  constructor(
+    readonly nsid: string,
+    readonly status: number,
+    readonly error: string | undefined,
+    message: string | undefined,
+  ) {
+    super(message ? `${nsid}: ${message}` : `${nsid} answered ${status}${error ? ` ${error}` : ""}`);
+  }
+}
+
 /** One XRPC call over the person's session (their PDS; `proxy` forwards it to the platform). */
 export async function sessionCall(
   session: Session,
@@ -19,6 +31,9 @@ export async function sessionCall(
     headers,
     body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
   });
-  if (!res.ok) throw new Error(`${nsid} answered ${res.status}`);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string; message?: string } | null;
+    throw new XrpcError(nsid, res.status, body?.error, body?.message);
+  }
   return res.json().catch(() => ({}));
 }
