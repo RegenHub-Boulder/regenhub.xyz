@@ -256,13 +256,14 @@ export async function fetchCollectiveEvents(opts: CollectiveEventsOptions = {}):
     const e = toCollectiveEvent(r);
     if (e) byUri.set(e.uri, e);
   }
-  // Only events from other calendars: the collective's own are read above, in their window.
-  const ownPrefix = `at://${collective}/${EVENT_NSID}/`;
+  // Only events from other calendars: the collective's own are read above, in their window. If that read
+  // failed (non-strict), its own listings are the only way left to show its nights, so keep them.
+  const ownPrefix = ownRows === null ? null : `at://${collective}/${EVENT_NSID}/`;
   const listed = [
     ...new Set(
       (listingRows ?? [])
         .map((l) => l.value.event?.uri)
-        .filter((u): u is string => !!u && !u.startsWith(ownPrefix) && !byUri.has(u)),
+        .filter((u): u is string => !!u && !(ownPrefix && u.startsWith(ownPrefix)) && !byUri.has(u)),
     ),
   ];
   const chunks: string[][] = [];

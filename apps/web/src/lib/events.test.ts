@@ -134,6 +134,20 @@ describe("fetchUpcomingRegenosEvents", () => {
     // Not strict (the landing page, /events): unchanged from before T-482, an answer from the listings alone.
     expect(await fetchCollectiveEvents()).toEqual([]);
   });
+  it("with its own events unread, a public page still shows the collective's nights through their own listings", async () => {
+    const ownUri = `at://${SCENE}/community.lexicon.calendar.event/3kownnight22`;
+    const techne = fakeTechne([
+      { uri: ownUri, value: { name: "Agents Night", startsAt: "2026-12-02T01:30:00Z" } },
+      { uri: `at://${SCENE}/pub.techne.draft.event.listing/3kownnight22-ctx`, value: { event: { uri: ownUri } } },
+    ]);
+    vi.stubGlobal("fetch", (async (input: string | URL | Request, init?: RequestInit) => {
+      const q = new URL(String(input)).searchParams.get("query") ?? "";
+      if (q.includes("community.lexicon.calendar.event")) return new Response("{}", { status: 503 });
+      return techne.fetch(input, init);
+    }) as typeof fetch);
+    expect((await fetchCollectiveEvents())?.map((e) => e.name)).toEqual(["Agents Night"]);
+  });
+
 
   it("with strict, a list cut short by a failed later page is unread, not short", async () => {
     // The own-events query answers page 1 with a cursor, then fails page 2; listings are empty.

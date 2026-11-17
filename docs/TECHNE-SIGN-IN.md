@@ -150,5 +150,5 @@ through the new one. The old lane also backs `/auth/login`'s regenOS panel, `/lo
 **Subtract:** once one real post works through the Techne door and Aaron retires the old page, delete
 `components/portal/legacy/`, `app/portal/events/old/`, the `OldStewardPage` branch in `app/portal/events/page.tsx`
 and the `isRegenosLoginEnabled` half of `isStewardEventsEnabled`; then the rest of the lane in one PR (with
-`REGENOS_LOGIN_ENABLED`, `REGENOS_OAUTH_JWKS_URI`) once Aaron has decided on membership sync. No date set: it
-waits on the first real post.
+`REGENOS_LOGIN_ENABLED`, `REGENOS_OAUTH_JWKS_URI`) once Aaron has decided on membership sync. Proposed date for the old page to go:
+2026-12-15 (Aaron's call; sooner if the first real post works, later if it doesn't).

@@ -484,7 +484,7 @@ export default async function PortalPage() {
                 <CalendarDays className="w-8 h-8 text-sage mb-3" />
                 <h3 className="font-semibold mb-1">Manage Events</h3>
                 <p className="text-sm text-muted">
-                  {isTechneSignInEnabled() ? "RegenHub's calendar on Techne, for stewards" : "Create and edit the collective's calendar"}
+                  {isTechneSignInEnabled() ? "RegenHub's calendar on Techne" : "Create and edit the collective's calendar"}
                 </p>
               </CardContent>
             </Card>

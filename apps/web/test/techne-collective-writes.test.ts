@@ -144,6 +144,8 @@ describe("what the steward is told when a write doesn't land", () => {
   });
   it("a token the PDS no longer accepts says to sign in again", async () => {
     expect(await sendCollectiveBatch(answering(401, { error: "ExpiredToken" }), config, batch())).toMatchObject({ ok: false, kind: "signin" });
+    expect(await sendCollectiveBatch(answering(400, { error: "ExpiredToken" }), config, batch())).toMatchObject({ ok: false, kind: "signin" });
+    expect(await sendCollectiveBatch(answering(401, "no json"), config, batch())).toMatchObject({ ok: false, kind: "signin" });
   });
   it("a 5xx may have landed: check before retrying", async () => {
     expect(await sendCollectiveBatch(answering(504, { error: "UpstreamTimeout" }), config, batch())).toMatchObject({ ok: false, kind: "unknown" });

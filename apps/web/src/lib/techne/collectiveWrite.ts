@@ -19,7 +19,8 @@ export const COLLECTIVE_WRITE_METHOD = "com.atproto.repo.applyWrites";
 
 export type WriteOutcome =
   | { ok: true }
-  /** 401/403 that isn't a lapsed token: Techne didn't accept a post as the collective from this account.
+  /** 401/403 that isn't a lapsed token (a reference PDS answers "not your repo" with 401
+   *  AuthenticationRequired): Techne didn't accept a post as the collective from this account.
    *  `message` is the PDS's own text. */
   | { ok: false; kind: "refused"; status: number; message: string }
   /** The PDS no longer accepts the sign-in's token (expired, revoked): sign in again. */
@@ -45,7 +46,9 @@ export async function sendCollectiveBatch(session: Session, config: TechneConfig
     if (err instanceof XrpcError) {
       // The one record of why a write as the collective didn't land, for whoever debugs the first real post.
       console.warn(`[techne] ${COLLECTIVE_WRITE_METHOD} as ${batch.input.repo}: ${err.status} ${err.error ?? ""}`.trim(), err.message);
-      if (err.status === 401 && err.error && LAPSED_TOKEN.has(err.error)) return { ok: false, kind: "signin", message: err.message };
+      // A token the PDS no longer takes: named as such (some PDSes answer expiry with 400), or a bare 401.
+      const lapsed = err.error ? LAPSED_TOKEN.has(err.error) : err.status === 401;
+      if ((err.status === 401 || err.status === 400) && lapsed) return { ok: false, kind: "signin", message: err.message };
       if (err.status === 401 || err.status === 403) return { ok: false, kind: "refused", status: err.status, message: err.message };
       if (REJECTED.has(err.status)) return { ok: false, kind: "failed", message: err.message };
     }
