@@ -3,8 +3,7 @@ import { getAddress, isAddress } from "viem";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { requirePortalMember } from "@/lib/onchain/portalMember";
 import { createWalletChallenge } from "@/lib/onchain/walletChallenge";
-import { isGaslessRelayConfigured } from "@/lib/onchain/config";
-import { onchainPassesReady } from "@/lib/onchain/invoiceKind";
+import { onchainPassesOpen } from "@/lib/onchain/invoiceKind";
 
 export async function POST(request: Request) {
   const session = await requirePortalMember();
@@ -24,7 +23,7 @@ export async function POST(request: Request) {
     // pass with a card may link one (card members included). It doesn't open
     // a crypto membership: /api/membership/onchain keeps its own approval and
     // live-membership checks. Only while USDC passes can actually be bought.
-    if (!isGaslessRelayConfigured() || !(await onchainPassesReady(admin))) {
+    if (!(await onchainPassesOpen(admin))) {
       return NextResponse.json({ error: "Paying for a day pass in USDC isn't open yet. Pay with card for now." }, { status: 503 });
     }
   } else {

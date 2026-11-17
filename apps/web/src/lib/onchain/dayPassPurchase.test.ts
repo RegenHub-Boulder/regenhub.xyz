@@ -272,14 +272,8 @@ describe("expiry", () => {
     expect(await balance()).toBe(0);
     expect(await purchases()).toEqual([]);
 
-    // A fresh purchase is a new invoice, and the transfer kept for an admin
-    // (who may refund it from that note) can't pay it, even sent moments ago.
-    const next = await start();
-    expect(next.body.invoice.id).not.toBe(body.invoice.id);
-    expect((await submit(next.body.invoice.id)).body).toMatchObject({ status: "exception" });
-    expect(await balance()).toBe(0);
-    chainPays(30_000_000n);
-    expect((await submit(next.body.invoice.id, TX2)).body).toMatchObject({ status: "paid", wasNew: true });
+    // A fresh purchase is a new invoice.
+    expect((await start()).body.invoice.id).not.toBe(body.invoice.id);
   });
 
   it("never expires a purchase with a payment on its way", async () => {

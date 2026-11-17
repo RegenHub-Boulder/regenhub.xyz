@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isGaslessRelayConfigured } from "./config";
 
 /**
  * Migration 063 adds `onchain_invoices.kind` (and `wallet_id`, and
@@ -9,7 +10,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  *
  * Subtract: once 063 is applied in production, `membershipInvoices` can go
  * back to a plain `.eq("kind", "membership")` and `isMissingFunction` can go;
- * the `onchainPassesReady` probe can go with them.
+ * the `onchainPassesReady` probe can go with them (`onchainPassesOpen` keeps the relayer check).
  */
 
 /** Postgres undefined_column, as PostgREST passes it on (or reports it from its schema cache). */
@@ -32,6 +33,11 @@ export async function membershipInvoices<R extends { error: { code?: string } | 
 ): Promise<R> {
   const result = await query(true);
   return isMissingColumn(result.error) ? query(false) : result;
+}
+
+/** Whether a day pass can be bought in USDC: the gasless relayer is set up and migration 063 is applied. */
+export async function onchainPassesOpen(client: SupabaseClient): Promise<boolean> {
+  return isGaslessRelayConfigured() && onchainPassesReady(client);
 }
 
 /** Whether migration 063 is applied (USDC day passes can be bought). A failed probe for any other reason says yes. */

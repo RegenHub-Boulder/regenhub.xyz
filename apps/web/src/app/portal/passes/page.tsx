@@ -11,8 +11,7 @@ import { BuyPassButton } from "@/components/portal/BuyPassButton";
 import { CryptoPassButton } from "@/components/portal/CryptoPassButton";
 import { isContributingMember as contributingMember } from "@/lib/dayPassPrice";
 import { dayPassCentsFor } from "@/lib/plans";
-import { isGaslessRelayConfigured } from "@/lib/onchain/config";
-import { onchainPassesReady } from "@/lib/onchain/invoiceKind";
+import { onchainPassesOpen } from "@/lib/onchain/invoiceKind";
 import { Ticket, Clock, ShoppingCart, Key, ArrowRight, CheckCircle, XCircle, Receipt, Gift } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -110,7 +109,7 @@ export default async function PassesPage({ searchParams }: PageProps) {
     // Contributing-member rate ($25 vs $30): the same check both purchase routes use.
     contributingMember(supabase, member.id).catch(() => false),
     // USDC passes need the relayer and migration 063; until then, offer the card only.
-    isGaslessRelayConfigured() ? onchainPassesReady(supabase) : false,
+    onchainPassesOpen(supabase),
   ]);
   const passCents = dayPassCentsFor(isContributingMember);
   // The USDC flow is the gasless one (as on /membership), so it needs the relayer too.
