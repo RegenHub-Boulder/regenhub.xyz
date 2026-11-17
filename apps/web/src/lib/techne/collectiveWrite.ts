@@ -17,11 +17,16 @@ export type WriteOutcome =
   | { ok: false; kind: "refused"; message: string }
   /** 401: the sign-in itself wasn't accepted (expired, revoked): sign in again. */
   | { ok: false; kind: "signin"; message: string }
-  /** A 4xx: applyWrites is atomic, so nothing was written; safe to try again. */
+  /** A request the PDS or platform rejected (400, 404, 409, 413, 415, 422): applyWrites is atomic, so
+   *  nothing was written; safe to try again. */
   | { ok: false; kind: "failed"; message: string }
-  /** No answer, or a 5xx from the PDS's proxy hop: it may or may not have been written. Reload first. A
-   *  session the OAuth library gave up on also lands here (its errors carry no stable name). */
+  /** Anything else: no answer, a 5xx or a timeout status from the proxy hop. It may or may not have been
+   *  written; reload first. A session the OAuth library gave up on also lands here (its errors carry no
+   *  stable name). */
   | { ok: false; kind: "unknown"; message: string };
+
+/** Statuses that mean the request itself was rejected, so nothing was applied. */
+const REJECTED = new Set([400, 404, 409, 413, 415, 422]);
 
 export async function sendCollectiveBatch(session: Session, config: TechneConfig, batch: CollectiveBatch): Promise<WriteOutcome> {
   const proxy = platformProxy(config);
@@ -30,8 +35,7 @@ export async function sendCollectiveBatch(session: Session, config: TechneConfig
   } catch (err) {
     if (err instanceof XrpcError && err.status === 403) return { ok: false, kind: "refused", message: err.message };
     if (err instanceof XrpcError && err.status === 401) return { ok: false, kind: "signin", message: err.message };
-    // A 408 is a timeout on the way: like a 5xx, the platform may have applied it.
-    if (err instanceof XrpcError && err.status < 500 && err.status !== 408) return { ok: false, kind: "failed", message: err.message };
+    if (err instanceof XrpcError && REJECTED.has(err.status)) return { ok: false, kind: "failed", message: err.message };
     return { ok: false, kind: "unknown", message: err instanceof Error ? err.message : "no answer from Techne" };
   }
   // Courtesy hints: the platform also learns of the records from the network.

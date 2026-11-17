@@ -185,7 +185,11 @@ export interface CollectiveEventsOptions {
   before?: string;
   /** Seconds the shared cache may hold the answer. */
   revalidate?: number;
-  /** Any part unread (a failed page or read, or more than STRICT_MAX_PAGES pages) makes the answer null. */
+  /**
+   * Null rather than short: the collective's own events in the window must be read whole (up to
+   * STRICT_MAX_PAGES pages), and the listings' first page and every listed event must read. Listings of
+   * other calendars past their first 500 are best effort (listings have no date to window on).
+   */
   strict?: boolean;
 }
 

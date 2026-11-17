@@ -145,6 +145,34 @@ describe("fetchUpcomingRegenosEvents", () => {
     expect(await fetchCollectiveEvents({ strict: true, revalidate: 0 })).toBeNull();
   });
 
+  it("reads listed events from other calendars only, and a strict read fails if one can't be read", async () => {
+    const other = "at://did:plc:someoneelse/community.lexicon.calendar.event/3kother";
+    const own = `at://${SCENE}/community.lexicon.calendar.event/old`;
+    const techne = fakeTechne([
+      eventRow("now", "Ours", "2026-08-20T18:00:00Z"),
+      { uri: own, value: { name: "Ours, last year", startsAt: "2025-01-01T18:00:00Z" } },
+      { uri: other, value: { name: "Theirs", startsAt: "2026-08-19T18:00:00Z" } },
+      { uri: `at://${SCENE}/pub.techne.draft.event.listing/a`, value: { event: { uri: other } } },
+      { uri: `at://${SCENE}/pub.techne.draft.event.listing/old-ctx`, value: { event: { uri: own } } },
+    ]);
+    const asked: string[][] = [];
+    let failGet = false;
+    vi.stubGlobal("fetch", (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("getRecords")) {
+        asked.push(url.searchParams.getAll("uris"));
+        if (failGet) return new Response("{}", { status: 503 });
+      }
+      return techne.fetch(input, init);
+    }) as typeof fetch);
+    const after = "2026-08-01T00:00:00Z";
+    expect((await fetchCollectiveEvents({ after, revalidate: 0, strict: true }))!.map((e) => e.name)).toEqual(["Theirs", "Ours"]);
+    expect(asked).toEqual([[other]]); // the collective's own events aren't fetched again through their listings
+    failGet = true;
+    expect(await fetchCollectiveEvents({ after, revalidate: 0, strict: true })).toBeNull();
+    expect((await fetchCollectiveEvents({ after, revalidate: 0 }))!.map((e) => e.name)).toEqual(["Ours"]);
+  });
+
   it("returns [] on a non-2xx instead of throwing", async () => {
     stubTechne([], { status: 503 });
     expect(await fetchUpcomingRegenosEvents()).toEqual([]);
