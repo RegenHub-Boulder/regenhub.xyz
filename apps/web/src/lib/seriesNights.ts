@@ -1,11 +1,11 @@
 /**
  * "Add the next nights" for a series (/portal/events): which nights to suggest
- * (the hosts' confirmed dates, lib/series.ts, not posted or over yet), the check
+ * (the next dates of the series' monthly rule, lib/series.ts, not posted or over yet), the check
  * on a night a steward picks by hand, and the createEvent body that posts one as
  * an ordinary Techne event of the collective. Pure, so it's tested in node.
  */
 
-import { dateIn, plannedNight, type PlannedNight, type Series } from "@/lib/series";
+import { dateIn, plannedNight, ruleDatesFrom, type PlannedNight, type Series } from "@/lib/series";
 import { HUB_TIMEZONE, mintRkey } from "@/lib/regenos/eventForm";
 
 export type PostedNight = { seriesSlug: string | null; startAt: string | null; cancelled?: boolean };
@@ -19,17 +19,31 @@ function takenDates(series: Series, posted: PostedNight[], withCancelled: boolea
   );
 }
 
+/** How many nights "Add the next nights" suggests per series. */
+export const SUGGESTED_NIGHTS = 3;
+
 /**
- * The series' confirmed nights that aren't posted yet and haven't ended by `now`, soonest first.
- * A cancelled night isn't suggested again (the hosts called it off); a steward can still pick it by hand.
+ * The next `SUGGESTED_NIGHTS` dates of the series' rule that aren't posted yet and haven't ended by `now`,
+ * soonest first. A date already posted is skipped (the next one after it is offered instead); a cancelled
+ * night isn't suggested again (the hosts called it off), though a steward can still pick it by hand.
  */
-export function unpostedNights(series: Series, posted: PostedNight[], now: Date): PlannedNight[] {
+export function unpostedNights(series: Series, posted: PostedNight[], now: Date, count = SUGGESTED_NIGHTS): PlannedNight[] {
   const taken = takenDates(series, posted, true);
-  return [...series.confirmedDates]
-    .sort()
-    .filter((d) => !taken.has(d))
-    .map((d) => plannedNight(series, d))
-    .filter((n) => Date.parse(n.endsAt) > now.getTime());
+  const out: PlannedNight[] = [];
+  // From today in the series zone, so tonight's still-running night counts.
+  let from = dateIn(now.toISOString(), series.timezone);
+  while (out.length < count) {
+    const batch = ruleDatesFrom(series.rule, from, count + taken.size + 1);
+    for (const d of batch) {
+      if (taken.has(d)) continue;
+      const n = plannedNight(series, d);
+      if (Date.parse(n.endsAt) > now.getTime()) out.push(n);
+      if (out.length === count) break;
+    }
+    from = batch[batch.length - 1];
+    from = new Date(Date.parse(`${from}T00:00:00Z`) + 86400_000).toISOString().slice(0, 10);
+  }
+  return out;
 }
 
 /**

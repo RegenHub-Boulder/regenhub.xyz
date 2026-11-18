@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, CalendarDays } from "lucide-react";
 import { formatEventWhen } from "@/components/events/EventList";
+import { rhythmOf } from "@/lib/series";
 import { nextNightLabel, nextStart, type SeriesOverview } from "@/lib/seriesEvents";
 
 /**
@@ -17,6 +18,7 @@ export function SeriesCard({ overview }: { overview: SeriesOverview }) {
       <div className="glass-panel-subtle rounded-lg p-5 h-full flex flex-col gap-2 hover-lift">
         <p className="font-semibold text-xl leading-snug">{series.name}</p>
         <p className="text-sm text-muted">{series.blurb}</p>
+        <p className="text-sm text-muted">{rhythmOf(series)}</p>
         <p className="mt-auto pt-2 flex items-center gap-2 text-sm">
           <CalendarDays className="w-4 h-4 text-sage shrink-0" />
           <span>{nextNightLabel(overview, formatEventWhen)}</span>

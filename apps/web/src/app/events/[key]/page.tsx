@@ -3,7 +3,7 @@ import { eventDetailsLinkText } from "@/lib/techne/rsvpCopy";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, CalendarDays, CalendarPlus, MapPin } from "lucide-react";
-import { getSeries, topicOf } from "@/lib/series";
+import { getSeries, rhythmOf, topicOf } from "@/lib/series";
 import { fetchCollectiveEvents, formatEventLocation, pastWindowStart } from "@/lib/regenos/events";
 import { NO_NEXT_NIGHT, overviewFor } from "@/lib/seriesEvents";
 import { formatEventRange, formatEventWhen } from "@/components/events/EventList";
@@ -58,6 +58,7 @@ export default async function SeriesPage({ params }: PageProps) {
         <header className="space-y-2">
           <h1 className="text-3xl md:text-4xl font-bold text-forest leading-tight">{series.name}</h1>
           <p className="text-lg text-muted">{series.about}</p>
+          <p className="font-medium text-forest" data-testid="series-rhythm">{rhythmOf(series)}</p>
           <p className="flex items-start gap-2 text-muted">
             <MapPin className="w-5 h-5 text-sage shrink-0 mt-0.5" /> {place}
           </p>

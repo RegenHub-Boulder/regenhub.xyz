@@ -97,7 +97,7 @@ const ALL_NIGHTS = [
   {
     slug: "civic-tech-night",
     name: "Civic Tech Night",
-    date: "2026-12-10",
+    date: "2026-12-15",
     description:
       "Bring your project, or your neighborhood group's stuck problem, and work on it with others. Open to anyone. (Sample event on staging.)",
   },

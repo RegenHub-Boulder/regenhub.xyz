@@ -2,7 +2,7 @@
  * The series as visitors see them: each series' nights as posted to the
  * collective's calendar (Techne records), and the calendar feeds built from them.
  *
- * Only posted nights show. A series has no schedule here, so when no night is
+ * Only posted nights show. A series' rhythm is only words, so when no night is
  * posted ahead the cards and the series page say "Next date coming soon".
  * Stewards post nights from /portal/events ("Add the next nights").
  */
