@@ -3,6 +3,7 @@ import { eventDetailsLinkText, eventsPageRsvpLine } from "./rsvpCopy";
 
 function setEnv(on: boolean) {
   vi.stubEnv("TECHNE_SIGNIN_ENABLED", on ? "true" : "");
+  vi.stubEnv("TECHNE_OAUTH_PRIVATE_JWK", "{\"kid\":\"present\"}"); // the door needs its client key to be on
   vi.stubEnv("REGENOS_BASE_URL", "https://regenos.example");
   vi.stubEnv("REGENOS_COLLECTIVE_DID", "did:plc:abc");
 }

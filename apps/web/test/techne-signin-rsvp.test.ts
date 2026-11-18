@@ -1,27 +1,38 @@
 /**
- * "Sign in with Techne" as the RSVP door, end to end in node:
- *  - the client metadata route (flag off: 404; on: techne-sdk's document, least privilege);
- *  - sign-in start and restore through the real techne-sdk/auth, with the staging stand-in
- *    injected as the OAuth client (the SDK's documented `setOAuthClientFactory` seam);
- *  - the RSVP written with that session to the stand-in for the person's PDS (the real
- *    scripts/staging/techne-standin.mjs, spawned), then read back through Techne's documented
- *    query as the page's going count;
- *  - the staging proxy route stays shut unless the stand-in is switched on.
- * Only the platform's AppView is faked (a tiny HTTP server), as a system outside this repo.
+ * "Sign in with Techne" as the RSVP door on the staging stand-in, end to end in node, through the real routes:
+ *  - the client metadata route (flag off: 404) and the staging proxy (only the stand-in's sign-in page, only when on,
+ *    never for regenhub.xyz);
+ *  - "Sign in with Techne" (POST /techne/signin) → the stand-in's "pick a sample person" page → /techne/callback →
+ *    this browser's Techne sign-in (server-held) → POST /api/techne/rsvp writes the person's own record on the
+ *    stand-in for their PDS (the real scripts/staging/techne-standin.mjs, spawned) → read back through Techne's
+ *    documented query as the page's going count.
+ * Faked: the platform's AppView (a tiny HTTP server) and, at the network edge, Supabase (PGlite + migration 064).
+ * The real OAuth exchange is covered by src/app/api/auth/techne/oneDoor.test.ts.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { AddressInfo } from "node:net";
+import { NextRequest } from "next/server";
+import type { PGlite } from "@electric-sql/pglite";
+import type { FakeAuthUser } from "./pglitePostgrest";
+import { doorDb, edgeFetch, type Edge } from "./support/oneDoorHarness";
+
+const browser = vi.hoisted(() => ({ jar: new Map<string, string>() as Map<string, string> }));
+vi.mock("next/headers", async () => {
+  const { cookieStore } = await import("./support/oneDoorHarness");
+  return { cookies: async () => cookieStore(browser.jar), headers: async () => new Headers() };
+});
+
 import { GET as clientMetadataGET } from "@/app/techne/client-metadata.json/route";
 import { GET as stagingGET } from "@/app/staging/techne/[...path]/route";
-import { NextRequest } from "next/server";
+import { POST as signinPOST } from "@/app/techne/signin/route";
+import { GET as callbackGET } from "@/app/techne/callback/route";
+import { GET as rsvpGET, POST as rsvpPOST } from "@/app/api/techne/rsvp/route";
 import { techneConfig } from "@/lib/techne/config";
-import { authOptions, safeReturn, signInScope } from "@/lib/techne/session";
-import { writeRsvp } from "@/components/events/RsvpPanel";
 import { fetchAttendance } from "@/lib/regenos/events";
 
 const HUB = "did:plc:hubtest";
@@ -32,12 +43,20 @@ let appview: Server;
 let standin: ChildProcess;
 let standinUrl = "";
 
+const SITE = "https://preview.test";
+let pg: PGlite;
+const realFetch = globalThis.fetch;
+
 function setEnv(on: boolean) {
-  process.env.REGENOS_BASE_URL = standinUrl || "http://127.0.0.1:1";
-  process.env.REGENOS_COLLECTIVE_DID = HUB;
-  process.env.NEXT_PUBLIC_SITE_URL = "https://preview.test";
-  if (on) process.env.TECHNE_SIGNIN_ENABLED = "true";
-  else delete process.env.TECHNE_SIGNIN_ENABLED;
+  vi.stubEnv("REGENOS_BASE_URL", standinUrl || "http://127.0.0.1:1");
+  vi.stubEnv("REGENOS_COLLECTIVE_DID", HUB);
+  vi.stubEnv("NEXT_PUBLIC_SITE_URL", SITE);
+  vi.stubEnv("TECHNE_SIGNIN_ENABLED", on ? "true" : "");
+  vi.stubEnv("TECHNE_STAGING_STANDIN", "");
+  vi.stubEnv("TECHNE_STANDIN_URL", standinUrl);
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://supabase.test");
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "test-anon-key");
+  vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key");
 }
 
 beforeAll(async () => {
@@ -72,135 +91,115 @@ afterAll(() => {
   appview?.close();
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   setEnv(true);
-  delete process.env.TECHNE_STAGING_STANDIN;
+  pg = await doorDb();
+  browser.jar = new Map();
+  const edge: Edge = {
+    pg,
+    users: new Map<string, FakeAuthUser>(),
+    authByEmail: new Map(),
+    didDocs: new Map(),
+    webDocs: new Map(),
+    mails: [],
+    servers: [],
+    passthrough: (u) => u.hostname === "127.0.0.1",
+  };
+  vi.stubGlobal("fetch", edgeFetch(edge, realFetch));
 });
 
-describe("client metadata (regenhub.xyz's OAuth client id)", () => {
-  it("404s while RSVP is off", async () => {
+afterEach(async () => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+  await pg.close();
+});
+
+describe("client metadata and the staging switch", () => {
+  it("404s while the door is off, and stays off without a client key unless the stand-in is on", async () => {
     setEnv(false);
     expect(clientMetadataGET().status).toBe(404);
     expect(techneConfig()).toBeNull();
-  });
-
-  it("serves techne-sdk's document at its own URL: the one scope list every sign-in asks for, nothing wider", async () => {
-    const doc = await clientMetadataGET().json();
-    expect(doc.client_id).toBe("https://preview.test/techne/client-metadata.json");
-    expect(doc.redirect_uris).toEqual(["https://preview.test/techne/callback"]);
-    expect(doc.token_endpoint_auth_method).toBe("none");
-    expect(doc.dpop_bound_access_tokens).toBe(true);
-    const scope = String(doc.scope).split(" ");
-    expect(scope).toContain("atproto");
-    // One sign-in for everyone: the metadata declares exactly what signIn asks for (lib/techne/session.ts).
-    expect(scope).toEqual(signInScope({ clientId: doc.client_id }));
-    expect(scope.filter((s) => s.startsWith("repo:"))).toEqual([
-      "repo:community.lexicon.calendar.event?action=create&action=update&action=delete",
-      "repo:community.lexicon.calendar.rsvp?action=create&action=update&action=delete",
-      "repo:pub.techne.draft.event.config?action=create&action=update&action=delete",
-      "repo:pub.techne.draft.event.listing?action=create&action=update&action=delete",
-    ]);
-    // The write as the collective is a repo write the PDS answers: no platform rpc scope for it.
-    expect(scope.some((s) => s.includes("applyWrites"))).toBe(false);
-    expect(scope).toContain("rpc:pub.techne.draft.sync.indexRecord?aud=did:web:techne.computer%23atproto_appview");
-    expect(scope.some((s) => s.includes("authRead") || s.includes("authWrite"))).toBe(false);
+    setEnv(true);
+    expect(techneConfig()).toBeNull(); // no TECHNE_OAUTH_PRIVATE_JWK
+    vi.stubEnv("TECHNE_STAGING_STANDIN", "1");
+    expect(techneConfig()?.standIn).toBe(true);
   });
 
   it("never turns the stand-in on for the production origin", () => {
-    process.env.TECHNE_STAGING_STANDIN = "1";
-    process.env.NEXT_PUBLIC_SITE_URL = "https://regenhub.xyz";
+    vi.stubEnv("TECHNE_STAGING_STANDIN", "1");
+    vi.stubEnv("TECHNE_OAUTH_PRIVATE_JWK", '{"kid":"present"}');
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://regenhub.xyz");
     expect(techneConfig()?.standIn).toBeUndefined();
-    process.env.NEXT_PUBLIC_SITE_URL = "https://preview.test";
-    expect(techneConfig()?.standIn).toBe("/staging/techne");
   });
 });
 
 describe("staging route", () => {
   const call = (path: string) =>
-    stagingGET(new NextRequest(`https://preview.test/staging/techne/${path}?redirect=https://preview.test/techne/callback`), {
+    stagingGET(new NextRequest(`${SITE}/staging/techne/${path}?redirect=${SITE}/techne/callback`), {
       params: Promise.resolve({ path: path.split("/") }),
     });
 
   it("404s when the stand-in is off", async () => {
-    process.env.TECHNE_STANDIN_URL = standinUrl;
     expect((await call("signin")).status).toBe(404);
   });
 
-  it("serves the stand-in's sign-in page when on", async () => {
-    process.env.TECHNE_STAGING_STANDIN = "1";
-    process.env.TECHNE_STANDIN_URL = standinUrl;
+  it("serves only the stand-in's sign-in page when on: the server talks to the rest itself", async () => {
+    vi.stubEnv("TECHNE_STAGING_STANDIN", "1");
     const res = await call("signin");
     expect(res.status).toBe(200);
     expect(await res.text()).toContain("Lee (sample)");
+    expect((await call("xrpc/com.atproto.repo.putRecord")).status).toBe(404);
   });
 });
 
-describe("Sign in with Techne → RSVP", () => {
-  it("starts sign-in, restores the session on the callback, and RSVPs with it", async () => {
-    process.env.TECHNE_STAGING_STANDIN = "1";
-    const config = techneConfig()!;
-    // A browser window for the SDK: the stand-in's base goes straight to the spawned server here.
-    const store = new Map<string, string>();
-    const location = new URL("https://preview.test/events/did%3Aplc%3Ahubtest/3n2aaaaaaaaa2") as URL & {
-      assign: (u: string) => void;
-    };
-    let assigned = "";
-    const win = {
-      location: Object.assign(location, { assign: (u: string) => void (assigned = u) }),
-      localStorage: {
-        getItem: (k: string) => store.get(k) ?? null,
-        setItem: (k: string, v: string) => void store.set(k, v),
-        removeItem: (k: string) => void store.delete(k),
-      },
-      fetch: (u: string, init?: RequestInit) => fetch(u.replace(config.standIn!, standinUrl), init),
-    };
-    (globalThis as { window?: unknown }).window = win;
-    (globalThis as { location?: unknown }).location = win.location;
+describe("Sign in with Techne → RSVP (stand-in)", () => {
+  it("signs in through the server, then RSVPs with the server-held session", async () => {
+    vi.stubEnv("TECHNE_STAGING_STANDIN", "1");
+    const path = "/events/did%3Aplc%3Ahubtest/3n2aaaaaaaaa2";
+    const read = async () => (await rsvpGET(new NextRequest(`${SITE}/api/techne/rsvp?event=${encodeURIComponent(EVENT.uri)}`))).json();
+    expect(await read()).toEqual({ signedIn: false });
 
-    const auth = await import("techne-sdk/auth");
-    const opts = await authOptions(config);
-
-    // Signed out at first.
-    expect(await auth.restore(opts)).toBeNull();
-
-    // Start: the SDK hands the redirect to the OAuth client, which goes to the sign-in page.
-    await auth.signIn({ ...opts, state: "/events/did%3Aplc%3Ahubtest/3n2aaaaaaaaa2" });
-    const go = new URL(assigned);
+    // "Sign in with Techne" on the event page: the server sends the browser to the stand-in's page.
+    const start = await signinPOST(
+      new Request(`${SITE}/techne/signin`, {
+        method: "POST",
+        headers: { origin: SITE, "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ next: path }).toString(),
+      }),
+    );
+    const go = new URL(start.headers.get("location")!);
     expect(go.pathname).toBe("/staging/techne/signin");
-    expect(go.searchParams.get("redirect")).toBe("https://preview.test/techne/callback");
-    const page = await (await fetch(`${standinUrl}/signin?${go.searchParams}`)).text();
+    expect(go.searchParams.get("redirect")).toBe(`${SITE}/techne/callback`);
+    const page = await (await realFetch(`${standinUrl}/signin?${go.searchParams}`)).text();
     const back = /href="([^"]+)"/.exec(page)![1].replace(/&amp;/g, "&");
 
-    // Come back: restore finishes the sign-in, redirectState gives back the page we started on.
-    await auth.signOut({ ...opts, session: { did: PERSON.did } as never }).catch(() => {});
-    win.location.href = back;
-    const session = (await auth.restore(opts)) as unknown as {
-      did: string;
-      fetchHandler: (p: string, i: RequestInit) => Promise<Response>;
-    };
-    expect(session.did).toBe(PERSON.did);
-    expect(safeReturn(await auth.redirectState(opts))).toBe("/events/did%3Aplc%3Ahubtest/3n2aaaaaaaaa2");
+    // Back at the callback: signed in with Techne here, and back on the event page.
+    const landed = await callbackGET(new NextRequest(back));
+    expect(new URL(landed.headers.get("location")!).pathname + new URL(landed.headers.get("location")!).search).toBe(path);
+    expect(await read()).toMatchObject({ signedIn: true, did: PERSON.did, own: null });
 
-    // RSVP with the session: the person's own record, then read back as the going count.
+    // RSVP: the person's own record, then read back as the going count.
+    const post = (status: string) =>
+      rsvpPOST(
+        new Request(`${SITE}/api/techne/rsvp`, {
+          method: "POST",
+          headers: { origin: SITE, "content-type": "application/json" },
+          body: JSON.stringify({ event: EVENT, status }),
+        }),
+      ).then((r) => r.json());
     expect((await fetchAttendance(EVENT.uri))?.going).toBe(0);
-    const rkey = await writeRsvp(session, config, EVENT, "going");
+    const { rkey } = await post("going");
     expect(rkey).toMatch(/^[234567a-j][234567a-z]{12}$/);
     expect(await fetchAttendance(EVENT.uri)).toEqual({ going: 1, goingDids: [PERSON.did] });
 
     // Changing their mind rewrites the same record, not a second one.
-    await writeRsvp(session, config, EVENT, "notgoing", rkey);
+    expect((await post("notgoing")).rkey).toBe(rkey);
     expect((await fetchAttendance(EVENT.uri))?.going).toBe(0);
-    const own = await (
-      await session.fetchHandler(
-        `/xrpc/com.atproto.repo.listRecords?repo=${PERSON.did}&collection=community.lexicon.calendar.rsvp`,
-        {},
-      )
-    ).json();
-    expect(own.records).toHaveLength(1);
+    expect(await read()).toMatchObject({ own: { rkey, status: "notgoing" } });
   });
 
   it("refuses a write into someone else's repo", async () => {
-    const res = await fetch(`${standinUrl}/xrpc/com.atproto.repo.putRecord`, {
+    const res = await realFetch(`${standinUrl}/xrpc/com.atproto.repo.putRecord`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-standin-did": "did:plc:mallory" },
       body: JSON.stringify({ repo: PERSON.did, collection: "community.lexicon.calendar.rsvp", rkey: "x", record: {} }),

@@ -2,7 +2,7 @@
 // STAGING ONLY. A stand-in for Supabase for the T-482 preview, so the one door ("Sign in with Techne" also opens
 // the portal) runs end to end with no Supabase stack and without ever touching production's:
 //   - PostgREST tables and rpc/<fn>, answered from an in-memory PGlite holding a minimal `members` and
-//     `admin_actions` plus the REAL migration 064 (techne_* tables, begin/confirm_techne_link), through the
+//     `admin_actions` plus the REAL migration 064 (the OAuth stores, web sessions, link and unlink), through the
 //     same adapter the route tests use (apps/web/test/pglitePostgrest.ts)
 //   - GoTrue: POST /auth/v1/admin/generate_link, POST /auth/v1/verify (a session, as current GoTrue answers),
 //     GET /auth/v1/user, POST /auth/v1/logout

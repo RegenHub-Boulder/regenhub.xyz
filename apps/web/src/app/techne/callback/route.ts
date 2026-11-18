@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { mintSupabaseSession } from "@/lib/auth/mintSession";
 import { siteOrigin } from "@/lib/techne/config";
-import { handleFor, isPlcDid } from "@/lib/techne/did";
+import { handleFor } from "@/lib/techne/did";
 import { handback, techneOAuth } from "@/lib/techne/oauth/client";
 import { NONCE_COOKIE, packState, unpackState } from "@/lib/techne/oauth/appState";
 import { cookieOptions, startWebSession } from "@/lib/techne/webSession";
@@ -61,9 +61,9 @@ export async function GET(req: NextRequest) {
   }
 
   // The start must have been in this browser: a callback URL from someone else's sign-in signs nobody in here.
-  if (!app || !nonce || app.nonce !== nonce || !isPlcDid(did)) {
+  if (!app || !nonce || app.nonce !== nonce) {
     await oauth.revoke(did).catch(() => {});
-    return fail(app?.next ?? null, "not started in this browser, or not a did:plc");
+    return fail(app?.next ?? null, "not started in this browser");
   }
   jar.set(NONCE_COOKIE, "", cookieOptions(0));
 

@@ -116,7 +116,7 @@ class RealTechneOAuth implements TechneOAuth {
 let cached: { key: string; client: Promise<TechneOAuth> } | null = null;
 
 export function makeTechneOAuth(config: TechneConfig, jwk = techneClientKey()): Promise<TechneOAuth> {
-  if (config.standIn) return Promise.resolve(standInOAuth(config));
+  if (config.standIn) return Promise.resolve(standInOAuth());
   return (async () => {
     const key = await clientKey(jwk);
     const client = new NodeOAuthClient({

@@ -12,7 +12,7 @@
 import { randomBytes } from "node:crypto";
 import { createServiceClient } from "@/lib/supabase/admin";
 import type { Session } from "./call";
-import { siteOrigin, type TechneConfig } from "./config";
+import { siteOrigin } from "./config";
 import type { TechneOAuth } from "./oauth/client";
 
 export function standInSession(base: string, did: string, f: typeof fetch = (...a) => fetch(...a)): Session {
@@ -32,7 +32,7 @@ function standInBase(): string {
   return base.replace(/\/+$/, "");
 }
 
-export function standInOAuth(_config: TechneConfig): TechneOAuth {
+export function standInOAuth(): TechneOAuth {
   const db = () => createServiceClient();
   return {
     async authorize({ appState }) {

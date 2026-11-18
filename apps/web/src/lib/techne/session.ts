@@ -33,7 +33,7 @@ export function homePds(config: Pick<TechneConfig, "pds">): string {
 
 /** Platform calls (the queries, `sync.indexRecord`) go through the person's PDS with this `atproto-proxy`
  *  header. Repo writes (`com.atproto.repo.*`) never carry it: the PDS answers those itself. */
-export function platformProxy(config: Pick<TechneConfig, "platform">): string {
+export function platformProxy(config: { platform?: string }): string {
   return `${config.platform ?? DEFAULT_PLATFORM}#atproto_appview`;
 }
 

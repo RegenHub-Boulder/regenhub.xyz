@@ -93,6 +93,7 @@ describe("GET /api/portal/events/standing", () => {
     vi.stubEnv("REGENOS_BASE_URL", "https://techne.test");
     vi.stubEnv("REGENOS_COLLECTIVE_DID", HUB);
     vi.stubEnv("TECHNE_SIGNIN_ENABLED", "true");
+    vi.stubEnv("TECHNE_OAUTH_PRIVATE_JWK", "{\"kid\":\"present\"}"); // the door needs its client key to be on
     records.length = 0;
     records.push(claim(HUB, ME, 40), claim(HUB, OTHER, 10), claim(OTHER, OTHER, 40));
     techne = fakeTechne(records);

@@ -4,7 +4,7 @@ import { loginUrlFor } from "@/lib/safeNext";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { MobileNav, type NavLink } from "@/components/nav/MobileNav";
-import { isStewardEventsEnabled, techneConfig } from "@/lib/techne/config";
+import { isStewardEventsEnabled } from "@/lib/techne/config";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 
 export const metadata = { title: "Member Portal — RegenHub" };
@@ -26,8 +26,6 @@ export default async function PortalLayout({ children }: { children: React.React
 
   // Flag-gated only: the page itself says what you may do. The Techne door, or the old regenOS lane.
   const eventsEnabled = isStewardEventsEnabled();
-  // Sign-out ends the Techne session too (the one door).
-  const techne = techneConfig();
 
   const links: NavLink[] = [
     { href: "/portal", label: "Dashboard" },
