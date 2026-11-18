@@ -1,12 +1,13 @@
 /**
- * RegenHub's event series: Agents Night and Civic Tech Night.
+ * RegenHub's event series: Agents Building Night and Civic Tech Night.
  *
  * Techne has no series record (techne.pub lists none), so a series is data in
  * this file, and a night belongs to a series by what its own event record says:
  *
  *   1. its `uris` list names the series page (`https://regenhub.xyz/events/<slug>`), or
  *   2. its `name` is the series name, alone or followed by a separator and a topic
- *      ("Agents Night", "Agents Night: local models").
+ *      ("Agents Building Night", "Agents Building Night: local models").
+ *      A renamed series keeps its old names in `formerNames`, so nights posted under them still match.
  *
  * Each night is an ordinary `community.lexicon.calendar.event`, so it shows
  * wherever Techne events show. Record keys stay TIDs, as the lexicon declares
@@ -38,6 +39,10 @@ export interface MonthlyRule {
 export interface Series {
   slug: SeriesSlug;
   name: string;
+  /** Earlier display names; nights posted under them still belong to the series. */
+  formerNames?: readonly string[];
+  /** Who runs the night, as shown in public copy. */
+  hosts: string;
   /** One line, for cards. */
   blurb: string;
   /** A short paragraph for the series page. */
@@ -65,11 +70,14 @@ export const REGENHUB_PLACE: SeriesPlace = {
 export const SERIES: readonly Series[] = [
   {
     slug: "agents-night",
-    name: "Agents Night",
-    blurb: "People building with AI agents show their work and compare notes.",
+    name: "Agents Building Night",
+    formerNames: ["Agents Night"],
+    hosts: "AG and Benjamin",
+    blurb: "Show us how you build with your agents. Demo your setup and build alongside others.",
     about:
-      "Bring what you're building with AI agents, or come to see what others are building. A few short demos, " +
-      "then open tables to compare notes. Open to anyone; no membership needed.",
+      "Show us how you build with your agents. Hermes, OpenClaw, Instinct, Duet, Dots, Muse, GrokBot or whatever " +
+      "you use: bring your setup, demo it, and build alongside others. AG and Benjamin demo their own personal " +
+      "agent setups and share tips on how to build your own, and own it. Bring a laptop. All levels welcome.",
     rule: { nth: 1, weekday: 2 },
     startTime: "18:30",
     endTime: "21:00",
@@ -80,10 +88,12 @@ export const SERIES: readonly Series[] = [
   {
     slug: "civic-tech-night",
     name: "Civic Tech Night",
-    blurb: "Bring your project, or your neighborhood group's stuck problem.",
+    hosts: "AG and Benjamin",
+    blurb: "Building for what Boulder needs, with your neighbors.",
     about:
-      "A night for people who build tools for their town and people who need them. Bring a project, " +
-      "or a problem your neighborhood group is stuck on, and work on it with others. Open to anyone.",
+      "Building for what Boulder needs. Bring a question about how this city works, a tool you think our " +
+      "community needs, or just your curiosity, and build with your neighbors. Rooted in Boulder, with an eye " +
+      "on Colorado. No background in politics or code required.",
     rule: { nth: 3, weekday: 2 },
     startTime: "18:30",
     endTime: "21:00",
@@ -122,6 +132,17 @@ export function ruleDatesFrom(rule: MonthlyRule, fromDate: string, count: number
     }
   }
   return out;
+}
+
+/** The current name, then former names. */
+function namesOf(series: Series): string[] {
+  return [series.name, ...(series.formerNames ?? [])];
+}
+
+/** Whether `name` is the series name alone (current or former), ignoring case. */
+export function isSeriesName(series: Series, name: string): boolean {
+  const n = name.trim().toLowerCase();
+  return namesOf(series).some((x) => x.toLowerCase() === n);
 }
 
 export function getSeries(slug: string): Series | null {
@@ -184,8 +205,10 @@ export function seriesOf(event: SeriesMatchable): Series | null {
   const name = (event.name ?? "").trim().toLowerCase();
   if (!name) return null;
   for (const s of SERIES) {
-    const base = s.name.toLowerCase();
-    if (name === base || /^\s*[:\-–—|]/.test(name.startsWith(base) ? name.slice(base.length) : "x")) return s;
+    for (const n of namesOf(s)) {
+      const base = n.toLowerCase();
+      if (name === base || /^\s*[:\-–—|]/.test(name.startsWith(base) ? name.slice(base.length) : "x")) return s;
+    }
   }
   return null;
 }
@@ -196,9 +219,12 @@ export function seriesOf(event: SeriesMatchable): Series | null {
  */
 export function topicOf(series: Series, name: string): string | null {
   const n = name.trim();
-  if (!n.toLowerCase().startsWith(series.name.toLowerCase())) return null;
-  const m = /^\s*[:\-–—|]\s*(.+)$/.exec(n.slice(series.name.length));
-  return m ? m[1] : null;
+  for (const base of namesOf(series)) {
+    if (!n.toLowerCase().startsWith(base.toLowerCase())) continue;
+    const m = /^\s*[:\-–—|]\s*(.+)$/.exec(n.slice(base.length));
+    if (m) return m[1];
+  }
+  return null;
 }
 
 /** Techne's query document assumes an event with no end runs two hours. */

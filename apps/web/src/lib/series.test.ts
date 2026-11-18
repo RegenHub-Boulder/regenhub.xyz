@@ -6,22 +6,33 @@ const civic = getSeries("civic-tech-night")!;
 
 describe("series keys", () => {
   it("knows both series by slug and nothing else", () => {
-    expect(agents.name).toBe("Agents Night");
+    expect(agents.name).toBe("Agents Building Night");
     expect(civic.name).toBe("Civic Tech Night");
     expect(getSeries("happy-hour")).toBeNull();
   });
 
   it("puts a night in a series by name, alone or with a topic after a separator", () => {
-    expect(seriesOf({ name: "Agents Night" })?.slug).toBe("agents-night");
+    expect(seriesOf({ name: "Agents Building Night" })?.slug).toBe("agents-night");
     expect(seriesOf({ name: "agents night: local models" })?.slug).toBe("agents-night");
     expect(seriesOf({ name: "Civic Tech Night — transit data" })?.slug).toBe("civic-tech-night");
     expect(seriesOf({ name: "Civic Tech Night | Dec" })?.slug).toBe("civic-tech-night");
-    expect(seriesOf({ name: "Agents Night:" })?.slug).toBe("agents-night");
+    expect(seriesOf({ name: "Agents Building Night:" })?.slug).toBe("agents-night");
+  });
+
+  it("keeps nights posted under the old name Agents Night", () => {
+    expect(seriesOf({ name: "Agents Night" })?.slug).toBe("agents-night");
+    expect(seriesOf({ name: "Agents Night: evals" })?.slug).toBe("agents-night");
+    expect(topicOf(agents, "Agents Night: evals")).toBe("evals");
+    expect(seriesOf({ name: "Agents Nightly" })).toBeNull();
+  });
+
+  it("names AG and Benjamin as hosts of both series", () => {
+    for (const s of SERIES) expect(s.hosts).toBe("AG and Benjamin");
   });
 
   it("does not claim near-misses", () => {
-    expect(seriesOf({ name: "Agents Nightly" })).toBeNull();
-    expect(seriesOf({ name: "Not Agents Night" })).toBeNull();
+    expect(seriesOf({ name: "Agents Building Nightly" })).toBeNull();
+    expect(seriesOf({ name: "Not Agents Building Night" })).toBeNull();
     expect(seriesOf({ name: "420 Happy Hour" })).toBeNull();
     expect(seriesOf({ name: "" })).toBeNull();
   });
@@ -30,7 +41,7 @@ describe("series keys", () => {
     expect(seriesOf({ name: "Special night", uris: [{ uri: "https://regenhub.xyz/events/civic-tech-night" }] })?.slug).toBe(
       "civic-tech-night",
     );
-    expect(seriesOf({ name: "Agents Night", uris: [{ uri: "https://regenhub.xyz/events/unknown" }] })?.slug).toBe("agents-night");
+    expect(seriesOf({ name: "Agents Building Night", uris: [{ uri: "https://regenhub.xyz/events/unknown" }] })?.slug).toBe("agents-night");
     // Another site's /events/<slug> page doesn't put an event in our series.
     expect(seriesOf({ name: "Their meetup", uris: [{ uri: "https://lu.ma/events/agents-night" }] })).toBeNull();
     expect(seriesOf({ name: "Hack Night", uris: [{ uri: "https://site.regenhub.build/events/civic-tech-night" }] })?.slug).toBe(
@@ -39,9 +50,9 @@ describe("series keys", () => {
   });
 
   it("reads a night's topic only after a separator", () => {
-    expect(topicOf(agents, "Agents Night: evals")).toBe("evals");
-    expect(topicOf(agents, "Agents Nightly Hack")).toBeNull();
-    expect(topicOf(agents, "Agents Night")).toBeNull();
+    expect(topicOf(agents, "Agents Building Night: evals")).toBe("evals");
+    expect(topicOf(agents, "Agents Building Nightly Hack")).toBeNull();
+    expect(topicOf(agents, "Agents Building Night")).toBeNull();
   });
 });
 

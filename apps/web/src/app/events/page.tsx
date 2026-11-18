@@ -16,7 +16,7 @@ import { fetchSeriesOverviews } from "@/lib/seriesEvents";
  * lu.ma and an event card used to leave for scenius.social; both now land here,
  * and a card from here opens `/events/<did>/<rkey>` on this same site.
  *
- * Leads with the community nights (Agents Night, Civic Tech Night: lib/series.ts),
+ * Leads with the community nights (Agents Building Night, Civic Tech Night: lib/series.ts),
  * each with its next date, then the rest of the calendar.
  *
  * Same fallback contract as the landing section (components/landing/UpcomingEvents.tsx):

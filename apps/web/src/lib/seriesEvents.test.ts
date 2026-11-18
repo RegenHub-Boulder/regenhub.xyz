@@ -26,7 +26,7 @@ describe("series overview", () => {
 
   it("says 'Next date coming soon' when no upcoming night is posted, and invents no date", async () => {
     // Only a past night is posted: nothing upcoming, so no next night from any schedule.
-    vi.stubGlobal("fetch", fakeTechne([ev("3c", "Agents Night", "2026-10-21T01:30:00.000Z", "2026-10-21T04:00:00.000Z")]).fetch);
+    vi.stubGlobal("fetch", fakeTechne([ev("3c", "Agents Building Night", "2026-10-21T01:30:00.000Z", "2026-10-21T04:00:00.000Z")]).fetch);
     const o = overviewFor(agents, (await fetchCollectiveEvents())!, new Date("2026-11-16T12:00:00Z"));
     expect(o.next).toBeNull();
     expect(o.upcoming).toEqual([]);
@@ -38,9 +38,9 @@ describe("series overview", () => {
     vi.stubGlobal(
       "fetch",
       fakeTechne([
-        ev("3a", "Agents Night", "2026-12-02T01:30:00.000Z", "2026-12-02T04:00:00.000Z"),
-        ev("3b", "Agents Night: evals", "2026-11-04T01:30:00.000Z", "2026-11-04T04:00:00.000Z"),
-        ev("3c", "Agents Night", "2026-10-21T01:30:00.000Z", "2026-10-21T04:00:00.000Z"),
+        ev("3a", "Agents Building Night", "2026-12-02T01:30:00.000Z", "2026-12-02T04:00:00.000Z"),
+        ev("3b", "Agents Building Night: evals", "2026-11-04T01:30:00.000Z", "2026-11-04T04:00:00.000Z"),
+        ev("3c", "Agents Building Night", "2026-10-21T01:30:00.000Z", "2026-10-21T04:00:00.000Z"),
         ev("3d", "420 Happy Hour", "2026-11-20T23:20:00.000Z"),
       ]).fetch,
     );
@@ -60,9 +60,9 @@ describe("cancelled and open-ended nights", () => {
       "fetch",
       fakeTechne([
         {
-          ...ev("3a", "Agents Night", "2026-12-02T01:30:00.000Z", "2026-12-02T04:00:00.000Z"),
+          ...ev("3a", "Agents Building Night", "2026-12-02T01:30:00.000Z", "2026-12-02T04:00:00.000Z"),
           value: {
-            name: "Agents Night",
+            name: "Agents Building Night",
             startsAt: "2026-12-02T01:30:00.000Z",
             status: "community.lexicon.calendar.event#cancelled",
           },
@@ -84,7 +84,7 @@ describe("cancelled and open-ended nights", () => {
   });
 
   it("keeps a night with no end on for two hours after it starts", async () => {
-    vi.stubGlobal("fetch", fakeTechne([ev("3a", "Agents Night", "2026-12-02T01:30:00.000Z")]).fetch);
+    vi.stubGlobal("fetch", fakeTechne([ev("3a", "Agents Building Night", "2026-12-02T01:30:00.000Z")]).fetch);
     const events = (await fetchCollectiveEvents())!;
     expect(overviewFor(agents, events, new Date("2026-12-02T03:00:00Z")).next).toMatchObject({ rkey: "3a" });
     expect(overviewFor(agents, events, new Date("2026-12-02T03:31:00Z")).next).toBeNull();
@@ -117,7 +117,7 @@ describe("calendar feeds", () => {
     vi.stubGlobal(
       "fetch",
       fakeTechne([
-        ev("3a", "Agents Night", "2026-12-02T01:30:00.000Z", "2026-12-02T04:00:00.000Z"),
+        ev("3a", "Agents Building Night", "2026-12-02T01:30:00.000Z", "2026-12-02T04:00:00.000Z"),
         ev("3e", "Civic Tech Night", "2026-12-11T01:30:00.000Z", "2026-12-11T04:00:00.000Z"),
         ev("3d", "420 Happy Hour", "2026-11-20T23:20:00.000Z"),
       ]).fetch,
@@ -127,7 +127,7 @@ describe("calendar feeds", () => {
   it("puts only that series' nights in a series feed, with in-site links and the record URI as UID", async () => {
     const ics = (await buildEventsFeed(getSeries("agents-night"), new Date("2026-11-16T12:00:00Z")))!;
     expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(1);
-    expect(ics).toContain("SUMMARY:Agents Night");
+    expect(ics).toContain("SUMMARY:Agents Building Night");
     expect(ics).toContain(`UID:at://${HUB}/community.lexicon.calendar.event/3a`);
     expect(ics).toContain(`URL:https://regenhub.xyz/events/${encodeURIComponent(HUB)}/3a`);
     expect(ics).not.toContain("Civic");

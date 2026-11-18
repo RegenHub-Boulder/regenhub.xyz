@@ -23,7 +23,7 @@ import { pickedNight, seriesNightInput, type PostedNight } from "@/lib/seriesNig
  * picks by hand. Ticking some and posting creates each as an ordinary public
  * event of the collective (same createEvent as "New event"), named after the
  * series so the series page, cards and feeds pick it up. Edit one afterwards
- * for a topic ("Agents Night: local models") or a different time.
+ * for a topic ("Agents Building Night: local models") or a different time.
  */
 export function OldAddSeriesNights({
   authority,

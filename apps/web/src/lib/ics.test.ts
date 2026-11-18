@@ -21,13 +21,13 @@ describe("ics", () => {
 
   it("builds a calendar with one VEVENT per event, CRLF line ends, a default end and cancellations", () => {
     const ics = buildIcs({
-      name: "Agents Night at RegenHub",
+      name: "Agents Building Night at RegenHub",
       timezone: "America/Denver",
       now: new Date("2026-11-16T00:00:00Z"),
       events: [
         {
           uid: "at://did:plc:x/community.lexicon.calendar.event/3a",
-          name: "Agents Night",
+          name: "Agents Building Night",
           startAt: "2026-12-02T01:30:00.000Z",
           endAt: "2026-12-02T04:00:00.000Z",
           location: "RegenHub · 1515 Walnut St, Suite 200, Boulder, CO 80302",
@@ -41,7 +41,7 @@ describe("ics", () => {
     expect(ics.startsWith("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n")).toBe(true);
     expect(ics.endsWith("END:VCALENDAR\r\n")).toBe(true);
     expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(2);
-    expect(ics).toContain("X-WR-CALNAME:Agents Night at RegenHub");
+    expect(ics).toContain("X-WR-CALNAME:Agents Building Night at RegenHub");
     expect(ics).toContain("DTSTART:20261202T013000Z\r\nDTEND:20261202T040000Z");
     expect(ics).toContain("LOCATION:RegenHub · 1515 Walnut St\\, Suite 200\\, Boulder\\, CO 80302");
     expect(ics).toContain("DTEND:20261210T033000Z");
