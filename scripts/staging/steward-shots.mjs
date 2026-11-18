@@ -8,7 +8,6 @@ import { createRequire } from "node:module";
 const { chromium } = createRequire(process.env.PLAYWRIGHT_DIR + "/")("playwright");
 const BASE = process.argv[2] ?? "http://127.0.0.1:18600";
 const OUT = process.argv[3] ?? "walkthrough/techne-door";
-const SIGN_IN = '[data-testid=steward-panel] button:has-text("Sign in with Techne")';
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
 const page = await ctx.newPage();
@@ -63,7 +62,8 @@ await page.locator("[data-testid=rsvp-panel]").scrollIntoViewIfNeeded();
 await shot("rsvp-going");
 console.log("rsvp:", await page.textContent("[data-testid=rsvp-count]"), "|", await page.textContent("[data-testid=rsvp-mine]"));
 // 7. Sign out (both sessions) and back in, through the one door, as a member who isn't a steward (Ana: linked).
-await page.click("[data-testid=rsvp-panel] >> text=Sign out");
+await Promise.all([page.waitForResponse("**/auth/signout"), page.click("[data-testid=rsvp-panel] >> text=Sign out")]);
+await page.waitForSelector("[data-testid=rsvp-panel] >> text=Sign in with Techne");
 await page.goto(BASE + "/portal/events", { waitUntil: "networkidle" });
 await page.waitForSelector("[data-testid=techne-door]");
 await page.click("[data-testid=techne-door] button:has-text('Sign in with Techne')");
