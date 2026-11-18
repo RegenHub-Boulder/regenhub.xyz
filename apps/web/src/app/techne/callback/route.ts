@@ -69,7 +69,10 @@ export async function GET(req: NextRequest) {
   jar.set(NONCE_COOKIE, left, cookieOptions(left ? 3600 : 0));
 
   const admin = createServiceClient();
-  const before = await currentTechne(admin, { evenExpired: true });
+  // The account this browser was signed in as: a live sign-in counts as a switch below; even an expired one gets
+  // its grant revoked.
+  const live = await currentTechne(admin);
+  const before = live ?? (await currentTechne(admin, { evenExpired: true }));
   try {
     // Replaces this browser's previous Techne sign-in (webSession.ts) once the new one is written. A fresh handle
     // read (not the display cache): it is stored with the sign-in.
@@ -90,7 +93,7 @@ export async function GET(req: NextRequest) {
   const portalDid = user
     ? ((await admin.from("members").select("did").eq("supabase_user_id", user.id).maybeSingle()).data?.did as string | null | undefined)
     : null;
-  const switched = !!before && before.did !== did && portalDid !== did;
+  const switched = !!live && live.did !== did && portalDid !== did;
   if (user && ((portalDid && portalDid !== did) || switched)) await supabase.auth.signOut({ scope: "local" });
   if (before && before.did !== did && !(await stillSignedIn(admin, before.did))) await oauth.revoke(before.did).catch(() => {});
 

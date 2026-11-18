@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { techneConfig } from "@/lib/techne/config";
 import { regenosCollectiveDid } from "@/lib/regenos/config";
-import { TechneUnreachable, techneSession, unreachableResponse } from "@/lib/techne/serverSession";
+import { TechneUnreachable, endLapsedSession, techneSession, unreachableResponse } from "@/lib/techne/serverSession";
 import { sameSiteJson } from "@/lib/techne/guard";
 import { deleteEventBatch, putEventBatch, type EventInput, type ExistingEvent } from "@/lib/techne/collectiveEvents";
 import { sendCollectiveBatch, writeErrorText } from "@/lib/techne/collectiveWrite";
@@ -69,5 +69,7 @@ export async function POST(req: Request) {
   }
   const out = await sendCollectiveBatch(signedIn.session, config, batch);
   if (out.ok) return NextResponse.json({ ok: true });
+  // A token the PDS no longer takes: end this sign-in here too, as RSVP does, so the page offers sign-in again.
+  if (out.kind === "signin") await endLapsedSession(createServiceClient(), signedIn.who.did);
   return NextResponse.json({ ok: false, error: writeErrorText(out) }, { status: out.kind === "refused" ? 403 : 502 });
 }

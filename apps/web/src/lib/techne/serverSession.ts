@@ -9,7 +9,7 @@ import { NextResponse } from "next/server";
 import type { createServiceClient } from "@/lib/supabase/admin";
 import type { Session } from "./call";
 import { techneOAuth } from "./oauth/client";
-import { currentTechne, endWebSession, stillSignedIn, type TechneVisitor } from "./webSession";
+import { currentTechne, endWebSession, type TechneVisitor } from "./webSession";
 
 export class TechneUnreachable extends Error {}
 
@@ -48,8 +48,8 @@ export async function techneSession(admin: Admin): Promise<{ who: TechneVisitor;
  * browser still uses it. The portal session stays (it isn't a sign-out, and the next Techne sign-in renews both).
  */
 export async function endLapsedSession(admin: Admin, did: string): Promise<void> {
-  await endWebSession(admin).catch(() => null);
-  if (await stillSignedIn(admin, did)) return;
+  const ended = await endWebSession(admin).catch(() => null);
+  if (!ended || ended.did !== did || ended.othersLeft) return;
   const oauth = techneOAuth();
   if (oauth) await (await oauth).revoke(did).catch(() => {});
 }

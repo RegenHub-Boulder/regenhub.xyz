@@ -3,7 +3,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { techneConfig } from "@/lib/techne/config";
 import { TechneUnreachable, endLapsedSession, techneSession, unreachableResponse as unreachable } from "@/lib/techne/serverSession";
 import { ownRsvp, writeRsvp } from "@/lib/techne/rsvpWrite";
-import { isLapsedToken } from "@/lib/techne/collectiveWrite";
+import { isLapsedToken, isSignedOutAnswer } from "@/lib/techne/call";
 import { sameSiteJson } from "@/lib/techne/guard";
 import type { RsvpStatus } from "@/lib/techne/rsvp";
 
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
     own = await ownRsvp(signedIn.session, event);
   } catch (err) {
     // The PDS no longer takes this session's token: signed out, so the panel offers sign-in again.
-    if (isLapsedToken(err)) {
+    if (isSignedOutAnswer(err)) {
       await endLapsedSession(createServiceClient(), signedIn.who.did);
       return NextResponse.json({ signedIn: false }, { headers: { "cache-control": "no-store" } });
     }

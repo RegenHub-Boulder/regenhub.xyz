@@ -12,7 +12,7 @@
 
 import type { TechneConfig } from "./config";
 import { platformProxy } from "./session";
-import { sessionCall, XrpcError, type Session } from "./call";
+import { isLapsedToken, sessionCall, XrpcError, type Session } from "./call";
 import type { CollectiveBatch } from "./collectiveEvents";
 
 export const COLLECTIVE_WRITE_METHOD = "com.atproto.repo.applyWrites";
@@ -36,12 +36,7 @@ export type WriteOutcome =
 const REJECTED = new Set([400, 404, 409, 413, 415, 422]);
 
 /** Error names a PDS gives a token or DPoP proof it no longer accepts (as opposed to a write it won't allow). */
-const LAPSED_TOKEN = new Set(["ExpiredToken", "InvalidToken", "invalid_token", "invalid_dpop_proof"]);
 
-/** A PDS answer that names this session's token as no good (not a DPoP-nonce retry, not a refusal of the write). */
-export function isLapsedToken(err: unknown): boolean {
-  return err instanceof XrpcError && err.status < 500 && [err.error, err.challenge].some((n) => !!n && LAPSED_TOKEN.has(n));
-}
 
 export async function sendCollectiveBatch(session: Session, config: TechneConfig, batch: CollectiveBatch): Promise<WriteOutcome> {
   try {
@@ -54,7 +49,7 @@ export async function sendCollectiveBatch(session: Session, config: TechneConfig
       // Below 500, a token named lapsed (in the body or the challenge) wins over the status. A 5xx stays
       // "unknown" whatever it names: the batch may have landed.
       const named = [err.error, err.challenge];
-      if (err.status < 500 && named.some((n) => n && LAPSED_TOKEN.has(n))) return { ok: false, kind: "signin", message: err.message };
+      if (isLapsedToken(err)) return { ok: false, kind: "signin", message: err.message };
       // The OAuth library retries a fresh DPoP nonce once; a second one wrote nothing.
       if (err.status < 500 && named.includes("use_dpop_nonce")) return { ok: false, kind: "failed", message: err.message };
       if (err.status === 401 || err.status === 403) return { ok: false, kind: "refused", status: err.status, message: err.message };
