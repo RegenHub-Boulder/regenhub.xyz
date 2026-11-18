@@ -3,7 +3,7 @@
 
     KOKORO_CACHE=~/.cache/t482-bvz3/kokoro ~/Code/unforced-media/video-lab/.venv/bin/python walkthrough/film-one-door.py capture
     KOKORO_CACHE=~/.cache/t482-bvz3/kokoro ~/Code/unforced-media/video-lab/.venv/bin/python walkthrough/film-one-door.py render
-Env T482_BASE (default http://127.0.0.1:18610). Each capture needs a fresh preview (it links Jo's account).
+Env T482_BASE (default http://127.0.0.1:18610; the review fix used 18640). Each capture needs a fresh preview (it links Jo's account).
 """
 import os
 import sys
@@ -43,6 +43,10 @@ STEPS = [
     {'id': 'inbox', 'js': go('/staging/outbox'), 'wait': 1500, 'mark': 'a:has-text("Link my Techne account")', 'after': 300},
     {'id': 'linkpage', 'js': TO_LINK, 'wait': 3500, 'mark': 'button:has-text("Link and open my portal")', 'after': 300},
     {'id': 'linked', 'tap': 'button:has-text("Link and open my portal")', 'after': 5000},
+    {'id': 'toprofile', 'js': go('/portal/profile'), 'wait': 3500, 'mark': 'h1', 'after': 300, 'quiet': True},
+    {'id': 'profile', 'scroll': '[data-testid=techne-account]', 'mark': '[data-testid=techne-account]', 'after': 300},
+    {'id': 'notice', 'js': go('/staging/outbox'), 'wait': 1500, 'mark': 'text=A Techne account was linked', 'after': 300},
+    {'id': 'back', 'js': go('/portal'), 'wait': 3500, 'mark': 'h1', 'after': 300, 'quiet': True},
     {'id': 'menu2', 'tap': MENU, 'after': 800, 'quiet': True},
     {'id': 'out2', 'tap': OUTB, 'after': 3500, 'quiet': True},
     {'id': 'again', 'tap': DOOR, 'after': 2500, 'quiet': True},
@@ -54,7 +58,7 @@ V = Voice([
     ('signin', '[signin]A stand-in plays Techne\'s sign-in screen.', {'gap': .2}),
     ('ana', '[ana]Ana\'s Techne account is linked to her membership,', {'gap': .1}),
     ('portal', 'so [portal]one sign-in opens her portal. No second login.', {'gap': .5}),
-    ('out', '[out]Sign out ends both.', {'gap': .5}),
+    ('out', '[out]Sign out ends both, on the server. Nothing left in the browser signs back in.', {'gap': .5}),
     ('rsvpdoor', 'Jo is a member whose account isn\'t linked yet. [rsvpdoor]She signs in on an event,', {'gap': .1}),
     ('jo', '[jo]and Techne alone', {'gap': .1}),
     ('going', 'is [going]enough to R S V P.', {'gap': .5}),
@@ -63,7 +67,9 @@ V = Voice([
     ('send', '[send]The link goes to that address, never to one Techne claims.', {'gap': .5}),
     ('inbox', '[inbox]She opens it on the same device,', {'gap': .1}),
     ('linkpage', '[linkpage]confirms it\'s her account,', {'gap': .1}),
-    ('linked', 'and [linked]she\'s in.', {'gap': .5}),
+    ('linked', 'and [linked]she\'s in.', {'gap': .4}),
+    ('profile', '[profile]Her profile shows the linked account, with Unlink,', {'gap': .1}),
+    ('notice', 'and [notice]she gets an email saying it was linked.', {'gap': .5}),
     ('jo2', 'Next time, [jo2]one tap', {'gap': .1}),
     ('joportal', '[joportal]opens the portal.', {'gap': .8}),
 ], OUT / 'vo')

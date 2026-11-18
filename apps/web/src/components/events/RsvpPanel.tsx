@@ -106,9 +106,9 @@ export function RsvpPanel({ event, going, path }: Props) {
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : isGoing ? "Can't make it" : "I'm going"}
           </Button>
-          <p>
+          <div>
             <SignOutOfTechne next={path} />
-          </p>
+          </div>
         </div>
       )}
 

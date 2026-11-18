@@ -103,9 +103,9 @@ function NotLinked({ handle, mode, next }: { handle: string | null; mode: "login
           </section>
         </>
       )}
-      <p className="text-center">
+      <div className="text-center">
         <SignOutOfTechne next={back} />
-      </p>
+      </div>
     </div>
   );
 }

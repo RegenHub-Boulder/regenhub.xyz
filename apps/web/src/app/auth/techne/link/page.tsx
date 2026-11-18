@@ -32,9 +32,9 @@ export default async function TechneLinkPage({ searchParams }: { searchParams: P
                   RegenHub membership. After this, &ldquo;Sign in with Techne&rdquo; opens your portal.
                 </p>
                 <TechneLinkConfirm code={code} />
-                <p>
+                <div>
                   <SignOutOfTechne next={here} />
-                </p>
+                </div>
               </>
             ) : (
               <>

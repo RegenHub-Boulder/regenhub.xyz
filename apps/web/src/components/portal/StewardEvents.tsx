@@ -83,13 +83,13 @@ export function StewardEvents({
   const role = check?.state === "done" ? check.standing.roleName : null;
   const who = (
     <div className="text-xs text-muted space-y-1" data-testid="steward-who">
-      <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span>
           Signed in with Techne as <code className="text-foreground">{techne.handle ? `@${techne.handle}` : techne.did}</code>
           {role ? ` · RegenHub ${role}` : ""}
         </span>
         <SignOutOfTechne />
-      </p>
+      </div>
       {/* Only a hint: claims may be private, and Techne decides on the write. */}
       {check && !(check.state === "done" && check.standing.canManageEvents) && (
         <p data-testid="steward-hint">
