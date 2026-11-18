@@ -8,7 +8,7 @@
 --   techne_used_proofs     each proof is used once (sha-256 of the token), kept until it expires
 --   techne_link_requests   one row per "link my membership" ask: rate limit, single-use emailed code
 --   use_techne_proof       spend a proof (false = already used)
---   begin_techne_link      rate-limit (3 an hour per DID and per member) and record an ask
+--   begin_techne_link      rate-limit (3 asks an hour per DID; 10 link emails an hour per member) and record an ask
 --   confirm_techne_link    the emailed code + the same DID: write members.did, audit, in one transaction
 --
 -- Server-only: RLS on, no policies, functions granted to service_role alone. Additive.
@@ -58,7 +58,9 @@ $$;
 --   'no_member'      no member has that email (send nothing)
 --   'linked'         this DID is already this member's (nothing to do)
 --   'taken'          the member has another DID, or this DID is another member's (send nothing; staff sort it out)
---   'rate_limited'   3 asks an hour per DID and per member
+--   'rate_limited'   3 asks an hour from this DID (says nothing about the email, so the route may answer 429)
+--   'quiet'          this member already had 10 link emails this hour (send nothing; the route answers as for
+--                    'sent', so the limit doesn't tell anyone the email is a member's)
 create function begin_techne_link(p_did text, p_email text, p_code_hash text)
 returns table (status text, member_id integer, member_email text, member_name text)
 language plpgsql security definer set search_path = public as $$
@@ -83,8 +85,9 @@ begin
     return;
   end if;
   if (select count(*) from techne_link_requests r
-        where r.member_id = m.id and r.created_at > now() - interval '1 hour') >= 3 then
-    return query select 'rate_limited', null::integer, null::text, null::text;
+        where r.member_id = m.id and r.created_at > now() - interval '1 hour') >= 10 then
+    insert into techne_link_requests (code_hash, did) values (p_code_hash, p_did);
+    return query select 'quiet', null::integer, null::text, null::text;
     return;
   end if;
   insert into techne_link_requests (code_hash, did, member_id) values (p_code_hash, p_did, m.id);

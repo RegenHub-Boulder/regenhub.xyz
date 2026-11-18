@@ -57,6 +57,15 @@ the person presses "Link and open my portal", which needs the **same Techne acco
 (`confirm_techne_link` compares the DID; a member who clicks a link someone else asked for links nothing). It writes
 `members.did` and an `admin_actions` row `techne_did_linked` in one transaction, then starts the portal session.
 
+**Accepted risks (review, 11-17).** (1) Any app a member has authorised with a grant covering this method
+(`transition:generic`, an app password, or this `rpc:` scope) can ask their PDS for a proof and open their portal
+session. That is how atproto service auth works; the portal session is the same one an email link gives, and billing
+and admin pages keep their own checks. The narrower alternative is a confidential server-side OAuth client, a larger
+change. (2) A disabled member can still sign in, as with the email link (parity, not new). Hardened in review: the
+use-once key is the signed content (a re-encoded or re-signed copy is refused), only canonical signatures pass,
+did:web resolves only public DNS names with no redirects, the per-member email cap is silent, sign-out waits at most
+3 s for the PDS, and the link email carries no handle (a DID document's own unverified claim).
+
 **Not a member.** A visitor signs in, RSVPs, and `/auth/login` tells them they can RSVP and points to /membership and
 /apply. They get no portal session. `/apply` asks them for an email link (an application needs a reachable email).
 

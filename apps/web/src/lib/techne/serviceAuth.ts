@@ -25,7 +25,8 @@ export interface VerifyOptions {
 export interface VerifiedProof {
   did: string;
   exp: number;
-  /** A stable key for this exact token, so it can be used once (sha-256 of the token). */
+  /** A stable key for this token's signed content, so it can be used once: sha-256 of `header.payload` (a
+   *  re-encoded or re-signed copy of the same claims has the same key). */
   tokenKey: string;
 }
 
@@ -51,12 +52,14 @@ export async function verifyPortalToken(token: string, o: VerifyOptions): Promis
   const doc = await o.resolveDid(claims.iss);
   const key = atprotoKey(doc, claims.iss);
   if (header.alg !== key.alg) throw new ServiceAuthError("algorithm doesn't match the key");
+  // Exactly the canonical encoding of 64 bytes: no padding, no stray characters, no spare low bits.
+  if (!/^[A-Za-z0-9_-]{86}$/.test(s)) throw new ServiceAuthError("bad signature");
   const sig = Buffer.from(s, "base64url");
-  if (sig.length !== 64) throw new ServiceAuthError("bad signature");
+  if (sig.length !== 64 || sig.toString("base64url") !== s) throw new ServiceAuthError("bad signature");
   const ok = cryptoVerify("sha256", Buffer.from(`${h}.${p}`), { key: key.key, dsaEncoding: "ieee-p1363" }, sig);
   if (!ok) throw new ServiceAuthError("bad signature");
 
-  return { did: claims.iss, exp: claims.exp, tokenKey: createHash("sha256").update(token).digest("hex") };
+  return { did: claims.iss, exp: claims.exp, tokenKey: createHash("sha256").update(`${h}.${p}`).digest("hex") };
 }
 
 function parseJson(seg: string): Record<string, unknown> {
@@ -119,17 +122,23 @@ export function base58btc(s: string): Buffer {
 
 // ── Resolving a DID ──────────────────────────────────────────────────────────
 
-/** did:plc at `plcUrl` (plc.directory by default); did:web over https only, host-only (no paths). */
+/** did:plc at `plcUrl` (plc.directory by default); did:web over https only, a public DNS name only (no paths, ports,
+ *  IP literals or localhost), never following a redirect: a token naming a did:web must not make this server fetch
+ *  something on its own network. */
 export function didResolver(plcUrl = "https://plc.directory", fetchImpl: typeof fetch = fetch): DidResolver {
   return async (did) => {
     let url: string;
     if (did.startsWith("did:plc:")) url = `${plcUrl.replace(/\/+$/, "")}/${did}`;
-    else if (/^did:web:[A-Za-z0-9.-]+(%3A\d+)?$/.test(did)) {
-      url = `https://${decodeURIComponent(did.slice("did:web:".length))}/.well-known/did.json`;
-    } else throw new ServiceAuthError("unsupported DID");
+    else if (isPublicDidWeb(did)) url = `https://${did.slice("did:web:".length)}/.well-known/did.json`;
+    else throw new ServiceAuthError("unsupported DID");
     let res: Response;
     try {
-      res = await fetchImpl(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(5000), cache: "no-store" });
+      res = await fetchImpl(url, {
+        headers: { accept: "application/json" },
+        signal: AbortSignal.timeout(5000),
+        cache: "no-store",
+        redirect: "error",
+      });
     } catch {
       throw new ServiceAuthError("couldn't resolve the DID");
     }
@@ -138,4 +147,13 @@ export function didResolver(plcUrl = "https://plc.directory", fetchImpl: typeof 
       throw new ServiceAuthError("couldn't resolve the DID");
     });
   };
+}
+
+function isPublicDidWeb(did: string): boolean {
+  const m = /^did:web:([a-z0-9-]+(?:\.[a-z0-9-]+)+)$/i.exec(did);
+  if (!m) return false;
+  const host = m[1].toLowerCase();
+  const labels = host.split(".");
+  if (labels.every((l) => /^\d+$/.test(l))) return false; // an IPv4 literal
+  return !/(^|\.)(localhost|local|internal|lan|home\.arpa|localdomain)$/.test(host);
 }

@@ -15,7 +15,7 @@ import { stagingOutbox } from "@/lib/staging/outbox";
  * DID), so a member who clicks a link someone else asked for links nothing.
  *
  * Same answer whether or not a member has that email (no account probing). Rate-limited in SQL: 3 asks an
- * hour per Techne account and per member.
+ * hour per Techne account (429), and at most 10 link emails an hour per member (silent, so it can't be probed).
  */
 export async function POST(request: Request) {
   if (doorOff()) return notFound();
@@ -42,11 +42,7 @@ export async function POST(request: Request) {
   }
   if (row.status === "linked") return NextResponse.json({ status: "linked" });
   if (row.status === "sent" && row.member_email) {
-    const mail = techneLinkEmail({
-      name: row.member_name ?? "",
-      link: `${siteOrigin()}${LINK_PATH}?code=${code}`,
-      handle: proof.handle,
-    });
+    const mail = techneLinkEmail({ name: row.member_name ?? "", link: `${siteOrigin()}${LINK_PATH}?code=${code}` });
     const sent = await sendEmail({ to: row.member_email, ...mail });
     if (!sent) stagingOutbox(row.member_email, mail);
   } else {

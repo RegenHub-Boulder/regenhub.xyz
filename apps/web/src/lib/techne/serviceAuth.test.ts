@@ -69,6 +69,26 @@ describe("verifyPortalToken", () => {
   });
 });
 
+describe("verifyPortalToken: one token, one key", () => {
+  it("gives a re-encoded or padded copy of a token the same key, or refuses it", async () => {
+    const { a, resolveDid, claims } = setup();
+    const token = a.jwt(claims);
+    const key = (await verifyPortalToken(token, { aud: AUD, resolveDid, now: NOW })).tokenKey;
+    for (const variant of [`${token}=`, `${token}==`, `${token}!`]) {
+      await expect(verifyPortalToken(variant, { aud: AUD, resolveDid, now: NOW })).rejects.toThrow("bad signature");
+    }
+    // A last character with different spare bits decodes to the same bytes: refused as non-canonical.
+    const last = token.slice(-1);
+    const alt = "AQgw".includes(last) ? String.fromCharCode(last.charCodeAt(0) + 1) : last;
+    if (alt !== last) {
+      await expect(verifyPortalToken(token.slice(0, -1) + alt, { aud: AUD, resolveDid, now: NOW })).rejects.toThrow(ServiceAuthError);
+    }
+    // A second valid signature over the same claims (ECDSA is malleable, or simply signed again) keys the same.
+    const again = a.jwt(claims);
+    expect((await verifyPortalToken(again, { aud: AUD, resolveDid, now: NOW })).tokenKey).toBe(key);
+  });
+});
+
 describe("didResolver", () => {
   it("reads did:plc at the PLC directory and did:web at its host, nothing else", async () => {
     const seen: string[] = [];
@@ -78,10 +98,14 @@ describe("didResolver", () => {
     }) as typeof fetch;
     const r = didResolver("https://plc.example/", f);
     await r("did:plc:abc");
-    await r("did:web:alice.example%3A8443");
-    await expect(r("did:web:evil.example/path")).rejects.toThrow("unsupported DID");
-    await expect(r("did:key:z6Mk")).rejects.toThrow("unsupported DID");
-    expect(seen).toEqual(["https://plc.example/did:plc:abc", "https://alice.example:8443/.well-known/did.json"]);
+    await r("did:web:alice.example");
+    for (const bad of [
+      "did:web:evil.example/path", "did:key:z6Mk", "did:web:alice.example%3A8443", "did:web:192.168.1.200",
+      "did:web:localhost", "did:web:printer.local", "did:web:nas.lan",
+    ]) {
+      await expect(r(bad)).rejects.toThrow("unsupported DID");
+    }
+    expect(seen).toEqual(["https://plc.example/did:plc:abc", "https://alice.example/.well-known/did.json"]);
   });
 });
 

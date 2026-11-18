@@ -214,7 +214,7 @@ describe("linking a Techne account to a membership", () => {
     expect(ask).toMatchObject({ status: 200, body: { status: "sent" } });
     expect(mails).toHaveLength(1);
     expect(mails[0].to).toBe("carol@example.test");
-    expect(mails[0].html).toContain("@carol.techne.town");
+    expect(mails[0].html).not.toContain("carol.techne.town"); // the DID document's own claim stays out of email
     const code = codeFrom(mails[0].html)!;
     expect(code).toBeTruthy();
     expect((await one(pg, "select did from members where id = $1", [memberId])).did).toBeNull();
@@ -269,6 +269,15 @@ describe("linking a Techne account to a membership", () => {
     for (let i = 0; i < 3; i++) expect((await call(linkPOST, { token: hank.proof(), email: "hank@example.test" })).status).toBe(200);
     expect((await call(linkPOST, { token: hank.proof(), email: "hank@example.test" })).status).toBe(429);
     expect(mails).toHaveLength(3);
+  });
+
+  it("caps link emails per member at 10 an hour, silently (no 429 that would say the email is a member's)", async () => {
+    await addMember("Kim Member", "kim@example.test");
+    for (let i = 0; i < 11; i++) {
+      const res = await call(linkPOST, { token: person(`did:plc:asker${i}`).proof(), email: "kim@example.test" });
+      expect(res).toMatchObject({ status: 200, body: { status: "sent" } });
+    }
+    expect(mails).toHaveLength(10);
   });
 
   it("refuses an expired link", async () => {

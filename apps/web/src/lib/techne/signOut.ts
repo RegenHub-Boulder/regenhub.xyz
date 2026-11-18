@@ -13,9 +13,10 @@ export async function signOutOfTechne(config: TechneConfig | null, session?: { d
     const auth = await import("techne-sdk/auth");
     const opts = await authOptions(config);
     const s = session ?? (await auth.restore(opts).catch(() => null));
-    if (s) await auth.signOut({ ...opts, session: s as never });
+    // A PDS that hangs must not hold up the rest of sign-out: at most 3 s for the revoke.
+    if (s) await Promise.race([auth.signOut({ ...opts, session: s as never }), new Promise((ok) => setTimeout(ok, 3000))]);
   } catch {
-    // A PDS that can't be reached must not keep anyone signed in here: signOut forgets locally first.
+    // A PDS that can't be reached must not keep anyone signed in to the portal: go on to /auth/signout.
   }
 }
 
