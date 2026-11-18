@@ -17,6 +17,10 @@
 //          that collective at role >= 30 (the ASSUMED Techne rule for a collective hosted on the same PDS;
 //          unproven until one real post). Else 403 Forbidden. x-standin-expired: 1 = a lapsed token, 401.
 //   - GET  /xrpc/pub.techne.draft.query.getRecords   the AppView's answer with the stand-in's writes applied
+//   - GET  /xrpc/com.atproto.server.getServiceAuth   a service-auth JWT for the sample person (the one door's
+//          proof, apps/web/src/lib/techne/portalAuth.ts), signed with a P-256 key the stand-in holds for them
+//   - GET  /plc/<did>                    that person's DID document naming the key (the app reads DIDs here on
+//          staging: TECHNE_STANDIN_URL/plc, lib/techne/portalDoor.ts)
 //   - everything else under /xrpc is passed to the AppView unchanged.
 // It also serves the collective's public membership claim for its steward (seed.json), as production
 // Techne does for a collective's founder (`mb-self-<did>`, role 40); the local AppView writes none.
@@ -24,6 +28,7 @@
 import { createServer } from "node:http";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { ECDH, generateKeyPairSync, randomBytes, sign } from "node:crypto";
 
 const arg = (k, d) => {
   const i = process.argv.indexOf(k);
@@ -111,6 +116,31 @@ const typesIn = (node) =>
 
 const cid = () => "bafystandin" + Math.random().toString(36).slice(2, 12);
 
+// One P-256 signing key per sample person, for the one door's service-auth proof. In memory: a restart makes new
+// keys, and the proofs only live a minute.
+const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+const base58 = (buf) => {
+  let n = BigInt(`0x${buf.toString("hex")}`);
+  let out = "";
+  while (n > 0n) {
+    out = B58[Number(n % 58n)] + out;
+    n /= 58n;
+  }
+  return out;
+};
+const keys = new Map();
+function keyFor(did) {
+  if (!keys.has(did)) {
+    const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+    const jwk = publicKey.export({ format: "jwk" });
+    const raw = Buffer.concat([Buffer.from([4]), Buffer.from(jwk.x, "base64url"), Buffer.from(jwk.y, "base64url")]);
+    const point = ECDH.convertKey(raw, "prime256v1", undefined, undefined, "compressed");
+    keys.set(did, { privateKey, multikey: `z${base58(Buffer.concat([Buffer.from([0x80, 0x24]), point]))}` });
+  }
+  return keys.get(did);
+}
+const known = (d) => people().some((p) => p.did === d);
+
 createServer(async (req, res) => {
   const url = new URL(req.url, "http://standin");
   const path = url.pathname;
@@ -135,6 +165,27 @@ h1{font-size:1.3rem}p{color:#555}ul{list-style:none;padding:0}li a{display:flex;
 li a:hover{background:#eef4f0}span{color:#666;font-size:.9rem}</style>
 <h1>Sign in with Techne</h1><p>Staging stand-in: on regenhub.xyz this is techne.town's sign-in. Pick a sample person.</p><ul>${rows}</ul>`);
       return;
+    }
+    if (path.startsWith("/plc/")) {
+      const d = decodeURIComponent(path.slice(5));
+      if (!known(d)) return json(res, 404, { message: "DID not registered" });
+      const handle = people().find((p) => p.did === d)?.handle;
+      return json(res, 200, {
+        id: d,
+        alsoKnownAs: handle ? [`at://${handle.replace(/^@/, "")}`] : [],
+        verificationMethod: [{ id: `${d}#atproto`, type: "Multikey", controller: d, publicKeyMultibase: keyFor(d).multikey }],
+      });
+    }
+    if (path === "/xrpc/com.atproto.server.getServiceAuth") {
+      if (!did || !known(did)) return json(res, 401, { error: "AuthMissing", message: "Authentication Required" });
+      const aud = url.searchParams.get("aud");
+      const lxm = url.searchParams.get("lxm");
+      if (!aud || !lxm) return json(res, 400, { error: "InvalidRequest", message: "aud and lxm are required" });
+      const now = Math.floor(Date.now() / 1000);
+      const enc = (v) => Buffer.from(JSON.stringify(v)).toString("base64url");
+      const input = `${enc({ typ: "JWT", alg: "ES256" })}.${enc({ iss: did, aud, lxm, iat: now, exp: now + 60, jti: randomBytes(16).toString("hex") })}`;
+      const sig = sign("sha256", Buffer.from(input), { key: keyFor(did).privateKey, dsaEncoding: "ieee-p1363" });
+      return json(res, 200, { token: `${input}.${sig.toString("base64url")}` });
     }
     // Like pds.techne.town: repo methods are the PDS's own; it never forwards them to the platform.
     if (path.startsWith("/xrpc/com.atproto.repo.") && req.headers["atproto-proxy"]) {

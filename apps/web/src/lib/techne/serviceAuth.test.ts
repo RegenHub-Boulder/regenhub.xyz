@@ -1,44 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { ECDH, generateKeyPairSync, sign } from "node:crypto";
+import { base58, techneAccount } from "../../../test/techneAccount";
 import { verifyPortalToken, ServiceAuthError, didResolver, base58btc } from "./serviceAuth";
 import { PORTAL_LXM, portalAudience } from "./portalAuth";
 
-const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-function b58(buf: Buffer): string {
-  let n = BigInt(`0x${buf.toString("hex") || "0"}`);
-  let out = "";
-  while (n > BigInt(0)) {
-    out = B58[Number(n % BigInt(58))] + out;
-    n /= BigInt(58);
-  }
-  for (const b of buf) {
-    if (b !== 0) break;
-    out = `1${out}`;
-  }
-  return out;
-}
-
-/** A signing key, its Multikey, and a DID document naming it, as a PDS and PLC would have them. */
-function account(did: string, alg: "ES256" | "ES256K") {
-  const curve = alg === "ES256" ? "prime256v1" : "secp256k1";
-  const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: curve });
-  const jwk = publicKey.export({ format: "jwk" }) as { x: string; y: string };
-  const raw = Buffer.concat([Buffer.from([4]), Buffer.from(jwk.x, "base64url"), Buffer.from(jwk.y, "base64url")]);
-  const compressed = ECDH.convertKey(raw, curve, undefined, undefined, "compressed") as Buffer;
-  const prefix = alg === "ES256" ? [0x80, 0x24] : [0xe7, 0x01];
-  const multikey = `z${b58(Buffer.concat([Buffer.from(prefix), compressed]))}`;
-  const doc = {
-    id: did,
-    verificationMethod: [{ id: `${did}#atproto`, type: "Multikey", controller: did, publicKeyMultibase: multikey }],
-  };
-  const jwt = (claims: Record<string, unknown>, headerAlg = alg) => {
-    const enc = (v: unknown) => Buffer.from(JSON.stringify(v)).toString("base64url");
-    const input = `${enc({ typ: "JWT", alg: headerAlg })}.${enc(claims)}`;
-    const sig = sign("sha256", Buffer.from(input), { key: privateKey, dsaEncoding: "ieee-p1363" });
-    return `${input}.${sig.toString("base64url")}`;
-  };
-  return { doc, jwt };
-}
+const account = techneAccount;
+const b58 = base58;
 
 const AUD = portalAudience("https://regenhub.xyz");
 const NOW = 1_800_000_000;

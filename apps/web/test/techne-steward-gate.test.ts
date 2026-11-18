@@ -67,12 +67,19 @@ describe("standingFrom", () => {
   });
 });
 
-describe("sign-in comes back to the stewards' page", () => {
-  it("returns to /portal/events and nowhere else in the portal", () => {
+describe("sign-in comes back where it started (the one door), never to another site", () => {
+  it("returns to any page on this site, resolved, and nowhere else", () => {
     expect(safeReturn("/portal/events")).toBe("/portal/events");
-    expect(safeReturn("/portal/events/../../admin")).toBe("/events");
-    expect(safeReturn("/admin")).toBe("/events");
+    expect(safeReturn("/portal")).toBe("/portal");
+    expect(safeReturn("/apply")).toBe("/apply");
+    expect(safeReturn("/auth/techne/link?code=abc")).toBe("/auth/techne/link?code=abc");
+    // What is checked is what gets followed: dot segments resolve before the check.
+    expect(safeReturn("/portal/events/../../admin")).toBe("/admin");
     expect(safeReturn("https://evil.example/portal/events")).toBe("/events");
+    expect(safeReturn("//evil.example/portal")).toBe("/events");
+    expect(safeReturn("/\\evil.example")).toBe("/events");
+    expect(safeReturn("/.//evil.example")).toBe("/events");
+    expect(safeReturn(null)).toBe("/events");
   });
 });
 

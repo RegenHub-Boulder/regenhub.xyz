@@ -26,7 +26,6 @@ import { LoginForm } from "@/components/auth/LoginForm";
 
 type Door =
   | { state: "idle" }
-  | { state: "checking" }
   | { state: "member" }
   | { state: "not-linked"; handle: string | null; did: string }
   | { state: "failed"; error: string };
@@ -46,22 +45,17 @@ export function TechneDoor({ config, next, banner = null, mode = "login", signed
   const { phase, session, error, start, signOut } = useTechneSession(config, next);
   const [door, setDoor] = useState<Door>({ state: "idle" });
   const asked = useRef<string | null>(null);
-  const [clearing, setClearing] = useState(signedOut);
-
   // Arriving from a sign-out with a Techne session still here (a no-JS sign-out): end it, don't sign back in.
-  useEffect(() => {
-    if (!clearing || phase === "restoring") return;
-    if (phase === "signed-in" && session) {
-      void signOutOfTechne(config, session).finally(() => window.location.replace("/auth/login"));
-    } else {
-      setClearing(false);
-    }
-  }, [clearing, phase, session, config]);
+  const clearing = signedOut && (phase === "restoring" || phase === "signed-in");
 
   useEffect(() => {
-    if (clearing || phase !== "signed-in" || !session || asked.current === session.did) return;
+    if (!signedOut || phase !== "signed-in" || !session) return;
+    void signOutOfTechne(config, session).finally(() => window.location.replace("/auth/login"));
+  }, [signedOut, phase, session, config]);
+
+  useEffect(() => {
+    if (signedOut || phase !== "signed-in" || !session || asked.current === session.did) return;
     asked.current = session.did;
-    setDoor({ state: "checking" });
     openPortal(session as Session, config)
       .then((a) => {
         if (a.member) {
@@ -72,9 +66,12 @@ export function TechneDoor({ config, next, banner = null, mode = "login", signed
       .catch((err: unknown) =>
         setDoor({ state: "failed", error: err instanceof Error ? err.message : "Couldn't open your portal." }),
       );
-  }, [clearing, phase, session, config, next]);
+  }, [signedOut, phase, session, config, next]);
 
-  if (clearing || phase === "restoring" || door.state === "checking" || door.state === "member") {
+  // Signed in and not answered yet: the portal check is running.
+  const checking = phase === "signed-in" && !!session && door.state === "idle";
+
+  if (clearing || checking || phase === "restoring" || door.state === "member") {
     return (
       <p className="flex items-center justify-center gap-2 py-6 text-muted" data-testid="door-busy">
         <Loader2 className="w-5 h-5 animate-spin" /> Signing you in…
