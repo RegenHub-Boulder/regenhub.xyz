@@ -138,7 +138,7 @@ describe("fetchUpcomingRegenosEvents", () => {
   it("with its own events unread, a public page still shows the collective's nights through their own listings", async () => {
     const ownUri = `at://${SCENE}/community.lexicon.calendar.event/3kownnight22`;
     const techne = fakeTechne([
-      { uri: ownUri, value: { name: "Agents Night", startsAt: "2026-12-02T01:30:00Z" } },
+      { uri: ownUri, value: { name: "Agents Building Night", startsAt: "2026-12-02T01:30:00Z" } },
       { uri: `at://${SCENE}/pub.techne.draft.event.listing/3kownnight22-ctx`, value: { event: { uri: ownUri } } },
     ]);
     vi.stubGlobal("fetch", (async (input: string | URL | Request, init?: RequestInit) => {
@@ -146,7 +146,7 @@ describe("fetchUpcomingRegenosEvents", () => {
       if (q.includes("community.lexicon.calendar.event")) return new Response("{}", { status: 503 });
       return techne.fetch(input, init);
     }) as typeof fetch);
-    expect((await fetchCollectiveEvents())?.map((e) => e.name)).toEqual(["Agents Night"]);
+    expect((await fetchCollectiveEvents())?.map((e) => e.name)).toEqual(["Agents Building Night"]);
   });
 
   it("with strict, a list cut short by a failed later page is unread, not short", async () => {
@@ -260,7 +260,7 @@ describe("fetchPublicRegenosEvent (the in-site detail page's read)", () => {
   });
 
   it("finds the series a night belongs to by its name", async () => {
-    stubTechne([eventRow("an1", "Agents Night: local models", "2026-12-02T01:30:00Z")]);
+    stubTechne([eventRow("an1", "Agents Building Night: local models", "2026-12-02T01:30:00Z")]);
     expect((await fetchPublicRegenosEvent(SCENE, "an1"))?.series?.slug).toBe("agents-night");
   });
 

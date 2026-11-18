@@ -69,7 +69,7 @@ describe("Add the next nights", () => {
     expect(pickedNight(agents, "2026-11-10", [], NOW)).toEqual({ error: "That night is already over" });
     expect(
       pickedNight(agents, "2027-01-19", [{ seriesSlug: "agents-night", startAt: "2027-01-20T01:30:00.000Z" }], NOW),
-    ).toEqual({ error: "Agents Night is already posted for that date" });
+    ).toEqual({ error: "Agents Building Night is already posted for that date" });
   });
 
   it("posts a night as a public event named after the series, at Boulder time and the hub's address", () => {
@@ -78,7 +78,7 @@ describe("Add the next nights", () => {
       authority: "did:plc:hub",
       rkey: "3n2aaaaaaaaa2",
       visibility: "public",
-      name: "Agents Night",
+      name: "Agents Building Night",
       startsAt: "2026-12-02T01:30:00.000Z",
       endsAt: "2026-12-02T04:00:00.000Z",
       timezone: "America/Denver",

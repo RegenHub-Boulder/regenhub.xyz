@@ -58,7 +58,7 @@ describe("the batch", () => {
     expect(cfg.value).toMatchObject({ timezone: "America/Denver", attendance: "open" });
     expect(ev.value).toMatchObject({
       $type: EVENT_NSID,
-      name: "Agents Night",
+      name: "Agents Building Night",
       startsAt: plannedNight(agents, "2026-12-01").startsAt,
       createdAt: NOW.toISOString(),
       locations: [expect.objectContaining({ $type: "community.lexicon.location.address", locality: "Boulder", country: "US" })],
@@ -82,7 +82,7 @@ describe("the batch", () => {
       config: { $type: EVENT_CONFIG_NSID, waitlist: true, attendance: "approval", createdAt: "2026-11-06T23:20:00.000Z" },
       hasListing: false,
     };
-    const form = { ...eventBodyToFormValues(value, "public"), name: "Agents Night: local models" };
+    const form = { ...eventBodyToFormValues(value, "public"), name: "Agents Building Night: local models" };
     const b = putEventBatch(HUB, buildUpdateEventInput(form, { authority: HUB, rkey: existing.rkey }) as unknown as EventInput, existing, NOW);
     expect(b.input.writes.map((w) => [w.$type.split("#")[1], w.rkey])).toEqual([
       ["update", "ev-mtishcrx6pltz6"],
@@ -90,7 +90,7 @@ describe("the batch", () => {
       ["create", "ev-mtishcrx6pltz6-ctx"],
     ]);
     const [ev, cfg] = b.input.writes as { value: Record<string, unknown> }[];
-    expect(ev.value).toMatchObject({ name: "Agents Night: local models", createdAt: value.createdAt, rsvpExpected: true, uris: value.uris });
+    expect(ev.value).toMatchObject({ name: "Agents Building Night: local models", createdAt: value.createdAt, rsvpExpected: true, uris: value.uris });
     expect(ev.value.locations).toEqual([value.locations[0]]); // the geo point stays; no empty address
     expect(cfg.value).toMatchObject({ waitlist: true, attendance: "approval", timezone: "America/Denver", createdAt: value.createdAt });
   });
@@ -268,14 +268,14 @@ describe("end to end through the stand-in", () => {
     const input = night();
     expect(await sendCollectiveBatch(steward, config, putEventBatch(HUB, input, null))).toEqual({ ok: true });
     let [posted] = await calendar();
-    expect(posted).toMatchObject({ did: HUB, rkey: input.rkey, name: "Agents Night", series: expect.objectContaining({ slug: "agents-night" }) });
+    expect(posted).toMatchObject({ did: HUB, rkey: input.rkey, name: "Agents Building Night", series: expect.objectContaining({ slug: "agents-night" }) });
 
-    const form = { ...eventBodyToFormValues(posted.value, "public"), name: "Agents Night: local models" };
+    const form = { ...eventBodyToFormValues(posted.value, "public"), name: "Agents Building Night: local models" };
     const existing = { rkey: posted.rkey, value: posted.value as Record<string, unknown>, config: { $type: EVENT_CONFIG_NSID, attendance: "open", createdAt: "x" }, hasListing: true };
     const edit = putEventBatch(HUB, buildUpdateEventInput(form, { authority: HUB, rkey: posted.rkey }) as unknown as EventInput, existing);
     expect(await sendCollectiveBatch(steward, config, edit)).toEqual({ ok: true });
     [posted] = await calendar();
-    expect(posted.name).toBe("Agents Night: local models");
+    expect(posted.name).toBe("Agents Building Night: local models");
 
     expect(await sendCollectiveBatch(steward, config, deleteEventBatch(HUB, existing))).toEqual({ ok: true });
     expect(await calendar()).toEqual([]);

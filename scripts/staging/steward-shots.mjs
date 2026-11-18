@@ -28,7 +28,7 @@ await page.click("[data-testid=techne-door] button:has-text('Sign in with Techne
 await page.waitForSelector("text=Pick a sample person");
 await shot("sign-in");
 await page.click("text=RegenHub steward (sample)");
-// 3. The steward's calendar: Agents Night posted, Civic Tech Night confirmed but not posted.
+// 3. The steward's calendar: Agents Building Night posted, Civic Tech Night confirmed but not posted.
 await page.waitForSelector("[data-testid=add-series-nights]");
 await page.waitForTimeout(500);
 console.log("who:", await page.textContent("[data-testid=steward-who]"));
