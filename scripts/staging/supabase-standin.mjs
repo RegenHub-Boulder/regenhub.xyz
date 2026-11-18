@@ -36,7 +36,8 @@ await pg.exec(`
     member_type text not null default 'hot_desk', disabled boolean not null default false,
     is_admin boolean not null default false, approved_for_daily boolean not null default true,
     approved_for_full boolean not null default true, day_passes_balance integer not null default 0,
-    telegram_username text, created_at timestamptz not null default now()
+    telegram_username text, ethereum_address text, bio text, skills text[], profile_photo_url text,
+    created_at timestamptz not null default now()
   );
   create table admin_actions (
     id bigserial primary key, actor_member_id integer references members(id) on delete set null,

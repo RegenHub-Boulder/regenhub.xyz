@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // The one door on the staging preview (sample data only), at 390x844, as a person would use it:
-//   a member whose Techne account is linked signs in once and lands in the portal; sign-out ends both sessions;
-//   a member whose account isn't linked RSVPs, then links it by an email link and lands in the portal;
+//   a member whose Techne account is linked signs in once and lands in the portal; sign-out ends both sessions
+//   and nothing signs back in; a member whose account isn't linked RSVPs, then links it by an email link, lands
+//   in the portal, and sees the linked account (with Unlink) on their profile and the "linked" email;
 //   someone who isn't a member is told how to become one; /portal/events needs no second sign-in.
 // Asserts each step (exits non-zero on a broken one) and saves walkthrough/one-door/NN-*.png.
 // Usage: PLAYWRIGHT_DIR=<dir holding node_modules/playwright> node scripts/staging/door-shots.mjs [base] [outdir]
@@ -53,10 +54,13 @@ await expectPath(/\/portal$/);
 await inPortal();
 await shot("ana-portal");
 
-// 3. Sign out → both sessions end: the door shows the button again, and /portal sends back to the door.
+// 3. Sign out → both sessions end on the server: the door shows the button again (and stays: nothing signs back
+//    in), and /portal sends back to the door.
 await signOut();
 await expectPath(/\/auth\/login/);
 await page.waitForSelector("[data-testid=techne-door]");
+await page.waitForTimeout(1500);
+if (!new URL(page.url()).pathname.startsWith("/auth/login")) throw new Error("signed back in after sign-out");
 await shot("signed-out");
 await page.goto(BASE + "/portal", { waitUntil: "networkidle" });
 await expectPath(/\/auth\/login\?next=%2Fportal/);
@@ -95,6 +99,16 @@ await page.click("text=Link and open my portal");
 await expectPath(/\/portal$/);
 await inPortal();
 await shot("jo-portal");
+// The linked account on Jo's profile, with Unlink (the member was also emailed that it was linked).
+await page.goto(BASE + "/portal/profile", { waitUntil: "networkidle" });
+await page.locator("[data-testid=techne-account]").scrollIntoViewIfNeeded();
+await page.waitForSelector("[data-testid=techne-account] >> text=Unlink");
+await shot("jo-profile-linked");
+await page.goto(BASE + "/staging/outbox", { waitUntil: "networkidle" });
+await page.waitForSelector("text=A Techne account was linked");
+await shot("jo-linked-email", true);
+await page.goto(BASE + "/portal", { waitUntil: "networkidle" });
+await inPortal();
 
 // 6. Jo again later: the one door opens the portal directly now.
 await signOut();

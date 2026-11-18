@@ -54,7 +54,7 @@ export function TechneAccountCard({
           <p className="text-sm">
             <span className="text-forest font-medium">{handle ? `@${handle}` : did}</span>
             <span className="block text-xs text-muted">
-              {who === "you" ? "Sign in with Techne with this account opens your portal." : "Signing in with Techne with this account opens their portal."}
+              {who === "you" ? "Signing in with Techne as this account opens your portal." : "Signing in with Techne as this account opens their portal."}
             </span>
           </p>
           <Button type="button" variant="outline" disabled={busy} onClick={() => void unlink()} className="btn-glass">
