@@ -35,9 +35,6 @@ export type WriteOutcome =
 /** Statuses that mean the request itself was rejected, so nothing was applied. */
 const REJECTED = new Set([400, 404, 409, 413, 415, 422]);
 
-/** Error names a PDS gives a token or DPoP proof it no longer accepts (as opposed to a write it won't allow). */
-
-
 export async function sendCollectiveBatch(session: Session, config: TechneConfig, batch: CollectiveBatch): Promise<WriteOutcome> {
   try {
     // No proxy: the person's PDS answers repo writes itself.
