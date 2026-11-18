@@ -3,10 +3,17 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { isRegenosLoginEnabled } from "@/lib/regenos/config";
 import { REGENOS_PENDING_COOKIE, REGENOS_SESSION_COOKIE, revokeRegenosSession } from "@/lib/regenos/auth";
+import { safeNextPath } from "@/lib/safeNext";
+import { endWebSession } from "@/lib/techne/webSession";
+import { techneOAuth } from "@/lib/techne/oauth/client";
+import { sameSiteForm } from "@/lib/techne/guard";
 
 /**
- * Sign-out ends every session this origin can hold. The Techne session lives in the browser: every "Sign out"
- * button ends it first (lib/techne/signOut.ts), and /auth/login?signed_out=1 ends any left behind.
+ * Sign-out ends every session this origin can hold: the portal (Supabase) session, and the Techne sign-in this
+ * server holds for the browser (lib/techne/webSession.ts). Every "Sign out" button is a plain form posting here
+ * (no script needed). The browser's Techne cookie and its row go first, whatever the PDS does, so nothing can sign
+ * back in; then the OAuth session is revoked at the PDS (at most 3 s) and forgotten, unless another browser is
+ * still signed in as that account. Back to `next` (the RSVP panel's page) or /auth/login.
  *
  * regenOS one-login (Phase 2) can leave its own `__Host-rs_session` cookie
  * alive here (set by the /xrpc proxy — app/xrpc/[...nsid]/route.ts). If we
@@ -21,6 +28,19 @@ import { REGENOS_PENDING_COOKIE, REGENOS_SESSION_COOKIE, revokeRegenosSession } 
  * down AppView must never block sign-out.
  */
 export async function POST(request: Request) {
+  if (sameSiteForm(request)) redirect("/auth/login");
+  const form = await request.formData().catch(() => null);
+  const next = safeNextPath(typeof form?.get("next") === "string" ? (form.get("next") as string) : null);
+
+  const ended = await endWebSession().catch((err) => {
+    console.warn("[techne] ending the web session failed:", err);
+    return null;
+  });
+  const oauth = techneOAuth();
+  if (ended && !ended.othersLeft && oauth) {
+    await oauth.then((o) => o.revoke(ended.did)).catch((err) => console.warn("[techne] revoke on sign-out failed:", err));
+  }
+
   const supabase = await createClient();
   await supabase.auth.signOut();
 
@@ -43,7 +63,5 @@ export async function POST(request: Request) {
     cookieStore.delete({ name, path: "/", secure: true });
   }
 
-  // signed_out=1: /auth/login ends a Techne session still in this browser (a sign-out that didn't run the page's
-  // own script) instead of signing straight back in through the one door.
-  redirect("/auth/login?signed_out=1");
+  redirect(next ?? "/auth/login");
 }

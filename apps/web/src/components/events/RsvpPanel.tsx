@@ -3,105 +3,61 @@
 /**
  * RSVP on an event's page, with "Sign in with Techne" as the door.
  *
- * Signed out: the shared "Sign in with Techne" button (components/techne). Signed in (the site's one
- * Techne session, components/techne/useTechneSession): "I'm going" / "Can't make it" write the
- * person's own `community.lexicon.calendar.rsvp` (lib/techne/rsvp.ts) to their PDS with their
- * session, then hint the platform so the count updates at once.
+ * The server holds the Techne session (one door, one sign-in): this panel asks GET /api/techne/rsvp whether this
+ * browser is signed in and what the person said before, and "I'm going" / "Can't make it" POST there; the server
+ * writes the person's own `community.lexicon.calendar.rsvp` on their PDS and hints the platform. Signed out: the
+ * shared "Sign in with Techne" button, which comes back to this page.
  */
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Loader2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { RSVP_NSID, findOwnRsvp, goingLine, rsvpRecord, tid, type RsvpStatus } from "@/lib/techne/rsvp";
-import type { TechneConfig } from "@/lib/techne/config";
-import { platformProxy } from "@/lib/techne/session";
-import { sessionCall, type Session } from "@/lib/techne/call";
-import { useTechneSession } from "@/components/techne/useTechneSession";
+import { goingLine, type RsvpStatus } from "@/lib/techne/rsvp";
 import { SignInWithTechne, SignOutOfTechne } from "@/components/techne/SignInWithTechne";
 
 interface Props {
-  config: TechneConfig;
   event: { uri: string; cid: string };
   going: number;
   /** This page's path: where sign-in comes back to. */
   path: string;
 }
 
-/** Write (or rewrite) the person's RSVP, then hint the platform. Answers the record key. */
-export async function writeRsvp(
-  session: Session,
-  config: TechneConfig,
-  event: { uri: string; cid: string },
-  status: RsvpStatus,
-  existingRkey?: string,
-): Promise<string> {
-  const rkey = existingRkey ?? tid();
-  const out = (await sessionCall(session, "com.atproto.repo.putRecord", {
-    body: { repo: session.did, collection: RSVP_NSID, rkey, record: rsvpRecord(event, status) },
-  })) as { uri?: string };
-  const uri = out.uri ?? `at://${session.did}/${RSVP_NSID}/${rkey}`;
-  // A courtesy: the platform also learns of the record from the network.
-  await sessionCall(session, "pub.techne.draft.sync.indexRecord", { body: { uri }, proxy: platformProxy(config) }).catch(
-    () => {},
-  );
-  return rkey;
-}
+type Mine = { rkey: string; status: RsvpStatus | null } | null;
+type State = { phase: "loading" } | { phase: "signed-out" } | { phase: "signed-in"; own: Mine };
 
-export function RsvpPanel({ config: configProp, event, going, path }: Props) {
+export function RsvpPanel({ event, going, path }: Props) {
   const router = useRouter();
-  const { config, phase, session, error: signInError, start, signOut } = useTechneSession(configProp, path);
-  const [own, setOwn] = useState<{ rkey: string; status: RsvpStatus | null } | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const [state, setState] = useState<State>({ phase: "loading" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadOwn = useCallback(
-    async (s: Session) => {
-      // Every page of their RSVPs, so a change rewrites their existing record (up to 1000).
-      const all: { uri: string; value: never }[] = [];
-      let cursor: string | undefined;
-      for (let page = 0; page < 10; page++) {
-        let data: { records?: { uri: string; value: never }[]; cursor?: string };
-        try {
-          data = (await sessionCall(s, "com.atproto.repo.listRecords", {
-            query: { repo: s.did, collection: RSVP_NSID, limit: "100", ...(cursor ? { cursor } : {}) },
-          })) as typeof data;
-        } catch (err) {
-          if (page === 0) throw err;
-          break; // keep what the earlier pages found
-        }
-        all.push(...(data.records ?? []));
-        cursor = data.cursor;
-        if (!cursor || !data.records?.length) break;
-      }
-      setOwn(findOwnRsvp(all, event.uri));
-    },
-    [event.uri],
-  );
+  const load = useCallback(async () => {
+    const res = await fetch(`/api/techne/rsvp?event=${encodeURIComponent(event.uri)}`, { cache: "no-store" });
+    const out = (await res.json().catch(() => ({}))) as { signedIn?: boolean; own?: Mine };
+    setState(out.signedIn ? { phase: "signed-in", own: out.own ?? null } : { phase: "signed-out" });
+  }, [event.uri]);
 
   useEffect(() => {
-    if (!session) {
-      setOwn(null);
-      setLoaded(false);
-      return;
-    }
-    let live = true;
-    loadOwn(session)
-      .catch(() => live && setOwn(null))
-      .finally(() => live && setLoaded(true));
-    return () => {
-      live = false;
-    };
-  }, [session, loadOwn]);
+    load().catch(() => setState({ phase: "signed-out" }));
+  }, [load]);
 
   async function answer(status: RsvpStatus) {
-    if (!session) return;
     setSaving(true);
     setError(null);
     try {
-      const rkey = await writeRsvp(session, config, event, status, own?.rkey);
-      setOwn({ rkey, status });
+      const res = await fetch("/api/techne/rsvp", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ event, status }),
+      });
+      const out = (await res.json().catch(() => ({}))) as { rkey?: string; error?: string };
+      if (res.status === 401) {
+        setState({ phase: "signed-out" });
+        throw new Error(out.error ?? "Sign in with Techne again.");
+      }
+      if (!res.ok || !out.rkey) throw new Error(out.error ?? "Couldn't save your RSVP.");
+      setState({ phase: "signed-in", own: { rkey: out.rkey, status } });
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't save your RSVP.");
@@ -110,9 +66,8 @@ export function RsvpPanel({ config: configProp, event, going, path }: Props) {
     }
   }
 
+  const own = state.phase === "signed-in" ? state.own : null;
   const isGoing = own?.status === "going";
-  const shownError = error ?? signInError;
-  const restoring = phase === "restoring" || (phase === "signed-in" && !loaded);
 
   return (
     <div className="glass-panel p-6 md:p-8 text-center space-y-4" data-testid="rsvp-panel">
@@ -122,13 +77,11 @@ export function RsvpPanel({ config: configProp, event, going, path }: Props) {
         {goingLine({ going })}
       </p>
 
-      {restoring && <Loader2 className="w-5 h-5 animate-spin mx-auto text-muted" aria-label="Loading" />}
+      {state.phase === "loading" && <Loader2 className="w-5 h-5 animate-spin mx-auto text-muted" aria-label="Loading" />}
 
-      {(phase === "signed-out" || phase === "starting") && (
-        <SignInWithTechne busy={phase === "starting"} onStart={(signUp) => void start(signUp)} />
-      )}
+      {state.phase === "signed-out" && <SignInWithTechne next={path} />}
 
-      {phase === "signed-in" && loaded && session && (
+      {state.phase === "signed-in" && (
         <div className="space-y-3">
           {isGoing ? (
             <p className="flex items-center justify-center gap-2 font-medium text-sage" data-testid="rsvp-mine">
@@ -145,14 +98,14 @@ export function RsvpPanel({ config: configProp, event, going, path }: Props) {
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : isGoing ? "Can't make it" : "I'm going"}
           </Button>
           <p>
-            <SignOutOfTechne onSignOut={() => void signOut()} />
+            <SignOutOfTechne next={path} />
           </p>
         </div>
       )}
 
-      {shownError && (
+      {error && (
         <p className="text-sm text-red-300" role="alert">
-          {shownError}
+          {error}
         </p>
       )}
     </div>

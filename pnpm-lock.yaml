@@ -21,7 +21,7 @@ importers:
         version: 3.0.3
       node-telegram-bot-api:
         specifier: ^0.66.0
-        version: 0.66.0(request@2.88.2)
+        version: 0.66.0(request@2.88.2)(supports-color@7.2.0)
       resend:
         specifier: ^6.12.4
         version: 6.12.4
@@ -44,6 +44,12 @@ importers:
 
   apps/web:
     dependencies:
+      '@atproto/jwk-jose':
+        specifier: 0.2.4
+        version: 0.2.4
+      '@atproto/oauth-client-node':
+        specifier: 0.5.16
+        version: 0.5.16
       '@metamask/connect-evm':
         specifier: 2.1.1
         version: 2.1.1(bufferutil@4.1.0)(supports-color@7.2.0)(utf-8-validate@5.0.10)
@@ -200,8 +206,16 @@ packages:
     resolution: {integrity: sha512-peNomkIMFcvsrq+1CHXiWv/sAakcYFenIWCB+EI94TPdDezNgRs39R6c8XaU3+UxSbzkfky7R3ywSOiKVVIY1g==}
     engines: {node: '>=22'}
 
+  '@atproto-labs/fetch-node@0.4.5':
+    resolution: {integrity: sha512-uHsGTiC0q6FD7dHgGDNgGNmFWb+Wr2xd/AdZXi2gXq9hdgq6apnSoMCNlhYGp2s2NdXEKUNcZLIJImN9qrPLbA==}
+    engines: {node: '>=22'}
+
   '@atproto-labs/fetch@0.4.2':
     resolution: {integrity: sha512-9mgISMM2eY/w373HUNrtWq4onPzES1K6DaeAv9BDcEgovcKTkcI60H9Jjp38thU2i/dQaGpKrxmxR9qc0FZocg==}
+    engines: {node: '>=22'}
+
+  '@atproto-labs/handle-resolver-node@0.2.17':
+    resolution: {integrity: sha512-gqhSo4n+iUxWwZGX/fo5VPzhjzyyDGbaPLfee7bzRXPJcbUdzMO0HN1QcA85nPGxy9aXYglPt5Xktn8hSYcuRA==}
     engines: {node: '>=22'}
 
   '@atproto-labs/handle-resolver@0.4.10':
@@ -270,6 +284,10 @@ packages:
 
   '@atproto/oauth-client-browser@0.5.14':
     resolution: {integrity: sha512-g2KOuFJkMonAXGybNJOKz1hoGrt4TaPjBjJzqYszd43FivtThBNFPXw7dLvEFzSPplrtSXMZctf2V9LdlMZtoQ==}
+    engines: {node: '>=22'}
+
+  '@atproto/oauth-client-node@0.5.16':
+    resolution: {integrity: sha512-fNM5LByMPR/VbSW5pLv3mIHdEelg/8UpNqyO6xh4vRUg9+y2cj9AAF+po/G7EfL7y97InLkH/yKNFt0AvGzABQ==}
     engines: {node: '>=22'}
 
   '@atproto/oauth-client@0.9.3':
@@ -3512,6 +3530,10 @@ packages:
     resolution: {integrity: sha512-0KI/607xoxSToH7GjN1FfSbLoU0+btTicjsQSWQlh/hZykN8KpmMf7uYwPW3R+akZ6R/w18ZlXSHBYXiYUPO3g==}
     engines: {node: '>= 0.10'}
 
+  ipaddr.js@2.5.0:
+    resolution: {integrity: sha512-aq+t5NAc+cS6rZQQVWC2x98CPqGtKKTMDd4Gaodv0wShnItdKg/51djkGJ1hqH+Oy0ivDftCbSLCQob8zso01w==}
+    engines: {node: '>= 10'}
+
   iron-webcrypto@1.2.1:
     resolution: {integrity: sha512-feOM6FaSr6rEABp/eDfVseKyTMDt+KGpeB35SkVn9Tyn0CqvVsY3EwI0v5i8nMHyJnzCIQf7nsy3p41TPkJZhg==}
 
@@ -5099,6 +5121,18 @@ packages:
   undici-types@7.29.0:
     resolution: {integrity: sha512-vamA8dGlzMwhpyYpQp9d8vka3o4D/yn5I7ez7Or+msDA4bZ8Uh+Zy91WvWf3I73gDAkFha9JcYRqm2li0Npfgg==}
 
+  undici@6.29.1:
+    resolution: {integrity: sha512-EvRlUt/QqAEvXdQeRMYUfwOQsfzpDztykrG2owGEE/rBOBoYv9uF39ZzsNDh4lTFHhTr2XOZjKkYgueD12ZmGA==}
+    engines: {node: '>=18.17'}
+
+  undici@7.30.2:
+    resolution: {integrity: sha512-mLyPQnHwUxaM/rideoK/+KL8DaAJLRl4aBCfmX444aCSLnIaomqPLtNRe2jdCYcsk5wZzXrDIQC8ZeYNRAYyIA==}
+    engines: {node: '>=20.18.1'}
+
+  undici@8.12.4:
+    resolution: {integrity: sha512-8Mx+uNKKER2bA4AdtedkqRbwUCIJFr2nJckXRe5yrDqzePqwLP7VNcctN8/XdmDSbF7mS+jJKIszlL+vbam1VA==}
+    engines: {node: '>=22.19.0'}
+
   unicode-segmenter@0.14.5:
     resolution: {integrity: sha512-jHGmj2LUuqDcX3hqY12Ql+uhUTn8huuxNZGq7GvtF6bSybzH3aFgedYu/KTzQStEgt1Ra2F3HxadNXsNjb3m3g==}
 
@@ -5624,9 +5658,24 @@ snapshots:
       '@atproto/did': 0.5.6
       zod: 3.25.76
 
+  '@atproto-labs/fetch-node@0.4.5':
+    dependencies:
+      '@atproto-labs/fetch': 0.4.2
+      '@atproto-labs/pipe': 0.2.5
+      ipaddr.js: 2.5.0
+      undici_v6: undici@6.29.1
+      undici_v7: undici@7.30.2
+      undici_v8: undici@8.12.4
+
   '@atproto-labs/fetch@0.4.2':
     dependencies:
       '@atproto-labs/pipe': 0.2.5
+
+  '@atproto-labs/handle-resolver-node@0.2.17':
+    dependencies:
+      '@atproto-labs/fetch-node': 0.4.5
+      '@atproto-labs/handle-resolver': 0.4.10
+      '@atproto/did': 0.5.6
 
   '@atproto-labs/handle-resolver@0.4.10':
     dependencies:
@@ -5732,6 +5781,18 @@ snapshots:
       '@atproto/oauth-client': 0.9.3
       '@atproto/oauth-types': 0.7.7
       core-js: 3.51.0
+
+  '@atproto/oauth-client-node@0.5.16':
+    dependencies:
+      '@atproto-labs/did-resolver': 0.3.13
+      '@atproto-labs/handle-resolver-node': 0.2.17
+      '@atproto-labs/simple-store': 0.5.1
+      '@atproto/did': 0.5.6
+      '@atproto/jwk': 0.7.4
+      '@atproto/jwk-jose': 0.2.4
+      '@atproto/jwk-webcrypto': 0.3.4
+      '@atproto/oauth-client': 0.9.3
+      '@atproto/oauth-types': 0.7.7
 
   '@atproto/oauth-client@0.9.3':
     dependencies:
@@ -9161,10 +9222,6 @@ snapshots:
 
   dayjs@1.11.13: {}
 
-  debug@3.2.7:
-    dependencies:
-      ms: 2.1.3
-
   debug@3.2.7(supports-color@7.2.0):
     dependencies:
       ms: 2.1.3
@@ -10082,6 +10139,8 @@ snapshots:
 
   ipaddr.js@1.9.1: {}
 
+  ipaddr.js@2.5.0: {}
+
   iron-webcrypto@1.2.1: {}
 
   is-arguments@1.2.0:
@@ -10626,13 +10685,13 @@ snapshots:
 
   node-releases@2.0.27: {}
 
-  node-telegram-bot-api@0.66.0(request@2.88.2):
+  node-telegram-bot-api@0.66.0(request@2.88.2)(supports-color@7.2.0):
     dependencies:
       '@cypress/request': 3.0.10
       '@cypress/request-promise': 5.0.0(@cypress/request@3.0.10)(request@2.88.2)
       array.prototype.findindex: 2.2.4
       bl: 1.2.3
-      debug: 3.2.7
+      debug: 3.2.7(supports-color@7.2.0)
       eventemitter3: 3.1.2
       file-type: 3.9.0
       mime: 1.6.0
@@ -11763,6 +11822,12 @@ snapshots:
   undici-types@6.21.0: {}
 
   undici-types@7.29.0: {}
+
+  undici@6.29.1: {}
+
+  undici@7.30.2: {}
+
+  undici@8.12.4: {}
 
   unicode-segmenter@0.14.5: {}
 

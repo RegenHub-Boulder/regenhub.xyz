@@ -13,6 +13,7 @@ import { StewardEvents } from "@/components/portal/StewardEvents";
 import { STEWARD_PATH } from "@/lib/techne/session";
 import { OldStewardPage } from "@/components/portal/legacy/OldStewardPage";
 import { loginUrlFor } from "@/lib/safeNext";
+import { currentTechne } from "@/lib/techne/webSession";
 
 export const metadata = { title: "Manage Events — RegenHub" };
 
@@ -23,8 +24,8 @@ export const dynamic = "force-dynamic";
  * Manage Events. With TECHNE_SIGNIN_ENABLED off this is the old regenOS-lane page, unchanged
  * (components/portal/legacy/OldStewardPage.tsx). With it on, RegenHub's calendar on Techne:
  *
- * One door: "Sign in with Techne" on /auth/login opens the portal for a member and is the same Techne session
- * this page posts with (shared with RSVP). A member who came in by email link signs in with Techne here. The calendar is the documented public read every visitor gets (lib/regenos/events.ts).
+ * One door: "Sign in with Techne" on /auth/login opens the portal for a member and is the same server-held Techne
+ * session this page posts with (shared with RSVP). A member who came in by email link signs in with Techne here. The calendar is the documented public read every visitor gets (lib/regenos/events.ts).
  * Anyone signed in with Techne gets the form; Techne decides on each write whether they may post as
  * RegenHub (components/portal/StewardEvents.tsx). The old page is still served at /portal/events/old while the
  * regenOS lane is on, but nothing links to it (the one door: no regenOS sign-in on any page).
@@ -102,7 +103,7 @@ export default async function ManageEventsPage() {
         <p className="text-muted mt-1">RegenHub&apos;s calendar on Techne.</p>
       </div>
       <StewardEvents
-        config={config}
+        techne={await currentTechne()}
         authority={collective}
         events={manageable}
         nights={nights}

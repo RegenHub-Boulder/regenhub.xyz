@@ -1,53 +1,66 @@
 /**
- * STAGING ONLY: a stand-in for a Techne PDS's OAuth, for the tailnet preview,
- * where no real PDS can reach the preview's client metadata and production
- * Techne is off limits.
+ * STAGING ONLY: a stand-in for a Techne PDS's OAuth, for the tailnet preview, where no real PDS can reach the
+ * preview's client metadata and production Techne is off limits. Never on for regenhub.xyz (isStandInEnabled).
  *
- * techne-sdk/auth lets tests and other runtimes inject their own OAuth client
- * (`setOAuthClientFactory`). This one sends sign-in to the stand-in's "pick a
- * sample person" page and gives back a session whose `fetchHandler` talks to
- * the stand-in (app/staging/techne). Everything after sign-in (the RSVP
- * putRecord, the indexRecord hint, the read back) is the code production runs.
+ * The same interface as the real client (./oauth/client.ts), on the server: sign-in goes to the stand-in's "pick a
+ * sample person" page (through /staging/techne/signin), which comes back to /techne/callback with `standin_did`
+ * and the state. The pending sign-in and the session sit in the same tables the real client uses. The session's
+ * `fetchHandler` talks to the stand-in for the person's PDS (scripts/staging/techne-standin.mjs). Everything after
+ * sign-in (the web session, the portal session, RSVP, posting) is the code production runs.
  */
 
-import type { OAuthClientLike } from "techne-sdk/auth";
+import { randomBytes } from "node:crypto";
+import { createServiceClient } from "@/lib/supabase/admin";
+import type { Session } from "./call";
+import { siteOrigin, type TechneConfig } from "./config";
+import type { TechneOAuth } from "./oauth/client";
 
-const KEY = "regenhub.techneStandInDid";
-
-type Win = Pick<Window, "location" | "localStorage"> & { fetch: typeof fetch };
-
-export function standInSession(base: string, did: string, win: Pick<Win, "fetch"> = globalThis as never) {
+export function standInSession(base: string, did: string, f: typeof fetch = (...a) => fetch(...a)): Session {
   return {
     did,
-    sub: did,
     fetchHandler: (path: string, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
       headers.set("x-standin-did", did);
-      return win.fetch(`${base}${path}`, { ...init, headers });
+      return f(`${base}${path}`, { ...init, headers });
     },
   };
 }
 
-export function standInClient(base: string, win: Win): OAuthClientLike {
+function standInBase(): string {
+  const base = process.env.TECHNE_STANDIN_URL?.trim();
+  if (!base) throw new Error("TECHNE_STANDIN_URL is not set");
+  return base.replace(/\/+$/, "");
+}
+
+export function standInOAuth(_config: TechneConfig): TechneOAuth {
+  const db = () => createServiceClient();
   return {
-    async init() {
-      const url = new URL(win.location.href);
-      const did = url.searchParams.get("standin_did");
-      if (did) {
-        win.localStorage.setItem(KEY, did);
-        return { session: standInSession(base, did, win) as never, state: url.searchParams.get("state") };
-      }
-      const kept = win.localStorage.getItem(KEY);
-      return kept ? { session: standInSession(base, kept, win) as never } : undefined;
+    async authorize({ appState }) {
+      const key = randomBytes(16).toString("base64url");
+      const { error } = await db().from("techne_oauth_states").insert({ key, value: { standIn: true, appState } });
+      if (error) throw new Error(error.message);
+      const go = new URL("/staging/techne/signin", siteOrigin());
+      go.searchParams.set("redirect", `${siteOrigin()}/techne/callback`);
+      go.searchParams.set("state", key);
+      return go;
     },
-    async signInRedirect(_input, options) {
-      const go = new URL(`${base}/signin`, win.location.origin);
-      go.searchParams.set("redirect", new URL("/techne/callback", win.location.origin).toString());
-      if (options?.state) go.searchParams.set("state", String(options.state));
-      win.location.assign(go.toString());
+    async callback(params) {
+      const key = params.get("state") ?? "";
+      const did = params.get("standin_did") ?? "";
+      const { data } = await db().from("techne_oauth_states").select("value").eq("key", key).maybeSingle();
+      await db().from("techne_oauth_states").delete().eq("key", key);
+      const value = data?.value as { standIn?: boolean; appState?: string } | undefined;
+      if (!value?.standIn || !/^did:plc:[a-z0-9]{1,64}$/.test(did)) throw new Error("stand-in sign-in didn't match a start");
+      const { error } = await db().from("techne_oauth_sessions").upsert({ did, value: { standIn: true } }, { onConflict: "did" });
+      if (error) throw new Error(error.message);
+      return { did, appState: value.appState ?? null };
     },
-    async revoke() {
-      win.localStorage.removeItem(KEY);
+    async restore(did) {
+      const { data } = await db().from("techne_oauth_sessions").select("did").eq("did", did).maybeSingle();
+      return data ? standInSession(standInBase(), did) : null;
+    },
+    async revoke(did) {
+      await db().from("techne_oauth_sessions").delete().eq("did", did);
     },
   };
 }

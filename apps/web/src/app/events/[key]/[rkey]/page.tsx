@@ -110,7 +110,6 @@ export default async function EventDetailPage({ params }: PageProps) {
             <div className="glass-panel p-6 text-center text-sm text-muted">This night has happened.</div>
           ) : (
             <RsvpPanel
-              config={rsvp}
               event={{ uri: event.uri, cid: event.cid }}
               going={attendance?.going ?? 0}
               path={`/events/${encodeURIComponent(event.did)}/${event.rkey}`}

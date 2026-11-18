@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ProfileForm } from "@/components/portal/ProfileForm";
+import { TechneAccountCard } from "@/components/techne/TechneAccountCard";
+import { handleFor } from "@/lib/techne/did";
 
 export const metadata = { title: "Profile — RegenHub" };
 
@@ -11,7 +13,7 @@ export default async function ProfilePage() {
 
   const { data: member } = await supabase
     .from("members")
-    .select("id, name, email, telegram_username, ethereum_address, bio, skills, profile_photo_url, member_type")
+    .select("id, name, email, telegram_username, ethereum_address, bio, skills, profile_photo_url, member_type, did")
     .eq("supabase_user_id", user.id)
     .single();
 
@@ -33,6 +35,9 @@ export default async function ProfilePage() {
         <p className="text-muted mt-1">Update your info in the member directory</p>
       </div>
       <ProfileForm member={member} />
+      {member.did && (
+        <TechneAccountCard did={member.did} handle={await handleFor(member.did)} endpoint="/api/portal/techne/unlink" who="you" />
+      )}
     </div>
   );
 }

@@ -1,32 +1,10 @@
-"use client";
-
-import { useRef } from "react";
-import type { TechneConfig } from "@/lib/techne/config";
-import { signOutOfTechne } from "@/lib/techne/signOut";
-
 /**
- * "Sign out" for the portal: ends the Techne session in this browser first (when the door is on), then posts
- * the form that ends the portal session (/auth/signout). Without JavaScript the form still posts, and
- * /auth/login?signed_out=1 ends the Techne session there.
+ * "Sign out" for the portal: a plain form posting to /auth/signout, which ends the portal session and this
+ * browser's Techne sign-in on the server (no script, nothing left in the browser to sign back in).
  */
-export function SignOutButton({ config, className }: { config: TechneConfig | null; className?: string }) {
-  const form = useRef<HTMLFormElement>(null);
-  const done = useRef(false);
+export function SignOutButton({ className }: { className?: string }) {
   return (
-    <form
-      ref={form}
-      action="/auth/signout"
-      method="post"
-      className={className}
-      onSubmit={(e) => {
-        if (done.current || !config) return;
-        e.preventDefault();
-        void signOutOfTechne(config).finally(() => {
-          done.current = true;
-          form.current?.submit();
-        });
-      }}
-    >
+    <form action="/auth/signout" method="post" className={className}>
       <button className="text-sm text-muted hover:text-foreground transition-colors">Sign out</button>
     </form>
   );

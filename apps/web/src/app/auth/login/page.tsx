@@ -2,6 +2,9 @@ import { LoginForm } from "@/components/auth/LoginForm";
 import { TechneDoor } from "@/components/auth/TechneDoor";
 import { DEFAULT_NEXT, safeNextPath } from "@/lib/safeNext";
 import { techneConfig } from "@/lib/techne/config";
+import { createClient } from "@/lib/supabase/server";
+import { currentTechne } from "@/lib/techne/webSession";
+import { redirect } from "next/navigation";
 
 export const metadata = { title: "Sign In — RegenHub" };
 export const dynamic = "force-dynamic";
@@ -13,14 +16,21 @@ const ERROR_MESSAGES: Record<string, string> = {
     "Your sign-in link expired. Enter your email and we'll send you another.",
 };
 
+const TECHNE_ERRORS: Record<string, string> = {
+  techne: "Sign-in with Techne didn't finish. Try again.",
+  techne_start: "Couldn't reach Techne to start sign-in. Try again in a moment, or use an email link.",
+  techne_busy: "That's a lot of sign-ins from here. Try again in an hour, or use an email link.",
+};
+
 interface PageProps {
-  searchParams: Promise<{ error?: string; next?: string; signed_out?: string }>;
+  searchParams: Promise<{ error?: string; next?: string }>;
 }
 
 /**
  * The site's sign-in page. With the Techne door on (TECHNE_SIGNIN_ENABLED): "Sign in with Techne", one button
  * that also opens the portal for a member (components/auth/TechneDoor.tsx), with the email link as a quiet
  * fallback. With it off: the email link form, as before. The old regenOS lane is not offered here any more.
+ * Signed in to the portal and to Techne already: straight on to `next`.
  */
 export default async function LoginPage({ searchParams }: PageProps) {
   const params = await searchParams;
@@ -28,6 +38,13 @@ export default async function LoginPage({ searchParams }: PageProps) {
   // Only honor same-origin relative paths (no open redirects).
   const safeNext = safeNextPath(params.next);
   const config = techneConfig();
+  const techneError = params.error ? (TECHNE_ERRORS[params.error] ?? null) : null;
+  if (config && !techneError) {
+    const {
+      data: { user },
+    } = await (await createClient()).auth.getUser();
+    if (user && (await currentTechne())) redirect(safeNext ?? DEFAULT_NEXT);
+  }
 
   return (
     <div className="py-8 sm:min-h-[60vh] flex items-start sm:items-center justify-center px-6">
@@ -43,12 +60,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
           </div>
 
           {config ? (
-            <TechneDoor
-              config={config}
-              next={safeNext ?? DEFAULT_NEXT}
-              banner={banner}
-              signedOut={params.signed_out === "1"}
-            />
+            <TechneDoor next={safeNext ?? DEFAULT_NEXT} banner={banner} techneError={techneError} />
           ) : (
             <LoginForm initialBanner={banner} next={safeNext} />
           )}

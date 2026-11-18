@@ -780,6 +780,24 @@ export function techneLinkEmail(args: { name: string; link: string }) {
   };
 }
 
+/** Sent to the member email when a Techne account is linked (review of PR #122, M1): a link someone made with
+ *  one-time access to the mailbox doesn't stay silent. */
+export function techneLinkedEmail(args: { name: string; account: string; profile: string }) {
+  const firstName = args.name.split(" ")[0] || "there";
+  return {
+    subject: "A Techne account was linked to your RegenHub membership",
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+        <p>Hi ${escapeHtml(firstName)},</p>
+        <p>The Techne account <strong>${escapeHtml(args.account)}</strong> is now linked to your membership. &ldquo;Sign in with Techne&rdquo; with it opens your portal.</p>
+        <p>If this wasn&rsquo;t you, unlink it on <a href="${args.profile}">your profile</a> (sign in with an email link) and reply to this email.</p>
+        <p>&mdash; RegenHub</p>
+      </div>
+    `,
+    text: `Hi ${firstName},\n\nThe Techne account ${args.account} is now linked to your membership. "Sign in with Techne" with it opens your portal.\n\nIf this wasn't you, unlink it on your profile (${args.profile}; sign in with an email link) and reply to this email.\n\n— RegenHub`,
+  };
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }

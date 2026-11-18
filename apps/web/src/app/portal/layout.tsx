@@ -45,7 +45,7 @@ export default async function PortalLayout({ children }: { children: React.React
           <div className="flex items-center gap-6">
             <MobileNav
               links={links}
-              trailing={<SignOutButton config={techne} />}
+              trailing={<SignOutButton />}
             />
             <Link href="/" className="text-forest font-bold text-lg">RegenHub</Link>
             <div className="hidden sm:flex gap-4 text-sm">
@@ -61,7 +61,7 @@ export default async function PortalLayout({ children }: { children: React.React
               )}
             </div>
           </div>
-          <SignOutButton config={techne} className="hidden sm:block" />
+          <SignOutButton className="hidden sm:block" />
         </nav>
       </header>
       <main className="max-w-7xl mx-auto px-6 py-8">{children}</main>

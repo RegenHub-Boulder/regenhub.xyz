@@ -45,7 +45,7 @@ export default async function ApplyPage() {
               {config ? (
                 // The one door, as on /auth/login: a member signs straight in; anyone else applies with an
                 // email link (an application needs an email we can reach).
-                <TechneDoor config={config} next="/apply" mode="apply" />
+                <TechneDoor next="/apply" mode="apply" />
               ) : (
                 <LoginForm next="/apply" />
               )}
