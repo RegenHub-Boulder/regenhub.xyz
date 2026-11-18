@@ -4,6 +4,7 @@ Uses the video lab's walkthrough template (~/Code/unforced-media/video-lab/tools
     .venv/bin/python walkthrough/film-door.py capture   # steps through the preview for real (fresh RSVP state)
     .venv/bin/python walkthrough/film-door.py render    # -> walkthrough/t482-techne-door.mp4
 Env T482_BASE (default http://127.0.0.1:18600). Each capture needs a fresh preview (it posts Civic Tech Night).
+Superseded by film-one-door.py (T-482 part 3): /staging/portal-session is gone, so this capture no longer runs as is.
 """
 import os
 import sys
