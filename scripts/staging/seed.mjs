@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Seed the T-482 staging Techne backend (a local AppView, AUTH_MODE=beta, in-memory PDS) with:
-// a steward, a "RegenHub (staging)" collective, Agents Night's first night, and fictional
+// a steward, a "RegenHub (staging)" collective, Agents Building Night's first night, and fictional
 // sample people (their RSVPs are written by seed-rsvps.mjs, through the stand-in). Nobody here is a real person.
 // Usage: node scripts/staging/seed.mjs --appview http://127.0.0.1:18591 --out <state dir>
 // Writes <state dir>/seed.json (collective DID, event URIs) and <state dir>/people.json
@@ -84,12 +84,12 @@ const c = await steward.call("social.scenius.createScene", {
 const collective = c.sceneDid ?? c.collectiveDid ?? c.did;
 console.log("collective", collective);
 
-// Agents Night's first night is posted; Civic Tech Night's is left for the steward page to list as
+// Agents Building Night's first night is posted; Civic Tech Night's is left for the steward page to list as
 // "confirmed but not posted yet". Times are the placeholder 6:30-9pm America/Denver (MST, -07:00).
 const ALL_NIGHTS = [
   {
     slug: "agents-night",
-    name: "Agents Night",
+    name: "Agents Building Night",
     date: "2026-12-01",
     description:
       "People building with AI agents show their work and compare notes. A few short demos, then open tables. Open to anyone. (Sample event on staging.)",
@@ -99,7 +99,7 @@ const ALL_NIGHTS = [
     name: "Civic Tech Night",
     date: "2026-12-15",
     description:
-      "Bring your project, or your neighborhood group's stuck problem, and work on it with others. Open to anyone. (Sample event on staging.)",
+      "Building for what Boulder needs. Bring a question about how this city works, a tool you think our community needs, or just your curiosity, and build with your neighbors. (Sample event on staging.)",
   },
 ];
 const NIGHTS = ALL_NIGHTS.filter((n) => n.slug === "agents-night");

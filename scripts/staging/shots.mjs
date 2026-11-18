@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Screenshots of the T-482 staging preview (sample data only): /, /events, both series pages,
-// at 390x844 and 1440x900, plus the RSVP flow on the first Agents Night.
+// at 390x844 and 1440x900, plus the RSVP flow on the first Agents Building Night.
 // Usage: PLAYWRIGHT_DIR=<dir holding node_modules/playwright> node scripts/staging/shots.mjs [base] [outdir]
 import { createRequire } from "node:module";
 const { chromium } = createRequire(process.env.PLAYWRIGHT_DIR + "/")("playwright");

@@ -13,7 +13,7 @@
  * wherever Techne events show. Record keys stay TIDs, as the lexicon declares
  * (`"key": "tid"`); the series is never encoded in the key.
  *
- * A series meets on a monthly rule (Agents Night: 1st Tuesday; Civic Tech Night: 3rd Tuesday; Aaron, 11-18).
+ * A series meets on a monthly rule (Agents Building Night: 1st Tuesday; Civic Tech Night: 3rd Tuesday; Aaron, 11-18).
  * The rule invents no events: a visitor sees a night only once a steward has posted it. The rule is used
  * to say the rhythm in public copy and to suggest the next nights in /portal/events. The rule and the
  * times below are EDITABLE DATA; 6:30–9pm is a placeholder until the hosts confirm.
