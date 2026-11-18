@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { mintSupabaseSession } from "@/lib/auth/mintSession";
 import { siteOrigin } from "@/lib/techne/config";
-import { handleFor } from "@/lib/techne/did";
+import { handleFor, resolver } from "@/lib/techne/did";
 import { handback, techneOAuth } from "@/lib/techne/oauth/client";
 import { NONCE_COOKIE, nonces, packState, unpackState, withoutNonce } from "@/lib/techne/oauth/appState";
 import { cookieOptions, currentTechne, startWebSession, stillSignedIn } from "@/lib/techne/webSession";
@@ -69,17 +69,19 @@ export async function GET(req: NextRequest) {
   jar.set(NONCE_COOKIE, left, cookieOptions(left ? 3600 : 0));
 
   const admin = createServiceClient();
-  const before = await currentTechne(admin);
+  const before = await currentTechne(admin, { evenExpired: true });
   try {
-    // Replaces this browser's previous Techne sign-in (webSession.ts), only once the new one is written.
-    await startWebSession(admin, { did, handle: await handleFor(did) });
+    // Replaces this browser's previous Techne sign-in (webSession.ts) once the new one is written. A fresh handle
+    // read (not the display cache): it is stored with the sign-in.
+    await startWebSession(admin, { did, handle: await handleFor(did, resolver()) });
   } catch (err) {
     return fail(app.next, "web session", err);
   }
 
-  // A different account than before in this browser, or than the portal session's member: the old portal session
-  // ends here, so the browser is never Techne-as-one-person and portal-as-another. The old account's grant is
-  // revoked unless another browser still uses it.
+  // A portal session for a member linked to a different Techne account ends here (in this browser only), so the
+  // browser is never Techne-as-one-member and portal-as-another. A portal session from an email link for a member
+  // with no Techne account linked stays: that is a steward who came in by email signing in with Techne to post.
+  // The previous account's grant is revoked unless another browser still uses it.
   const supabase = await createClient();
   const {
     data: { user },
@@ -87,7 +89,7 @@ export async function GET(req: NextRequest) {
   const portalDid = user
     ? ((await admin.from("members").select("did").eq("supabase_user_id", user.id).maybeSingle()).data?.did as string | null | undefined)
     : null;
-  if ((before && before.did !== did) || (portalDid && portalDid !== did)) await supabase.auth.signOut();
+  if (portalDid && portalDid !== did) await supabase.auth.signOut({ scope: "local" });
   if (before && before.did !== did && !(await stillSignedIn(admin, before.did))) await oauth.revoke(before.did).catch(() => {});
 
   // The portal session, for the linked member only. If it can't open, say so on a portal page (an RSVP sign-in

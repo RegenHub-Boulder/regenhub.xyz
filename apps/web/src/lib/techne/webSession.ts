@@ -37,8 +37,6 @@ export async function startWebSession(admin: Admin, who: TechneVisitor): Promise
   // A second sign-in in this browser replaces its first: an orphan row would make sign-out think another browser
   // still uses the account and skip the revoke. Then expired rows go (prune_techne_sessions, migration 064).
   const previous = await cookieId();
-  if (previous) await admin.from("techne_web_sessions").delete().eq("id_hash", hash(previous));
-  await admin.rpc("prune_techne_sessions");
   const id = randomBytes(32).toString("base64url");
   const expires = new Date(Date.now() + TTL_DAYS * 86_400_000);
   const { error } = await admin
@@ -46,6 +44,8 @@ export async function startWebSession(admin: Admin, who: TechneVisitor): Promise
     .insert({ id_hash: hash(id), did: who.did, handle: who.handle, expires_at: expires.toISOString() });
   if (error) throw new Error(`[techne] web session: ${error.message}`);
   (await cookies()).set(webCookieName(), id, cookieOptions(TTL_DAYS * 86_400));
+  if (previous) await admin.from("techne_web_sessions").delete().eq("id_hash", hash(previous));
+  await admin.rpc("prune_techne_sessions");
 }
 
 async function cookieId(): Promise<string | null> {
@@ -54,15 +54,15 @@ async function cookieId(): Promise<string | null> {
 }
 
 /** Who is signed in with Techne in this browser, or null. */
-export async function currentTechne(admin: Admin = createServiceClient()): Promise<TechneVisitor | null> {
+export async function currentTechne(
+  admin: Admin = createServiceClient(),
+  o: { evenExpired?: boolean } = {},
+): Promise<TechneVisitor | null> {
   const id = await cookieId();
   if (!id) return null;
-  const { data, error } = await admin
-    .from("techne_web_sessions")
-    .select("did, handle")
-    .eq("id_hash", hash(id))
-    .gt("expires_at", new Date().toISOString())
-    .maybeSingle();
+  let q = admin.from("techne_web_sessions").select("did, handle").eq("id_hash", hash(id));
+  if (!o.evenExpired) q = q.gt("expires_at", new Date().toISOString());
+  const { data, error } = await q.maybeSingle();
   if (error) {
     console.error("[techne] web session read failed:", error.message);
     return null;

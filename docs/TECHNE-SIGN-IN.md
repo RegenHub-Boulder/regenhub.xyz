@@ -103,7 +103,10 @@ gives, and now only a sign-in through this site's own client starts it. (5) Per-
 can't answer (logged), so a database hiccup doesn't lock people out. (6) A callback refused here (not started in this
 browser) has already replaced the account's stored grant: that is the OAuth library's order, and the grant came from
 the account's own PDS after its own approval; no sign-in starts from it. (7) Someone with ~17 throwaway Techne accounts
-can hold link emails at the 50-an-hour cap; members then read "Linking is busy" and can use an email link.
+can hold link emails at the 50-an-hour cap; members then read "Linking is busy" and can use an email link. (8) A
+member who came in by email link and whose membership has no Techne account linked keeps that portal session when the
+browser signs in with any Techne account (the steward who posts with Techne after an email link). A portal session for
+a member linked to a different Techne account ends at that sign-in (this browser only).
 
 **Not a member.** A visitor signs in, RSVPs, and `/auth/login` tells them they can RSVP and points to /membership and
 /apply. They get no portal session. `/apply` asks them for an email link (an application needs a reachable email).

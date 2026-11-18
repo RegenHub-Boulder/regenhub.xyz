@@ -379,19 +379,30 @@ describe("sign-out", () => {
     expect(portalSessionEmail(browser.jar)).toBeNull();
   });
 
-  it("an email-link portal session stays when its member signs in with a Techne account (to RSVP or to link)", async () => {
+  it("an email-link portal session stays when its member signs in with a Techne account that isn't linked", async () => {
     const carol = account("carol");
-    await addMember("Carol Member", "carol@example.test"); // not linked
-    await signIn(account("dora").did, "/events"); // any first sign-in, to get a portal cookie below by linking
-    browser.jar = new Map();
-    // Carol's portal session by email link, then a Techne sign-in with her (unlinked) account.
-    await signIn(carol.did, "/events");
-    await postJson(linkPOST, { email: "carol@example.test" });
-    await vi.waitFor(() => expect(edge.mails.length).toBeGreaterThan(0));
-    await postJson(confirmPOST, { code: codeFrom(edge.mails[0].html)! });
+    await addMember("Carol Member", "carol@example.test"); // no Techne account linked
+    const { mintSupabaseSession } = await import("@/lib/auth/mintSession");
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    expect((await mintSupabaseSession(createServiceClient(), "carol@example.test")).ok).toBe(true); // as an email link does
+    await signIn(carol.did, "/portal/events");
     expect(portalSessionEmail(browser.jar)).toBe("carol@example.test");
-    await signIn(carol.did, "/events");
-    expect(portalSessionEmail(browser.jar)).toBe("carol@example.test");
+  });
+
+  it("a portal session for a member linked to another account ends, in this browser only", async () => {
+    const alice = account("alice");
+    await addMember("Alice Member", "alice@example.test", alice.did);
+    await signIn(alice.did, "/portal");
+    const logouts: string[] = [];
+    const inner = globalThis.fetch;
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const u = new URL(input instanceof Request ? input.url : String(input));
+      if (u.pathname === "/auth/v1/logout") logouts.push(u.searchParams.get("scope") ?? "global");
+      return inner(input, init);
+    });
+    await signIn(account("bob").did, "/events");
+    expect(portalSessionEmail(browser.jar)).toBeNull();
+    expect(logouts).toEqual(["local"]);
   });
 
   it("switching accounts in one browser ends the first account's sign-in properly (revoked at its PDS)", async () => {

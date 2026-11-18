@@ -30,7 +30,10 @@ export async function techneSession(admin: Admin): Promise<{ who: TechneVisitor;
   if (!who) return null;
   const session = await (await oauth).restore(who.did).catch((err: unknown) => {
     // Usually Techne not answering; the original is logged so a local fault (the session store) shows as one.
-    console.error(`[techne] restoring the session failed: ${(err as Error | null)?.name ?? "Error"}: ${(err as Error | null)?.message ?? ""}`);
+    const e = err as { name?: string; message?: string; cause?: { message?: string } } | null;
+    console.error(
+      `[techne] restoring the session failed: ${e?.name ?? typeof err}: ${e?.message ?? String(err)}${e?.cause?.message ? ` (cause: ${e.cause.message})` : ""}`,
+    );
     throw new TechneUnreachable(err instanceof Error ? err.message : "Techne didn't answer");
   });
   if (!session) {

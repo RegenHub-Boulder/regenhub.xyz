@@ -3,6 +3,8 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { techneConfig } from "@/lib/techne/config";
 import { TechneUnreachable, techneSession, unreachableResponse as unreachable } from "@/lib/techne/serverSession";
 import { ownRsvp, writeRsvp } from "@/lib/techne/rsvpWrite";
+import { XrpcError } from "@/lib/techne/call";
+import { endWebSession } from "@/lib/techne/webSession";
 import { sameSiteJson } from "@/lib/techne/guard";
 import type { RsvpStatus } from "@/lib/techne/rsvp";
 
@@ -32,7 +34,12 @@ export async function GET(req: NextRequest) {
   let own;
   try {
     own = await ownRsvp(signedIn.session, event);
-  } catch {
+  } catch (err) {
+    // The PDS no longer takes this session's token: signed out, so the panel offers sign-in again.
+    if (err instanceof XrpcError && err.status === 401) {
+      await endWebSession().catch(() => null);
+      return NextResponse.json({ signedIn: false }, { headers: { "cache-control": "no-store" } });
+    }
     return unreachable(); // a look-up that failed must not read as "not answered yet"
   }
   return NextResponse.json(
