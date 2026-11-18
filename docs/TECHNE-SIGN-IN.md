@@ -1,7 +1,8 @@
 # Sign in with Techne on regenhub.xyz (T-482, part 2)
 
-One door for Techne: a member RSVPs and a steward manages RegenHub's calendar with the same "Sign in with
-Techne" session. Supabase email login stays the door for billing and the portal. Written 2026-11-17 from the
+One door: "Sign in with Techne" is the site's sign-in. The same session RSVPs, posts RegenHub's calendar, and (part 3,
+"One door" below) opens the member portal when the Techne account is linked to a member. The Supabase email link
+stays as a quiet fallback ("Use an email link instead"). Written 2026-11-17 from the
 public docs only (techne.computer/llms.txt and what it lists, reference.html, techne.pub, the lexicons in npm
 `techne-sdk@0.4.0`) and read-only calls to the live platform.
 
@@ -22,6 +23,64 @@ public docs only (techne.computer/llms.txt and what it lists, reference.html, te
   repo, in one standard `com.atproto.repo.applyWrites` sent **straight to the steward's own PDS, with no
   `atproto-proxy` header** (`lib/techne/collectiveEvents.ts`, `lib/techne/collectiveWrite.ts`).
 - `TECHNE_RSVP_ENABLED` is renamed `TECHNE_SIGNIN_ENABLED` (it now covers both pages). It was off in production.
+
+## One door (T-482 part 3, 2026-11-17)
+
+Aaron, 11-17: "When I just go to portal I'm still getting old scenius login. It should feel unified."
+
+**How the portal session starts.** The Techne session lives in the browser (techne-sdk, a public DPoP client), so the
+server can't read it. The browser proves who it is with standard atproto **service auth**: it calls
+`com.atproto.server.getServiceAuth?aud=did:web:<site host>&lxm=xyz.regenhub.portal.signIn` on its own PDS with its
+OAuth session, and the PDS answers a 60-second JWT signed with the account's `#atproto` key. The server
+(`lib/techne/serviceAuth.ts`) checks the signature against the DID document (plc.directory, or `TECHNE_PLC_URL`;
+did:web over https), the audience, the method and the lifetime, spends the token once (`use_techne_proof`, migration
+064), and mints the Supabase session only for the member whose `members.did` is that DID (`lib/auth/mintSession.ts`,
+the old lane's generateLink + verifyOtp, now shared). Nothing the Techne account says about itself (handle, email)
+picks a member.
+
+- The OAuth scope that allows the call: `rpc:xyz.regenhub.portal.signIn?aud=*` (atproto permission spec; `aud=*`
+  because the method is ours alone, and an audience with a `#fragment` wouldn't match the plain DID
+  `getServiceAuth` takes). It is in `signInScope`, so the client metadata declares it. A Techne session from before
+  this change lacks it; its proof request fails and the page offers "Sign in with Techne again".
+- Checked read-only on 11-17: `GET https://pds.techne.town/xrpc/com.atproto.server.getServiceAuth` answers 400
+  `AuthMissing` (the method exists; an unknown one answers "not forwarded"), and the PLC documents of
+  `unforced.techne.town` and RegenHub parse to valid keys with the verifier. **Unproven until one real sign-in:**
+  that pds.techne.town grants the `rpc:` scope above at consent and signs the token for it. If it doesn't, sign-in
+  still works for RSVP and posting; `/auth/login` shows the refusal and the email link still opens the portal.
+
+**Linking an account that isn't linked yet.** `/auth/login` shows "Already a member? Enter the email on your
+membership": `POST /api/auth/techne/link` (a fresh proof + the email) → `begin_techne_link` finds the member by that
+email and sends a single-use, 30-minute link to **the email on the member row**. Same answer whether or not a member
+has the email; nothing is sent for a membership already linked to another account. Rate limit: 3 asks an hour per
+Techne account and per member. The link page (`/auth/techne/link?code=`) links nothing on open (mail scanners);
+the person presses "Link and open my portal", which needs the **same Techne account that asked**
+(`confirm_techne_link` compares the DID; a member who clicks a link someone else asked for links nothing). It writes
+`members.did` and an `admin_actions` row `techne_did_linked` in one transaction, then starts the portal session.
+
+**Not a member.** A visitor signs in, RSVPs, and `/auth/login` tells them they can RSVP and points to /membership and
+/apply. They get no portal session. `/apply` asks them for an email link (an application needs a reachable email).
+
+**Sign-out** ends both: every Sign out button revokes the Techne session first (`lib/techne/signOut.ts`), then
+`/auth/signout` clears the Supabase cookies and lands on `/auth/login?signed_out=1`, which ends any Techne session a
+no-JS sign-out left behind instead of signing straight back in.
+
+**Every sign-in surface now** (door on):
+
+| Surface | Shows |
+|---|---|
+| `/auth/login` (and `/portal`, `/portal/*`, `/admin` redirects to it) | "Sign in with Techne" + "Make one"; "Use an email link instead" folded. Signed in and linked: straight to `next`. Signed in, not linked: "Already a member?" email link form, "Not a member yet?" links, Sign out |
+| `/apply` signed out | Same door; a non-member is asked for an email link to apply with |
+| `/login` | Redirects to `/auth/login` |
+| Event page RSVP panel | "Sign in with Techne"; the sign-in also opens the portal for a linked member. "Sign out" ends both |
+| `/portal/events` | Signed out of the portal: `/auth/login?next=/portal/events`. In the portal but not in Techne (came by email link): "Sign in with Techne" |
+| `/auth/techne/link?code=` | "Sign in with the Techne account you asked from", then "Link and open my portal" |
+| Portal header | "Sign out" ends both sessions |
+
+Door off: `/auth/login` and `/apply` are the email link form, as before; the API routes 404.
+
+**No scenius anywhere:** the regenOS panel is gone from `/auth/login` and `/apply`, the "Link regenOS" card from
+`/portal`, the "Old steward page" link from `/portal/events`. The lane's code stays behind `REGENOS_LOGIN_ENABLED`
+(off in production) until it is deleted (below).
 
 ## Study, with sources
 
@@ -137,7 +196,8 @@ Each line was checked with one real read-only call on 2026-11-17.
 | `REGENOS_BASE_URL=https://techne.computer` (from `https://scenius.social`) | The docs' API host; the documented reads answer there | `query.listRecords` (RegenHub's events, its listings, its memberships by `references`), `query.getRecords` (one event), the RSVP-by-subject query: all 200 with data. `/.well-known/did.json` names `https://techne.computer` as `#atproto_appview` |
 | `REGENOS_COLLECTIVE_DID` unchanged (`did:plc:dl3lexgjfg2euvkqvao4wsgs`) | | plc.directory: handle `regenhub.techne.town`, PDS `https://pds.techne.town`; descriptor `pub.techne.draft.collective/self` = "RegenHub" |
 | `TECHNE_SIGNIN_ENABLED=true` (new name; drop `TECHNE_RSVP_ENABLED` if set) | Turns on the door, `/techne/client-metadata.json`, `/techne/callback`, the Techne `/portal/events` (old page moves to `/portal/events/old`) | `https://pds.techne.town/.well-known/oauth-authorization-server`: issuer pds.techne.town, `client_id_metadata_document_supported: true`, DPoP ES256; handle resolution `unforced.techne.town` → did:plc:3hmy2v5fvvdh7vuujef5upvl. `https://regenhub.xyz/techne/client-metadata.json` is 404 today (flag off), as expected |
-| `REGENOS_LOGIN_ENABLED=false` (Aaron's call, only after one real post works through the Techne door) | That lane is what emailed a scenius link that went to beacon.techne.computer | Not flipped by us. With it off, `/auth/login` shows only the Supabase door, `/login` redirects there, `/oauth/callback` is a 404, **the "Old steward page" goes away**, and **`/admin/members` "Sync claims to regenOS" turns off too** (it rides the same lane) |
+| `REGENOS_LOGIN_ENABLED=false` (Uni set it off 11-17 as a stopgap; keep it off) | That lane is what emailed a scenius link that went to beacon.techne.computer | With the one door no page shows the lane either way. With it off, `/login` redirects there, `/oauth/callback` is a 404, **the "Old steward page" goes away**, and **`/admin/members` "Sync claims to regenOS" turns off too** (it rides the same lane) |
+| Apply migration `064_techne_one_door.sql` after deploying (MCP `run_migration`) | The one door's tables and functions; without them `/api/auth/techne/*` answers 500 and sign-in still works for RSVP | |
 | No `TECHNE_PDS_URL`, `TECHNE_PLC_URL`, `TECHNE_HANDLE_DOMAIN`, `TECHNE_PLATFORM_DID`, `TECHNE_STAGING_STANDIN` | Production uses the SDK's defaults; the stand-in is refused for regenhub.xyz anyway | |
 
 The env vars are runtime: set them in Coolify and redeploy the web app. Production deploy is Aaron's go.
@@ -149,7 +209,12 @@ production with the Techne door off is as before, and so stewards have a working
 through the new one. The old lane also backs `/auth/login`'s regenOS panel, `/login`, `/oauth/*`,
 `/oauth-client-metadata.json`, `/api/auth/regenos/*`, the `/xrpc` proxy, `/api/portal/events/import-luma`,
 `fetchCollectiveEventsForManagement`, `lib/regenos/auth.ts` and `/admin/members` membership sync.
-**Subtract:** once one real post works through the Techne door and Aaron retires the old page, delete
+**Subtract (one door, 11-17):** no page offers the old lane any more. Proposed: delete the whole lane in one PR
+(`components/auth/RegenosLoginPanel.tsx`, `MagicLinkWizard.tsx`, `OAuthSignInButton.tsx`, `OAuthCallback.tsx`,
+`components/portal/LinkRegenOSCard.tsx`, `app/login`, `app/oauth`, `app/oauth-client-metadata.json`,
+`app/api/auth/regenos/*`, the `/xrpc` proxy, `lib/regenos/{auth,oauth,signupWizard,syntheticEmail,writeDid}.ts`, the
+regenOS branch of `/auth/signout`) together with the old steward page below. Earlier plan:
+once one real post works through the Techne door and Aaron retires the old page, delete
 `components/portal/legacy/`, `app/portal/events/old/`, the `OldStewardPage` branch in `app/portal/events/page.tsx`
 and the `isRegenosLoginEnabled` half of `isStewardEventsEnabled`; then the rest of the lane in one PR (with
 `REGENOS_LOGIN_ENABLED`, `REGENOS_OAUTH_JWKS_URI`) once Aaron has decided on membership sync. Proposed date for the old page to go:

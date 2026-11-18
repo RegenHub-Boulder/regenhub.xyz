@@ -48,7 +48,7 @@ The `.dockerignore` has an exception (`!**/.env.production`) so the file is avai
 | `REGENOS_BASE_URL` | Web (runtime) | regenOS AppView base URL, no trailing slash. Unset = events fall back to the Luma embed and one-login stays off. |
 | `REGENOS_COLLECTIVE_DID` | Web (runtime) | The RegenHub collective's `did:plc:…`. Required alongside the base URL for the events swap. |
 | `REGENOS_WEB_URL` | Web (runtime) | **No longer read** (T-482): the calendar feed is regenhub.xyz's own `/events.ics`. Safe to remove from Coolify. |
-| `TECHNE_SIGNIN_ENABLED` | Web (runtime) | **Default off.** `true` turns on "Sign in with Techne": RSVP on event pages, the Techne `/portal/events` (the old page moves to `/portal/events/old`), and `/techne/client-metadata.json`. Off = Manage Events exactly as before (old regenOS-lane page). Needs the events vars above. (Was `TECHNE_RSVP_ENABLED`.) |
+| `TECHNE_SIGNIN_ENABLED` | Web (runtime) | **Default off.** `true` turns on "Sign in with Techne", the site's one door: `/auth/login` and `/apply` lead with it (email link as a quiet fallback), it opens the portal for a member whose `members.did` matches, RSVP on event pages, the Techne `/portal/events` (the old page moves to `/portal/events/old`), `/techne/client-metadata.json` and `/api/auth/techne/*`. Off = Manage Events exactly as before (old regenOS-lane page). Needs the events vars above. (Was `TECHNE_RSVP_ENABLED`.) |
 | `TECHNE_PDS_URL` / `TECHNE_PLC_URL` / `TECHNE_HANDLE_DOMAIN` / `TECHNE_PLATFORM_DID` | Web (runtime) | Test deployments only; production leaves them unset (techne-sdk defaults). |
 | `TECHNE_STAGING_STANDIN` / `TECHNE_STANDIN_URL` | Web (runtime) | **Staging only**, never production: the sign-in stand-in. Refused for the regenhub.xyz origin. |
 | `REGENOS_LOGIN_ENABLED` | Web (runtime) | **Default off.** `true`/`1`/`yes` turns on the regenOS login lane + the `/xrpc` proxy. |
@@ -95,6 +95,7 @@ Three identities can exist for one person: an `interests` row (email-only signup
 - `link_member_to_auth` (migration 013) fires on `members.email` change; pulls in the auth user if one already exists.
 - `/api/interest` (POST) looks up `members` by email at insert time, so the common case (member exists, then signs up to the interest list) is linked synchronously.
 - `/portal` (server component) auto-links `members.supabase_user_id` if the auth user signs in with an email matching an unlinked member.
+- `members.did` (the Techne/atproto DID) is written only by the one door's link (`confirm_techne_link`, migration 064: an email link to the member email, redeemed from the same Techne account, audited `techne_did_linked`) or the old regenOS lane. "Sign in with Techne" as that DID starts that member's Supabase session.
 
 The result: regardless of event order, the linkage materializes the moment all three records can be reconciled.
 
@@ -308,15 +309,30 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   `com.atproto.repo.putRecord` on their PDS, then hinted with `pub.techne.draft.sync.indexRecord`
   (`components/events/RsvpPanel.tsx`, `lib/techne/rsvp.ts`); "N going" is the documented query
   `{type rsvp, subject <event>}`, latest per person. No `/xrpc` proxy change and no platform origin
-  allowlist is involved. This door does NOT sign anyone into the RegenHub portal; Supabase login stays the
-  member door. Optional test-deployment overrides: `TECHNE_PDS_URL`, `TECHNE_PLC_URL`, `TECHNE_HANDLE_DOMAIN`,
+  allowlist is involved.
+- **The one door** (T-482 part 3; `docs/TECHNE-SIGN-IN.md` "One door"): the same sign-in opens the portal. After
+  sign-in (`components/events/TechneCallback.tsx`) and on `/auth/login`/`/apply` (`components/auth/TechneDoor.tsx`)
+  the browser asks its own PDS for an atproto service-auth JWT (`com.atproto.server.getServiceAuth`, `aud` =
+  `did:web:<site host>`, `lxm` = `xyz.regenhub.portal.signIn`; the scope `rpc:xyz.regenhub.portal.signIn?aud=*` is
+  in `signInScope`) and POSTs it to `/api/auth/techne/session`. The server verifies it against the DID document's
+  `#atproto` key (`lib/techne/serviceAuth.ts`, plain node:crypto; did:plc at plc.directory or `TECHNE_PLC_URL`),
+  spends it once (`use_techne_proof`), and mints the Supabase session (`lib/auth/mintSession.ts`, generateLink +
+  verifyOtp, shared with the old lane) **only for the member whose `members.did` is that DID**. No match = no portal
+  session; the page offers "Already a member?" (email → `POST /api/auth/techne/link` → `begin_techne_link`, 3 an hour
+  per DID and per member, email to the MEMBER ROW's email only, same answer either way) and "Not a member yet?". The
+  emailed `/auth/techne/link?code=` page needs a click and the same Techne account (`/link/confirm` →
+  `confirm_techne_link`). Sign-out ends both (`lib/techne/signOut.ts`; every Sign out button, and
+  `/auth/login?signed_out=1` after `/auth/signout`). Return paths follow `safeNextPath`. Optional test-deployment overrides: `TECHNE_PDS_URL`, `TECHNE_PLC_URL`, `TECHNE_HANDLE_DOMAIN`,
   `TECHNE_PLATFORM_DID`. **Staging only:** `TECHNE_STAGING_STANDIN=1` + `TECHNE_STANDIN_URL` swap the OAuth
   for a stand-in (`lib/techne/standIn.ts`, `app/staging/techne`, `scripts/staging/`); refused for the
   regenhub.xyz origin. Staging recipe: `scripts/staging/preview.sh`.
 - Deliberately NOT changed: the newsletter still reads Luma directly (`lib/newsletter.ts:142`). Its
   copy is Luma-branded end to end; switching it is a product decision, not a plumbing one.
 
-**One-login (`REGENOS_LOGIN_ENABLED`, default OFF).** regenOS becomes the front door; Supabase stays
+**One-login (`REGENOS_LOGIN_ENABLED`, default OFF; superseded by the one door).** No page offers this lane any
+more (`/auth/login`, `/apply`, the `/portal` link card and the "Old steward page" link are gone; `/login` redirects
+to `/auth/login` while the Techne door is on). The code below stays behind its OFF flag until it is deleted
+(proposed 2026-12-15, docs/TECHNE-SIGN-IN.md). As it was: regenOS becomes the front door; Supabase stays
 the session + RLS substrate. Two doors, same finish:
 
 - **Real atproto OAuth** (`lib/regenos/oauth.ts`) — the actual mechanism ("regenOS acting like Google
@@ -371,9 +387,9 @@ Both doors land the AppView's session cookie on this origin then call the one sh
   self-edit whitelist (`api/portal/profile/route.ts:63-65`).
 - `/portal/events` — **Manage Events**, the stewards' in-portal calendar. **`TECHNE_SIGNIN_ENABLED` off: the old
   lane's page, unchanged** (`components/portal/legacy/`, described below; nav link, card and revalidate ride
-  `isStewardEventsEnabled()` = Techne door OR `REGENOS_LOGIN_ENABLED`). **On:** the Techne door. Supabase session for
-  the portal, then "Sign in with Techne" (the same session as RSVP); the old page stays at `/portal/events/old`
-  ("Old steward page") until Aaron retires it. The calendar is the documented public read (`fetchCollectiveEvents`).
+  `isStewardEventsEnabled()` = Techne door OR `REGENOS_LOGIN_ENABLED`). **On:** the Techne door. Signed out, it sends to
+  `/auth/login?next=/portal/events`, whose one sign-in gives both sessions; the old page is still served at
+  `/portal/events/old` while the regenOS lane is on, but nothing links to it. The calendar is the documented public read (`fetchCollectiveEvents`).
   **Everyone signed in gets the form**; the collective's public `pub.techne.draft.membership` claims only word a hint
   (role, or "posting works if you manage RegenHub on Techne"; `lib/techne/standing.ts`,
   `GET /api/portal/events/standing`, portal session required, 1-minute cache). Techne decides on the write.
