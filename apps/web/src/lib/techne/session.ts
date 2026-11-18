@@ -9,6 +9,8 @@ import { TECHNE_PLATFORM_DID, scopes, type ClientOptions } from "techne-sdk/auth
 import type { TechneConfig } from "./config";
 import { RSVP_TYPES } from "./rsvp";
 import { COLLECTIVE_EVENT_TYPES } from "./collectiveEvents";
+import { PORTAL_SCOPE } from "./portalAuth";
+import { safeNextPath } from "@/lib/safeNext";
 
 const DEFAULT_PLATFORM = TECHNE_PLATFORM_DID;
 
@@ -21,10 +23,11 @@ const DEFAULT_PLATFORM = TECHNE_PLATFORM_DID;
  * The scopes don't decide who may post as RegenHub: Techne does, on the write (a person whose role in
  * RegenHub is facilitator or steward; lib/techne/collectiveWrite.ts). The client metadata declares this
  * same list, so a hand-back to another server asks for no more than this either.
+ * Plus PORTAL_SCOPE: the one door's proof (lib/techne/portalAuth.ts), so the same sign-in opens the portal.
  */
 export function signInScope(config: Pick<TechneConfig, "clientId" | "platform">): string[] {
   const platform = config.platform ?? DEFAULT_PLATFORM;
-  return scopes({ clientId: config.clientId, platform, types: [...RSVP_TYPES, ...COLLECTIVE_EVENT_TYPES] });
+  return [...scopes({ clientId: config.clientId, platform, types: [...RSVP_TYPES, ...COLLECTIVE_EVENT_TYPES] }), PORTAL_SCOPE];
 }
 
 let standInFor: string | null = null;
@@ -67,8 +70,10 @@ export function platformProxy(config: TechneConfig): string {
 /** The stewards' page: where its sign-in comes back to. */
 export const STEWARD_PATH = "/portal/events";
 
-/** Only a path we sent ourselves (an /events page or the stewards' page) is a place to return to. */
+/**
+ * Where a sign-in goes back to: any same-origin path (the same rule as /auth/login's `next`, lib/safeNext.ts),
+ * so a sign-in started on an event, the portal, /apply or the link page comes back there. Never another site.
+ */
 export function safeReturn(state: string | null | undefined): string {
-  if (state === STEWARD_PATH) return state;
-  return state && /^\/events(\/[A-Za-z0-9._:%~-]+)*\/?$/.test(state) ? state : "/events";
+  return safeNextPath(state) ?? "/events";
 }

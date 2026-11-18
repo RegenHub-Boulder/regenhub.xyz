@@ -5,7 +5,8 @@ import { isRegenosLoginEnabled } from "@/lib/regenos/config";
 import { REGENOS_PENDING_COOKIE, REGENOS_SESSION_COOKIE, revokeRegenosSession } from "@/lib/regenos/auth";
 
 /**
- * Sign-out ends BOTH sessions this origin can hold.
+ * Sign-out ends every session this origin can hold. The Techne session lives in the browser: every "Sign out"
+ * button ends it first (lib/techne/signOut.ts), and /auth/login?signed_out=1 ends any left behind.
  *
  * regenOS one-login (Phase 2) can leave its own `__Host-rs_session` cookie
  * alive here (set by the /xrpc proxy — app/xrpc/[...nsid]/route.ts). If we
@@ -42,5 +43,7 @@ export async function POST(request: Request) {
     cookieStore.delete({ name, path: "/", secure: true });
   }
 
-  redirect("/auth/login");
+  // signed_out=1: /auth/login ends a Techne session still in this browser (a sign-out that didn't run the page's
+  // own script) instead of signing straight back in through the one door.
+  redirect("/auth/login?signed_out=1");
 }

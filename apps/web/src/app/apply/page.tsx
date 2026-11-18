@@ -4,11 +4,11 @@ import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { LoginForm } from "@/components/auth/LoginForm";
-import { RegenosLoginPanel } from "@/components/auth/RegenosLoginPanel";
+import { TechneDoor } from "@/components/auth/TechneDoor";
 import ApplyForm from "./ApplyForm";
 import regenHubFull from "@/assets/regenhub-full.svg";
 import { isSyntheticEmail } from "@/lib/regenos/syntheticEmail";
-import { isRegenosLoginEnabled } from "@/lib/regenos/config";
+import { techneConfig } from "@/lib/techne/config";
 
 export const metadata: Metadata = {
   title: "Apply for Membership — RegenHub",
@@ -25,7 +25,7 @@ export default async function ApplyPage() {
   // free-day/member folks upgrade against their real record. The magic link
   // creates an account for brand-new people too, then returns them here.
   if (!user) {
-    const regenosEnabled = isRegenosLoginEnabled();
+    const config = techneConfig();
     return (
       <div className="px-6 py-12">
         <div className="max-w-md mx-auto space-y-8">
@@ -35,28 +35,17 @@ export default async function ApplyPage() {
             </Link>
             <h1 className="text-3xl md:text-4xl font-bold text-forest mb-3">Apply for Membership</h1>
             <p className="text-muted max-w-sm mx-auto">
-              Sign in first so your application links to your account. We&apos;ll
-              email you a magic link and bring you right back here.
+              Sign in first so your application links to your account.
+              {!config && " We'll email you a magic link and bring you right back here."}
             </p>
           </div>
 
           <Card className="glass-panel">
             <CardContent className="p-8">
-              {regenosEnabled ? (
-                <>
-                  {/* Same regenOS front door as /auth/login — kept consistent so
-                      the sign-in experience doesn't change shape depending on
-                      which page sent you here. */}
-                  <RegenosLoginPanel next="/apply" />
-                  <details className="mt-6">
-                    <summary className="text-xs text-muted text-center cursor-pointer list-none hover:text-forest transition-colors">
-                      Having trouble signing in?
-                    </summary>
-                    <div className="mt-4">
-                      <LoginForm next="/apply" />
-                    </div>
-                  </details>
-                </>
+              {config ? (
+                // The one door, as on /auth/login: a member signs straight in; anyone else applies with an
+                // email link (an application needs an email we can reach).
+                <TechneDoor config={config} next="/apply" mode="apply" />
               ) : (
                 <LoginForm next="/apply" />
               )}

@@ -1,9 +1,10 @@
 import { LoginForm } from "@/components/auth/LoginForm";
-import { RegenosLoginPanel } from "@/components/auth/RegenosLoginPanel";
-import { safeNextPath } from "@/lib/safeNext";
-import { isRegenosLoginEnabled } from "@/lib/regenos/config";
+import { TechneDoor } from "@/components/auth/TechneDoor";
+import { DEFAULT_NEXT, safeNextPath } from "@/lib/safeNext";
+import { techneConfig } from "@/lib/techne/config";
 
 export const metadata = { title: "Sign In — RegenHub" };
+export const dynamic = "force-dynamic";
 
 const ERROR_MESSAGES: Record<string, string> = {
   auth_error:
@@ -13,48 +14,41 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 interface PageProps {
-  searchParams: Promise<{ error?: string; next?: string }>;
+  searchParams: Promise<{ error?: string; next?: string; signed_out?: string }>;
 }
 
+/**
+ * The site's sign-in page. With the Techne door on (TECHNE_SIGNIN_ENABLED): "Sign in with Techne", one button
+ * that also opens the portal for a member (components/auth/TechneDoor.tsx), with the email link as a quiet
+ * fallback. With it off: the email link form, as before. The old regenOS lane is not offered here any more.
+ */
 export default async function LoginPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const banner = params.error ? (ERROR_MESSAGES[params.error] ?? null) : null;
   // Only honor same-origin relative paths (no open redirects).
   const safeNext = safeNextPath(params.next);
-
-  // Phase 2 one-login, default OFF. When off this page is byte-identical to
-  // what it has always been: the Supabase one-time-link form and nothing else.
-  const regenosEnabled = isRegenosLoginEnabled();
+  const config = techneConfig();
 
   return (
     <div className="min-h-[60vh] flex items-center justify-center px-6">
       <div className="w-full max-w-md">
         <div className="glass-panel-strong p-8">
           <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-forest mb-2">Member Portal</h1>
+            <h1 className="text-2xl font-bold text-forest mb-2">Sign in</h1>
             <p className="text-muted text-sm">
-              {regenosEnabled
-                ? "Sign in with your membership email. Check your inbox (and spam folder, just in case)."
+              {config
+                ? "One Techne account for events and your member portal."
                 : "Enter your email — we'll send a one-time sign-in link. Check your inbox (and spam folder, just in case)."}
             </p>
           </div>
 
-          {regenosEnabled ? (
-            <>
-              <RegenosLoginPanel next={safeNext} />
-              {/* regenOS is THE login. The classic lane stays reachable for the
-                  whole transition — a regenOS outage must never lock a member
-                  out of their door — but it no longer shares the stage. It
-                  auto-opens when a failed-link banner needs showing. */}
-              <details className="mt-6" open={!!banner}>
-                <summary className="text-xs text-muted text-center cursor-pointer list-none hover:text-forest transition-colors">
-                  Having trouble signing in?
-                </summary>
-                <div className="mt-4">
-                  <LoginForm initialBanner={banner} next={safeNext} />
-                </div>
-              </details>
-            </>
+          {config ? (
+            <TechneDoor
+              config={config}
+              next={safeNext ?? DEFAULT_NEXT}
+              banner={banner}
+              signedOut={params.signed_out === "1"}
+            />
           ) : (
             <LoginForm initialBanner={banner} next={safeNext} />
           )}

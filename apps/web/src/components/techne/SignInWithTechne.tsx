@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * The "Sign in with Techne" button and its "Make one" link, shared by RSVP and the stewards' page.
+ * The "Sign in with Techne" button and its "Make one" link: the site's one sign-in button (/auth/login,
+ * /apply, RSVP, the link page, the stewards' page).
  * The label and busy behaviour follow the docs' <SignInWithTechne />, which techne-sdk 0.4.0 doesn't
  * ship yet (docs/TECHNE-SIGN-IN.md).
  */
@@ -37,10 +38,11 @@ export function SignInWithTechne({
   );
 }
 
+/** Ends both sessions (Techne and the portal): useTechneSession's signOut. */
 export function SignOutOfTechne({ onSignOut }: { onSignOut: () => void }) {
   return (
     <button type="button" onClick={onSignOut} className="text-xs text-muted hover:text-foreground inline-flex items-center gap-1">
-      <LogOut className="w-3 h-3" /> Sign out of Techne
+      <LogOut className="w-3 h-3" /> Sign out
     </button>
   );
 }

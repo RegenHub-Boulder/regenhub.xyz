@@ -754,3 +754,33 @@ export function hubHealthDigestEmail(args: {
     text: `HUB PULSE — ${stats.monthLabel}\n\nAs a cooperative, we believe everyone who's part of RegenHub should see how it's going — these are the same numbers we look at.\n${noteText}\nMonthly recurring revenue: ${mrr}\nPaying members: ${stats.payingMembers}\nNew members this month: ${stats.newMembers}\nDoor entries: ${stats.totalVisits}\nDistinct visitors: ${stats.distinctVisitors}\nDay codes issued: ${stats.dayCodesIssued}\nFree-day signups: ${stats.freeDaySignups}\n\nMembers by tier:\n${tierText}\n\nQuestions, ideas, or want to get more involved in the cooperative? Just reply — it goes straight to a human.\n\nWith gratitude,\nRegenHub\n\n${base}`,
   };
 }
+
+/**
+ * The one door: someone signed in with Techne asked to link that account to this membership. Sent only to the
+ * email on the member row. The link works only from the Techne account that asked (confirm_techne_link).
+ */
+export function techneLinkEmail(args: { name: string; link: string; handle: string | null }) {
+  const firstName = args.name.split(" ")[0] || "there";
+  const who = args.handle ? `the Techne account <strong>@${escapeHtml(args.handle)}</strong>` : "a Techne account";
+  const whoText = args.handle ? `the Techne account @${args.handle}` : "a Techne account";
+  return {
+    subject: "Link your Techne account to RegenHub",
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+        <p>Hi ${escapeHtml(firstName)},</p>
+        <p>Someone signed in to regenhub.xyz with ${who} and asked to link it to your membership. After that, &ldquo;Sign in with Techne&rdquo; opens your portal.</p>
+        <p style="margin: 16px 0;">
+          <a href="${args.link}" style="background: #2d5e3e; color: white; padding: 10px 18px; border-radius: 8px; text-decoration: none; display: inline-block;">Link my Techne account</a>
+        </p>
+        <p>Open it on the device where you signed in with Techne. The link works once, for 30 minutes.</p>
+        <p>If this wasn&rsquo;t you, ignore this email and nothing changes.</p>
+        <p>&mdash; RegenHub</p>
+      </div>
+    `,
+    text: `Hi ${firstName},\n\nSomeone signed in to regenhub.xyz with ${whoText} and asked to link it to your membership. After that, "Sign in with Techne" opens your portal.\n\nLink my Techne account: ${args.link}\n\nOpen it on the device where you signed in with Techne. The link works once, for 30 minutes.\n\nIf this wasn't you, ignore this email and nothing changes.\n\n— RegenHub`,
+  };
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+}

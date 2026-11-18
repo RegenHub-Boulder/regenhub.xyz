@@ -1,15 +1,17 @@
 "use client";
 
 /**
- * One Techne session for the whole site: the RSVP panel and the stewards' /portal/events both use
- * this hook, with the same TechneConfig, so they restore, sign in and sign out the same session
- * (techne-sdk/auth keeps one per client id per origin).
+ * One Techne session for the whole site: /auth/login, /apply, the RSVP panel, the link page and the
+ * stewards' /portal/events all use this hook, with the same TechneConfig, so they restore, sign in and sign
+ * out the same session (techne-sdk/auth keeps one per client id per origin). Sign-out ends the portal
+ * session too.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TechneConfig } from "@/lib/techne/config";
 import { authOptions } from "@/lib/techne/session";
 import type { Session } from "@/lib/techne/call";
+import { signOutEverywhere } from "@/lib/techne/signOut";
 
 export type SessionPhase = "restoring" | "signed-out" | "starting" | "signed-in";
 
@@ -71,10 +73,9 @@ export function useTechneSession(configProp: TechneConfig, returnPath: string) {
     [config, returnPath, session],
   );
 
+  /** Ends both sessions: Techne here and the portal's (lib/techne/signOut.ts). */
   const signOut = useCallback(async () => {
-    if (!session) return;
-    const auth = await import("techne-sdk/auth");
-    await auth.signOut({ ...(await authOptions(config)), session: session as never }).catch(() => {});
+    await signOutEverywhere(config, session);
     setSession(null);
     setPhase("signed-out");
   }, [config, session]);

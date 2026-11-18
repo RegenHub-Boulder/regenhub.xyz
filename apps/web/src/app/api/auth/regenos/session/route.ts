@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { mintSupabaseSession } from "@/lib/auth/mintSession";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { isRegenosLoginEnabled } from "@/lib/regenos/config";
 import { fetchRegenosIdentity, type RegenosIdentity } from "@/lib/regenos/auth";
@@ -100,44 +100,8 @@ export async function POST(request: Request) {
   // next. Synthetic DID address last — participants with no email at all.
   const mintEmail = member?.email ?? identity.email ?? syntheticEmailForDid(identity.did);
 
-  // When no auth.users row exists yet, current GoTrue does NOT error here — it
-  // auto-creates an unconfirmed user and mints a `signup`-type token (older
-  // GoTrue 404s instead, which the branch below handles). Either way trigger
-  // 004 links the new auth user to the member row by email on insert, so
-  // supabase_user_id lands for free when the emails match. The redeem must use
-  // the `verification_type` GoTrue says it minted: redeeming a signup token as
-  // "magiclink" fails with "Email link is invalid or has expired", which used
-  // to break exactly the first sign-in of every newly provisioned member.
-  let link = await admin.auth.admin.generateLink({ type: "magiclink", email: mintEmail });
-
-  if (link.error) {
-    const { error: createError } = await admin.auth.admin.createUser({
-      email: mintEmail,
-      email_confirm: true,
-    });
-    if (createError) {
-      console.error("[regenOS] auth user provisioning failed:", createError);
-      return NextResponse.json({ error: "Couldn't create your sign-in." }, { status: 500 });
-    }
-    link = await admin.auth.admin.generateLink({ type: "magiclink", email: mintEmail });
-  }
-
-  const tokenHash = link.data?.properties?.hashed_token;
-  const verificationType = link.data?.properties?.verification_type;
-  if (link.error || !tokenHash || !verificationType) {
-    console.error("[regenOS] generateLink failed:", link.error);
-    return NextResponse.json({ error: "Couldn't create your sign-in." }, { status: 500 });
-  }
-
-  const supabase = await createClient();
-  const { error: verifyError } = await supabase.auth.verifyOtp({
-    type: verificationType as "magiclink" | "signup",
-    token_hash: tokenHash,
-  });
-  if (verifyError) {
-    console.error("[regenOS] verifyOtp failed:", verifyError);
-    return NextResponse.json({ error: "Couldn't start your session." }, { status: 500 });
-  }
+  const minted = await mintSupabaseSession(admin, mintEmail, "regenOS");
+  if (!minted.ok) return NextResponse.json({ error: minted.error }, { status: 500 });
 
   return NextResponse.json({
     ok: true,
