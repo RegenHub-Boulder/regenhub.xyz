@@ -68,11 +68,15 @@ const HANDLE_TTL_MS = 10 * 60 * 1000;
 
 /** The handle for a DID, or null when it can't be read (display only). Kept 10 minutes, so pages that show it
  *  (profile, admin member page) don't wait on the PLC directory each time. */
-export async function handleFor(did: string, resolve: DidResolver = resolver()): Promise<string | null> {
-  const hit = handles.get(did);
+export async function handleFor(did: string, resolve?: DidResolver): Promise<string | null> {
+  const key = `${resolve ? "custom" : (plcUrl() ?? "plc.directory")} ${did}`;
+  const hit = resolve ? undefined : handles.get(key);
   if (hit && Date.now() - hit.at < HANDLE_TTL_MS) return hit.handle;
-  const handle = await resolve(did).then(handleOf, () => null);
-  if (handles.size > 1000) handles.clear();
-  handles.set(did, { handle, at: Date.now() });
+  const handle = await (resolve ?? resolver())(did).then(handleOf, () => null);
+  // A failed read isn't kept: the next page tries again.
+  if (handle !== null && !resolve) {
+    if (handles.size > 1000) handles.clear();
+    handles.set(key, { handle, at: Date.now() });
+  }
   return handle;
 }

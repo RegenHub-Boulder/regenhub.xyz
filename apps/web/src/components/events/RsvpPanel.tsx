@@ -24,7 +24,7 @@ interface Props {
 }
 
 type Mine = { rkey: string; status: RsvpStatus | null } | null;
-type State = { phase: "loading" } | { phase: "signed-out" } | { phase: "signed-in"; own: Mine };
+type State = { phase: "loading" } | { phase: "signed-out" } | { phase: "unavailable" } | { phase: "signed-in"; own: Mine };
 
 export function RsvpPanel({ event, going, path }: Props) {
   const router = useRouter();
@@ -36,8 +36,9 @@ export function RsvpPanel({ event, going, path }: Props) {
     const res = await fetch(`/api/techne/rsvp?event=${encodeURIComponent(event.uri)}`, { cache: "no-store" });
     const out = (await res.json().catch(() => ({}))) as { signedIn?: boolean; own?: Mine; error?: string };
     if (!res.ok) {
-      setError(out.error ?? "Couldn't reach Techne just now. Reload to try again.");
-      setState({ phase: "signed-out" });
+      // Still signed in (the server kept it); Techne just didn't answer. No sign-in button: it would fail too.
+      setError(res.status === 503 ? "Couldn't reach Techne just now. Reload in a moment." : (out.error ?? "Couldn't load your RSVP."));
+      setState({ phase: "unavailable" });
       return;
     }
     setState(out.signedIn ? { phase: "signed-in", own: out.own ?? null } : { phase: "signed-out" });

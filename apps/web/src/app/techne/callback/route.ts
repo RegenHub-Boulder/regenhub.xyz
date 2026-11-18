@@ -6,7 +6,7 @@ import { siteOrigin } from "@/lib/techne/config";
 import { handleFor } from "@/lib/techne/did";
 import { handback, techneOAuth } from "@/lib/techne/oauth/client";
 import { NONCE_COOKIE, nonces, packState, unpackState, withoutNonce } from "@/lib/techne/oauth/appState";
-import { cookieOptions, startWebSession } from "@/lib/techne/webSession";
+import { cookieOptions, endWebSession, startWebSession } from "@/lib/techne/webSession";
 import { memberForDid } from "@/lib/techne/portalDoor";
 import { loginUrlFor } from "@/lib/safeNext";
 
@@ -68,6 +68,9 @@ export async function GET(req: NextRequest) {
   jar.set(NONCE_COOKIE, left, cookieOptions(left ? 3600 : 0));
 
   const admin = createServiceClient();
+  // This browser was signed in as another account: end that one properly (revoked unless another browser uses it).
+  const before = await endWebSession(admin).catch(() => null);
+  if (before && before.did !== did && !before.othersLeft) await oauth.revoke(before.did).catch(() => {});
   try {
     await startWebSession(admin, { did, handle: await handleFor(did) });
   } catch (err) {
@@ -87,7 +90,7 @@ export async function GET(req: NextRequest) {
       portalFailed = true;
     }
   }
-  if (portalFailed && /^\/(portal|admin)(\/|$|\?)/.test(app.next)) {
+  if (portalFailed && /^\/(portal|admin|apply)([/?#]|$)/.test(app.next)) {
     const u = new URL(loginUrlFor(app.next), siteOrigin());
     u.searchParams.set("error", "techne_portal");
     return NextResponse.redirect(u, 303);

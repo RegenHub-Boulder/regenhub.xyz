@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { JoseKey } from "@atproto/oauth-client-node";
-import { createHash } from "node:crypto";
+import { ipBucket } from "@/lib/techne/guard";
 import type { PGlite } from "@electric-sql/pglite";
 import { one, rows } from "../../../../../test/onchainDb";
 import type { FakeAuthUser } from "../../../../../test/pglitePostgrest";
@@ -306,6 +306,12 @@ describe("Sign in with Techne", () => {
     expect(techneCookie()).toBeTruthy(); // still signed in with Techne (RSVP works)
   });
 
+  it("says so on /apply too (it needs the portal session)", async () => {
+    const nora = account("nora");
+    await addMember("Nora Member", null as unknown as string, nora.did);
+    expect((await signIn(nora.did, "/apply")).searchParams.get("error")).toBe("techne_portal");
+  });
+
   it("only this site's own client opens anything: no cookie, a made-up cookie, or a made-up callback get nothing", async () => {
     const alice = account("alice");
     await addMember("Alice Member", "alice@example.test", alice.did);
@@ -361,6 +367,17 @@ describe("sign-out", () => {
     await signOut();
     expect(home.revoked.length).toBe(revokedBefore + 1);
     expect(await rows(pg, "select * from techne_oauth_sessions")).toEqual([]);
+  });
+
+  it("switching accounts in one browser ends the first account's sign-in properly (revoked at its PDS)", async () => {
+    const alice = account("alice");
+    const bob = account("bob");
+    await signIn(alice.did, "/events");
+    const before = home.revoked.length;
+    await signIn(bob.did, "/events");
+    expect(home.revoked.length).toBe(before + 1);
+    expect(await rows(pg, "select did from techne_web_sessions")).toEqual([{ did: bob.did }]);
+    expect(await rows(pg, "select did from techne_oauth_sessions")).toEqual([{ did: bob.did }]);
   });
 
   it("keeps the account's OAuth session while another browser is still signed in with it", async () => {
@@ -538,8 +555,7 @@ describe("linking a Techne account to a membership", () => {
 
   it("limits each IP: past 30 asks in an hour from one address, refused; another address is fine", async () => {
     await signIn(account("asker").did);
-    const ip = createHash("sha256").update("203.0.113.9").digest("hex").slice(0, 32);
-    await pg.exec(`insert into techne_rate_hits (bucket) select 'link:${ip}' from generate_series(1, 30)`);
+    await pg.exec(`insert into techne_rate_hits (bucket) select '${ipBucket("link", "203.0.113.9")}' from generate_series(1, 30)`);
     expect((await postJson(linkPOST, { email: "nobody@example.test" }, { "x-forwarded-for": "203.0.113.9" })).status).toBe(429);
     expect((await postJson(linkPOST, { email: "nobody@example.test" }, { "x-forwarded-for": "203.0.113.10" })).status).toBe(200);
   });

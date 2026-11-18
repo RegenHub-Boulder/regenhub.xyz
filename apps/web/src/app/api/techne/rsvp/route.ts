@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { techneConfig } from "@/lib/techne/config";
-import { TechneUnreachable, techneSession } from "@/lib/techne/serverSession";
+import { TechneUnreachable, techneSession, unreachableResponse as unreachable } from "@/lib/techne/serverSession";
 import { ownRsvp, writeRsvp } from "@/lib/techne/rsvpWrite";
 import { sameSiteJson } from "@/lib/techne/guard";
 import type { RsvpStatus } from "@/lib/techne/rsvp";
@@ -14,9 +14,6 @@ import type { RsvpStatus } from "@/lib/techne/rsvp";
  * 404 while the door is off.
  */
 export const dynamic = "force-dynamic";
-
-const unreachable = () =>
-  NextResponse.json({ error: "Couldn't reach Techne just now. Try again in a moment." }, { status: 503, headers: { "cache-control": "no-store" } });
 
 const AT_URI = /^at:\/\/did:[a-z]+:[A-Za-z0-9._:%-]+\/[A-Za-z0-9.]+\/[A-Za-z0-9._:~-]+$/;
 

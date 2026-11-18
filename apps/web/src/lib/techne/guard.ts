@@ -36,15 +36,19 @@ export function clientIp(req: Request): string {
   );
 }
 
+/** The rate-limit bucket for `route` and an IP (sha-256 of the IP: the address itself is never stored). */
+export function ipBucket(route: string, ip: string): string {
+  return `${route}:${createHash("sha256").update(ip).digest("hex").slice(0, 32)}`;
+}
+
 /** Per-IP limits, each an hour long. Generous: everyone at the hub shares its one public IP (a full Agents Night
  *  signing in to RSVP); these only stop a flood. The per-account and per-member limits are in SQL. */
 export const IP_LIMITS = { signin: 300, link: 30, confirm: 60 } as const;
 
 /** Count this call against the IP's hourly limit for `route`. Fails open when the database can't answer (logged). */
 export async function withinIpLimit(admin: Admin, req: Request, route: keyof typeof IP_LIMITS): Promise<boolean> {
-  const ip = createHash("sha256").update(clientIp(req)).digest("hex").slice(0, 32);
   const { data, error } = await admin.rpc("techne_rate_ok", {
-    p_bucket: `${route}:${ip}`,
+    p_bucket: ipBucket(route, clientIp(req)),
     p_limit: IP_LIMITS[route],
     p_window_seconds: 3600,
   });

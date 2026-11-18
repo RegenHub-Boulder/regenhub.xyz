@@ -100,7 +100,10 @@ can still sign in, as with the email link (parity, not new). (3) A Techne sign-i
 linked member (by design: one door); on a shared computer, press Sign out. (4) Billing and admin pages check the
 session they are given; they are not a second factor. The portal session from Techne is the same one an email link
 gives, and now only a sign-in through this site's own client starts it. (5) Per-IP limits fail open if the database
-can't answer (logged), so a database hiccup doesn't lock people out.
+can't answer (logged), so a database hiccup doesn't lock people out. (6) A callback refused here (not started in this
+browser) has already replaced the account's stored grant: that is the OAuth library's order, and the grant came from
+the account's own PDS after its own approval; no sign-in starts from it. (7) Someone with ~17 throwaway Techne accounts
+can hold link emails at the 50-an-hour cap; members then read "Linking is busy" and can use an email link.
 
 **Not a member.** A visitor signs in, RSVPs, and `/auth/login` tells them they can RSVP and points to /membership and
 /apply. They get no portal session. `/apply` asks them for an email link (an application needs a reachable email).

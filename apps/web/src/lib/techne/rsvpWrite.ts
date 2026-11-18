@@ -29,20 +29,15 @@ export async function writeRsvp(
   return rkey;
 }
 
-/** The person's own latest RSVP for `eventUri` (every page of their RSVPs, up to 1000), so a change rewrites it. */
+/** The person's own latest RSVP for `eventUri` (every page of their RSVPs, up to 1000), so a change rewrites it.
+ *  Any page that fails fails the look-up: a partial answer could miss the record and make a second one. */
 export async function ownRsvp(session: Session, eventUri: string): Promise<{ rkey: string; status: RsvpStatus | null } | null> {
   const all: { uri: string; value: never }[] = [];
   let cursor: string | undefined;
   for (let page = 0; page < 10; page++) {
-    let data: { records?: { uri: string; value: never }[]; cursor?: string };
-    try {
-      data = (await sessionCall(session, "com.atproto.repo.listRecords", {
-        query: { repo: session.did, collection: RSVP_NSID, limit: "100", ...(cursor ? { cursor } : {}) },
-      })) as typeof data;
-    } catch (err) {
-      if (page === 0) throw err;
-      break; // keep what the earlier pages found
-    }
+    const data = (await sessionCall(session, "com.atproto.repo.listRecords", {
+      query: { repo: session.did, collection: RSVP_NSID, limit: "100", ...(cursor ? { cursor } : {}) },
+    })) as { records?: { uri: string; value: never }[]; cursor?: string };
     all.push(...(data.records ?? []));
     cursor = data.cursor;
     if (!cursor || !data.records?.length) break;
