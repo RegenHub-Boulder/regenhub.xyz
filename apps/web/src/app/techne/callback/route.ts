@@ -78,9 +78,10 @@ export async function GET(req: NextRequest) {
     return fail(app.next, "web session", err);
   }
 
-  // A portal session for a member linked to a different Techne account ends here (in this browser only), so the
-  // browser is never Techne-as-one-member and portal-as-another. A portal session from an email link for a member
-  // with no Techne account linked stays: that is a steward who came in by email signing in with Techne to post.
+  // A portal session for a member linked to a different Techne account ends here (in this browser only), and so does
+  // any portal session when this browser switches from one Techne account to another: the browser is never
+  // Techne-as-one-person and portal-as-another. A portal session from an email link for a member with no Techne
+  // account linked stays at a first Techne sign-in: a steward who came in by email signing in with Techne to post.
   // The previous account's grant is revoked unless another browser still uses it.
   const supabase = await createClient();
   const {
@@ -89,7 +90,8 @@ export async function GET(req: NextRequest) {
   const portalDid = user
     ? ((await admin.from("members").select("did").eq("supabase_user_id", user.id).maybeSingle()).data?.did as string | null | undefined)
     : null;
-  if (portalDid && portalDid !== did) await supabase.auth.signOut({ scope: "local" });
+  const switched = !!before && before.did !== did && portalDid !== did;
+  if (user && ((portalDid && portalDid !== did) || switched)) await supabase.auth.signOut({ scope: "local" });
   if (before && before.did !== did && !(await stillSignedIn(admin, before.did))) await oauth.revoke(before.did).catch(() => {});
 
   // The portal session, for the linked member only. If it can't open, say so on a portal page (an RSVP sign-in

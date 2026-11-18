@@ -466,6 +466,16 @@ describe("RSVP", () => {
     expect(techneCookie()).toBeNull();
   });
 
+  it("a token the PDS stops taking signs the browser out of Techne and forgets the grant", async () => {
+    const lee = account("lee");
+    await signIn(lee.did, "/events/x");
+    home.tokens.clear(); // the PDS no longer takes the access token…
+    home.refreshTokens.clear(); // …nor the refresh token
+    expect(await read()).toEqual({ signedIn: false });
+    expect(techneCookie()).toBeNull();
+    expect(await rows(pg, "select * from techne_oauth_sessions")).toEqual([]);
+  });
+
   it("never writes a second RSVP when it can't look up the first", async () => {
     const lee = account("lee");
     await signIn(lee.did, "/events/x");

@@ -38,6 +38,11 @@ const REJECTED = new Set([400, 404, 409, 413, 415, 422]);
 /** Error names a PDS gives a token or DPoP proof it no longer accepts (as opposed to a write it won't allow). */
 const LAPSED_TOKEN = new Set(["ExpiredToken", "InvalidToken", "invalid_token", "invalid_dpop_proof"]);
 
+/** A PDS answer that names this session's token as no good (not a DPoP-nonce retry, not a refusal of the write). */
+export function isLapsedToken(err: unknown): boolean {
+  return err instanceof XrpcError && err.status < 500 && [err.error, err.challenge].some((n) => !!n && LAPSED_TOKEN.has(n));
+}
+
 export async function sendCollectiveBatch(session: Session, config: TechneConfig, batch: CollectiveBatch): Promise<WriteOutcome> {
   try {
     // No proxy: the person's PDS answers repo writes itself.
