@@ -758,7 +758,7 @@ export function hubHealthDigestEmail(args: {
 /**
  * The one door: someone signed in with Techne asked to link that account to this membership. Sent only to the
  * email on the member row. The link works only from the Techne account that asked (confirm_techne_link). No handle:
- * a DID document's alsoKnownAs is the account's own claim, unverified, so it doesn't go in an email.
+ * a DID document's alsoKnownAs is the account's own claim, so it doesn't go in this email.
  */
 export function techneLinkEmail(args: { name: string; link: string }) {
   const firstName = args.name.split(" ")[0] || "there";

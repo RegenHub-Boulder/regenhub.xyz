@@ -13,6 +13,7 @@
 import Link from "next/link";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { currentTechne } from "@/lib/techne/webSession";
+import { shortDid } from "@/lib/techne/did";
 import { memberForDid } from "@/lib/techne/portalDoor";
 import { SignInWithTechne, SignOutOfTechne } from "@/components/techne/SignInWithTechne";
 import { LoginForm } from "@/components/auth/LoginForm";
@@ -35,7 +36,7 @@ export async function TechneDoor({ next, banner = null, techneError = null, mode
   const linked = who ? await memberForDid(admin, who.did) : null;
 
   if (who && linked?.ok && !linked.member) {
-    return <NotLinked handle={who.handle} mode={mode} next={next} />;
+    return <NotLinked did={who.did} handle={who.handle} mode={mode} next={next} />;
   }
 
   return (
@@ -64,8 +65,8 @@ function EmailFallback({ next, banner }: { next: string; banner: string | null }
   );
 }
 
-function NotLinked({ handle, mode, next }: { handle: string | null; mode: "login" | "apply"; next: string }) {
-  const who = handle ? `@${handle}` : "your Techne account";
+function NotLinked({ did, handle, mode, next }: { did: string; handle: string | null; mode: "login" | "apply"; next: string }) {
+  const who = handle ? `@${handle}` : shortDid(did);
   const back = mode === "apply" ? "/apply" : `/auth/login?next=${encodeURIComponent(next)}`;
   return (
     <div className="space-y-6 text-left" data-testid="techne-not-linked">

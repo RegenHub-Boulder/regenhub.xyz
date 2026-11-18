@@ -86,6 +86,7 @@ beforeEach(async () => {
   vi.stubEnv("RESEND_API_KEY", "re_test");
   vi.stubEnv("EMAIL_FROM", "RegenHub <hub@regenhub.test>");
   vi.stubGlobal("fetch", edgeFetch(edge, realFetch));
+  vi.doMock("node:dns/promises", () => ({ resolveTxt: async () => { throw new Error("ENOTFOUND"); } }));
 });
 
 afterEach(async () => {
@@ -100,6 +101,7 @@ function account(name: string, server: FakeTechne = home) {
   const did = plc(name);
   const handle = `${name}.techne.town`;
   edge.didDocs.set(did, didDoc(did, server.origin, handle));
+  server.handles.set(handle, did); // the handle resolves back to the account, as a real one does
   return { did, handle };
 }
 
@@ -537,6 +539,38 @@ describe("linking a Techne account to a membership", () => {
     browser.jar = new Map();
     await signIn(carol.did);
     expect(portalSessionEmail(browser.jar)).toBe("carol@example.test");
+  });
+
+  it("N2: a handle the DID document claims but that doesn't resolve to it is never shown or emailed; the DID is", async () => {
+    const victim = account("vic"); // vic.techne.town really belongs to this account
+    const mallory = plc("mallory");
+    edge.didDocs.set(mallory, didDoc(mallory, home.origin, victim.handle)); // ...but mallory's document claims it
+    const memberId = await addMember("Vic Member", "vic@example.test");
+    await signIn(mallory);
+    expect((await one(pg, "select handle from techne_web_sessions")).handle).toBeNull();
+    await postJson(linkPOST, { email: "vic@example.test" });
+    await vi.waitFor(() => expect(edge.mails).toHaveLength(1));
+    expect((await postJson(confirmPOST, { code: codeFrom(edge.mails[0].html)! })).status).toBe(200);
+    expect((await one(pg, "select did from members where id = $1", [memberId])).did).toBe(mallory);
+    await vi.waitFor(() => expect(edge.mails).toHaveLength(2));
+    expect(edge.mails[1].html).not.toContain("vic.techne.town");
+    expect(edge.mails[1].html).toContain(mallory);
+  });
+
+  it("N1: unlinking voids link codes already sent, so a saved code can't link the account back", async () => {
+    const mallory = account("mallory");
+    const memberId = await addMember("Dee Member", "dee@example.test");
+    await signIn(mallory.did);
+    await postJson(linkPOST, { email: "dee@example.test" });
+    await postJson(linkPOST, { email: "dee@example.test" });
+    await vi.waitFor(() => expect(edge.mails).toHaveLength(2));
+    const [first, second] = edge.mails.map((m) => codeFrom(m.html)!);
+    expect((await postJson(confirmPOST, { code: first })).status).toBe(200);
+    expect((await postJson(unlinkPOST, {})).status).toBe(200);
+    browser.jar = new Map();
+    await signIn(mallory.did);
+    expect((await postJson(confirmPOST, { code: second })).status).toBe(410);
+    expect((await one(pg, "select did from members where id = $1", [memberId])).did).toBeNull();
   });
 
   it("links nothing when the member clicks a link another Techne account asked for", async () => {

@@ -219,6 +219,9 @@ begin
   update members set did = null where id = m.id;
   delete from techne_web_sessions where did = m.did;
   delete from techne_oauth_sessions where did = m.did;
+  -- Link codes already sent are void too: an unlinked account can't link straight back with a saved one
+  -- (review of PR #122, N1).
+  update techne_link_requests set used_at = now() where member_id = m.id and used_at is null;
   -- Portal sessions: GoTrue's own table, when there is one (not in the test databases).
   if m.supabase_user_id is not null and to_regclass('auth.sessions') is not null then
     execute 'delete from auth.sessions where user_id = $1 and ($2::uuid is null or id <> $2)'

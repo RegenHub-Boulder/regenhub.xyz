@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { techneConfig } from "@/lib/techne/config";
 import { currentTechne } from "@/lib/techne/webSession";
+import { shortDid } from "@/lib/techne/did";
 import { LINK_PATH } from "@/lib/techne/linkPath";
 import { TechneLinkConfirm } from "@/components/auth/TechneLinkConfirm";
 import { SignInWithTechne, SignOutOfTechne } from "@/components/techne/SignInWithTechne";
@@ -28,7 +29,7 @@ export default async function TechneLinkPage({ searchParams }: { searchParams: P
             {who ? (
               <>
                 <p className="text-sm text-muted">
-                  Link {who.handle ? <span className="text-forest font-medium">@{who.handle}</span> : "the Techne account you're signed in with"} to your
+                  Link <span className="text-forest font-medium">{who.handle ? `@${who.handle}` : shortDid(who.did)}</span> to your
                   RegenHub membership. After this, &ldquo;Sign in with Techne&rdquo; opens your portal.
                 </p>
                 <TechneLinkConfirm code={code} />

@@ -299,6 +299,14 @@ export function edgeFetch(edge: Edge, realFetch: typeof fetch) {
       const doc = edge.didDocs.get(decodeURIComponent(url.pathname.slice(1)));
       return doc ? json(200, doc) : json(404, { message: "DID not registered" });
     }
+    if (url.pathname === "/.well-known/atproto-did") {
+      // A handle's own domain says which DID it belongs to (the servers' handle tables).
+      for (const s of edge.servers) {
+        const did = s.handles.get(url.host);
+        if (did) return new Response(did, { status: 200, headers: { "content-type": "text/plain" } });
+      }
+      return json(404, { error: "no such handle" });
+    }
     if (url.pathname === "/.well-known/did.json" && edge.webDocs.has(url.host)) return json(200, edge.webDocs.get(url.host));
     if (url.origin === "https://api.resend.com") {
       const b = JSON.parse(body);

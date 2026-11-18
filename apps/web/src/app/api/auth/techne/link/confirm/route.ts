@@ -51,7 +51,7 @@ export async function POST(request: Request) {
   }
   if (row.newly) {
     const to = row.member_email;
-    const mail = techneLinkedEmail({ name: row.member_name ?? "", account: handle ? `@${handle}` : did, profile: `${siteOrigin()}/portal/profile` });
+    const mail = techneLinkedEmail({ name: row.member_name ?? "", account: handle ? `@${handle} (${did})` : did, profile: `${siteOrigin()}/portal/profile` });
     later(async () => {
       if (!(await sendEmail({ to, ...mail }))) stagingOutbox(to, mail);
     });
