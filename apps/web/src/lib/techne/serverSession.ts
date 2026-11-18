@@ -5,21 +5,21 @@
  * Techne just can't be reached, it throws TechneUnreachable and the sign-in stays.
  */
 
-export class TechneUnreachable extends Error {}
-
-/** The one answer for TechneUnreachable: nothing was sent, try again. */
-export function unreachableResponse(): NextResponse {
-  return NextResponse.json(
-    { ok: false, error: "Couldn't reach Techne just now, so nothing was sent. Try again in a moment." },
-    { status: 503, headers: { "cache-control": "no-store" } },
-  );
-}
-
 import { NextResponse } from "next/server";
 import type { createServiceClient } from "@/lib/supabase/admin";
 import type { Session } from "./call";
 import { techneOAuth } from "./oauth/client";
 import { currentTechne, endWebSession, type TechneVisitor } from "./webSession";
+
+export class TechneUnreachable extends Error {}
+
+/** The one answer for TechneUnreachable. */
+export function unreachableResponse(): NextResponse {
+  return NextResponse.json(
+    { ok: false, error: "Couldn't reach Techne just now. Try again in a moment." },
+    { status: 503, headers: { "cache-control": "no-store" } },
+  );
+}
 
 type Admin = ReturnType<typeof createServiceClient>;
 
@@ -30,7 +30,7 @@ export async function techneSession(admin: Admin): Promise<{ who: TechneVisitor;
   if (!who) return null;
   const session = await (await oauth).restore(who.did).catch((err: unknown) => {
     // Usually Techne not answering; the original is logged so a local fault (the session store) shows as one.
-    console.error("[techne] restoring the session failed:", err);
+    console.error(`[techne] restoring the session failed: ${(err as Error | null)?.name ?? "Error"}: ${(err as Error | null)?.message ?? ""}`);
     throw new TechneUnreachable(err instanceof Error ? err.message : "Techne didn't answer");
   });
   if (!session) {

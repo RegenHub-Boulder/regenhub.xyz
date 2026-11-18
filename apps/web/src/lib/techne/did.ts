@@ -73,10 +73,10 @@ export async function handleFor(did: string, resolve?: DidResolver): Promise<str
   const hit = resolve ? undefined : handles.get(key);
   if (hit && Date.now() - hit.at < HANDLE_TTL_MS) return hit.handle;
   const handle = await (resolve ?? resolver())(did).then(handleOf, () => null);
-  // A failed read isn't kept: the next page tries again.
-  if (handle !== null && !resolve) {
+  // A failed read is kept only a minute, so a slow PLC directory doesn't stall every page, and it's soon retried.
+  if (!resolve) {
     if (handles.size > 1000) handles.clear();
-    handles.set(key, { handle, at: Date.now() });
+    handles.set(key, { handle, at: handle === null ? Date.now() - HANDLE_TTL_MS + 60_000 : Date.now() });
   }
   return handle;
 }

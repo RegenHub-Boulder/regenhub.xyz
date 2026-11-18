@@ -29,7 +29,12 @@ export async function GET(req: NextRequest) {
     throw err;
   }
   if (!signedIn) return NextResponse.json({ signedIn: false }, { headers: { "cache-control": "no-store" } });
-  const own = await ownRsvp(signedIn.session, event).catch(() => null);
+  let own;
+  try {
+    own = await ownRsvp(signedIn.session, event);
+  } catch {
+    return unreachable(); // a look-up that failed must not read as "not answered yet"
+  }
   return NextResponse.json(
     { signedIn: true, did: signedIn.who.did, handle: signedIn.who.handle, own },
     { headers: { "cache-control": "no-store" } },

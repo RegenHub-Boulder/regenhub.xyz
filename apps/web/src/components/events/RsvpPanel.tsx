@@ -45,7 +45,10 @@ export function RsvpPanel({ event, going, path }: Props) {
   }, [event.uri]);
 
   useEffect(() => {
-    load().catch(() => setState({ phase: "signed-out" }));
+    load().catch(() => {
+      setError("Couldn't load your RSVP. Reload to try again.");
+      setState({ phase: "unavailable" });
+    });
   }, [load]);
 
   async function answer(status: RsvpStatus) {

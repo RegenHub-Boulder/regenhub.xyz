@@ -369,6 +369,31 @@ describe("sign-out", () => {
     expect(await rows(pg, "select * from techne_oauth_sessions")).toEqual([]);
   });
 
+  it("switching to an account that isn't linked ends the first member's portal session", async () => {
+    const alice = account("alice");
+    await addMember("Alice Member", "alice@example.test", alice.did);
+    const bob = account("bob");
+    await signIn(alice.did, "/portal");
+    expect(portalSessionEmail(browser.jar)).toBe("alice@example.test");
+    await signIn(bob.did, "/events");
+    expect(portalSessionEmail(browser.jar)).toBeNull();
+  });
+
+  it("an email-link portal session stays when its member signs in with a Techne account (to RSVP or to link)", async () => {
+    const carol = account("carol");
+    await addMember("Carol Member", "carol@example.test"); // not linked
+    await signIn(account("dora").did, "/events"); // any first sign-in, to get a portal cookie below by linking
+    browser.jar = new Map();
+    // Carol's portal session by email link, then a Techne sign-in with her (unlinked) account.
+    await signIn(carol.did, "/events");
+    await postJson(linkPOST, { email: "carol@example.test" });
+    await vi.waitFor(() => expect(edge.mails.length).toBeGreaterThan(0));
+    await postJson(confirmPOST, { code: codeFrom(edge.mails[0].html)! });
+    expect(portalSessionEmail(browser.jar)).toBe("carol@example.test");
+    await signIn(carol.did, "/events");
+    expect(portalSessionEmail(browser.jar)).toBe("carol@example.test");
+  });
+
   it("switching accounts in one browser ends the first account's sign-in properly (revoked at its PDS)", async () => {
     const alice = account("alice");
     const bob = account("bob");

@@ -6,7 +6,8 @@ import { siteOrigin } from "@/lib/techne/config";
 import { handleFor } from "@/lib/techne/did";
 import { handback, techneOAuth } from "@/lib/techne/oauth/client";
 import { NONCE_COOKIE, nonces, packState, unpackState, withoutNonce } from "@/lib/techne/oauth/appState";
-import { cookieOptions, endWebSession, startWebSession } from "@/lib/techne/webSession";
+import { cookieOptions, currentTechne, startWebSession, stillSignedIn } from "@/lib/techne/webSession";
+import { createClient } from "@/lib/supabase/server";
 import { memberForDid } from "@/lib/techne/portalDoor";
 import { loginUrlFor } from "@/lib/safeNext";
 
@@ -68,14 +69,26 @@ export async function GET(req: NextRequest) {
   jar.set(NONCE_COOKIE, left, cookieOptions(left ? 3600 : 0));
 
   const admin = createServiceClient();
-  // This browser was signed in as another account: end that one properly (revoked unless another browser uses it).
-  const before = await endWebSession(admin).catch(() => null);
-  if (before && before.did !== did && !before.othersLeft) await oauth.revoke(before.did).catch(() => {});
+  const before = await currentTechne(admin);
   try {
+    // Replaces this browser's previous Techne sign-in (webSession.ts), only once the new one is written.
     await startWebSession(admin, { did, handle: await handleFor(did) });
   } catch (err) {
     return fail(app.next, "web session", err);
   }
+
+  // A different account than before in this browser, or than the portal session's member: the old portal session
+  // ends here, so the browser is never Techne-as-one-person and portal-as-another. The old account's grant is
+  // revoked unless another browser still uses it.
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const portalDid = user
+    ? ((await admin.from("members").select("did").eq("supabase_user_id", user.id).maybeSingle()).data?.did as string | null | undefined)
+    : null;
+  if ((before && before.did !== did) || (portalDid && portalDid !== did)) await supabase.auth.signOut();
+  if (before && before.did !== did && !(await stillSignedIn(admin, before.did))) await oauth.revoke(before.did).catch(() => {});
 
   // The portal session, for the linked member only. If it can't open, say so on a portal page (an RSVP sign-in
   // carries on: Techne alone is enough there).

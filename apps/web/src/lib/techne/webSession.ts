@@ -82,10 +82,15 @@ export async function endWebSession(admin: Admin = createServiceClient()): Promi
   const { data } = await admin.from("techne_web_sessions").delete().eq("id_hash", hash(id)).select("did").maybeSingle();
   const did = (data?.did as string | undefined) ?? null;
   if (!did) return null;
-  const { count } = await admin
+  return { did, othersLeft: await stillSignedIn(admin, did) };
+}
+
+/** Whether any browser is still signed in here as `did` (so its OAuth session must stay). Errs towards yes. */
+export async function stillSignedIn(admin: Admin, did: string): Promise<boolean> {
+  const { count, error } = await admin
     .from("techne_web_sessions")
     .select("id_hash", { count: "exact", head: true })
     .eq("did", did)
     .gt("expires_at", new Date().toISOString());
-  return { did, othersLeft: (count ?? 0) > 0 };
+  return error ? true : (count ?? 0) > 0;
 }
