@@ -5,7 +5,7 @@ import { mintSupabaseSession } from "@/lib/auth/mintSession";
 import { siteOrigin } from "@/lib/techne/config";
 import { handleFor } from "@/lib/techne/did";
 import { handback, techneOAuth } from "@/lib/techne/oauth/client";
-import { NONCE_COOKIE, packState, unpackState } from "@/lib/techne/oauth/appState";
+import { NONCE_COOKIE, nonces, packState, unpackState, withoutNonce } from "@/lib/techne/oauth/appState";
 import { cookieOptions, startWebSession } from "@/lib/techne/webSession";
 import { memberForDid } from "@/lib/techne/portalDoor";
 import { loginUrlFor } from "@/lib/safeNext";
@@ -37,7 +37,8 @@ export async function GET(req: NextRequest) {
   if (!pending) return NextResponse.redirect(new URL("/events", siteOrigin()), 303);
   const oauth = await pending;
   const jar = await cookies();
-  const nonce = jar.get(NONCE_COOKIE)?.value ?? null;
+  const cookie = jar.get(NONCE_COOKIE)?.value ?? null;
+  const started = nonces(cookie);
 
   let did: string;
   let app;
@@ -48,7 +49,7 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     const back = handback(err);
     const state = unpackState(back?.appState);
-    if (back && state && state.nonce === nonce && state.hops < MAX_HANDBACKS) {
+    if (back && state && started.includes(state.nonce) && state.hops < MAX_HANDBACKS) {
       try {
         const url = await oauth.authorize({ hint: back.hint, appState: packState({ ...state, hops: state.hops + 1 }) });
         return NextResponse.redirect(url, 303);
@@ -61,11 +62,10 @@ export async function GET(req: NextRequest) {
   }
 
   // The start must have been in this browser: a callback URL from someone else's sign-in signs nobody in here.
-  if (!app || !nonce || app.nonce !== nonce) {
-    await oauth.revoke(did).catch(() => {});
-    return fail(app?.next ?? null, "not started in this browser");
-  }
-  jar.set(NONCE_COOKIE, "", cookieOptions(0));
+  // (No revoke: the OAuth session is per account, and other browsers of that account may be using it.)
+  if (!app || !started.includes(app.nonce)) return fail(app?.next ?? null, "not started in this browser");
+  const left = withoutNonce(cookie, app.nonce);
+  jar.set(NONCE_COOKIE, left, cookieOptions(left ? 3600 : 0));
 
   const admin = createServiceClient();
   try {
@@ -74,10 +74,23 @@ export async function GET(req: NextRequest) {
     return fail(app.next, "web session", err);
   }
 
+  // The portal session, for the linked member only. If it can't open, say so on a portal page (an RSVP sign-in
+  // carries on: Techne alone is enough there).
   const found = await memberForDid(admin, did);
-  if (found.ok && found.member?.email) {
-    const minted = await mintSupabaseSession(admin, found.member.email, "techne door");
-    if (!minted.ok) console.error(`[techne door] portal session for member ${found.member.id} failed: ${minted.error}`);
+  let portalFailed = !found.ok;
+  if (found.ok && found.member) {
+    const minted = found.member.email
+      ? await mintSupabaseSession(admin, found.member.email, "techne door")
+      : { ok: false as const, error: "no email on the membership" };
+    if (!minted.ok) {
+      console.error(`[techne door] portal session for member ${found.member.id} failed: ${minted.error}`);
+      portalFailed = true;
+    }
+  }
+  if (portalFailed && /^\/(portal|admin)(\/|$|\?)/.test(app.next)) {
+    const u = new URL(loginUrlFor(app.next), siteOrigin());
+    u.searchParams.set("error", "techne_portal");
+    return NextResponse.redirect(u, 303);
   }
   return NextResponse.redirect(new URL(app.next, siteOrigin()), 303);
 }

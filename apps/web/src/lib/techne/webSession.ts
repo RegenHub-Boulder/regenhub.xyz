@@ -34,6 +34,11 @@ export interface TechneVisitor {
 }
 
 export async function startWebSession(admin: Admin, who: TechneVisitor): Promise<void> {
+  // A second sign-in in this browser replaces its first: an orphan row would make sign-out think another browser
+  // still uses the account and skip the revoke. Then expired rows go (prune_techne_sessions, migration 064).
+  const previous = await cookieId();
+  if (previous) await admin.from("techne_web_sessions").delete().eq("id_hash", hash(previous));
+  await admin.rpc("prune_techne_sessions");
   const id = randomBytes(32).toString("base64url");
   const expires = new Date(Date.now() + TTL_DAYS * 86_400_000);
   const { error } = await admin

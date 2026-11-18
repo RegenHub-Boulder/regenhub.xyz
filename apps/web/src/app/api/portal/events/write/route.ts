@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { techneConfig } from "@/lib/techne/config";
 import { regenosCollectiveDid } from "@/lib/regenos/config";
-import { techneSession } from "@/lib/techne/serverSession";
+import { TechneUnreachable, techneSession } from "@/lib/techne/serverSession";
 import { sameSiteJson } from "@/lib/techne/guard";
 import { deleteEventBatch, putEventBatch, type EventInput, type ExistingEvent } from "@/lib/techne/collectiveEvents";
 import { sendCollectiveBatch, writeErrorText } from "@/lib/techne/collectiveWrite";
@@ -51,7 +51,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "What event?" }, { status: 400 });
   }
 
-  const signedIn = await techneSession(createServiceClient());
+  let signedIn;
+  try {
+    signedIn = await techneSession(createServiceClient());
+  } catch (err) {
+    if (!(err instanceof TechneUnreachable)) throw err;
+    return NextResponse.json({ ok: false, error: "Couldn't reach Techne just now, so nothing was sent. Try again in a moment." }, { status: 503 });
+  }
   if (!signedIn) {
     return NextResponse.json({ ok: false, error: "Your Techne sign-in has ended. Sign in with Techne again, then retry." }, { status: 401 });
   }

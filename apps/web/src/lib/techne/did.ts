@@ -63,7 +63,16 @@ export function handleOf(doc: unknown): string | null {
   return a ? a.slice(5) : null;
 }
 
-/** The handle for a DID, or null when it can't be read (display only). */
+const handles = new Map<string, { handle: string | null; at: number }>();
+const HANDLE_TTL_MS = 10 * 60 * 1000;
+
+/** The handle for a DID, or null when it can't be read (display only). Kept 10 minutes, so pages that show it
+ *  (profile, admin member page) don't wait on the PLC directory each time. */
 export async function handleFor(did: string, resolve: DidResolver = resolver()): Promise<string | null> {
-  return resolve(did).then(handleOf, () => null);
+  const hit = handles.get(did);
+  if (hit && Date.now() - hit.at < HANDLE_TTL_MS) return hit.handle;
+  const handle = await resolve(did).then(handleOf, () => null);
+  if (handles.size > 1000) handles.clear();
+  handles.set(did, { handle, at: Date.now() });
+  return handle;
 }

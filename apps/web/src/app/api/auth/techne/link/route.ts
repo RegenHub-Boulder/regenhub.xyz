@@ -17,8 +17,9 @@ import { stagingOutbox } from "@/lib/staging/outbox";
  * for links nothing.
  *
  * Same answer whether or not a member has that email (no account probing), and the email goes out after the
- * answer, so the timing doesn't tell either. Limits: 10 asks an hour per IP; in SQL, 3 an hour per Techne account
- * (429), and at most 10 link emails an hour per member and 30 in all (both silent, so they can't be probed).
+ * answer, so the timing doesn't tell either. Limits: 30 asks an hour per IP; in SQL, 3 an hour per Techne account
+ * (429), 50 link emails an hour in all (429 "busy", checked before the email is looked up, so it says nothing about
+ * it), and at most 10 link emails an hour per member (silent, so it can't be probed).
  */
 export async function POST(request: Request) {
   if (doorOff()) return notFound();
@@ -45,6 +46,12 @@ export async function POST(request: Request) {
   }
   if (row.status === "rate_limited") {
     return NextResponse.json({ error: "That's a few links already. Try again in an hour." }, { status: 429 });
+  }
+  if (row.status === "busy") {
+    return NextResponse.json(
+      { error: "Linking is busy right now. Try again in an hour, or sign in with an email link instead." },
+      { status: 429 },
+    );
   }
   if (row.status === "linked") return NextResponse.json({ status: "linked" });
   if (row.status === "sent" && row.member_email) {

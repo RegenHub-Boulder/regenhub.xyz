@@ -34,7 +34,12 @@ export function RsvpPanel({ event, going, path }: Props) {
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/techne/rsvp?event=${encodeURIComponent(event.uri)}`, { cache: "no-store" });
-    const out = (await res.json().catch(() => ({}))) as { signedIn?: boolean; own?: Mine };
+    const out = (await res.json().catch(() => ({}))) as { signedIn?: boolean; own?: Mine; error?: string };
+    if (!res.ok) {
+      setError(out.error ?? "Couldn't reach Techne just now. Reload to try again.");
+      setState({ phase: "signed-out" });
+      return;
+    }
     setState(out.signedIn ? { phase: "signed-in", own: out.own ?? null } : { phase: "signed-out" });
   }, [event.uri]);
 
@@ -49,7 +54,7 @@ export function RsvpPanel({ event, going, path }: Props) {
       const res = await fetch("/api/techne/rsvp", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ event, status }),
+        body: JSON.stringify({ event, status, ...(own?.rkey ? { rkey: own.rkey } : {}) }),
       });
       const out = (await res.json().catch(() => ({}))) as { rkey?: string; error?: string };
       if (res.status === 401) {

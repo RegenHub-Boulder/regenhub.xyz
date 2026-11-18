@@ -14,6 +14,21 @@ export interface AppState {
 
 export const NONCE_COOKIE = "regenhub-techne-start";
 
+/** The cookie keeps the last few starts, so a sign-in started in two tabs finishes in either. */
+const KEEP = 3;
+
+export function nonces(cookie: string | null | undefined): string[] {
+  return (cookie ?? "").split(".").filter((n) => /^[A-Za-z0-9_-]{16,64}$/.test(n));
+}
+
+export function withNonce(cookie: string | null | undefined, nonce: string): string {
+  return [nonce, ...nonces(cookie).filter((n) => n !== nonce)].slice(0, KEEP).join(".");
+}
+
+export function withoutNonce(cookie: string | null | undefined, nonce: string): string {
+  return nonces(cookie).filter((n) => n !== nonce).join(".");
+}
+
 export function packState(s: AppState): string {
   return JSON.stringify(s);
 }

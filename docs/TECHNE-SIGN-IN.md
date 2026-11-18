@@ -43,13 +43,20 @@ decision: fix the cause. Now:
 - The PDS comes back to **`/techne/callback`, a server route**. The server exchanges the code itself; the library
   checks that the token's `sub` is a DID whose own PDS names this issuer; then this site checks it again
   (`lib/techne/oauth/issuer.ts`: did:plc only, DID document → `#atproto_pds` → protected-resource metadata →
-  authorization server → `issuer` must equal the token's) and that the nonce cookie matches (login CSRF). Only then:
+  authorization server → `issuer` must equal the token's) and that the nonce cookie matches (login CSRF; it keeps the
+  last three starts, so a sign-in begun in two tabs finishes in either; a mismatch revokes nothing, since the
+  account's session may be in use in another browser). Only then:
   this browser's Techne sign-in (`lib/techne/webSession.ts`: an httpOnly cookie naming a server row, 30 days) and,
   **only for the member whose `members.did` is that DID**, the portal session (`lib/auth/mintSession.ts`). Nothing
   else mints a portal session from Techne; a token minted for any other app opens nothing here.
 - Pending sign-ins and sessions (tokens, DPoP keys) live in Postgres (migration 064: `techne_oauth_states`,
-  `techne_oauth_sessions`, `techne_web_sessions`), server only. One web container, so the library's in-process
-  lock is enough for refreshes; a second container would need a shared lock.
+  `techne_oauth_sessions`, `techne_web_sessions`), server only. One OAuth session per account, shared by that
+  account's browsers; a new sign-in in a browser replaces that browser's old one. Expired web sessions, and OAuth
+  sessions no browser has used for a day, are pruned at each sign-in. One web container, so the library's
+  in-process lock is enough for refreshes; a second container would need a shared lock.
+- If Techne can't be reached while a token is refreshed, the routes answer 503 and the sign-in stays; only a
+  refused refresh or a revoked grant ends it. A linked member whose portal session can't open (no email on the
+  membership, GoTrue down) is told so on `/auth/login` instead of being sent round again.
 - A person whose account lives on another server is handed back by the Techne sign-in page
   (`error=login_required&login_hint=…`); the callback starts again there, at most twice (as techne-sdk did).
 
@@ -64,9 +71,10 @@ is without the service-auth proof H1 removed. One client, one sign-in, one sessi
 membership": `POST /api/auth/techne/link` (this browser's Techne sign-in + the email) → `begin_techne_link` finds the
 member by that email and sends a single-use, 30-minute link to **the email on the member row**, after the response
 (so the timing doesn't say whether the email is a member's). Same answer whether or not a member has the email;
-nothing is sent for a membership already linked to another account. Limits: 10 asks an hour per IP; 3 asks an hour
-per Techne account (429); 10 link emails an hour per member and 30 in all (both silent). Link requests older than a
-day are deleted. Only did:plc accounts can link (a did:web costs nothing to make). The link page
+nothing is sent for a membership already linked to another account. Limits: 30 asks an hour per IP (everyone at the
+hub shares one IP; sign-in itself allows 300); 3 asks an hour per Techne account (429); 50 link emails an hour in all
+("Linking is busy right now", checked before the email is looked up, so it says nothing about it); 10 link emails an
+hour per member (silent). Link requests older than a day are deleted. Only did:plc accounts can link (a did:web costs nothing to make). The link page
 (`/auth/techne/link?code=`) links nothing on open (mail scanners); the person presses "Link and open my portal",
 which needs the **same Techne account that asked** (`confirm_techne_link` compares the DID). It writes `members.did`
 and an `admin_actions` row `techne_did_linked` in one transaction, **emails the member that a Techne account was

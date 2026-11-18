@@ -6,11 +6,13 @@ import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SignInWithTechne } from "@/components/techne/SignInWithTechne";
 
 export function LinkMembershipForm() {
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
+  const [linked, setLinked] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function send(e: React.FormEvent) {
@@ -25,7 +27,7 @@ export function LinkMembershipForm() {
       });
       const out = (await res.json().catch(() => ({}))) as { status?: string; error?: string };
       if (!res.ok) throw new Error(out.error ?? "Couldn't send the link.");
-      if (out.status === "linked") window.location.replace("/portal");
+      if (out.status === "linked") setLinked(true);
       else setSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't send the link.");
@@ -34,6 +36,14 @@ export function LinkMembershipForm() {
     }
   }
 
+  if (linked) {
+    return (
+      <div className="space-y-3 text-center" role="status">
+        <p className="text-sm">This Techne account is already linked to that membership. Sign in again to open your portal.</p>
+        <SignInWithTechne next="/portal" />
+      </div>
+    );
+  }
   if (sent) {
     return (
       <p className="text-sm" role="status" data-testid="link-sent">

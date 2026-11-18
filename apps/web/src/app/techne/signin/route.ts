@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { siteOrigin } from "@/lib/techne/config";
 import { techneOAuth } from "@/lib/techne/oauth/client";
-import { NONCE_COOKIE, packState } from "@/lib/techne/oauth/appState";
+import { NONCE_COOKIE, packState, withNonce } from "@/lib/techne/oauth/appState";
 import { cookieOptions } from "@/lib/techne/webSession";
 import { sameSiteForm, withinIpLimit } from "@/lib/techne/guard";
 import { safeReturn } from "@/lib/techne/session";
@@ -41,6 +41,7 @@ export async function POST(req: Request) {
     console.error("[techne] sign-in start failed:", err instanceof Error ? err.message : err);
     return back(next, "techne_start");
   }
-  (await cookies()).set(NONCE_COOKIE, nonce, cookieOptions(3600));
+  const jar = await cookies();
+  jar.set(NONCE_COOKIE, withNonce(jar.get(NONCE_COOKIE)?.value, nonce), cookieOptions(3600));
   return NextResponse.redirect(url, 303);
 }

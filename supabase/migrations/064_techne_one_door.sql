@@ -12,8 +12,9 @@
 --   techne_rate_hits       per-IP limits on the door's routes (sha-256 of the IP)
 --   techne_link_requests   one row per "link my membership" ask: rate limit, single-use emailed code
 --   techne_rate_ok         count a hit, answer whether it is within the limit
---   begin_techne_link      rate-limit (3 asks an hour per DID; 10 link emails an hour per member; 30 an hour in
---                          all) and record an ask
+--   prune_techne_sessions  drop expired web sessions, and OAuth sessions no browser has used for a day
+--   begin_techne_link      rate-limit (3 asks an hour per DID; 50 link emails an hour in all; 10 an hour per
+--                          member) and record an ask
 --   confirm_techne_link    the emailed code + the same DID: write members.did, audit, in one transaction
 --   unlink_techne          clear members.did, end that account's sign-ins here and the member's portal sessions,
 --                          audit, in one transaction
@@ -21,6 +22,7 @@
 -- Server-only: RLS on, no policies, functions granted to service_role alone. Additive.
 -- Reverse: drop function unlink_techne(integer, integer, uuid); drop function confirm_techne_link(text, text);
 --   drop function begin_techne_link(text, text, text); drop function techne_rate_ok(text, integer, integer);
+--   drop function prune_techne_sessions();
 --   drop table techne_link_requests, techne_rate_hits, techne_web_sessions, techne_oauth_sessions, techne_oauth_states;
 set local lock_timeout = '5s';
 
@@ -49,6 +51,7 @@ create table techne_web_sessions (
   expires_at timestamptz not null
 );
 create index techne_web_sessions_did_idx on techne_web_sessions (did);
+create index techne_web_sessions_expires_idx on techne_web_sessions (expires_at);
 alter table techne_web_sessions enable row level security;
 revoke all on techne_web_sessions from public, anon, authenticated;
 
@@ -57,6 +60,7 @@ create table techne_rate_hits (
   at     timestamptz not null default now()
 );
 create index techne_rate_hits_idx on techne_rate_hits (bucket, at desc);
+create index techne_rate_hits_at_idx on techne_rate_hits (at);
 alter table techne_rate_hits enable row level security;
 revoke all on techne_rate_hits from public, anon, authenticated;
 
@@ -97,14 +101,26 @@ begin
 end;
 $$;
 
+-- Expired web sessions go; so does an OAuth session (tokens, DPoP key) that no live web session uses and that
+-- hasn't been refreshed for a day (a fresh one is written just before its web session, so it is never caught).
+create function prune_techne_sessions() returns void
+language sql security definer set search_path = public as $$
+  delete from techne_web_sessions where expires_at < now();
+  delete from techne_oauth_sessions o
+    where o.updated_at < now() - interval '1 day'
+      and not exists (select 1 from techne_web_sessions w where w.did = o.did);
+$$;
+
 -- Record a link ask. status:
 --   'sent'           email the code to member_email
 --   'no_member'      no member has that email (send nothing)
 --   'linked'         this DID is already this member's (nothing to do)
 --   'taken'          the member has another DID, or this DID is another member's (send nothing; staff sort it out)
 --   'rate_limited'   3 asks an hour from this DID (says nothing about the email, so the route may answer 429)
---   'quiet'          this member already had 10 link emails this hour, or 30 went out in all this hour (send
---                    nothing; the route answers as for 'sent', so the limit doesn't tell anyone the email is a member's)
+--   'busy'           50 link emails went out this hour in all (checked before the email is looked up, so it says
+--                    nothing about it; the route answers 429 and the person can use an email link instead)
+--   'quiet'          this member already had 10 link emails this hour (send nothing; the route answers as for
+--                    'sent', so the limit doesn't tell anyone the email is a member's)
 -- Only did:plc (Techne accounts are did:plc; a did:web costs nothing to make).
 create function begin_techne_link(p_did text, p_email text, p_code_hash text)
 returns table (status text, member_id integer, member_email text, member_name text)
@@ -120,6 +136,12 @@ begin
     return query select 'rate_limited', null::integer, null::text, null::text;
     return;
   end if;
+  perform pg_advisory_xact_lock(hashtext('techne_link_emails'));
+  if (select count(*) from techne_link_requests r
+        where r.emailed and r.created_at > now() - interval '1 hour') >= 50 then
+    return query select 'busy', null::integer, null::text, null::text;
+    return;
+  end if;
   select * into m from members where lower(email) = lower(trim(p_email)) for update;
   if not found then
     insert into techne_link_requests (code_hash, did) values (p_code_hash, p_did);
@@ -130,11 +152,8 @@ begin
     return query select 'linked', m.id, m.email, m.name;
     return;
   end if;
-  perform pg_advisory_xact_lock(hashtext('techne_link_emails'));
   if (select count(*) from techne_link_requests r
-        where r.member_id = m.id and r.created_at > now() - interval '1 hour') >= 10
-     or (select count(*) from techne_link_requests r
-        where r.emailed and r.created_at > now() - interval '1 hour') >= 30 then
+        where r.member_id = m.id and r.created_at > now() - interval '1 hour') >= 10 then
     insert into techne_link_requests (code_hash, did) values (p_code_hash, p_did);
     return query select 'quiet', null::integer, null::text, null::text;
     return;
@@ -212,6 +231,8 @@ begin
 end;
 $$;
 
+revoke all on function prune_techne_sessions() from public, anon, authenticated;
+grant execute on function prune_techne_sessions() to service_role;
 revoke all on function techne_rate_ok(text, integer, integer) from public, anon, authenticated;
 grant execute on function techne_rate_ok(text, integer, integer) to service_role;
 revoke all on function begin_techne_link(text, text, text) from public, anon, authenticated;

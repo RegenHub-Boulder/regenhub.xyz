@@ -1,8 +1,11 @@
 /**
  * The person's Techne session for a server route: this browser's sign-in (webSession) and the OAuth session the
  * server holds for that DID. When the OAuth session can't be used any more (revoked, refresh refused), the
- * browser's sign-in ends too, so the page shows "Sign in with Techne" again instead of failing every call.
+ * browser's sign-in ends too, so the page shows "Sign in with Techne" again instead of failing every call. When
+ * Techne just can't be reached, it throws TechneUnreachable and the sign-in stays.
  */
+
+export class TechneUnreachable extends Error {}
 
 import type { createServiceClient } from "@/lib/supabase/admin";
 import type { Session } from "./call";
@@ -16,7 +19,9 @@ export async function techneSession(admin: Admin): Promise<{ who: TechneVisitor;
   if (!oauth) return null;
   const who = await currentTechne(admin);
   if (!who) return null;
-  const session = await (await oauth).restore(who.did);
+  const session = await (await oauth).restore(who.did).catch((err: unknown) => {
+    throw new TechneUnreachable(err instanceof Error ? err.message : "Techne didn't answer");
+  });
   if (!session) {
     await endWebSession(admin).catch(() => null);
     return null;

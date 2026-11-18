@@ -8,7 +8,13 @@
  * On staging (TECHNE_STAGING_STANDIN, never regenhub.xyz) the same interface is the stand-in (../standIn.ts).
  */
 
-import { JoseKey, NodeOAuthClient, OAuthCallbackError, requestLocalLock } from "@atproto/oauth-client-node";
+import {
+  JoseKey,
+  NodeOAuthClient,
+  OAuthCallbackError,
+  isExpectedSessionError,
+  requestLocalLock,
+} from "@atproto/oauth-client-node";
 import { createServiceClient } from "@/lib/supabase/admin";
 import type { Session } from "../call";
 import { techneClientKey, techneConfig, siteOrigin, type TechneConfig } from "../config";
@@ -29,7 +35,8 @@ export interface TechneOAuth {
   authorize(o: { appState: string; signUp?: boolean; hint?: string }): Promise<URL>;
   /** Finish a sign-in from the callback's query: exchange the code, check the account. Throws when it fails. */
   callback(params: URLSearchParams): Promise<SignedIn>;
-  /** The person's session (refreshed when due), or null when there is none or it can't be used any more. */
+  /** The person's session (refreshed when due), or null when there is none or it can't be used any more
+   *  (revoked, refresh refused). Throws when Techne can't be reached just now: the sign-in stays. */
   restore(did: string): Promise<Session | null>;
   /** End the session at the PDS (at most 3 s) and forget it here whatever the PDS says. */
   revoke(did: string): Promise<void>;
@@ -101,8 +108,11 @@ class RealTechneOAuth implements TechneOAuth {
     try {
       const s = await this.client.restore(did);
       return { did: s.did, fetchHandler: (path, init) => s.fetchHandler(path, init) };
-    } catch {
-      return null;
+    } catch (err) {
+      // A grant the server no longer accepts (refused refresh, revoked, no session): gone. (A client auth method the
+      // server dropped makes the library delete the session itself, so the next call lands here.)
+      if (isExpectedSessionError(err)) return null;
+      throw err;
     }
   }
 

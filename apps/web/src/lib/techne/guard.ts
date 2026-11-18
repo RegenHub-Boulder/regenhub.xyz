@@ -36,8 +36,9 @@ export function clientIp(req: Request): string {
   );
 }
 
-/** Per-IP limits, each an hour long. */
-export const IP_LIMITS = { signin: 30, link: 10, confirm: 20 } as const;
+/** Per-IP limits, each an hour long. Generous: everyone at the hub shares its one public IP (a full Agents Night
+ *  signing in to RSVP); these only stop a flood. The per-account and per-member limits are in SQL. */
+export const IP_LIMITS = { signin: 300, link: 30, confirm: 60 } as const;
 
 /** Count this call against the IP's hourly limit for `route`. Fails open when the database can't answer (logged). */
 export async function withinIpLimit(admin: Admin, req: Request, route: keyof typeof IP_LIMITS): Promise<boolean> {

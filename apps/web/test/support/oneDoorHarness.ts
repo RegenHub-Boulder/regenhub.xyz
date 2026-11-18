@@ -39,6 +39,13 @@ export class FakeTechne {
   handles = new Map<string, string>();
   /** A revocation that never answers (a PDS that hangs). */
   hangRevoke = false;
+  /** Access token lifetime; a short one makes the next call refresh. */
+  expiresIn = 3600;
+  /** How a refresh fails: unreachable (no answer) or refused (invalid_grant, a revoked grant). */
+  failRefresh: null | "unreachable" | "invalid_grant" = null;
+  refreshTokens = new Map<string, Par>();
+  /** listRecords answers 500 (a PDS having a bad moment). */
+  failList = false;
   constructor(
     readonly origin: string,
     readonly jwks: () => Promise<{ keys: unknown[] }>,
@@ -111,16 +118,26 @@ export class FakeTechne {
       const bad = await this.checkAssertion(form);
       if (bad) return json(401, { error: "invalid_client", error_description: bad });
       if (!headers.get("dpop")) return json(400, { error: "invalid_dpop_proof" });
-      const par = this.codes.get(form.get("code") ?? "");
-      if (!par?.did) return json(400, { error: "invalid_grant" });
-      this.codes.delete(form.get("code")!);
+      let par: Par | undefined;
+      if (form.get("grant_type") === "refresh_token") {
+        if (this.failRefresh === "unreachable") throw new TypeError("fetch failed");
+        par = this.refreshTokens.get(form.get("refresh_token") ?? "");
+        if (!par || this.failRefresh === "invalid_grant") return json(400, { error: "invalid_grant" });
+        this.refreshTokens.delete(form.get("refresh_token")!);
+      } else {
+        par = this.codes.get(form.get("code") ?? "");
+        if (!par?.did) return json(400, { error: "invalid_grant" });
+        this.codes.delete(form.get("code")!);
+      }
       const access = `at-${randomBytes(8).toString("hex")}`;
-      this.tokens.set(access, par.did);
+      const refresh = `rt-${randomBytes(8).toString("hex")}`;
+      this.tokens.set(access, par.did!);
+      this.refreshTokens.set(refresh, par);
       return json(200, {
         access_token: access,
         token_type: "DPoP",
-        expires_in: 3600,
-        refresh_token: `rt-${randomBytes(8).toString("hex")}`,
+        expires_in: this.expiresIn,
+        refresh_token: refresh,
         scope: par.scope,
         sub: par.did,
       });
@@ -147,6 +164,7 @@ export class FakeTechne {
         return json(200, { uri, cid: "bafyrecord" });
       }
       if (nsid === "com.atproto.repo.listRecords") {
+        if (this.failList) return json(500, { error: "InternalServerError" });
         const repo = url.searchParams.get("repo");
         const coll = url.searchParams.get("collection");
         const records = [...this.records.values()].filter((r) => r.uri.startsWith(`at://${repo}/${coll}/`));

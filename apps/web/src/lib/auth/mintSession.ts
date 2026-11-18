@@ -3,7 +3,7 @@ import type { createServiceClient } from "@/lib/supabase/admin";
 
 /**
  * Start a Supabase session for `email` on this response, server-side, with no email sent. Used by the
- * one door (POST /api/auth/techne/session, /link/confirm) and the old regenOS lane.
+ * one door (GET /techne/callback, POST /api/auth/techne/link/confirm) and the old regenOS lane.
  *
  * The repo's precedent for server-side provisioning is `signInWithOtp({ shouldCreateUser: true })`, but it
  * EMAILS a link. So: `generateLink` (admin API, sends nothing, returns the hashed token) redeemed at once by

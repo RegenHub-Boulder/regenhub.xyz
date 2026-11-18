@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { JoseKey } from "@atproto/oauth-client-node";
+import { createHash } from "node:crypto";
 import type { PGlite } from "@electric-sql/pglite";
 import { one, rows } from "../../../../../test/onchainDb";
 import type { FakeAuthUser } from "../../../../../test/pglitePostgrest";
@@ -275,6 +276,36 @@ describe("Sign in with Techne", () => {
     expect(victim.get("__Host-regenhub-techne")).toBeUndefined();
   });
 
+  it("a sign-in started in two tabs finishes in either", async () => {
+    const alice = account("alice");
+    await addMember("Alice Member", "alice@example.test", alice.did);
+    const first = await startSignIn("/events/a");
+    const second = await startSignIn("/portal");
+    expect((await land(home.approve(first, alice.did))).pathname).toBe("/events/a");
+    expect(techneCookie()).toBeTruthy();
+    expect((await land(home.approve(second, alice.did))).pathname).toBe("/portal");
+  });
+
+  it("a callback that didn't start here doesn't touch the account's session in other browsers", async () => {
+    const alice = account("alice");
+    const phone: Jar = new Map();
+    await land(home.approve(await startSignIn("/events", phone), alice.did), phone);
+    const stray = home.approve(await startSignIn("/events", new Map()), alice.did);
+    await land(stray, new Map()); // no nonce in this browser: refused
+    browser.jar = phone;
+    const res = await rsvpGET(new NextRequest(`${SITE}/api/techne/rsvp?event=${encodeURIComponent(`at://${plc("regenhub")}/community.lexicon.calendar.event/3abc`)}`));
+    expect(await res.json()).toMatchObject({ signedIn: true, did: alice.did });
+  });
+
+  it("a linked member whose portal can't open is told so on a portal page, not sent round in a loop", async () => {
+    const nora = account("nora");
+    await addMember("Nora Member", null as unknown as string, nora.did); // no email on the membership
+    const to = await signIn(nora.did, "/portal");
+    expect(to.pathname).toBe("/auth/login");
+    expect(to.searchParams.get("error")).toBe("techne_portal");
+    expect(techneCookie()).toBeTruthy(); // still signed in with Techne (RSVP works)
+  });
+
   it("only this site's own client opens anything: no cookie, a made-up cookie, or a made-up callback get nothing", async () => {
     const alice = account("alice");
     await addMember("Alice Member", "alice@example.test", alice.did);
@@ -320,6 +351,18 @@ describe("sign-out", () => {
     expect(await rows(pg, "select * from techne_oauth_sessions")).toEqual([]);
   }, 10_000);
 
+  it("signing in again in the same browser replaces its sign-in, so sign-out still revokes", async () => {
+    const alice = account("alice");
+    await addMember("Alice Member", "alice@example.test", alice.did);
+    await signIn(alice.did);
+    await signIn(alice.did);
+    expect((await rows(pg, "select * from techne_web_sessions")).length).toBe(1);
+    const revokedBefore = home.revoked.length;
+    await signOut();
+    expect(home.revoked.length).toBe(revokedBefore + 1);
+    expect(await rows(pg, "select * from techne_oauth_sessions")).toEqual([]);
+  });
+
   it("keeps the account's OAuth session while another browser is still signed in with it", async () => {
     const alice = account("alice");
     const other: Jar = new Map();
@@ -354,6 +397,33 @@ describe("RSVP", () => {
     // Changing their mind rewrites the same record.
     expect((await postJson(rsvpPOST, { event: EVENT, status: "notgoing" })).body.rkey).toBe(rkey);
     expect(await read()).toMatchObject({ own: { rkey, status: "notgoing" } });
+  });
+
+  it("Techne unreachable during a refresh: 503, and the sign-in stays; a refused refresh ends it", async () => {
+    home.expiresIn = 1; // the next call refreshes
+    const lee = account("lee");
+    await signIn(lee.did, "/events/x");
+    home.failRefresh = "unreachable";
+    const down = await rsvpGET(new NextRequest(`${SITE}/api/techne/rsvp?event=${encodeURIComponent(EVENT.uri)}`));
+    expect(down.status).toBe(503);
+    expect(techneCookie()).toBeTruthy();
+    expect((await rows(pg, "select * from techne_web_sessions")).length).toBe(1);
+    home.failRefresh = "invalid_grant";
+    expect(await read()).toEqual({ signedIn: false });
+    expect(techneCookie()).toBeNull();
+  });
+
+  it("never writes a second RSVP when it can't look up the first", async () => {
+    const lee = account("lee");
+    await signIn(lee.did, "/events/x");
+    await postJson(rsvpPOST, { event: EVENT, status: "going" });
+    home.failList = true;
+    expect((await postJson(rsvpPOST, { event: EVENT, status: "notgoing" })).status).toBe(502);
+    expect(home.records.size).toBe(1);
+    // With the key GET gave, it rewrites that record without a look-up.
+    const rkey = [...home.records.values()][0].uri.split("/").pop()!;
+    expect((await postJson(rsvpPOST, { event: EVENT, status: "notgoing", rkey })).body.rkey).toBe(rkey);
+    expect(home.records.size).toBe(1);
   });
 
   it("refuses a cross-site or non-JSON post (login CSRF and friends)", async () => {
@@ -445,30 +515,31 @@ describe("linking a Techne account to a membership", () => {
     expect(await rows(pg, "select * from techne_link_requests")).toEqual([]);
   });
 
-  it("rate-limits: 3 asks an hour per account; per member 10 emails an hour and 30 in all, silently", async () => {
+  it("rate-limits: 3 asks an hour per account; 50 link emails an hour in all says busy, whatever the email", async () => {
     const hank = account("hank");
     await addMember("Hank Member", "hank@example.test");
     await signIn(hank.did);
     for (let i = 0; i < 3; i++) expect((await postJson(linkPOST, { email: "hank@example.test" })).status).toBe(200);
     expect((await postJson(linkPOST, { email: "hank@example.test" })).status).toBe(429);
 
-    // 30 link emails an hour in all: the 31st ask for a real member sends nothing and says the same.
-    await pg.exec(`insert into techne_link_requests (code_hash, did, emailed) select 'h' || g, '${plc("other")}', true from generate_series(1, 27) g`);
+    // 50 link emails an hour in all: then every ask is "busy", member email or not (so it says nothing about it).
+    await pg.exec(`insert into techne_link_requests (code_hash, did, emailed) select 'h' || g, '${plc("other")}', true from generate_series(1, 47) g`);
     await addMember("Kim Member", "kim@example.test");
     browser.jar = new Map();
     await signIn(account("kim").did);
-    expect(await postJson(linkPOST, { email: "kim@example.test" })).toMatchObject({ status: 200, body: { status: "sent" } });
+    const busyMember = await postJson(linkPOST, { email: "kim@example.test" });
+    const busyNobody = await postJson(linkPOST, { email: "nobody@example.test" });
+    expect(busyMember).toEqual(busyNobody);
+    expect(busyMember.status).toBe(429);
+    expect(String(busyMember.body.error)).toMatch(/busy/);
     await new Promise((r) => setTimeout(r, 50));
     expect(edge.mails).toHaveLength(3); // hank's three; none for kim
   });
 
-  it("limits each IP: the 11th ask in an hour from one address is refused", async () => {
-    await addMember("Ivy Member", "ivy@example.test");
-    for (let i = 0; i < 10; i++) {
-      browser.jar = new Map();
-      await signIn(account(`asker${"abcdefghij"[i]}`).did);
-      expect((await postJson(linkPOST, { email: "nobody@example.test" }, { "x-forwarded-for": "203.0.113.9" })).status).toBe(200);
-    }
+  it("limits each IP: past 30 asks in an hour from one address, refused; another address is fine", async () => {
+    await signIn(account("asker").did);
+    const ip = createHash("sha256").update("203.0.113.9").digest("hex").slice(0, 32);
+    await pg.exec(`insert into techne_rate_hits (bucket) select 'link:${ip}' from generate_series(1, 30)`);
     expect((await postJson(linkPOST, { email: "nobody@example.test" }, { "x-forwarded-for": "203.0.113.9" })).status).toBe(429);
     expect((await postJson(linkPOST, { email: "nobody@example.test" }, { "x-forwarded-for": "203.0.113.10" })).status).toBe(200);
   });

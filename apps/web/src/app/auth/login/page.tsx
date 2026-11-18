@@ -20,6 +20,8 @@ const TECHNE_ERRORS: Record<string, string> = {
   techne: "Sign-in with Techne didn't finish. Try again.",
   techne_start: "Couldn't reach Techne to start sign-in. Try again in a moment, or use an email link.",
   techne_busy: "That's a lot of sign-ins from here. Try again in an hour, or use an email link.",
+  techne_portal:
+    "You're signed in with Techne, but your portal couldn't open just now. Use an email link instead, or email us if it keeps happening.",
 };
 
 interface PageProps {

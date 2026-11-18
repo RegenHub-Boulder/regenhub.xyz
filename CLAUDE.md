@@ -319,9 +319,9 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   and that the issuer is that DID's own PDS, a nonce cookie ties it to the browser that started it, and the Supabase
   session (`lib/auth/mintSession.ts`) is minted **only for the member whose `members.did` is that DID**, there and
   on link confirm, nowhere else. No match = no portal session; `/auth/login` (`components/auth/TechneDoor.tsx`, a
-  server component) offers "Already a member?" (email → `POST /api/auth/techne/link` → `begin_techne_link`: 10 an
-  hour per IP, 3 per DID (429), 10 emails per member and 30 in all (silent), email to the MEMBER ROW's email only,
-  sent after the answer, same answer either way) and "Not a member yet?". The emailed `/auth/techne/link?code=`
+  server component) offers "Already a member?" (email → `POST /api/auth/techne/link` → `begin_techne_link`: 30 an
+  hour per IP, 3 per DID (429), 50 emails an hour in all (429 "busy", before the email is looked up), 10 per member
+  (silent), email to the MEMBER ROW's email only, sent after the answer, same answer either way) and "Not a member yet?". The emailed `/auth/techne/link?code=`
   page needs a click and the same Techne account (`/link/confirm` → `confirm_techne_link`, audited
   `techne_did_linked`), and the member is emailed that an account was linked. **Unlink:** `/portal/profile` and the
   admin member page (Access) → `unlink_techne` (clears `members.did`, ends that account's sign-ins here and the
