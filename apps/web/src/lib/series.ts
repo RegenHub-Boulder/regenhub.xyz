@@ -12,10 +12,10 @@
  * wherever Techne events show. Record keys stay TIDs, as the lexicon declares
  * (`"key": "tid"`); the series is never encoded in the key.
  *
- * A series has no recurring schedule and promises none. Its nights are
- * the ones a steward posts. `confirmedDates` and the times below are EDITABLE
- * DATA, used only to suggest nights in /portal/events; 6:30–9pm is a
- * placeholder until the hosts confirm.
+ * A series meets on a monthly rule (Agents Night: 1st Tuesday; Civic Tech Night: 3rd Tuesday; Aaron, 11-18).
+ * The rule invents no events: a visitor sees a night only once a steward has posted it. The rule is used
+ * to say the rhythm in public copy and to suggest the next nights in /portal/events. The rule and the
+ * times below are EDITABLE DATA; 6:30–9pm is a placeholder until the hosts confirm.
  */
 
 export type SeriesSlug = "agents-night" | "civic-tech-night";
@@ -29,6 +29,12 @@ export interface SeriesPlace {
   country: string;
 }
 
+/** "The nth `weekday` of every month" (`weekday` 0 = Sunday … 6 = Saturday; `nth` 1–4). */
+export interface MonthlyRule {
+  nth: 1 | 2 | 3 | 4;
+  weekday: number;
+}
+
 export interface Series {
   slug: SeriesSlug;
   name: string;
@@ -36,11 +42,8 @@ export interface Series {
   blurb: string;
   /** A short paragraph for the series page. */
   about: string;
-  /**
-   * Nights the hosts have confirmed, `YYYY-MM-DD` in `timezone`. Only suggestions for
-   * "Add the next nights" in /portal/events; visitors see a night once it is posted.
-   */
-  confirmedDates: readonly string[];
+  /** The monthly rhythm. Suggests nights in /portal/events and words `rhythm`; posts nothing by itself. */
+  rule: MonthlyRule;
   /** Default local wall-clock `HH:mm` in `timezone` for a new night. */
   startTime: string;
   endTime: string;
@@ -67,7 +70,7 @@ export const SERIES: readonly Series[] = [
     about:
       "Bring what you're building with AI agents, or come to see what others are building. A few short demos, " +
       "then open tables to compare notes. Open to anyone; no membership needed.",
-    confirmedDates: ["2026-12-01"],
+    rule: { nth: 1, weekday: 2 },
     startTime: "18:30",
     endTime: "21:00",
     timezone: "America/Denver",
@@ -81,7 +84,7 @@ export const SERIES: readonly Series[] = [
     about:
       "A night for people who build tools for their town and people who need them. Bring a project, " +
       "or a problem your neighborhood group is stuck on, and work on it with others. Open to anyone.",
-    confirmedDates: ["2026-12-10"],
+    rule: { nth: 3, weekday: 2 },
     startTime: "18:30",
     endTime: "21:00",
     timezone: "America/Denver",
@@ -89,6 +92,37 @@ export const SERIES: readonly Series[] = [
     capacity: null,
   },
 ];
+
+const ORDINALS = ["", "First", "Second", "Third", "Fourth"];
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/** The rhythm in words: "Third Tuesday of each month". */
+export function rhythmOf(series: Pick<Series, "rule">): string {
+  return `${ORDINALS[series.rule.nth]} ${WEEKDAYS[series.rule.weekday]} of each month`;
+}
+
+/** The date of the nth `weekday` in a month (`month` 1–12), `YYYY-MM-DD`. A calendar date, so no zone. */
+export function nthWeekdayOfMonth(year: number, month: number, rule: MonthlyRule): string {
+  const firstDow = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
+  const day = 1 + ((rule.weekday - firstDow + 7) % 7) + (rule.nth - 1) * 7;
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+/** The first `count` dates of the rule on or after `fromDate` (`YYYY-MM-DD`), in order. */
+export function ruleDatesFrom(rule: MonthlyRule, fromDate: string, count: number): string[] {
+  let y = +fromDate.slice(0, 4);
+  let m = +fromDate.slice(5, 7);
+  const out: string[] = [];
+  while (out.length < count) {
+    const d = nthWeekdayOfMonth(y, m, rule);
+    if (d >= fromDate) out.push(d);
+    if (++m > 12) {
+      m = 1;
+      y++;
+    }
+  }
+  return out;
+}
 
 export function getSeries(slug: string): Series | null {
   return SERIES.find((s) => s.slug === slug) ?? null;

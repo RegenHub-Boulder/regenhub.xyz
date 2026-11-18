@@ -46,7 +46,7 @@ describe("series keys", () => {
 });
 
 describe("series copy", () => {
-  it("promises no repeating schedule in what visitors read", () => {
+  it("says the rhythm only through rhythmOf, not in the blurb or about", () => {
     for (const s of SERIES) {
       expect(`${s.name} ${s.blurb} ${s.about}`).not.toMatch(/monthly|weekly|every|alternate|second thursday|biweekly/i);
     }

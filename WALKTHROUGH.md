@@ -1,3 +1,22 @@
+# T-482 recurring Tuesdays: Agents Night 1st Tuesday, Civic Tech Night 3rd Tuesday
+
+**What's judged:** that the rhythm is now said in public ("First Tuesday of each month") while no event is invented:
+dates still come only from nights a steward posts. Look at the rhythm line on the cards and series pages.
+
+## Run it
+`pnpm --filter web build`, then `PORT=18777 HOSTNAME=127.0.0.1 pnpm --filter web start` and open `/events`.
+(With no Techne configured nothing is posted, so each card says "Next date coming soon".)
+
+## Steps (screens in `walkthrough/rhythm/`, 390x844)
+1. **/events** (`01`). *"The two nights now say when they meet: first Tuesday, third Tuesday."*
+2. **Agents Night** (`02`). *"Same line under the title. The next date appears once a steward posts it."*
+3. **Civic Tech Night** (`03`). *"Civic Tech moves to Tuesdays."*
+4. **/portal/events, Add the next nights** (steward only, not screenshotted). It suggests Agents Night 1 Dec, 5 Jan,
+   2 Feb and Civic Tech Night 15 Dec, 19 Jan, 16 Feb; a posted date is skipped; the date picker stays.
+   Dates are pinned in `lib/seriesNights.test.ts`.
+
+---
+
 # T-482 one door, after the PR #122 review: "Sign in with Techne" signs you into the whole site (staging, sample data)
 
 **What's judged:** whether signing in still feels like one thing now that the server holds the sign-in. Look at:

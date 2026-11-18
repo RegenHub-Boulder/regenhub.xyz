@@ -90,7 +90,7 @@ export default async function ManageEventsPage() {
     startAt: e.startAt,
     cancelled: isCancelled(e),
   }));
-  // With the calendar unreadable, every confirmed night would look unposted: suggest none.
+  // With the calendar unreadable, every rule night would look unposted: suggest none.
   const nights = read ? SERIES.flatMap((s) => unpostedNights(s, posted, now)) : [];
 
   return (

@@ -10,8 +10,8 @@ import { SERIES, dateIn, type PlannedNight } from "@/lib/series";
 import { pickedNight, seriesNightInput, type PostedNight } from "@/lib/seriesNights";
 
 /**
- * "Add the next nights": the hosts' confirmed nights of each series
- * (lib/series.ts `confirmedDates`) not posted yet, plus any night a steward
+ * "Add the next nights": the next nights of each series' monthly rule
+ * (lib/series.ts `rule`) not posted yet, plus any night a steward
  * picks by hand. Ticking some and posting creates each as an ordinary public
  * event of the collective (the same write as "New event"), named after the
  * series so the series page, cards and feeds pick it up. Edit one afterwards
