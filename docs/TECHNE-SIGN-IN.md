@@ -61,9 +61,12 @@ the person presses "Link and open my portal", which needs the **same Techne acco
 (`transition:generic`, an app password, or this `rpc:` scope) can ask their PDS for a proof and open their portal
 session. That is how atproto service auth works; the portal session is the same one an email link gives, and billing
 and admin pages keep their own checks. The narrower alternative is a confidential server-side OAuth client, a larger
-change. (2) A disabled member can still sign in, as with the email link (parity, not new). Hardened in review: the
+change. (2) A disabled member can still sign in, as with the email link (parity, not new). (3) Four Techne accounts
+asking 3 times each can use up a member's 10 link emails for an hour; the member then hears "sent" and nothing
+arrives (the email link sign-in still works). (4) did:web names are filtered, not resolved: a public name that
+resolves to a private address still gets an https request (certificate-checked, the answer never shown). Hardened in review: the
 use-once key is the signed content (a re-encoded or re-signed copy is refused), only canonical signatures pass,
-did:web resolves only public DNS names with no redirects, the per-member email cap is silent, sign-out waits at most
+did:web resolves only DNS names (no IP literals, decimal or hex) with no redirects, the per-member email cap is silent, sign-out waits at most
 3 s for the PDS, and the link email carries no handle (a DID document's own unverified claim).
 
 **Not a member.** A visitor signs in, RSVPs, and `/auth/login` tells them they can RSVP and points to /membership and

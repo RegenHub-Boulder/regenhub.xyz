@@ -154,6 +154,7 @@ function isPublicDidWeb(did: string): boolean {
   if (!m) return false;
   const host = m[1].toLowerCase();
   const labels = host.split(".");
-  if (labels.every((l) => /^\d+$/.test(l))) return false; // an IPv4 literal
+  // The URL parser reads a host whose last label is a number (decimal, or 0x… hex) as IPv4: "192.168.1.0xc8".
+  if (/^(\d+|0x[0-9a-f]*)$/.test(labels[labels.length - 1])) return false;
   return !/(^|\.)(localhost|local|internal|lan|home\.arpa|localdomain)$/.test(host);
 }

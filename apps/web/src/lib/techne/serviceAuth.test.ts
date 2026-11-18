@@ -100,7 +100,7 @@ describe("didResolver", () => {
     await r("did:plc:abc");
     await r("did:web:alice.example");
     for (const bad of [
-      "did:web:evil.example/path", "did:key:z6Mk", "did:web:alice.example%3A8443", "did:web:192.168.1.200",
+      "did:web:evil.example/path", "did:key:z6Mk", "did:web:alice.example%3A8443", "did:web:192.168.1.200", "did:web:192.168.1.0xc8", "did:web:0x7f.1",
       "did:web:localhost", "did:web:printer.local", "did:web:nas.lan",
     ]) {
       await expect(r(bad)).rejects.toThrow("unsupported DID");
