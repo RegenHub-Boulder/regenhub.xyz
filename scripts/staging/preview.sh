@@ -5,8 +5,13 @@
 #   seed: "RegenHub (staging)" collective (its steward is a sample person too), the first night of each series,
 #         sample people
 #   stand-in for the person's PDS 127.0.0.1:B+3 (scripts/staging/techne-standin.mjs), sample RSVPs
-#   stand-in for Supabase auth 127.0.0.1:B+4 (scripts/staging/supabase-standin.mjs): a sample portal session, so
-#         /portal/events can be reached (open /staging/portal-session)
+#   stand-in for Supabase 127.0.0.1:B+4 (scripts/staging/supabase-standin.mjs): PGlite with migration 064 and
+#         sample members (two linked to their Techne account, one not), GoTrue's session calls; the one door
+#         ("Sign in with Techne" on /auth/login) starts the portal session through it
+#   the app is built with NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:B+4 (build-time, so the service client
+#         reaches the stand-in, never production) and NEXT_PUBLIC_SITE_URL=<the tailnet URL>:
+#         NEXT_PUBLIC_SITE_URL=https://uni.taildf9ce2.ts.net:8591 NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:18614 \
+#           SUPABASE_SERVICE_ROLE_KEY=staging pnpm --filter web build
 #   regenhub.xyz (this worktree's build) 127.0.0.1:B, served on the tailnet by Uni
 # No production database, no production Techne, no production Supabase.
 # Env: T482_STATE (state dir, default ~/.cache/t482), T482_BUILD (where pgenv/, target/ and appview.env live;
@@ -38,7 +43,7 @@ export DATABASE_URL="postgres://postgres@127.0.0.1:$P_PG/t482" BIND_ADDR="127.0.
 for _ in $(seq 60); do curl -sf "http://127.0.0.1:$P_APPVIEW/health" >/dev/null && break; sleep 1; done
 node "$ROOT/scripts/staging/seed.mjs" --appview "http://127.0.0.1:$P_APPVIEW" --out "$STATE" > "$S/seed.log"
 node "$ROOT/scripts/staging/techne-standin.mjs" --port "$P_STANDIN" --appview "http://127.0.0.1:$P_APPVIEW" --state "$STATE" > "$S/standin.log" 2>&1 & pids+=($!)
-node "$ROOT/scripts/staging/supabase-standin.mjs" --port "$P_SUPA" > "$S/supabase-standin.log" 2>&1 & pids+=($!)
+node "$ROOT/scripts/staging/supabase-standin.mjs" --port "$P_SUPA" --state "$STATE" > "$S/supabase-standin.log" 2>&1 & pids+=($!)
 for _ in $(seq 20); do curl -sf -o /dev/null "http://127.0.0.1:$P_STANDIN/signin" && break; sleep 0.5; done
 node "$ROOT/scripts/staging/seed-rsvps.mjs" --standin "http://127.0.0.1:$P_STANDIN" --state "$STATE" >> "$S/seed.log"
 
@@ -46,6 +51,6 @@ COLLECTIVE="$(node -e 'console.log(require(process.argv[1]).collective)' "$STATE
 cd "$ROOT/apps/web"
 export REGENOS_BASE_URL="http://127.0.0.1:$P_STANDIN" REGENOS_COLLECTIVE_DID="$COLLECTIVE" \
   TECHNE_SIGNIN_ENABLED=true TECHNE_STAGING_STANDIN=1 TECHNE_STANDIN_URL="http://127.0.0.1:$P_STANDIN" \
-  SUPABASE_INTERNAL_URL="http://127.0.0.1:$P_SUPA" NODE_ENV=production
+  SUPABASE_INTERNAL_URL="http://127.0.0.1:$P_SUPA" SUPABASE_SERVICE_ROLE_KEY=staging NODE_ENV=production
 # Not exec: the shell stays, so the trap above stops the rest when next exits.
 node_modules/.bin/next start -H 127.0.0.1 -p "$B"

@@ -1,26 +1,20 @@
 "use client";
 
 /**
- * /portal/events behind "Sign in with Techne": the same client, scopes and session as RSVP
- * (useTechneSession; one sign-in for everyone, lib/techne/session.ts signInScope). Signed out, the door.
- * Signed in, the calendar and the posting form, for anyone: Techne decides on each write whether this
- * person may post as RegenHub (lib/techne/collectiveWrite.ts, straight to their PDS). RegenHub's public
- * membership claims (GET /api/portal/events/standing, lib/techne/standing.ts) only say what to expect:
- * the person's role when one is public, else "posting works if you manage RegenHub on Techne".
- * A refused write shows Techne's own words above the calendar. No regenOS cookie, no /xrpc proxy.
+ * /portal/events behind "Sign in with Techne": the same server-held session as RSVP (one sign-in for everyone,
+ * lib/techne/session.ts signInScope). Not signed in with Techne: the door. Signed in: the calendar and the
+ * posting form, for anyone: Techne decides on each write whether this person may post as RegenHub. Writes go
+ * through this server (POST /api/portal/events/write, which sends them to the person's PDS with their session).
+ * RegenHub's public membership claims (GET /api/portal/events/standing, lib/techne/standing.ts) only say what to
+ * expect: the person's role when one is public, else "posting works if you manage RegenHub on Techne".
+ * A refused write shows Techne's own words above the calendar.
  */
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
-import type { TechneConfig } from "@/lib/techne/config";
 import type { Standing } from "@/lib/techne/standing";
 import type { PlannedNight } from "@/lib/series";
 import type { PostedNight } from "@/lib/seriesNights";
 import { STEWARD_PATH } from "@/lib/techne/session";
-import { deleteEventBatch, putEventBatch, type EventInput, type ExistingEvent } from "@/lib/techne/collectiveEvents";
-import { sendCollectiveBatch, writeErrorText } from "@/lib/techne/collectiveWrite";
-import type { Session } from "@/lib/techne/call";
-import { useTechneSession } from "@/components/techne/useTechneSession";
 import { SignInWithTechne, SignOutOfTechne } from "@/components/techne/SignInWithTechne";
 import { ManageEvents, type EventWrite, type ManageableEvent } from "@/components/portal/ManageEvents";
 
@@ -37,7 +31,7 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 }
 
 export function StewardEvents({
-  config: configProp,
+  techne,
   authority,
   events,
   nights,
@@ -45,7 +39,8 @@ export function StewardEvents({
   readFailed,
   editingOff,
 }: {
-  config: TechneConfig;
+  /** Who this browser is signed in with Techne as (server-side), or null. */
+  techne: { did: string; handle: string | null } | null;
   authority: string;
   events: ManageableEvent[];
   nights: PlannedNight[];
@@ -55,9 +50,8 @@ export function StewardEvents({
   /** The calendar read, but not each event's config and listing: editing waits for a reload. */
   editingOff: boolean;
 }) {
-  const { config, phase, session, error, start, signOut } = useTechneSession(configProp, STEWARD_PATH);
   const [lastCheck, setCheck] = useState<Check | null>(null);
-  const did = session?.did ?? null;
+  const did = techne?.did ?? null;
   const check = lastCheck && lastCheck.did === did ? lastCheck : null;
 
   useEffect(() => {
@@ -75,22 +69,13 @@ export function StewardEvents({
     };
   }, [did]);
 
-  if (phase === "restoring") {
-    return <Loader2 className="w-5 h-5 animate-spin text-muted" aria-label="Loading" />;
-  }
-
-  if (phase !== "signed-in" || !session) {
+  if (!techne) {
     return (
       <Panel title="Sign in with Techne to manage events">
         <p>RegenHub&apos;s calendar lives on Techne. Sign in with your Techne account; posting as RegenHub works if you manage RegenHub on Techne.</p>
         <div className="pt-1 text-center">
-          <SignInWithTechne busy={phase === "starting"} onStart={(signUp) => void start(signUp)} />
+          <SignInWithTechne next={STEWARD_PATH} />
         </div>
-        {error && (
-          <p className="text-red-300" role="alert">
-            {error}
-          </p>
-        )}
       </Panel>
     );
   }
@@ -98,13 +83,13 @@ export function StewardEvents({
   const role = check?.state === "done" ? check.standing.roleName : null;
   const who = (
     <div className="text-xs text-muted space-y-1" data-testid="steward-who">
-      <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span>
-          Signed in with Techne as <code className="text-foreground">{session.did}</code>
+          Signed in with Techne as <code className="text-foreground">{techne.handle ? `@${techne.handle}` : techne.did}</code>
           {role ? ` · RegenHub ${role}` : ""}
         </span>
-        <SignOutOfTechne onSignOut={() => void signOut()} />
-      </p>
+        <SignOutOfTechne />
+      </div>
       {/* Only a hint: claims may be private, and Techne decides on the write. */}
       {check && !(check.state === "done" && check.standing.canManageEvents) && (
         <p data-testid="steward-hint">
@@ -117,14 +102,19 @@ export function StewardEvents({
   );
 
   const write: EventWrite = async (op, input, existing) => {
-    const known: ExistingEvent | null = existing
-      ? { rkey: existing.rkey, value: existing.value as Record<string, unknown>, config: existing.config ?? null, hasListing: !!existing.hasListing }
-      : null;
-    if (op !== "create" && !known) throw new Error("That event isn't on the page any more. Reload and try again.");
-    const batch = op === "delete" ? deleteEventBatch(authority, known!) : putEventBatch(authority, input as unknown as EventInput, known);
-    const out = await sendCollectiveBatch(session as Session, config, batch);
-    if (out.ok) return;
-    throw new Error(writeErrorText(out));
+    const res = await fetch("/api/portal/events/write", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        op,
+        input,
+        existing: existing
+          ? { rkey: existing.rkey, value: existing.value, config: existing.config ?? null, hasListing: !!existing.hasListing }
+          : null,
+      }),
+    });
+    const out = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+    if (!res.ok || !out.ok) throw new Error(out.error ?? "Couldn't tell whether Techne took that. Reload to see the calendar before trying again.");
   };
 
   return (

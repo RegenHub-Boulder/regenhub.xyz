@@ -2,10 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isStandInEnabled } from "@/lib/techne/config";
 
 /**
- * STAGING ONLY: carries the browser's "Sign in with Techne" stand-in calls
- * (lib/techne/standIn.ts) to the stand-in for a person's PDS
- * (scripts/staging/techne-standin.mjs). 404 unless TECHNE_STAGING_STANDIN is
- * on, which isStandInEnabled() refuses for the regenhub.xyz origin.
+ * STAGING ONLY: the stand-in's "pick a sample person" sign-in page
+ * (scripts/staging/techne-standin.mjs), which the server's stand-in client
+ * (lib/techne/standIn.ts) sends the browser to. Everything else the server
+ * asks the stand-in directly. 404 unless TECHNE_STAGING_STANDIN is on, which
+ * isStandInEnabled() refuses for the regenhub.xyz origin.
  */
 export const dynamic = "force-dynamic";
 
@@ -13,9 +14,9 @@ async function forward(req: NextRequest, ctx: { params: Promise<{ path: string[]
   const target = process.env.TECHNE_STANDIN_URL?.trim();
   if (!isStandInEnabled() || !target) return NextResponse.json({ error: "NotFound" }, { status: 404 });
   const path = (await ctx.params).path.join("/");
-  if (!/^(signin|xrpc\/[A-Za-z0-9.]+)$/.test(path)) return NextResponse.json({ error: "NotFound" }, { status: 404 });
+  if (path !== "signin") return NextResponse.json({ error: "NotFound" }, { status: 404 });
   const headers = new Headers();
-  for (const h of ["content-type", "accept", "x-standin-did", "atproto-proxy"]) {
+  for (const h of ["accept"]) {
     const v = req.headers.get(h);
     if (v) headers.set(h, v);
   }
@@ -31,4 +32,4 @@ async function forward(req: NextRequest, ctx: { params: Promise<{ path: string[]
   });
 }
 
-export { forward as GET, forward as POST };
+export { forward as GET };

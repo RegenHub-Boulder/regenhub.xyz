@@ -15,10 +15,8 @@ import { DayPassRedemptionHero } from "@/components/portal/DayPassRedemptionHero
 import { MembershipStatusCard } from "@/components/portal/MembershipStatusCard";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { planLabel, getPlan } from "@/lib/plans";
-import { isRegenosLoginEnabled } from "@/lib/regenos/config";
 import { isStewardEventsEnabled, isTechneSignInEnabled } from "@/lib/techne/config";
 import { isSyntheticEmail } from "@/lib/regenos/syntheticEmail";
-import { LinkRegenOSCard } from "@/components/portal/LinkRegenOSCard";
 import { OnchainBillingCard } from "@/components/portal/OnchainBillingCard";
 import { RemoveWalletButton } from "@/components/portal/RemoveWalletButton";
 import { isOnchainBillingConfigured, NATIVE_USDC_ADDRESS, TREASURY_ADDRESS } from "@/lib/onchain/config";
@@ -379,7 +377,6 @@ export default async function PortalPage() {
         hasActiveSubscription={!!activeSubscription}
       />
 
-      {isRegenosLoginEnabled() && !member.did && <LinkRegenOSCard />}
 
       <DayPassRedemptionHero member={member} />
 

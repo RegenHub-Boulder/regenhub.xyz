@@ -8,7 +8,6 @@ import { createRequire } from "node:module";
 const { chromium } = createRequire(process.env.PLAYWRIGHT_DIR + "/")("playwright");
 const BASE = process.argv[2] ?? "http://127.0.0.1:18600";
 const OUT = process.argv[3] ?? "walkthrough/techne-door";
-const SIGN_IN = '[data-testid=steward-panel] button:has-text("Sign in with Techne")';
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
 const page = await ctx.newPage();
@@ -20,12 +19,12 @@ const shot = async (name, fullPage = false) => {
   console.log(file);
 };
 
-// 1. In the portal (staging session), not yet signed in with Techne.
-await page.goto(BASE + "/staging/portal-session", { waitUntil: "networkidle" });
-await page.waitForSelector(SIGN_IN);
+// 1. Manage Events, signed out: the one door (/auth/login?next=/portal/events).
+await page.goto(BASE + "/portal/events", { waitUntil: "networkidle" });
+await page.waitForSelector("[data-testid=techne-door]");
 await shot("steward-signed-out");
-// 2. Sign in (the stand-in's picker in place of techne.town's sign-in).
-await page.click(SIGN_IN);
+// 2. Sign in (the stand-in's picker in place of techne.town's sign-in); one sign-in gives both sessions.
+await page.click("[data-testid=techne-door] button:has-text('Sign in with Techne')");
 await page.waitForSelector("text=Pick a sample person");
 await shot("sign-in");
 await page.click("text=RegenHub steward (sample)");
@@ -62,17 +61,19 @@ await page.waitForTimeout(800);
 await page.locator("[data-testid=rsvp-panel]").scrollIntoViewIfNeeded();
 await shot("rsvp-going");
 console.log("rsvp:", await page.textContent("[data-testid=rsvp-count]"), "|", await page.textContent("[data-testid=rsvp-mine]"));
-// 7. Sign out of Techne and back in as a member who isn't a steward.
-await page.click("text=Sign out of Techne");
+// 7. Sign out (both sessions) and back in, through the one door, as a member who isn't a steward (Ana: linked).
+await Promise.all([page.waitForResponse("**/auth/signout"), page.click("[data-testid=rsvp-panel] >> text=Sign out")]);
+await page.waitForSelector("[data-testid=rsvp-panel] >> text=Sign in with Techne");
 await page.goto(BASE + "/portal/events", { waitUntil: "networkidle" });
-await page.click(SIGN_IN);
+await page.waitForSelector("[data-testid=techne-door]");
+await page.click("[data-testid=techne-door] button:has-text('Sign in with Techne')");
 await page.waitForSelector("text=Pick a sample person");
-await page.click("text=Lee (sample)");
+await page.click("text=Ana (sample)");
 // Everyone signed in gets the form; Techne (here the stand-in PDS) decides on the write.
 await page.waitForSelector("[data-testid=steward-hint]");
-console.log("lee:", await page.textContent("[data-testid=steward-who]"));
+console.log("ana:", await page.textContent("[data-testid=steward-who]"));
 await page.click("button:has-text('New event')");
-await page.fill("#ev-name", "Lee's night");
+await page.fill("#ev-name", "Ana's night");
 await page.fill("#ev-starts", "2026-12-20T18:30");
 await page.click("button:has-text('Create event')");
 await page.waitForSelector("text=Techne didn't accept a post as RegenHub from this account", { timeout: 15000 });

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { MobileNav, type NavLink } from "@/components/nav/MobileNav";
 import { isStewardEventsEnabled } from "@/lib/techne/config";
+import { SignOutButton } from "@/components/auth/SignOutButton";
 
 export const metadata = { title: "Member Portal — RegenHub" };
 
@@ -42,13 +43,7 @@ export default async function PortalLayout({ children }: { children: React.React
           <div className="flex items-center gap-6">
             <MobileNav
               links={links}
-              trailing={
-                <form action="/auth/signout" method="post">
-                  <button className="text-sm text-muted hover:text-foreground transition-colors">
-                    Sign out
-                  </button>
-                </form>
-              }
+              trailing={<SignOutButton />}
             />
             <Link href="/" className="text-forest font-bold text-lg">RegenHub</Link>
             <div className="hidden sm:flex gap-4 text-sm">
@@ -64,9 +59,7 @@ export default async function PortalLayout({ children }: { children: React.React
               )}
             </div>
           </div>
-          <form action="/auth/signout" method="post" className="hidden sm:block">
-            <button className="text-sm text-muted hover:text-foreground transition-colors">Sign out</button>
-          </form>
+          <SignOutButton className="hidden sm:block" />
         </nav>
       </header>
       <main className="max-w-7xl mx-auto px-6 py-8">{children}</main>

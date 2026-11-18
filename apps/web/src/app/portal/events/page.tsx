@@ -11,9 +11,9 @@ import { unpostedNights } from "@/lib/seriesNights";
 import type { ManageableEvent } from "@/components/portal/ManageEvents";
 import { StewardEvents } from "@/components/portal/StewardEvents";
 import { STEWARD_PATH } from "@/lib/techne/session";
-import { isRegenosLoginEnabled } from "@/lib/regenos/config";
 import { OldStewardPage } from "@/components/portal/legacy/OldStewardPage";
-import Link from "next/link";
+import { loginUrlFor } from "@/lib/safeNext";
+import { currentTechne } from "@/lib/techne/webSession";
 
 export const metadata = { title: "Manage Events — RegenHub" };
 
@@ -24,12 +24,11 @@ export const dynamic = "force-dynamic";
  * Manage Events. With TECHNE_SIGNIN_ENABLED off this is the old regenOS-lane page, unchanged
  * (components/portal/legacy/OldStewardPage.tsx). With it on, RegenHub's calendar on Techne:
  *
- * Two doors, as everywhere in the portal: the Supabase sign-in gets you into the portal, and
- * "Sign in with Techne" (the site's one Techne session, shared with RSVP) says who you are on
- * Techne. The calendar is the documented public read every visitor gets (lib/regenos/events.ts).
+ * One door: "Sign in with Techne" on /auth/login opens the portal for a member and is the same server-held Techne
+ * session this page posts with (shared with RSVP). A member who came in by email link signs in with Techne here. The calendar is the documented public read every visitor gets (lib/regenos/events.ts).
  * Anyone signed in with Techne gets the form; Techne decides on each write whether they may post as
- * RegenHub (components/portal/StewardEvents.tsx). The old page stays at /portal/events/old while the
- * regenOS lane is on ("Old steward page").
+ * RegenHub (components/portal/StewardEvents.tsx). The old page is still served at /portal/events/old while the
+ * regenOS lane is on, but nothing links to it (the one door: no regenOS sign-in on any page).
  */
 export default async function ManageEventsPage() {
   const config = techneConfig();
@@ -41,7 +40,7 @@ export default async function ManageEventsPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect(`/auth/login?next=${encodeURIComponent(STEWARD_PATH)}`);
+  if (!user) redirect(loginUrlFor(STEWARD_PATH));
 
   // Strict: a list cut short would make posted nights look unposted, and they'd be offered again.
   const now = new Date();
@@ -101,20 +100,10 @@ export default async function ManageEventsPage() {
           <CalendarDays className="w-7 h-7 text-sage" />
           Manage Events
         </h1>
-        <p className="text-muted mt-1">
-          RegenHub&apos;s calendar on Techne.
-          {isRegenosLoginEnabled() && (
-            <>
-              {" "}
-              <Link href="/portal/events/old" className="underline underline-offset-2 hover:text-foreground">
-                Old steward page
-              </Link>
-            </>
-          )}
-        </p>
+        <p className="text-muted mt-1">RegenHub&apos;s calendar on Techne.</p>
       </div>
       <StewardEvents
-        config={config}
+        techne={await currentTechne()}
         authority={collective}
         events={manageable}
         nights={nights}

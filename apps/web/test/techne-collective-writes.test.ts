@@ -105,7 +105,7 @@ describe("the batch", () => {
 });
 
 describe("the request", () => {
-  const config = { clientId: "https://preview.test/techne/client-metadata.json", redirectUri: "https://preview.test/techne/callback" };
+  const config: TechneConfig = { clientId: "https://preview.test/techne/client-metadata.json", redirectUri: "https://preview.test/techne/callback", jwksUri: "https://preview.test/techne/jwks.json" };
   it("goes to the person's own PDS as applyWrites on the collective's repo, with no atproto-proxy; only the index hints are proxied", async () => {
     const calls: { path: string; headers: Headers; body: Record<string, unknown> }[] = [];
     // The OAuth session's fetchHandler resolves a path against the person's PDS: that is where it goes.
@@ -129,7 +129,7 @@ describe("the request", () => {
 });
 
 describe("what the steward is told when a write doesn't land", () => {
-  const config = { clientId: "https://preview.test/techne/client-metadata.json", redirectUri: "https://preview.test/techne/callback" };
+  const config: TechneConfig = { clientId: "https://preview.test/techne/client-metadata.json", redirectUri: "https://preview.test/techne/callback", jwksUri: "https://preview.test/techne/jwks.json" };
   const batch = () => putEventBatch(HUB, night(), null);
   const answering = (status: number, body: unknown) => ({ did: STEWARD, fetchHandler: async () => Response.json(body, { status }) });
   it("a refusal says Techne didn't accept a post as RegenHub, in Techne's own words, not that the role is wrong", async () => {
@@ -192,7 +192,7 @@ describe("end to end through the stand-in", () => {
   let appview: Server;
   let standin: ChildProcess;
   let base = "";
-  const config: TechneConfig = { clientId: "https://preview.test/techne/client-metadata.json", redirectUri: "https://preview.test/techne/callback" };
+  const config: TechneConfig = { clientId: "https://preview.test/techne/client-metadata.json", redirectUri: "https://preview.test/techne/callback", jwksUri: "https://preview.test/techne/jwks.json" };
 
   beforeAll(async () => {
     appview = createServer((_req, res) => {

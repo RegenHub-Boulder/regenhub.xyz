@@ -17,6 +17,8 @@
 //          that collective at role >= 30 (the ASSUMED Techne rule for a collective hosted on the same PDS;
 //          unproven until one real post). Else 403 Forbidden. x-standin-expired: 1 = a lapsed token, 401.
 //   - GET  /xrpc/pub.techne.draft.query.getRecords   the AppView's answer with the stand-in's writes applied
+//   - GET  /plc/<did>                    that person's DID document, for their handle (the app reads DIDs here on
+//          staging: TECHNE_STANDIN_URL/plc, lib/techne/did.ts)
 //   - everything else under /xrpc is passed to the AppView unchanged.
 // It also serves the collective's public membership claim for its steward (seed.json), as production
 // Techne does for a collective's founder (`mb-self-<did>`, role 40); the local AppView writes none.
@@ -111,6 +113,8 @@ const typesIn = (node) =>
 
 const cid = () => "bafystandin" + Math.random().toString(36).slice(2, 12);
 
+const known = (d) => people().some((p) => p.did === d);
+
 createServer(async (req, res) => {
   const url = new URL(req.url, "http://standin");
   const path = url.pathname;
@@ -135,6 +139,16 @@ h1{font-size:1.3rem}p{color:#555}ul{list-style:none;padding:0}li a{display:flex;
 li a:hover{background:#eef4f0}span{color:#666;font-size:.9rem}</style>
 <h1>Sign in with Techne</h1><p>Staging stand-in: on regenhub.xyz this is techne.town's sign-in. Pick a sample person.</p><ul>${rows}</ul>`);
       return;
+    }
+    if (path.startsWith("/plc/")) {
+      const d = decodeURIComponent(path.slice(5));
+      if (!known(d)) return json(res, 404, { message: "DID not registered" });
+      const handle = people().find((p) => p.did === d)?.handle;
+      return json(res, 200, {
+        id: d,
+        alsoKnownAs: handle ? [`at://${handle.replace(/^@/, "")}`] : [],
+        verificationMethod: [],
+      });
     }
     // Like pds.techne.town: repo methods are the PDS's own; it never forwards them to the platform.
     if (path.startsWith("/xrpc/com.atproto.repo.") && req.headers["atproto-proxy"]) {

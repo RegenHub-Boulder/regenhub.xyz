@@ -43,3 +43,20 @@ export async function sessionCall(
   }
   return res.json().catch(() => ({}));
 }
+
+/** Error names a PDS gives a token or DPoP proof it no longer accepts (as opposed to a write it won't allow). */
+const LAPSED_TOKEN = new Set(["ExpiredToken", "InvalidToken", "invalid_token", "invalid_dpop_proof"]);
+
+/** The PDS names this session's token as no good: below 500, in the body or the WWW-Authenticate challenge. */
+export function isLapsedToken(err: unknown): boolean {
+  return err instanceof XrpcError && err.status < 500 && [err.error, err.challenge].some((n) => !!n && LAPSED_TOKEN.has(n));
+}
+
+/**
+ * For a read of the person's own data (their RSVPs): the PDS won't take this session any more. A lapsed token, or any
+ * 401 that isn't a DPoP-nonce retry (a read of your own repo has nothing else to refuse).
+ */
+export function isSignedOutAnswer(err: unknown): boolean {
+  if (isLapsedToken(err)) return true;
+  return err instanceof XrpcError && err.status === 401 && ![err.error, err.challenge].includes("use_dpop_nonce");
+}

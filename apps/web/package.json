@@ -11,6 +11,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@atproto/jwk-jose": "0.2.4",
+    "@atproto/oauth-client-node": "0.5.16",
     "@metamask/connect-evm": "2.1.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@radix-ui/react-label": "^2.1.8",

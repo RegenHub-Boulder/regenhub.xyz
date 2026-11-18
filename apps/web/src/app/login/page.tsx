@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { MagicLinkWizard } from "@/components/auth/MagicLinkWizard";
 import { isRegenosLoginEnabled } from "@/lib/regenos/config";
+import { isTechneSignInEnabled } from "@/lib/techne/config";
 
 /**
  * `/login?token=…` — the landing page for the link regenOS EMAILS.
@@ -33,7 +34,8 @@ interface PageProps {
 }
 
 export default async function MagicLinkLoginPage({ searchParams }: PageProps) {
-  if (!isRegenosLoginEnabled()) {
+  // The one door (Techne) replaces the regenOS lane: with it on, /login is just the way to /auth/login.
+  if (!isRegenosLoginEnabled() || isTechneSignInEnabled()) {
     redirect("/auth/login");
   }
 

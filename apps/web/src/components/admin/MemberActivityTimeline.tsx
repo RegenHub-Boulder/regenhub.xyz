@@ -39,6 +39,8 @@ const ACTION_LABELS: Record<string, string> = {
   onchain_payment_after_void: "Member reported paying a voided or expired invoice (unverified; check, then refund)",
   onchain_day_pass_purchased: "Bought a day pass with USDC",
   onchain_pass_payment_exception: "USDC day pass payment not credited (see reason; check on chain, then settle by hand)",
+  techne_did_linked:      "Techne account linked (email link to the member email)",
+  techne_did_unlinked:    "Techne account unlinked",
   email_sent:             "Email sent",
   batch_email_sent:       "Batch email sent",
   free_day_approved:      "Free-day claim approved",
@@ -65,6 +67,10 @@ function summary(row: ActionRow): string | null {
       return `+1 day pass · $${typeof p.amount_cents === "number" ? (p.amount_cents / 100).toFixed(2) : "?"} USDC · invoice #${String(p.invoice_id)} · tx ${String(p.tx_hash)}`;
     case "onchain_pass_payment_exception":
       return `Invoice #${String(p.invoice_id)} · tx ${String(p.tx_hash)} · ${String(p.reason ?? "")}`;
+    case "techne_did_linked":
+      return typeof p.did === "string" ? p.did : null;
+    case "techne_did_unlinked":
+      return typeof p.did === "string" ? `${p.did}${p.by === "member" ? " · by the member" : ""}` : null;
     case "plan_switch_scheduled":
     case "plan_switch_canceled": {
       const plans = `${planLabel(String(p.from ?? "?"))} → ${planLabel(String(p.to ?? "?"))}`;

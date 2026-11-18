@@ -10,6 +10,8 @@ import { MembershipApprovalCard } from "@/components/admin/MembershipApprovalCar
 import { AdminRevokeCodeButton } from "@/components/admin/AdminRevokeCodeButton";
 import { MemberDetailTabs } from "@/components/admin/MemberDetailTabs";
 import { MemberActivityTimeline } from "@/components/admin/MemberActivityTimeline";
+import { TechneAccountCard } from "@/components/techne/TechneAccountCard";
+import { handleFor } from "@/lib/techne/did";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Key, AlertCircle, ShieldCheck, Mail, AtSign } from "lucide-react";
@@ -248,6 +250,12 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
           access: (
             <>
               <AddPassesCard memberId={member.id} initialBalance={member.day_passes_balance} />
+              <TechneAccountCard
+                did={member.did ?? null}
+                handle={member.did ? await handleFor(member.did) : null}
+                endpoint={`/api/admin/members/${member.id}/techne-unlink`}
+                who={member.name}
+              />
               {codeHistory && codeHistory.length > 0 ? (
                 <Card className="glass-panel">
                   <CardContent className="p-6">
