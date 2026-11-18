@@ -5,6 +5,7 @@
  */
 
 import { safeReturn } from "../session";
+import { webCookieName } from "../webSession";
 
 export interface AppState {
   next: string;
@@ -12,7 +13,8 @@ export interface AppState {
   hops: number;
 }
 
-export const NONCE_COOKIE = "regenhub-techne-start";
+/** `__Host-` on https like the session cookie, so a sibling subdomain can't plant one (review of PR #122, L5). */
+export const nonceCookieName = (): string => `${webCookieName()}-start`;
 
 /** The cookie keeps the last few starts, so a sign-in started in two tabs finishes in either. */
 const KEEP = 3;

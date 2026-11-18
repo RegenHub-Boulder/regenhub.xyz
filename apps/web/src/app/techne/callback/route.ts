@@ -5,7 +5,7 @@ import { mintSupabaseSession } from "@/lib/auth/mintSession";
 import { siteOrigin } from "@/lib/techne/config";
 import { handleFor, resolver } from "@/lib/techne/did";
 import { handback, techneOAuth } from "@/lib/techne/oauth/client";
-import { NONCE_COOKIE, nonces, packState, unpackState, withoutNonce } from "@/lib/techne/oauth/appState";
+import { nonceCookieName, nonces, packState, unpackState, withoutNonce } from "@/lib/techne/oauth/appState";
 import { cookieOptions, currentTechne, startWebSession, stillSignedIn } from "@/lib/techne/webSession";
 import { createClient } from "@/lib/supabase/server";
 import { memberForDid } from "@/lib/techne/portalDoor";
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
   if (!pending) return NextResponse.redirect(new URL("/events", siteOrigin()), 303);
   const oauth = await pending;
   const jar = await cookies();
-  const cookie = jar.get(NONCE_COOKIE)?.value ?? null;
+  const cookie = jar.get(nonceCookieName())?.value ?? null;
   const started = nonces(cookie);
 
   let did: string;
@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
   // (No revoke: the OAuth session is per account, and other browsers of that account may be using it.)
   if (!app || !started.includes(app.nonce)) return fail(app?.next ?? null, "not started in this browser");
   const left = withoutNonce(cookie, app.nonce);
-  jar.set(NONCE_COOKIE, left, cookieOptions(left ? 3600 : 0));
+  jar.set(nonceCookieName(), left, cookieOptions(left ? 3600 : 0));
 
   const admin = createServiceClient();
   // The account this browser was signed in as: a live sign-in counts as a switch below; even an expired one gets

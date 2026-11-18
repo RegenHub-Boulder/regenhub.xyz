@@ -226,8 +226,8 @@ describe("Sign in with Techne", () => {
     // A sign-in started at evil.test, whose server then claims to have signed in Alice.
     browser.jar = new Map();
     const oauth = await (await import("@/lib/techne/oauth/client")).techneOAuth()!;
-    const { packState, NONCE_COOKIE } = await import("@/lib/techne/oauth/appState");
-    browser.jar.set(NONCE_COOKIE, "n".repeat(32));
+    const { packState, nonceCookieName } = await import("@/lib/techne/oauth/appState");
+    browser.jar.set(nonceCookieName(), "n".repeat(32));
     const go = await oauth.authorize({ hint: evil.origin, appState: packState({ next: "/portal", nonce: "n".repeat(32), hops: 0 }) });
     const to = await land(evil.approve(go.toString(), alice.did));
     expect(to.pathname).toBe("/auth/login");
@@ -555,6 +555,12 @@ describe("linking a Techne account to a membership", () => {
     await vi.waitFor(() => expect(edge.mails).toHaveLength(2));
     expect(edge.mails[1].html).not.toContain("vic.techne.town");
     expect(edge.mails[1].html).toContain(mallory);
+  });
+
+  it("L5: the sign-in start cookie carries the __Host- prefix on https", async () => {
+    const { nonceCookieName } = await import("@/lib/techne/oauth/appState");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://regenhub.xyz");
+    expect(nonceCookieName().startsWith("__Host-")).toBe(true);
   });
 
   it("N1: unlinking voids link codes already sent, so a saved code can't link the account back", async () => {

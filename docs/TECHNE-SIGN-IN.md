@@ -8,7 +8,7 @@ public docs only (techne.computer/llms.txt and what it lists, reference.html, te
 
 ## What changed
 
-- With `TECHNE_SIGNIN_ENABLED` **off** (production today) Manage Events is exactly as before T-482: the old
+- With `TECHNE_SIGNIN_ENABLED` **off** Manage Events is exactly as before T-482: the old
   regenOS-lane page at `/portal/events` (`components/portal/legacy/`, main's code unchanged, Import from Luma
   included), its nav link and dashboard card, and the revalidate route, all on `REGENOS_LOGIN_ENABLED`
   (`isStewardEventsEnabled`, `lib/techne/config.ts`).
@@ -21,7 +21,7 @@ public docs only (techne.computer/llms.txt and what it lists, reference.html, te
 - Posting, editing and removing write **as the collective**: the event, its config and its listing in RegenHub's
   repo, in one standard `com.atproto.repo.applyWrites` sent **straight to the steward's own PDS, with no
   `atproto-proxy` header** (`lib/techne/collectiveEvents.ts`, `lib/techne/collectiveWrite.ts`).
-- `TECHNE_RSVP_ENABLED` is renamed `TECHNE_SIGNIN_ENABLED` (it now covers both pages). It was off in production.
+- `TECHNE_RSVP_ENABLED` is renamed `TECHNE_SIGNIN_ENABLED` (it now covers both pages). Production has it **on** today (PR #121's browser client: RSVP and the Techne Manage Events page are live).
 
 ## One door (T-482 part 3, 2026-11-17; server-side client after the PR #122 review)
 
@@ -259,12 +259,28 @@ Each line was checked with one real read-only call on 2026-11-17.
 | `REGENOS_BASE_URL=https://techne.computer` (from `https://scenius.social`) | The docs' API host; the documented reads answer there | `query.listRecords` (RegenHub's events, its listings, its memberships by `references`), `query.getRecords` (one event), the RSVP-by-subject query: all 200 with data. `/.well-known/did.json` names `https://techne.computer` as `#atproto_appview` |
 | `REGENOS_COLLECTIVE_DID` unchanged (`did:plc:dl3lexgjfg2euvkqvao4wsgs`) | | plc.directory: handle `regenhub.techne.town`, PDS `https://pds.techne.town`; descriptor `pub.techne.draft.collective/self` = "RegenHub" |
 | `TECHNE_OAUTH_PRIVATE_JWK` = the output of `node scripts/techne-oauth-key.mjs` (secret; Coolify only) | The OAuth client's signing key (`private_key_jwt`). Without it the door stays off | pds.techne.town lists `private_key_jwt` with ES256 (read-only, 11-17); the first real sign-in proves it accepts ours |
-| `TECHNE_SIGNIN_ENABLED=true` (new name; drop `TECHNE_RSVP_ENABLED` if set) | Turns on the door, `/techne/client-metadata.json`, `/techne/callback`, the Techne `/portal/events` (old page moves to `/portal/events/old`) | `https://pds.techne.town/.well-known/oauth-authorization-server`: issuer pds.techne.town, `client_id_metadata_document_supported: true`, DPoP ES256; handle resolution `unforced.techne.town` → did:plc:3hmy2v5fvvdh7vuujef5upvl. `https://regenhub.xyz/techne/client-metadata.json` is 404 today (flag off), as expected |
+| `TECHNE_SIGNIN_ENABLED=true` (new name; drop `TECHNE_RSVP_ENABLED` if set) | Turns on the door, `/techne/client-metadata.json`, `/techne/callback`, the Techne `/portal/events` (old page moves to `/portal/events/old`) | `https://pds.techne.town/.well-known/oauth-authorization-server`: issuer pds.techne.town, `client_id_metadata_document_supported: true`, DPoP ES256; handle resolution `unforced.techne.town` → did:plc:3hmy2v5fvvdh7vuujef5upvl. `https://regenhub.xyz/techne/client-metadata.json` answers 200 today with main's public (`none`) browser client: the flag is already on in production; `/techne/jwks.json` and `/techne/signin` are 404 until this PR ships |
 | `REGENOS_LOGIN_ENABLED=false` (Uni set it off 11-17 as a stopgap; keep it off) | That lane is what emailed a scenius link that went to beacon.techne.computer | With the one door no page shows the lane either way. With it off, `/login` redirects there, `/oauth/callback` is a 404, **the "Old steward page" goes away**, and **`/admin/members` "Sync claims to regenOS" turns off too** (it rides the same lane) |
-| Apply migration `064_techne_one_door.sql` after deploying (MCP `run_migration`) | The one door's tables and functions; without them `/api/auth/techne/*` answers 500 and sign-in still works for RSVP | |
+| Apply migration `064_techne_one_door.sql` **before** deploying (MCP `run_migration`; it is additive and main's code never touches its tables) | The one door's tables and functions; deployed without them, sign-in can't start (`/auth/login?error=techne_start`) | Confirmed in a test: with the OAuth-state table missing, sign-in answers 303 to `/auth/login?error=techne_start` |
 | No `TECHNE_PDS_URL`, `TECHNE_PLC_URL`, `TECHNE_HANDLE_DOMAIN`, `TECHNE_PLATFORM_DID`, `TECHNE_STAGING_STANDIN` | Production uses the SDK's defaults; the stand-in is refused for regenhub.xyz anyway | |
 
 The env vars are runtime: set them in Coolify and redeploy the web app. Production deploy is Aaron's go.
+
+### Deploy order (the flag is already on in production)
+
+Production runs main with `TECHNE_SIGNIN_ENABLED` on, so **deploying this PR is the moment the one door opens**, and
+the order matters:
+
+1. Generate the key (`node scripts/techne-oauth-key.mjs`) and set `TECHNE_OAUTH_PRIVATE_JWK` in Coolify. **Deploying
+   without it switches the door off**: live Techne RSVP and the Techne Manage Events page disappear until it is set.
+2. Apply `064_techne_one_door.sql` (`run_migration`). Additive; main's code ignores the new tables. Try one Unlink on a
+   test member right after (its `auth.sessions` delete has never run outside a test database).
+3. Deploy the web app. The client id stays the same but turns from public to confidential, so the PDS's cached metadata
+   may lag a few minutes.
+4. One real sign-in (and a sign-out then sign-in again, to see whether the PDS asks who you are).
+
+Before step 3, read `select id, did from members where did is not null`: rows written by the old regenOS lane open
+their portal on day one without the email-link proof.
 
 ## Old steward page, and the old lane: remove later (not done here)
 
