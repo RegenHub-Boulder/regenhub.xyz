@@ -1,43 +1,120 @@
 #!/usr/bin/env node
-// STAGING ONLY. A stand-in for the two Supabase calls the portal shell makes, so the T-482 preview can
-// show /portal/events without a Supabase stack (and without ever touching production's):
-//   GET /auth/v1/user                      the sample portal user, for the stand-in's own token only
-//   GET /rest/v1/members?...                a plain member row (not admin, not disabled)
-// Everything else answers 404. The browser gets the matching session cookie from the app's
-// /staging/portal-session route (on only with TECHNE_STAGING_STANDIN, never for regenhub.xyz).
-// Usage: node supabase-standin.mjs --port 18594
+// STAGING ONLY. A stand-in for Supabase for the T-482 preview, so the one door ("Sign in with Techne" also opens
+// the portal) runs end to end with no Supabase stack and without ever touching production's:
+//   - PostgREST tables and rpc/<fn>, answered from an in-memory PGlite holding a minimal `members` and
+//     `admin_actions` plus the REAL migration 064 (techne_* tables, begin/confirm_techne_link), through the
+//     same adapter the route tests use (apps/web/test/pglitePostgrest.ts)
+//   - GoTrue: POST /auth/v1/admin/generate_link, POST /auth/v1/verify (a session, as current GoTrue answers),
+//     GET /auth/v1/user, POST /auth/v1/logout
+// Sample members (all fictional, from <state>/people.json): the steward and Ana are members whose Techne account
+// is linked (members.did); Jo is a member who isn't linked yet (the link flow); Sam and Lee aren't members.
+// Usage: node supabase-standin.mjs --port 18604 --state <dir>
 import { createServer } from "node:http";
+import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { randomBytes } from "node:crypto";
 
 const arg = (k, d) => {
   const i = process.argv.indexOf(k);
   return i > 0 ? process.argv[i + 1] : d;
 };
-const PORT = Number(arg("--port", "18594"));
-// Must match apps/web/src/app/staging/portal-session/route.ts.
-const TOKEN = "staging-standin-token";
-const USER = {
-  id: "00000000-0000-4000-8000-000000000482",
-  aud: "authenticated",
-  role: "authenticated",
-  email: "steward@regenhub.test",
-  app_metadata: { provider: "email" },
-  user_metadata: {},
-  created_at: "2026-11-17T00:00:00Z",
-};
+const PORT = Number(arg("--port", "18604"));
+const STATE = arg("--state", ".");
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
+const WEB = join(ROOT, "apps/web");
 
+const { PGlite } = await import(createRequire(join(WEB, "package.json")).resolve("@electric-sql/pglite"));
+const { pglitePostgrest } = await import(join(WEB, "test/pglitePostgrest.ts"));
+
+const pg = new PGlite();
+await pg.exec(`
+  create role anon; create role authenticated; create role service_role bypassrls;
+  create table members (
+    id serial primary key, name text not null, email text unique, did text unique, supabase_user_id uuid,
+    member_type text not null default 'hot_desk', disabled boolean not null default false,
+    is_admin boolean not null default false, approved_for_daily boolean not null default true,
+    approved_for_full boolean not null default true, day_passes_balance integer not null default 0,
+    telegram_username text, created_at timestamptz not null default now()
+  );
+  create table admin_actions (
+    id bigserial primary key, actor_member_id integer references members(id) on delete set null,
+    action text not null, target_table text, target_id text, idempotency_key text unique,
+    payload jsonb not null default '{}'::jsonb, created_at timestamptz not null default now()
+  );`);
+await pg.exec(readFileSync(join(ROOT, "supabase/migrations/064_techne_one_door.sql"), "utf8"));
+
+const people = JSON.parse(readFileSync(join(STATE, "people.json"), "utf8"));
+const byName = (n) => people.find((p) => p.name.startsWith(n));
+const seed = [
+  [people[0], "Robin Steward (sample)", "steward@regenhub.test", true, "cold_desk"],
+  [byName("Ana"), "Ana Sample", "ana-sample@example.test", true, "hot_desk"],
+  [byName("Jo"), "Jo Sample", "jo-sample@example.test", false, "hot_desk"],
+];
+for (const [p, name, email, linked, type] of seed) {
+  if (!p) continue;
+  await pg.query("insert into members(name, email, did, member_type) values ($1, $2, $3, $4)", [
+    name, email, linked ? p.did : null, type,
+  ]);
+}
+
+const users = new Map(); // access token -> user
+const authByEmail = new Map();
+const otp = new Map();
+const db = pglitePostgrest(pg, users);
 const json = (res, status, body) => {
   res.writeHead(status, { "content-type": "application/json" });
   res.end(JSON.stringify(body));
 };
 
-createServer((req, res) => {
-  const url = new URL(req.url, "http://standin");
-  const authed = req.headers.authorization === `Bearer ${TOKEN}`;
-  if (url.pathname === "/auth/v1/user") return authed ? json(res, 200, USER) : json(res, 401, { msg: "not signed in" });
-  if (url.pathname === "/rest/v1/members") {
-    const row = { is_admin: false, disabled: false };
-    const single = /vnd\.pgrst\.object/.test(req.headers.accept ?? "");
-    return json(res, 200, single ? row : [row]);
+createServer(async (req, res) => {
+  const chunks = [];
+  for await (const c of req) chunks.push(c);
+  const text = Buffer.concat(chunks).toString("utf8");
+  const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
+  const body = text ? JSON.parse(text) : {};
+  try {
+    if (url.pathname === "/auth/v1/admin/generate_link" && req.method === "POST") {
+      let user = authByEmail.get(body.email);
+      const type = user ? "magiclink" : "signup";
+      if (!user) {
+        user = { id: crypto.randomUUID(), email: body.email };
+        authByEmail.set(body.email, user);
+        // Trigger 004's job: link the new auth user to the member with that email.
+        await pg.query("update members set supabase_user_id = $1 where lower(email) = lower($2)", [user.id, body.email]);
+      }
+      const hashed = randomBytes(16).toString("hex");
+      otp.set(hashed, { email: body.email, type });
+      return json(res, 200, { ...user, action_link: "", email_otp: "", hashed_token: hashed, redirect_to: "", verification_type: type });
+    }
+    if (url.pathname === "/auth/v1/verify" && req.method === "POST") {
+      const o = otp.get(body.token_hash);
+      if (!o || o.type !== body.type) return json(res, 403, { code: 403, msg: "Email link is invalid or has expired" });
+      otp.delete(body.token_hash);
+      const user = authByEmail.get(o.email);
+      const token = `standin-${randomBytes(12).toString("hex")}`;
+      users.set(token, user);
+      return json(res, 200, {
+        access_token: token, refresh_token: `r-${token}`, expires_in: 86400, expires_at: Math.floor(Date.now() / 1000) + 86400,
+        token_type: "bearer",
+        user: { ...user, aud: "authenticated", role: "authenticated", app_metadata: { provider: "email" }, user_metadata: {} },
+      });
+    }
+    if (url.pathname === "/auth/v1/logout") {
+      users.delete(req.headers.authorization?.replace(/^Bearer /, "") ?? "");
+      res.writeHead(204).end();
+      return;
+    }
+    const out = await db(url.toString(), {
+      method: req.method,
+      headers: Object.fromEntries(Object.entries(req.headers).filter(([, v]) => typeof v === "string")),
+      body: text || null,
+    });
+    res.writeHead(out.status, Object.fromEntries(out.headers));
+    res.end(Buffer.from(await out.arrayBuffer()));
+  } catch (err) {
+    console.error(req.method, url.pathname, err);
+    json(res, 500, { message: String(err) });
   }
-  json(res, 404, { msg: "not in the staging stand-in" });
-}).listen(PORT, "127.0.0.1", () => console.log(`supabase stand-in on 127.0.0.1:${PORT}`));
+}).listen(PORT, "127.0.0.1", () => console.log(`supabase stand-in (PGlite + 064) on 127.0.0.1:${PORT}`));

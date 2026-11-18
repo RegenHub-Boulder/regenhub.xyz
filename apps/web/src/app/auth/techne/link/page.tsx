@@ -16,7 +16,7 @@ export default async function TechneLinkPage({ searchParams }: { searchParams: P
   const { code } = await searchParams;
   if (!config || !code || !/^[A-Za-z0-9_-]{20,100}$/.test(code)) redirect("/auth/login");
   return (
-    <div className="min-h-[60vh] flex items-center justify-center px-6">
+    <div className="py-8 sm:min-h-[60vh] flex items-start sm:items-center justify-center px-6">
       <div className="w-full max-w-md">
         <div className="glass-panel-strong p-8">
           <h1 className="text-2xl font-bold text-forest mb-6 text-center">Link your Techne account</h1>
