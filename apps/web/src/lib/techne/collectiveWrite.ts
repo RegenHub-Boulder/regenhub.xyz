@@ -1,11 +1,10 @@
 /**
  * Sends a steward's change to the collective's calendar (the batch lib/techne/collectiveEvents.ts builds):
- * one `com.atproto.repo.applyWrites` with repo = the collective, sent straight to the steward's own PDS with
- * their OAuth session and NO `atproto-proxy` header. That is standard atproto: repo writes are answered by
- * the PDS itself (techne.computer/ref-applywrites.html: "Your PDS answers it, not techne.computer"), and
- * pds.techne.town refuses to forward `com.atproto.repo.*` to the platform. RegenHub's repo and its
- * stewards' live on the same PDS (pds.techne.town); whether it lets someone who manages RegenHub's member
- * space write RegenHub's repo is Techne's rule, decided on this write, and unproven until one real post.
+ * one `pub.techne.draft.identity.writeAsCollective` (applyWrites' input and answer, repo = the collective),
+ * sent to the steward's own PDS with their OAuth session and the platform's `atproto-proxy` header. The PDS
+ * forwards it to Techne, which checks that this account manages the collective and writes with the
+ * collective's own key. (A plain `com.atproto.repo.applyWrites` with repo = the collective is answered by
+ * the PDS itself and refused: the collective's repo is not the steward's.)
  * Then one `pub.techne.draft.sync.indexRecord` hint per record (a platform call, through the PDS with the
  * proxy header) so the calendar shows it at once.
  */
@@ -15,7 +14,7 @@ import { platformProxy } from "./session";
 import { isLapsedToken, sessionCall, XrpcError, type Session } from "./call";
 import type { CollectiveBatch } from "./collectiveEvents";
 
-export const COLLECTIVE_WRITE_METHOD = "com.atproto.repo.applyWrites";
+export const COLLECTIVE_WRITE_METHOD = "pub.techne.draft.identity.writeAsCollective";
 
 export type WriteOutcome =
   | { ok: true }
@@ -36,9 +35,10 @@ export type WriteOutcome =
 const REJECTED = new Set([400, 404, 409, 413, 415, 422]);
 
 export async function sendCollectiveBatch(session: Session, config: TechneConfig, batch: CollectiveBatch): Promise<WriteOutcome> {
+  const proxy = platformProxy(config);
   try {
-    // No proxy: the person's PDS answers repo writes itself.
-    await sessionCall(session, COLLECTIVE_WRITE_METHOD, { body: batch.input });
+    // Through the person's PDS to the platform, which writes as the collective.
+    await sessionCall(session, COLLECTIVE_WRITE_METHOD, { body: batch.input, proxy });
   } catch (err) {
     if (err instanceof XrpcError) {
       // The one record of why a write as the collective didn't land, for whoever debugs the first real post.
@@ -55,7 +55,6 @@ export async function sendCollectiveBatch(session: Session, config: TechneConfig
     return { ok: false, kind: "unknown", message: err instanceof Error ? err.message : "no answer from Techne" };
   }
   // Courtesy hints: the platform also learns of the records from the network.
-  const proxy = platformProxy(config);
   await Promise.all(
     batch.uris.map((uri) => sessionCall(session, "pub.techne.draft.sync.indexRecord", { body: { uri }, proxy }).catch(() => {})),
   );

@@ -10,12 +10,12 @@
 //   - POST /xrpc/pub.techne.draft.sync.indexRecord  accepted (the record is already readable)
 //   - GET  /xrpc/pub.techne.draft.query.listRecords  the AppView's answer, plus the stand-in's
 //          records when the query names their type (as the firehose would have indexed them)
-//   - POST /xrpc/com.atproto.repo.applyWrites   answered by the PDS itself, as pds.techne.town does: with
-//          an atproto-proxy header it answers 403 "... is not forwarded" (pds.techne.town's real answer,
-//          ~/Code/reviews/pr121/REVIEW-pr121.md B1). Without one: a person's own repo, or a collective's
-//          repo when the person "manages its own member space": here, a live public membership claim from
-//          that collective at role >= 30 (the ASSUMED Techne rule for a collective hosted on the same PDS;
-//          unproven until one real post). Else 403 Forbidden. x-standin-expired: 1 = a lapsed token, 401.
+//   - POST /xrpc/pub.techne.draft.identity.writeAsCollective  (with the platform's atproto-proxy header)
+//          Techne writing as a collective: applyWrites' input, repo = the collective, when the person
+//          "manages its own member space": here, a live public membership claim from that collective at
+//          role >= 30. Else 403 Forbidden; the person's own repo 400. x-standin-expired: 1 = a lapsed token, 401.
+//   - POST /xrpc/com.atproto.repo.applyWrites   answered by the PDS itself: the person's own repo only
+//          (a collective's repo is not theirs: 401 AuthenticationRequired, as a stock PDS answers).
 //   - GET  /xrpc/pub.techne.draft.query.getRecords   the AppView's answer with the stand-in's writes applied
 //   - GET  /plc/<did>                    that person's DID document, for their handle (the app reads DIDs here on
 //          staging: TECHNE_STANDIN_URL/plc, lib/techne/did.ts)
@@ -150,10 +150,7 @@ li a:hover{background:#eef4f0}span{color:#666;font-size:.9rem}</style>
         verificationMethod: [],
       });
     }
-    // Like pds.techne.town: repo methods are the PDS's own; it never forwards them to the platform.
-    if (path.startsWith("/xrpc/com.atproto.repo.") && req.headers["atproto-proxy"]) {
-      return json(res, 403, { error: "InvalidRequest", message: `${path} is not forwarded to ${req.headers["atproto-proxy"]}` });
-    }
+    // Like a stock PDS: repo methods are the PDS's own; the atproto-proxy header changes nothing for them.
     if (req.headers["x-standin-expired"] && req.method === "POST") return json(res, 401, { error: "ExpiredToken", message: "Token has expired" });
     if (path === "/xrpc/com.atproto.repo.putRecord" && req.method === "POST") {
       if (!did) return json(res, 401, { error: "AuthenticationRequired" });
@@ -170,10 +167,13 @@ li a:hover{background:#eef4f0}span{color:#666;font-size:.9rem}</style>
       const col = url.searchParams.get("collection");
       return json(res, 200, { records: records.filter((r) => r.author === repo && r.collection === col).map(({ uri, cid, value }) => ({ uri, cid, value })) });
     }
-    if (path === "/xrpc/com.atproto.repo.applyWrites" && req.method === "POST") {
+    const asCollective = path === "/xrpc/pub.techne.draft.identity.writeAsCollective" && !!req.headers["atproto-proxy"];
+    if ((asCollective || path === "/xrpc/com.atproto.repo.applyWrites") && req.method === "POST") {
       if (!did) return json(res, 401, { error: "AuthenticationRequired" });
       const b = JSON.parse(await readBody(req));
-      if (!holdsPen(did, b.repo)) return json(res, 403, { error: "Forbidden", message: `${did} may not write as ${b.repo}` });
+      if (!asCollective && b.repo !== did) return json(res, 401, { error: "AuthenticationRequired", message: "Authentication Required" });
+      if (asCollective && b.repo === did) return json(res, 400, { error: "InvalidRequest", message: "repo is your own DID: write it at your PDS" });
+      if (asCollective && !holdsPen(did, b.repo)) return json(res, 403, { error: "Forbidden", message: `${did} may not write as ${b.repo}` });
       const results = [];
       const next = [...records];
       for (const w of b.writes ?? []) {
