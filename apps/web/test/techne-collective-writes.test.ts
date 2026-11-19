@@ -1,9 +1,10 @@
 /**
  * A steward posts, edits and removes RegenHub's nights as the collective (lib/techne/collectiveEvents.ts,
  * lib/techne/collectiveWrite.ts). First the batch itself (what lands in the collective's repo), then the
- * request (straight to the person's PDS, no atproto-proxy), then end to end: the real staging stand-in
- * (scripts/staging/techne-standin.mjs, spawned) plays the person's PDS, including pds.techne.town's refusal
- * to forward repo writes and the ASSUMED rule that a manager of RegenHub may write its repo; the steward's
+ * request (pub.techne.draft.identity.writeAsCollective through the person's PDS, with the platform's
+ * atproto-proxy), then end to end: the real staging stand-in (scripts/staging/techne-standin.mjs, spawned)
+ * plays the person's PDS and Techne's writeAsCollective, including the rule that a manager of RegenHub may
+ * write as it; the steward's
  * session is the stand-in session the browser uses, and the site's own read (fetchCollectiveEvents) shows
  * each step. Only the platform's AppView is faked. What the stand-in can't prove: that pds.techne.town lets
  * a manager write the collective's repo. One real post does.
@@ -106,7 +107,7 @@ describe("the batch", () => {
 
 describe("the request", () => {
   const config: TechneConfig = { clientId: "https://preview.test/techne/client-metadata.json", redirectUri: "https://preview.test/techne/callback", jwksUri: "https://preview.test/techne/jwks.json" };
-  it("goes to the person's own PDS as applyWrites on the collective's repo, with no atproto-proxy; only the index hints are proxied", async () => {
+  it("goes through the person's own PDS to the platform as writeAsCollective on the collective's repo, as do the index hints", async () => {
     const calls: { path: string; headers: Headers; body: Record<string, unknown> }[] = [];
     // The OAuth session's fetchHandler resolves a path against the person's PDS: that is where it goes.
     const s = {
@@ -119,8 +120,8 @@ describe("the request", () => {
     const batch = putEventBatch(HUB, night(), null);
     expect(await sendCollectiveBatch(s, config, batch)).toEqual({ ok: true });
     const [write, ...hints] = calls;
-    expect(write.path).toBe("/xrpc/com.atproto.repo.applyWrites");
-    expect(write.headers.has("atproto-proxy")).toBe(false);
+    expect(write.path).toBe("/xrpc/pub.techne.draft.identity.writeAsCollective");
+    expect(write.headers.get("atproto-proxy")).toBe(platformProxy(config));
     expect(write.body.repo).toBe(HUB);
     expect(hints.map((h) => [h.path, h.headers.get("atproto-proxy")])).toEqual(
       batch.uris.map(() => ["/xrpc/pub.techne.draft.sync.indexRecord", platformProxy(config)]),
@@ -182,6 +183,7 @@ describe("the one sign-in", () => {
       expect(repo.some((x) => x.startsWith(`repo:${t}?`))).toBe(true);
     }
     expect(scope).toContain("rpc:pub.techne.draft.sync.indexRecord?aud=did:web:techne.computer%23atproto_appview");
+    expect(scope).toContain("rpc:pub.techne.draft.identity.writeAsCollective?aud=did:web:techne.computer%23atproto_appview");
     // building-an-app.md *Permissions*: authRead, authWrite or any space: but the app's own is the red warning.
     expect(scope.join(" ")).not.toMatch(/authRead|authWrite|applyWrites/);
     expect(scope.filter((x) => x.startsWith("space:"))).toEqual([expect.stringMatching(/^space:pub\.techne\.draft\.space\.private\?skey=/)]);
@@ -233,16 +235,12 @@ describe("end to end through the stand-in", () => {
 
   const calendar = async () => (await fetchCollectiveEvents({ revalidate: 0 })) ?? [];
 
-  it("the old proxy route is refused as pds.techne.town refuses it, and nothing is written", async () => {
+  it("the old route (applyWrites on the collective's repo, answered by the PDS itself) is refused, and nothing is written", async () => {
     const steward = standInSession(base, STEWARD);
-    const viaProxy = { did: STEWARD, fetchHandler: (path: string, init: RequestInit) => {
-      const headers = new Headers(init.headers);
-      headers.set("atproto-proxy", platformProxy(config));
-      return steward.fetchHandler(path, { ...init, headers });
-    } };
-    const out = await sendCollectiveBatch(viaProxy, config, putEventBatch(HUB, night(), null));
-    expect(out).toMatchObject({ ok: false, kind: "refused" });
-    expect((out as { message: string }).message).toContain("is not forwarded");
+    const asApplyWrites = { did: STEWARD, fetchHandler: (path: string, init: RequestInit) =>
+      steward.fetchHandler(path.replace("pub.techne.draft.identity.writeAsCollective", "com.atproto.repo.applyWrites"), init) };
+    const out = await sendCollectiveBatch(asApplyWrites, config, putEventBatch(HUB, night(), null));
+    expect(out).toMatchObject({ ok: false, kind: "refused", status: 401 });
     expect(await calendar()).toEqual([]);
   });
 

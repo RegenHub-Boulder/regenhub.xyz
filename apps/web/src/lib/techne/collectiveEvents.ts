@@ -6,8 +6,8 @@
  * Who may: "the caller then writes as the collective (permissioned.putRecords or
  * com.atproto.repo.applyWrites, repo = the new DID) … only whoever manages its own member space
  * (`pub.techne.draft.space.collective.member/self`) may" (lexicon pub.techne.draft.identity.createCollective,
- * techne-sdk 0.4.0). The batch is one standard `com.atproto.repo.applyWrites` with repo = the collective,
- * sent to the steward's own PDS, which answers repo writes itself (lib/techne/collectiveWrite.ts).
+ * techne-sdk 0.4.0). The batch is one `pub.techne.draft.identity.writeAsCollective` (applyWrites' input, repo =
+ * the collective), sent through the steward's own PDS to the platform (lib/techne/collectiveWrite.ts).
  *
  * What is written, all public, in the collective's repo, the shape the platform's own events have
  * (techne-sdk/put `eventRecords`, and RegenHub's live records):

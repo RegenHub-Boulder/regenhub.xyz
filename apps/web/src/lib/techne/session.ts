@@ -23,7 +23,11 @@ const DEFAULT_PLATFORM = TECHNE_PLATFORM_DID;
  */
 export function signInScope(config: Pick<TechneConfig, "clientId" | "platform">): string[] {
   const platform = config.platform ?? DEFAULT_PLATFORM;
-  return scopes({ clientId: config.clientId, platform, types: [...RSVP_TYPES, ...COLLECTIVE_EVENT_TYPES] });
+  return [
+    ...scopes({ clientId: config.clientId, platform, types: [...RSVP_TYPES, ...COLLECTIVE_EVENT_TYPES] }),
+    // Posting as the collective (lib/techne/collectiveWrite.ts), through the PDS to the platform.
+    `rpc:pub.techne.draft.identity.writeAsCollective?aud=${platform}%23atproto_appview`,
+  ];
 }
 
 /** Where a sign-in with no handle (and every sign-up) starts: the techne.town PDS, or TECHNE_PDS_URL. */
@@ -31,8 +35,8 @@ export function homePds(config: Pick<TechneConfig, "pds">): string {
   return config.pds ?? TECHNE_TOWN_PDS;
 }
 
-/** Platform calls (the queries, `sync.indexRecord`) go through the person's PDS with this `atproto-proxy`
- *  header. Repo writes (`com.atproto.repo.*`) never carry it: the PDS answers those itself. */
+/** Platform calls (the queries, `sync.indexRecord`, `writeAsCollective`) go through the person's PDS with this
+ *  `atproto-proxy` header. Repo writes (`com.atproto.repo.*`) never carry it: the PDS answers those itself. */
 export function platformProxy(config: { platform?: string }): string {
   return `${config.platform ?? DEFAULT_PLATFORM}#atproto_appview`;
 }
