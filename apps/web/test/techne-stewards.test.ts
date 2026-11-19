@@ -100,6 +100,15 @@ describe("the batch", () => {
     expect(() => rosterBatch(HUB, [manager], { op: "end", did: JO.did }, NOW)).toThrow(RosterRefusal);
   });
 
+  it("ending or changing a role also ends a claim that hasn't started yet", () => {
+    const later = claim("mb-later", JO.did, 40, { validFrom: "2026-12-01T00:00:00.000Z" });
+    const jo = claim(`mb-self-${JO.did}`, JO.did, 20);
+    expect(kinds(rosterBatch(HUB, [manager, jo, later], { op: "end", did: JO.did }, NOW))).toEqual([["update", `mb-self-${JO.did}`], ["update", "mb-later"]]);
+    const b = rosterBatch(HUB, [manager, jo, later], { op: "change", did: JO.did, role: 30 }, NOW);
+    expect(kinds(b)).toEqual([["update", `mb-self-${JO.did}`], ["update", "mb-later"]]);
+    expect(valueOf(b, 1).validUntil).toBe(NOW.toISOString());
+  });
+
   it("refuses leaving RegenHub with nobody at facilitator or above", () => {
     const jo = claim(`mb-self-${JO.did}`, JO.did, 20);
     expect(() => rosterBatch(HUB, [manager, jo], { op: "end", did: STEWARD.did }, NOW)).toThrow(RosterRefusal);
@@ -328,7 +337,7 @@ describe("end to end (stand-in)", () => {
       return inner(req.url, { method: req.method, headers, body: await req.text() });
     });
     const out = await post({ op: "add", handle: ANA.handle, role: 20 });
-    expect(out).toMatchObject({ status: 502, ok: false, error: expect.stringContaining("Your Techne sign-in has lapsed") });
+    expect(out).toMatchObject({ status: 401, ok: false, error: expect.stringContaining("Your Techne sign-in has lapsed") });
     expect(renderToStaticMarkup(await page())).toContain("Sign in with Techne");
   });
 });

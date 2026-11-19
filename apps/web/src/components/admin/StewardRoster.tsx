@@ -113,7 +113,7 @@ export function StewardRoster({ rows, me }: { rows: RosterRow[]; me: string }) {
       <ul className="glass-panel divide-y divide-white/5" data-testid="stewards-list">
         {rows.map((r) => {
           const choice = picked[r.did] ?? offered(r.role);
-          const changed = choice !== offered(r.role) || r.role !== offered(r.role);
+          const changed = choice !== offered(r.role);
           return (
             <li key={r.did} className="p-4 flex flex-wrap items-center gap-3" data-testid="steward-row" data-did={r.did}>
               <div className="flex-1 min-w-[10rem]">

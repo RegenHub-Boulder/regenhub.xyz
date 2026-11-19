@@ -18,6 +18,7 @@
 import { MEMBERSHIP_NSID } from "./standing";
 import { MANAGE_ROLE, isLive, isOfferedRole, roleName, type OfferedRole } from "./roles";
 import { listRecords, type TechneRecord } from "./query";
+import { isDid } from "./did";
 import { tid } from "./tid";
 import type { ApplyWrite, CollectiveBatch } from "./collectiveEvents";
 
@@ -44,10 +45,10 @@ export interface Holder {
   /** When their earliest live claim was made, if it says. */
   since: string | null;
   live: Claim[];
+  /** Claims not in force yet (validFrom ahead): ending or changing a role ends these too, or they'd start later. */
+  scheduled: Claim[];
   ended: Claim[];
 }
-
-const DID = /^did:[a-z]+:[A-Za-z0-9._:%-]{1,256}$/;
 
 /** The collective's own membership claims about DIDs (in its repo, authored by it), by key. */
 export function claimsFrom(rows: TechneRecord<MembershipValue>[], collective: string): Claim[] {
@@ -57,7 +58,7 @@ export function claimsFrom(rows: TechneRecord<MembershipValue>[], collective: st
     if (!r.uri.startsWith(prefix) || r.author !== collective) continue;
     const rkey = r.uri.slice(prefix.length);
     if (!rkey || rkey.includes("/")) continue;
-    if (typeof r.value?.subject !== "string" || !DID.test(r.value.subject)) continue;
+    if (typeof r.value?.subject !== "string" || !isDid(r.value.subject)) continue;
     out.set(rkey, { rkey, value: r.value });
   }
   return [...out.values()];
@@ -68,13 +69,14 @@ export function holdersFrom(claims: Claim[], now = new Date()): Holder[] {
   const by = new Map<string, Holder>();
   for (const c of claims) {
     const did = c.value.subject as string;
-    const h = by.get(did) ?? { did, role: 0, since: null, live: [], ended: [] };
+    const h = by.get(did) ?? { did, role: 0, since: null, live: [], scheduled: [], ended: [] };
     if (isLive(c.value, now)) {
       h.live.push(c);
       h.role = Math.max(h.role, c.value.role as number);
       const at = typeof c.value.createdAt === "string" ? c.value.createdAt : null;
       if (at && (!h.since || at < h.since)) h.since = at;
-    } else h.ended.push(c);
+    } else if (isLive(c.value, new Date(8.64e15))) h.scheduled.push(c);
+    else h.ended.push(c);
     by.set(did, h);
   }
   return [...by.values()]
@@ -94,7 +96,8 @@ export class RosterRefusal extends Error {}
 export async function fetchRoster(collective: string): Promise<Claim[] | null> {
   const rows = await listRecords<MembershipValue>(
     { where: { all: [{ type: { is: MEMBERSHIP_NSID } }, { author: { is: collective } }] } },
-    { revalidate: 0, strict: true },
+    // Ended claims stay (an end date, never a delete), so the list only grows: read up to 2,000.
+    { revalidate: 0, strict: true, maxPages: 20 },
   );
   return rows ? claimsFrom(rows, collective) : null;
 }
@@ -112,7 +115,7 @@ const update = (rkey: string, value: Record<string, unknown>): ApplyWrite => ({
  * batch leaves RegenHub without a manager either (the order Techne asks of a circle's roster batch).
  */
 export function rosterBatch(collective: string, claims: Claim[], change: RosterChange, now = new Date()): CollectiveBatch {
-  if (!DID.test(change.did)) throw new RosterRefusal("That isn't a Techne account.");
+  if (!isDid(change.did)) throw new RosterRefusal("That isn't a Techne account.");
   if (change.did === collective) throw new RosterRefusal("RegenHub can't hold a role in itself.");
   const holders = holdersFrom(claims, now);
   const holder = holders.find((h) => h.did === change.did) ?? null;
@@ -127,8 +130,7 @@ export function rosterBatch(collective: string, claims: Claim[], change: RosterC
   }
 
   if (change.op === "end") {
-    if (!holder) throw new RosterRefusal("They don't hold a role in RegenHub.");
-    for (const c of holder.live) lowers.push(update(c.rkey, { ...c.value, $type: MEMBERSHIP_NSID, validUntil: stamp }));
+    for (const c of [...holder!.live, ...holder!.scheduled]) lowers.push(update(c.rkey, { ...c.value, $type: MEMBERSHIP_NSID, validUntil: stamp }));
   } else {
     if (!isOfferedRole(change.role)) throw new RosterRefusal("Pick member, facilitator or manager.");
     if (holder && holder.role === change.role && holder.live.length === 1) {
@@ -155,7 +157,7 @@ export function rosterBatch(collective: string, claims: Claim[], change: RosterC
       };
     }
     (change.role >= before ? raises : lowers).push(write);
-    for (const c of holder?.live ?? []) {
+    for (const c of [...(holder?.live ?? []), ...(holder?.scheduled ?? [])]) {
       if (c !== keep) lowers.push(update(c.rkey, { ...c.value, $type: MEMBERSHIP_NSID, validUntil: stamp }));
     }
   }

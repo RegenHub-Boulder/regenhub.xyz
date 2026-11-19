@@ -90,5 +90,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   }
   if (out.kind === "signin") await endLapsedSession(admin, signedIn.who.did);
-  return NextResponse.json({ ok: false, error: writeErrorText(out, "roles") }, { status: out.kind === "refused" ? 403 : 502 });
+  return NextResponse.json({ ok: false, error: writeErrorText(out, "roles") }, { status: out.kind === "refused" ? 403 : out.kind === "signin" ? 401 : 502 });
 }
