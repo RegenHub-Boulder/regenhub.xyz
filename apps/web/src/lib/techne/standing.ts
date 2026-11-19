@@ -17,6 +17,7 @@
  */
 
 import { listRecords } from "./query";
+import { MANAGE_ROLE, roleName } from "./roles";
 
 export const MEMBERSHIP_NSID = "pub.techne.draft.membership";
 
@@ -26,18 +27,9 @@ export const MEMBERSHIP_NSID = "pub.techne.draft.membership";
  * manage leg is facilitator (30) and up (pub.techne.draft.appAccess: "Facilitator and up for a
  * collective's"). Techne enforces it on the write; this only words the hint.
  */
-export const EVENT_STEWARD_ROLE = 30;
+export const EVENT_STEWARD_ROLE = MANAGE_ROLE;
 
-const ROLE_NAMES: Record<number, string> = { 10: "member", 20: "builder", 30: "facilitator", 40: "steward" };
-
-export function roleName(role: number | null): string | null {
-  if (role === null) return null;
-  const known = Object.keys(ROLE_NAMES)
-    .map(Number)
-    .filter((r) => r <= role)
-    .sort((a, b) => b - a)[0];
-  return known === undefined ? `role ${role}` : ROLE_NAMES[known];
-}
+export { roleName };
 
 export interface Standing {
   /** The highest role among the collective's live claims naming them; null when there are none. */

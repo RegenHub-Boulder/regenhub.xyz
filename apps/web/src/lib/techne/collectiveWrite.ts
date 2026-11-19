@@ -61,15 +61,18 @@ export async function sendCollectiveBatch(session: Session, config: TechneConfig
   return { ok: true };
 }
 
-/** What the steward reads when a write doesn't land: a plain line first, then Techne's own words. */
-export function writeErrorText(out: Exclude<WriteOutcome, { ok: true }>): string {
+/** What the steward reads when a write doesn't land: a plain line first, then Techne's own words. `about` says which
+ *  page wrote: the calendar (/portal/events) or RegenHub's roles (/admin/stewards). */
+export function writeErrorText(out: Exclude<WriteOutcome, { ok: true }>, about: "calendar" | "roles" = "calendar"): string {
+  const what = about === "calendar" ? "a post as RegenHub" : "a change to RegenHub's roles";
+  const list = about === "calendar" ? "the calendar" : "the list";
   switch (out.kind) {
     case "refused":
-      return `Techne didn't accept a post as RegenHub from this account. If you think it should have, sign out and sign in with Techne again, then retry. (Techne said: ${out.message})`;
+      return `Techne didn't accept ${what} from this account. If you think it should have, sign out and sign in with Techne again, then retry. (Techne said: ${out.message})`;
     case "signin":
       return `Your Techne sign-in has lapsed. Sign out, sign in with Techne again, then retry. (${out.message})`;
     case "unknown":
-      return `Couldn't tell whether Techne took that. Reload to see the calendar before trying again; if this keeps happening, sign out and sign in with Techne again. (${out.message})`;
+      return `Couldn't tell whether Techne took that. Reload to see ${list} before trying again; if this keeps happening, sign out and sign in with Techne again. (${out.message})`;
     case "failed":
       return `Techne said no, nothing changed. Try again. (${out.message})`;
   }
