@@ -109,6 +109,27 @@ describe("the batch", () => {
     expect(valueOf(b, 1).validUntil).toBe(NOW.toISOString());
   });
 
+  it("treats a claim that starts later and has an end date as scheduled, so ending a role ends it too", () => {
+    const later = claim("mb-later", JO.did, 40, { validFrom: "2026-12-01T00:00:00.000Z", validUntil: "2027-06-01T00:00:00.000Z" });
+    const jo = claim(`mb-self-${JO.did}`, JO.did, 20);
+    expect(kinds(rosterBatch(HUB, [manager, jo, later], { op: "end", did: JO.did }, NOW))).toEqual([["update", `mb-self-${JO.did}`], ["update", "mb-later"]]);
+  });
+
+  it("adding someone whose only claim starts later ends that claim, so it can't raise them later", () => {
+    const later = claim("mb-later", JO.did, 40, { validFrom: "2026-12-01T00:00:00.000Z" });
+    const b = rosterBatch(HUB, [manager, later], { op: "add", did: JO.did, role: 20 }, NOW);
+    expect(kinds(b)).toEqual([["create", `mb-self-${JO.did}`], ["update", "mb-later"]]);
+    expect(valueOf(b, 1).validUntil).toBe(NOW.toISOString());
+  });
+
+  it("changing to the role someone holds still ends a scheduled claim, and a kept claim loses its old end date", () => {
+    const later = claim("mb-later", JO.did, 40, { validFrom: "2026-12-01T00:00:00.000Z" });
+    const jo = claim(`mb-self-${JO.did}`, JO.did, 30, { validUntil: "2027-01-01T00:00:00.000Z" });
+    const b = rosterBatch(HUB, [manager, jo, later], { op: "change", did: JO.did, role: 30 }, NOW);
+    expect(kinds(b)).toEqual([["update", `mb-self-${JO.did}`], ["update", "mb-later"]]);
+    expect(valueOf(b, 0)).not.toHaveProperty("validUntil");
+  });
+
   it("refuses leaving RegenHub with nobody at facilitator or above", () => {
     const jo = claim(`mb-self-${JO.did}`, JO.did, 20);
     expect(() => rosterBatch(HUB, [manager, jo], { op: "end", did: STEWARD.did }, NOW)).toThrow(RosterRefusal);

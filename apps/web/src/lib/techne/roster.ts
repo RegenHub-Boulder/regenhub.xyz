@@ -64,8 +64,21 @@ export function claimsFrom(rows: TechneRecord<MembershipValue>[], collective: st
   return [...out.values()];
 }
 
+/** A claim not in force yet that will be once its `validFrom` comes (whether or not it also has an end). */
+function isScheduled(v: MembershipValue, now: Date): boolean {
+  const from = typeof v.validFrom === "string" ? Date.parse(v.validFrom) : NaN;
+  return !Number.isNaN(from) && from > now.getTime() && isLive(v, new Date(from + 1));
+}
+
 /** Everyone holding a live role, highest role first, then longest standing. */
 export function holdersFrom(claims: Claim[], now = new Date()): Holder[] {
+  return everyone(claims, now)
+    .filter((h) => h.live.length > 0)
+    .sort((a, b) => b.role - a.role || (a.since ?? "~").localeCompare(b.since ?? "~") || a.did.localeCompare(b.did));
+}
+
+/** Everyone the claims name, with or without a live role. */
+function everyone(claims: Claim[], now: Date): Holder[] {
   const by = new Map<string, Holder>();
   for (const c of claims) {
     const did = c.value.subject as string;
@@ -75,13 +88,11 @@ export function holdersFrom(claims: Claim[], now = new Date()): Holder[] {
       h.role = Math.max(h.role, c.value.role as number);
       const at = typeof c.value.createdAt === "string" ? c.value.createdAt : null;
       if (at && (!h.since || at < h.since)) h.since = at;
-    } else if (isLive(c.value, new Date(8.64e15))) h.scheduled.push(c);
+    } else if (isScheduled(c.value, now)) h.scheduled.push(c);
     else h.ended.push(c);
     by.set(did, h);
   }
-  return [...by.values()]
-    .filter((h) => h.live.length > 0)
-    .sort((a, b) => b.role - a.role || (a.since ?? "~").localeCompare(b.since ?? "~") || a.did.localeCompare(b.did));
+  return [...by.values()];
 }
 
 /** `add`: someone with no live role (typed by handle); `change`: a role someone holds now; `end`: end it. */
@@ -119,6 +130,8 @@ export function rosterBatch(collective: string, claims: Claim[], change: RosterC
   if (change.did === collective) throw new RosterRefusal("RegenHub can't hold a role in itself.");
   const holders = holdersFrom(claims, now);
   const holder = holders.find((h) => h.did === change.did) ?? null;
+  // Claims of theirs not in force yet: every change ends them, or they'd raise or restore a role later.
+  const scheduled = everyone(claims, now).find((h) => h.did === change.did)?.scheduled ?? [];
   const stamp = now.toISOString();
   const raises: ApplyWrite[] = [];
   const lowers: ApplyWrite[] = [];
@@ -130,10 +143,10 @@ export function rosterBatch(collective: string, claims: Claim[], change: RosterC
   }
 
   if (change.op === "end") {
-    for (const c of [...holder!.live, ...holder!.scheduled]) lowers.push(update(c.rkey, { ...c.value, $type: MEMBERSHIP_NSID, validUntil: stamp }));
+    for (const c of [...holder!.live, ...scheduled]) lowers.push(update(c.rkey, { ...c.value, $type: MEMBERSHIP_NSID, validUntil: stamp }));
   } else {
     if (!isOfferedRole(change.role)) throw new RosterRefusal("Pick member, facilitator or manager.");
-    if (holder && holder.role === change.role && holder.live.length === 1) {
+    if (holder && holder.role === change.role && holder.live.length === 1 && scheduled.length === 0 && holder.live[0].value.validUntil == null) {
       throw new RosterRefusal(`They're already a ${roleName(change.role)}.`);
     }
     // Keep one live claim at the new role (their own `mb-self-` claim if live, else their highest) and end the rest.
@@ -145,7 +158,10 @@ export function rosterBatch(collective: string, claims: Claim[], change: RosterC
     const before = keep ? (keep.value.role as number) : 0;
     let write: ApplyWrite;
     if (keep) {
-      write = update(keep.rkey, { ...keep.value, $type: MEMBERSHIP_NSID, role: change.role });
+      // The kept claim carries the new role from now on, without an end date it may have had.
+      const { validUntil: _ended, ...value } = keep.value;
+      void _ended;
+      write = update(keep.rkey, { ...value, $type: MEMBERSHIP_NSID, role: change.role });
     } else {
       // An ended claim keeps its end: a new claim, under a new key when theirs is taken.
       const taken = claims.some((c) => c.rkey === main);
@@ -157,7 +173,7 @@ export function rosterBatch(collective: string, claims: Claim[], change: RosterC
       };
     }
     (change.role >= before ? raises : lowers).push(write);
-    for (const c of [...(holder?.live ?? []), ...(holder?.scheduled ?? [])]) {
+    for (const c of [...(holder?.live ?? []), ...scheduled]) {
       if (c !== keep) lowers.push(update(c.rkey, { ...c.value, $type: MEMBERSHIP_NSID, validUntil: stamp }));
     }
   }
