@@ -2,7 +2,7 @@
  * Dependency-free Markdown → email-ready HTML for LLM-authored newsletters.
  *
  * Covers the subset our authored issues use: #/##/### headings, **bold**,
- * *italic*, [links](url), "- " bullet lists, "---" rules, blank-line
+ * *italic*, [links](url), `![alt](https://…)` image lines, "- " bullet lists, "---" rules, blank-line
  * paragraphs, emoji passthrough. Every element gets INLINE styles because
  * email clients strip <style> blocks.
  *
@@ -12,6 +12,16 @@
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/**
+ * A line that is only `![alt](https://…)`. Only absolute https URLs with no
+ * quotes, angle brackets or whitespace qualify; anything else stays literal text.
+ */
+const IMAGE_LINE = /^!\[([^\]]*)\]\((https:\/\/[^\s"'<>()]+)\)$/;
+
+function imageHtml(alt: string, src: string): string {
+  return `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt).replace(/"/g, "&quot;")}" width="100%" style="display:block;max-width:600px;width:100%;height:auto;border-radius:8px;margin:16px 0;">`;
 }
 
 /** Strip a leading YAML frontmatter block (--- ... ---) if present. */
@@ -64,13 +74,19 @@ export function markdownToEmailHtml(md: string): string {
   for (const raw of lines) {
     let t = raw.trim();
     if (!t) { flushAll(); continue; }
+    let m: RegExpMatchArray | null;
+
+    if ((m = t.match(IMAGE_LINE)) && !items && !cur) {
+      flushAll();
+      out.push(imageHtml(m[1], m[2]));
+      continue;
+    }
 
     let br = false;
     if (t.endsWith("\\")) { br = true; t = t.replace(/\\+$/, "").trimEnd(); }
 
     if (/^---+$/.test(t)) { flushAll(); out.push(`<hr style="border:none;border-top:1px solid #e5e5e5;margin:24px 0;" />`); continue; }
 
-    let m: RegExpMatchArray | null;
     if ((m = t.match(/^(#{1,3})\s+(.*)$/))) {
       flushAll();
       const level = m[1].length;
