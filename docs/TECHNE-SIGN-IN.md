@@ -219,6 +219,23 @@ shipped.
 - This read only words the hint on the page (everyone signed in gets the form). Techne checks every write itself.
   `GET /api/portal/events/standing` needs the portal session and reads through a one-minute cache.
 
+### Managing RegenHub's roles: /admin/stewards (T-482, Aaron 11-19)
+
+- With the admin pages, but its authority is the Techne role: a Techne sign-in at facilitator (30) or above in
+  RegenHub's public membership claims. `members.is_admin` neither grants it nor is needed (the admin pages moved
+  into `app/admin/(staff)/`, whose layout keeps the `is_admin` gate; the admin frame only picks which links show).
+- Lists every live claim (handle verified both ways, else short DID), highest role first. Add (a handle, resolved
+  the atproto way and checked against the DID document), change and end. One `writeAsCollective` per action
+  (`POST /api/techne/stewards`, `lib/techne/roster.ts`, sent by `sendCollectiveBatch`): the roster is read fresh
+  on the server, never taken from the page.
+- Names follow Techne today: member 20, facilitator 30, manager 40 (`lib/techne/roles.ts`; the lexicon's older
+  index says 10=member, 40=steward). Keys follow the founder claim: `mb-self-<did>`, rewritten in place on a role
+  change; ending sets `validUntil` (never a delete); adding back someone whose claim ended writes
+  `mb-self-<did>-<tid>` so the ended one keeps its end. No `addedBy` (the lexicon: no public collective stamps it).
+- Refused: any change that leaves nobody at >= 30 (Techne's LastManager rule). Raises are written before lowers.
+- Unproven until one real change: that Techne's writeAsCollective takes a `pub.techne.draft.membership` write from
+  a manager (events through the same call are proven live, 11-19).
+
 ### Client metadata
 
 - "The app is its client metadata URL (`client_id`) … no registration" (building-an-app.md *Sign-in*).

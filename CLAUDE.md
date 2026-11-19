@@ -333,6 +333,11 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   `TECHNE_PLC_URL`, `TECHNE_HANDLE_DOMAIN`, `TECHNE_PLATFORM_DID`. **Staging only:** `TECHNE_STAGING_STANDIN=1` +
   `TECHNE_STANDIN_URL` swap the OAuth for a server-side stand-in (`lib/techne/standIn.ts`, `app/staging/techne`,
   `scripts/staging/`); refused for the regenhub.xyz origin. Staging recipe: `scripts/staging/preview.sh`.
+- **RegenHub stewards** (`/admin/stewards`, T-482): RegenHub's facilitators and managers on Techne list, add (by
+  handle), change and end roles (`pub.techne.draft.membership` written as the collective via writeAsCollective,
+  `lib/techne/roster.ts`, `POST /api/techne/stewards`). Authority is the Techne role (>= 30), never `is_admin`; the
+  `is_admin` admin pages live in `app/admin/(staff)/`. Ending sets `validUntil`; nobody-left-at-30 is refused.
+  Details: docs/TECHNE-SIGN-IN.md "Managing RegenHub's roles".
 - Deliberately NOT changed: the newsletter still reads Luma directly (`lib/newsletter.ts:142`). Its
   copy is Luma-branded end to end; switching it is a product decision, not a plumbing one.
 
