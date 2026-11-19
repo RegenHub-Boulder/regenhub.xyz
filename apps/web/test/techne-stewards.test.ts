@@ -55,7 +55,7 @@ describe("the batch", () => {
   const manager = claim(`mb-self-${STEWARD.did}`, STEWARD.did, 40);
 
   it("adds someone as one public claim at mb-self-<did>, no addedBy", () => {
-    const b = rosterBatch(HUB, [manager], { op: "set", did: JO.did, role: 30 }, NOW);
+    const b = rosterBatch(HUB, [manager], { op: "add", did: JO.did, role: 30 }, NOW);
     expect(b.input.repo).toBe(HUB);
     expect(kinds(b)).toEqual([["create", `mb-self-${JO.did}`]]);
     expect(valueOf(b, 0)).toEqual({ $type: MEMBERSHIP_NSID, subject: JO.did, role: 30, createdAt: NOW.toISOString() });
@@ -64,7 +64,7 @@ describe("the batch", () => {
 
   it("changes a role in place, keeping the claim's other fields", () => {
     const jo = claim(`mb-self-${JO.did}`, JO.did, 20, { note: "kept" });
-    const b = rosterBatch(HUB, [manager, jo], { op: "set", did: JO.did, role: 40 }, NOW);
+    const b = rosterBatch(HUB, [manager, jo], { op: "change", did: JO.did, role: 40 }, NOW);
     expect(kinds(b)).toEqual([["update", `mb-self-${JO.did}`]]);
     expect(valueOf(b, 0)).toEqual({ ...jo.value, role: 40 });
   });
@@ -79,7 +79,7 @@ describe("the batch", () => {
   });
 
   it("someone with two live claims ends up with exactly the role picked", () => {
-    const b = rosterBatch(HUB, [manager, claim("mb-a", JO.did, 30), claim("mb-b", JO.did, 40)], { op: "set", did: JO.did, role: 20 }, NOW);
+    const b = rosterBatch(HUB, [manager, claim("mb-a", JO.did, 30), claim("mb-b", JO.did, 40)], { op: "change", did: JO.did, role: 20 }, NOW);
     expect(kinds(b)).toEqual([["update", "mb-b"], ["update", "mb-a"]]);
     expect(valueOf(b, 0).role).toBe(20);
     expect(valueOf(b, 1).validUntil).toBe(NOW.toISOString());
@@ -87,17 +87,26 @@ describe("the batch", () => {
 
   it("adding back someone whose role ended writes a new claim, so the old one keeps its end", () => {
     const ended = claim(`mb-self-${JO.did}`, JO.did, 30, { validUntil: "2026-10-01T00:00:00.000Z" });
-    const b = rosterBatch(HUB, [manager, ended], { op: "set", did: JO.did, role: 20 }, NOW);
+    const b = rosterBatch(HUB, [manager, ended], { op: "add", did: JO.did, role: 20 }, NOW);
     expect(kinds(b)).toEqual([["create", expect.stringMatching(new RegExp(`^mb-self-${JO.did}-[234567a-z]{13}$`))]]);
+  });
+
+  it("Add never touches a role someone holds, and change or end never creates one", () => {
+    const fac = claim(`mb-self-${JO.did}`, JO.did, 30);
+    // A handle typed into Add with the default "member" must not demote a facilitator.
+    expect(() => rosterBatch(HUB, [manager, fac], { op: "add", did: JO.did, role: 20 }, NOW)).toThrow(/already a facilitator/);
+    // A DID that holds nothing (any string the page could be made to send) gets no claim through change or end.
+    expect(() => rosterBatch(HUB, [manager], { op: "change", did: "did:web:attacker.example", role: 40 }, NOW)).toThrow(RosterRefusal);
+    expect(() => rosterBatch(HUB, [manager], { op: "end", did: JO.did }, NOW)).toThrow(RosterRefusal);
   });
 
   it("refuses leaving RegenHub with nobody at facilitator or above", () => {
     const jo = claim(`mb-self-${JO.did}`, JO.did, 20);
     expect(() => rosterBatch(HUB, [manager, jo], { op: "end", did: STEWARD.did }, NOW)).toThrow(RosterRefusal);
-    expect(() => rosterBatch(HUB, [manager, jo], { op: "set", did: STEWARD.did, role: 20 }, NOW)).toThrow(/nobody at facilitator or above/);
+    expect(() => rosterBatch(HUB, [manager, jo], { op: "change", did: STEWARD.did, role: 20 }, NOW)).toThrow(/nobody at facilitator or above/);
     // With a facilitator left, the manager may step down.
     const fac = claim(`mb-self-${JO.did}`, JO.did, 30);
-    expect(kinds(rosterBatch(HUB, [manager, fac], { op: "set", did: STEWARD.did, role: 20 }, NOW))).toEqual([["update", `mb-self-${STEWARD.did}`]]);
+    expect(kinds(rosterBatch(HUB, [manager, fac], { op: "change", did: STEWARD.did, role: 20 }, NOW))).toEqual([["update", `mb-self-${STEWARD.did}`]]);
     // An ended or not-yet-valid manager claim doesn't count as someone left.
     const endedMgr = claim("mb-gone", ANA.did, 40, { validUntil: "2026-01-01T00:00:00.000Z" });
     expect(() => rosterBatch(HUB, [manager, endedMgr], { op: "end", did: STEWARD.did }, NOW)).toThrow(RosterRefusal);
@@ -106,7 +115,7 @@ describe("the batch", () => {
   it("raises come before lowers, so no prefix of the batch leaves RegenHub without a manager", () => {
     // Steward hands over: Jo's raise (her claim) is written; the steward's own lower is a separate change. Within one
     // change, the kept claim's raise precedes the others' ends.
-    const b = rosterBatch(HUB, [manager, claim("mb-a", JO.did, 20), claim("mb-b", JO.did, 10)], { op: "set", did: JO.did, role: 40 }, NOW);
+    const b = rosterBatch(HUB, [manager, claim("mb-a", JO.did, 20), claim("mb-b", JO.did, 10)], { op: "change", did: JO.did, role: 40 }, NOW);
     expect(kinds(b)).toEqual([["update", "mb-a"], ["update", "mb-b"]]);
     expect(valueOf(b, 0).role).toBe(40);
   });
@@ -298,8 +307,12 @@ describe("end to end (stand-in)", () => {
     expect(roles(rosterIn(await page()))).toEqual([[`@${STEWARD.handle}`, 40], [`@${JO.handle}`, 30]]);
   });
 
-  it("a handle that doesn't resolve is refused before anything is written", async () => {
+  it("a handle that doesn't resolve, or a change for someone without a role, is refused before anything is written", async () => {
     await signInAs(STEWARD.did);
+    const before = await fetchRoster(HUB);
+    expect(await post({ op: "change", did: "did:web:attacker.example", role: 40 })).toMatchObject({ status: 409, ok: false });
+    expect(await post({ op: "add", handle: JO.handle, role: 20 })).toMatchObject({ status: 409, error: expect.stringContaining("already a facilitator") });
+    expect(await fetchRoster(HUB)).toEqual(before);
     expect(await post({ op: "add", handle: "nobody.techne.town", role: 20 })).toMatchObject({ status: 400, error: expect.stringContaining("Couldn't find a Techne account") });
   });
 

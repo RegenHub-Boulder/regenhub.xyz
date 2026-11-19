@@ -20,6 +20,17 @@ export const isOfferedRole = (r: unknown): r is OfferedRole => ROLES.some((x) =>
 
 const ROLE_NAMES: Record<number, string> = { 10: "member", 20: "member", 30: "facilitator", 40: "manager" };
 
+/** Is a membership claim in force at `now`? An integer role, started (no `validFrom`, or one in the past), and not
+ *  ended (no `validUntil`, or a parseable one in the future). Anything malformed counts as not in force. */
+export function isLive(v: { role?: unknown; validFrom?: unknown; validUntil?: unknown }, now: Date): boolean {
+  if (typeof v.role !== "number" || !Number.isInteger(v.role)) return false;
+  const from = typeof v.validFrom === "string" ? Date.parse(v.validFrom) : NaN;
+  if (!Number.isNaN(from) && from > now.getTime()) return false;
+  if (v.validUntil === undefined) return true;
+  const until = typeof v.validUntil === "string" ? Date.parse(v.validUntil) : NaN;
+  return !Number.isNaN(until) && until > now.getTime();
+}
+
 /** A role index in words: the highest named role at or below it ("role 5" below them all). */
 export function roleName(role: number | null): string | null {
   if (role === null) return null;

@@ -16,9 +16,7 @@
  */
 
 import { MEMBERSHIP_NSID } from "./standing";
-import { MANAGE_ROLE, isOfferedRole, roleName, type OfferedRole } from "./roles";
-
-export { MANAGE_ROLE, ROLES, isOfferedRole, type OfferedRole } from "./roles";
+import { MANAGE_ROLE, isLive, isOfferedRole, roleName, type OfferedRole } from "./roles";
 import { listRecords, type TechneRecord } from "./query";
 import { tid } from "./tid";
 import type { ApplyWrite, CollectiveBatch } from "./collectiveEvents";
@@ -50,16 +48,6 @@ export interface Holder {
 }
 
 const DID = /^did:[a-z]+:[A-Za-z0-9._:%-]{1,256}$/;
-
-/** Is this claim in force at `now`? */
-export function isLive(v: MembershipValue, now: Date): boolean {
-  if (typeof v.role !== "number" || !Number.isInteger(v.role)) return false;
-  const from = typeof v.validFrom === "string" ? Date.parse(v.validFrom) : NaN;
-  if (!Number.isNaN(from) && from > now.getTime()) return false;
-  if (v.validUntil === undefined) return true;
-  const until = typeof v.validUntil === "string" ? Date.parse(v.validUntil) : NaN;
-  return !Number.isNaN(until) && until > now.getTime();
-}
 
 /** The collective's own membership claims about DIDs (in its repo, authored by it), by key. */
 export function claimsFrom(rows: TechneRecord<MembershipValue>[], collective: string): Claim[] {
@@ -94,8 +82,9 @@ export function holdersFrom(claims: Claim[], now = new Date()): Holder[] {
     .sort((a, b) => b.role - a.role || (a.since ?? "~").localeCompare(b.since ?? "~") || a.did.localeCompare(b.did));
 }
 
+/** `add`: someone with no live role (typed by handle); `change`: a role someone holds now; `end`: end it. */
 export type RosterChange =
-  | { op: "set"; did: string; role: OfferedRole }
+  | { op: "add" | "change"; did: string; role: OfferedRole }
   | { op: "end"; did: string };
 
 export class RosterRefusal extends Error {}
@@ -130,6 +119,12 @@ export function rosterBatch(collective: string, claims: Claim[], change: RosterC
   const stamp = now.toISOString();
   const raises: ApplyWrite[] = [];
   const lowers: ApplyWrite[] = [];
+
+  if (change.op !== "add" && !holder) throw new RosterRefusal("They don't hold a role in RegenHub. Reload to see the list.");
+  // Add never changes a role someone already holds (a handle typed with the default "member" would demote them).
+  if (change.op === "add" && holder) {
+    throw new RosterRefusal(`They're already a ${roleName(holder.role)} of RegenHub. Change their role in the list.`);
+  }
 
   if (change.op === "end") {
     if (!holder) throw new RosterRefusal("They don't hold a role in RegenHub.");
@@ -169,7 +164,7 @@ export function rosterBatch(collective: string, claims: Claim[], change: RosterC
   const after = holders
     .filter((h) => h.did !== change.did)
     .map((h) => h.role)
-    .concat(change.op === "set" ? [change.role] : []);
+    .concat(change.op === "end" ? [] : [change.role]);
   if (!after.some((r) => r >= MANAGE_ROLE)) {
     throw new RosterRefusal(
       "That would leave RegenHub with nobody at facilitator or above, and then nobody could manage it. Make someone else a facilitator or manager first.",

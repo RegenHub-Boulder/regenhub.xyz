@@ -4,9 +4,10 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { techneConfig } from "@/lib/techne/config";
 import { regenosCollectiveDid } from "@/lib/regenos/config";
 import { TechneUnreachable, endLapsedSession, techneSession, unreachableResponse } from "@/lib/techne/serverSession";
-import { sameSiteJson } from "@/lib/techne/guard";
+import { sameSiteJson, tooMany, withinIpLimit } from "@/lib/techne/guard";
 import { sendCollectiveBatch, writeErrorText } from "@/lib/techne/collectiveWrite";
-import { MANAGE_ROLE, RosterRefusal, fetchRoster, holdersFrom, isOfferedRole, rosterBatch, type OfferedRole, type RosterChange } from "@/lib/techne/roster";
+import { RosterRefusal, fetchRoster, holdersFrom, rosterBatch, type RosterChange } from "@/lib/techne/roster";
+import { MANAGE_ROLE, isOfferedRole, type OfferedRole } from "@/lib/techne/roles";
 import { didForHandle } from "@/lib/techne/did";
 import { TECHNE_READS_TAG } from "@/lib/techne/query";
 
@@ -38,6 +39,7 @@ export async function POST(req: Request) {
   }
 
   const admin = createServiceClient();
+  if (!(await withinIpLimit(admin, req, "stewards"))) return tooMany();
   let signedIn;
   try {
     signedIn = await techneSession(admin);
@@ -71,7 +73,9 @@ export async function POST(req: Request) {
     target = found.did;
   } else target = body!.did as string;
 
-  const change: RosterChange = op === "end" ? { op: "end", did: target } : { op: "set", did: target, role: body!.role as OfferedRole };
+  // Change and end act only on someone who holds a role now (rosterBatch checks); only Add, by a verified handle,
+  // brings in someone new.
+  const change: RosterChange = op === "end" ? { op: "end", did: target } : { op, did: target, role: body!.role as OfferedRole };
   let batch;
   try {
     batch = rosterBatch(collective, claims, change);

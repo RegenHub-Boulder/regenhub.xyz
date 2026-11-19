@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -29,3 +30,18 @@ export async function requireAdminMember() {
 export async function requireAdmin() {
   return (await requireAdminMember())?.user ?? null;
 }
+
+/** Who is signed in to the portal and whether they are an enabled admin, read once per request (React `cache`): the
+ *  admin frame (which links to show) and the staff pages' gate (app/admin/(staff)/layout.tsx) share it. */
+export const portalViewer = cache(async () => {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { user: null, isAdmin: false };
+  const { data } = await supabase
+    .from("members")
+    .select("is_admin, disabled")
+    .eq("supabase_user_id", user.id)
+    .maybeSingle();
+  // A disabled member is not an admin, whatever their is_admin flag says.
+  return { user, isAdmin: !!data?.is_admin && !data.disabled };
+});

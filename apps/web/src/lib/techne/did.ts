@@ -65,21 +65,21 @@ export function handleOf(doc: unknown): string | null {
 
 const HANDLE_SYNTAX = /^(?=.{3,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
-/** The DID a handle names, the atproto way: `https://<handle>/.well-known/atproto-did` (https only, no redirects,
- *  5 s), else the `_atproto.<handle>` DNS TXT record `did=…`. On staging, the stand-in's resolveHandle (its sample
- *  handles have no domain). Null when neither answers with a DID. */
-export async function resolveHandle(handle: string, fetchImpl: typeof fetch = (...a) => fetch(...a)): Promise<string | null> {
-  const h = handle.trim().replace(/^@/, "").toLowerCase();
-  if (!HANDLE_SYNTAX.test(h)) return null;
-  const isDid = (v: unknown): v is string => typeof v === "string" && /^did:[a-z]+:[A-Za-z0-9._:%-]{1,256}$/.test(v);
+const isDidString = (v: unknown): v is string => typeof v === "string" && /^did:[a-z]+:[A-Za-z0-9._:%-]{1,256}$/.test(v);
+
+/** The DIDs a handle's two atproto lookups name: `https://<handle>/.well-known/atproto-did` (https only, no
+ *  redirects, 5 s) and every `_atproto.<handle>` DNS TXT record `did=…`. On staging, only the stand-in's resolveHandle
+ *  (its sample handles have no domain). Empty when nothing answers. */
+async function handleDids(h: string, fetchImpl: typeof fetch): Promise<string[]> {
   const standIn = process.env.TECHNE_STANDIN_URL?.trim();
   if (isStandInEnabled() && standIn) {
     const res = await fetchImpl(`${standIn.replace(/\/+$/, "")}/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(h)}`, {
       cache: "no-store",
     }).catch(() => null);
     const did = res?.ok ? ((await res.json().catch(() => null)) as { did?: unknown } | null)?.did : null;
-    return isDid(did) ? did : null;
+    return isDidString(did) ? [did] : [];
   }
+  const out: string[] = [];
   try {
     const res = await fetchImpl(`https://${h}/.well-known/atproto-did`, {
       headers: { accept: "text/plain" },
@@ -88,9 +88,9 @@ export async function resolveHandle(handle: string, fetchImpl: typeof fetch = (.
       redirect: "error",
     });
     const did = res.ok ? (await res.text()).trim() : null;
-    if (isDid(did)) return did;
+    if (isDidString(did)) out.push(did);
   } catch {
-    /* fall through to DNS */
+    /* and DNS */
   }
   try {
     const { resolveTxt } = await import("node:dns/promises");
@@ -98,22 +98,33 @@ export async function resolveHandle(handle: string, fetchImpl: typeof fetch = (.
       resolveTxt(`_atproto.${h}`),
       new Promise<string[][]>((_, no) => setTimeout(() => no(new Error("dns timeout")), 5000).unref?.()),
     ]);
-    const did = records.map((r) => r.join("")).find((t) => t.startsWith("did="))?.slice(4);
-    return isDid(did) ? did : null;
+    for (const t of records.map((r) => r.join(""))) if (t.startsWith("did=") && isDidString(t.slice(4))) out.push(t.slice(4));
   } catch {
-    return null;
+    /* none */
   }
+  return out;
 }
 
-/** Does `handle` resolve to `did`? Any failure is "no". */
-export async function handleResolvesTo(handle: string, did: string, fetchImpl?: typeof fetch): Promise<boolean> {
-  return (await resolveHandle(handle, fetchImpl)) === did;
+const normalHandle = (handle: string) => handle.trim().replace(/^@/, "").toLowerCase();
+
+/** The DID a handle names (the well-known answer first, else DNS), or null. */
+export async function resolveHandle(handle: string, fetchImpl: typeof fetch = (...a) => fetch(...a)): Promise<string | null> {
+  const h = normalHandle(handle);
+  if (!HANDLE_SYNTAX.test(h)) return null;
+  return (await handleDids(h, fetchImpl))[0] ?? null;
+}
+
+/** Does `handle` resolve to `did` by either lookup? Any failure is "no". */
+export async function handleResolvesTo(handle: string, did: string, fetchImpl: typeof fetch = (...a) => fetch(...a)): Promise<boolean> {
+  const h = normalHandle(handle);
+  if (!HANDLE_SYNTAX.test(h)) return false;
+  return (await handleDids(h, fetchImpl)).includes(did);
 }
 
 /** A handle typed by a person → the DID it names, verified both ways: the handle resolves to the DID, and that DID's
  *  own document claims the handle back. Only did:plc (Techne accounts). Null when either side doesn't hold. */
 export async function didForHandle(handle: string, resolve: DidResolver = resolver()): Promise<{ did: string; handle: string } | null> {
-  const h = handle.trim().replace(/^@/, "").toLowerCase();
+  const h = normalHandle(handle);
   const did = await resolveHandle(h);
   if (!did || !isPlcDid(did)) return null;
   const doc = await resolve(did).catch(() => null);

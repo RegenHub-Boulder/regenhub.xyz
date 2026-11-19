@@ -17,19 +17,17 @@
  */
 
 import { listRecords } from "./query";
-import { MANAGE_ROLE, roleName } from "./roles";
+import { MANAGE_ROLE, isLive, roleName } from "./roles";
 
 export const MEMBERSHIP_NSID = "pub.techne.draft.membership";
 
-/**
- * Facilitator and up post and edit the collective's events: writing as the collective is for "whoever
+/*
+ * Facilitator and up (MANAGE_ROLE) post and edit the collective's events: writing as the collective is for "whoever
  * manages its own member space" (lexicon pub.techne.draft.identity.createCollective), and a collective's
  * manage leg is facilitator (30) and up (pub.techne.draft.appAccess: "Facilitator and up for a
  * collective's"). Techne enforces it on the write; this only words the hint.
  */
-export const EVENT_STEWARD_ROLE = MANAGE_ROLE;
 
-export { roleName };
 
 export interface Standing {
   /** The highest role among the collective's live claims naming them; null when there are none. */
@@ -56,14 +54,11 @@ export function standingFrom(rows: MembershipRow[], collective: string, did: str
     if (!r.uri.includes(`/${MEMBERSHIP_NSID}/`)) continue;
     const v = r.value ?? {};
     if (v.subject !== did) continue;
-    if (typeof v.role !== "number" || !Number.isInteger(v.role)) continue;
-    const from = typeof v.validFrom === "string" ? Date.parse(v.validFrom) : NaN;
-    const until = typeof v.validUntil === "string" ? Date.parse(v.validUntil) : NaN;
-    if (!Number.isNaN(from) && from > now.getTime()) continue;
-    if (typeof v.validUntil === "string" && (Number.isNaN(until) || until <= now.getTime())) continue;
-    if (role === null || v.role > role) role = v.role;
+    if (!isLive(v, now)) continue;
+    const held = v.role as number;
+    if (role === null || held > role) role = held;
   }
-  return { role, roleName: roleName(role), canManageEvents: role !== null && role >= EVENT_STEWARD_ROLE };
+  return { role, roleName: roleName(role), canManageEvents: role !== null && role >= MANAGE_ROLE };
 }
 
 /** Their standing, read anonymously from Techne. Null when Techne couldn't be read. */

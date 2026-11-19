@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { portalViewer } from "@/lib/admin";
 import Link from "next/link";
 import { MobileNav, type NavLink } from "@/components/nav/MobileNav";
 import { techneConfig } from "@/lib/techne/config";
@@ -24,12 +24,7 @@ const portalLink: NavLink = { href: "/portal", label: "Portal", accent: true };
  * a RegenHub admin sees them all, anyone else just Stewards (while the Techne door is on).
  */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  const { data: member } = user
-    ? await supabase.from("members").select("is_admin, disabled").eq("supabase_user_id", user.id).maybeSingle()
-    : { data: null };
-  const isAdmin = !!member?.is_admin && !member.disabled;
+  const { user, isAdmin } = await portalViewer();
   const stewards = techneConfig() && regenosCollectiveDid() ? [stewardsLink] : [];
   const links = [...(isAdmin ? staffLinks : []), ...stewards, ...(user ? [portalLink] : [])];
 
