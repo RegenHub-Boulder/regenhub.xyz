@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getSeries, nthWeekdayOfMonth, plannedNight, rhythmOf, ruleDatesFrom } from "./series";
+import { getSeries, nthWeekdayOfMonth, plannedNight, rhythmOf, ruleDatesFrom, type MonthlyRule } from "./series";
 import { pickedNight, seriesNightInput, unpostedNights } from "./seriesNights";
 
 const agents = getSeries("agents-night")!;
@@ -11,14 +11,14 @@ const dates = (ns: { date: string }[]) => ns.map((n) => n.date);
 
 describe("the monthly rule", () => {
   it("1st Tuesday: months where the 1st is itself a Tuesday (Dec 2026 → Feb 2027)", () => {
-    const r = agents.rule;
+    const r = agents.rule as MonthlyRule;
     expect(nthWeekdayOfMonth(2026, 12, r)).toBe("2026-12-01");
     expect(nthWeekdayOfMonth(2027, 1, r)).toBe("2027-01-05");
     expect(nthWeekdayOfMonth(2027, 2, r)).toBe("2027-02-02");
     expect(nthWeekdayOfMonth(2027, 3, r)).toBe("2027-03-02");
   });
   it("3rd Tuesday", () => {
-    const r = civic.rule;
+    const r = civic.rule as MonthlyRule;
     expect([[2026, 12], [2027, 1], [2027, 2]].map(([y, m]) => nthWeekdayOfMonth(y, m, r))).toEqual([
       "2026-12-15", "2027-01-19", "2027-02-16",
     ]);
