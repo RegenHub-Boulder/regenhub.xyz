@@ -85,7 +85,7 @@ const collective = c.sceneDid ?? c.collectiveDid ?? c.did;
 console.log("collective", collective);
 
 // Agents Building Night's first night is posted; Civic Tech Night's is left for the steward page to list as
-// "confirmed but not posted yet". Times are the placeholder 6:30-9pm America/Denver (MST, -07:00).
+// "confirmed but not posted yet". Times are the series default, 5:30-7:30pm America/Denver (MST, -07:00).
 const ALL_NIGHTS = [
   {
     slug: "agents-night",
@@ -113,8 +113,8 @@ for (const n of NIGHTS) {
     attendance: "open",
     name: n.name,
     description: n.description,
-    startsAt: `${n.date}T18:30:00-07:00`,
-    endsAt: `${n.date}T21:00:00-07:00`,
+    startsAt: `${n.date}T17:30:00-07:00`,
+    endsAt: `${n.date}T19:30:00-07:00`,
     timezone: "America/Denver",
     placeName: "RegenHub",
     street: "1515 Walnut St, Suite 200",

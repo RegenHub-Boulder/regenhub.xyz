@@ -283,7 +283,7 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   has `rule: {nth, weekday}` (`nthWeekdayOfMonth`, `ruleDatesFrom`) and `rhythmOf` words it ("First Tuesday of
   each month"), shown on the series page and cards. The rule invents no events: a visitor sees a night only once
   a steward posts it, feeds are built from posted records, and with none posted ahead the page still says "Next
-  date coming soon". The rule and the 6:30–9pm America/Denver placeholder times are EDITABLE DATA, used for the
+  date coming soon". The rule and the 5:30–7:30pm America/Denver times are EDITABLE DATA, used for the
   rhythm line and as suggestions in the portal. Techne has no series type: a night is an ordinary event named after the series ("Agents Building Night", or
   "Agents Building Night: topic"), or with a `uris` entry ending `/events/<slug>`. Nights posted as "Agents Night" (the series' former name, `formerNames`) still match. Each series has `hosts` ("AG and Benjamin"), shown on the series page and cards. Event keys are TIDs (`mintRkey`), as the
   lexicon declares; old `ev-…` keys still read. Every create/edit sends `timezone: "America/Denver"`.

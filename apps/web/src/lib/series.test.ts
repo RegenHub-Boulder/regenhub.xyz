@@ -71,11 +71,11 @@ describe("times", () => {
     expect(zonedTimeToUtc("2027-03-14", "18:30", "America/Denver").toISOString()).toBe("2027-03-15T00:30:00.000Z");
   });
 
-  it("puts a night on its date at the series' 6:30–9pm", () => {
+  it("puts a night on its date at the series' 5:30–7:30pm", () => {
     expect(plannedNight(agents, "2026-12-01")).toMatchObject({
       date: "2026-12-01",
-      startsAt: "2026-12-02T01:30:00.000Z",
-      endsAt: "2026-12-02T04:00:00.000Z",
+      startsAt: "2026-12-02T00:30:00.000Z",
+      endsAt: "2026-12-02T02:30:00.000Z",
     });
   });
 });

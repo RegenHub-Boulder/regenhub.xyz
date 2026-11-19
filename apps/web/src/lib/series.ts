@@ -16,7 +16,7 @@
  * A series meets on a monthly rule (Agents Building Night: 1st Tuesday; Civic Tech Night: 3rd Tuesday; Aaron, 11-18).
  * The rule invents no events: a visitor sees a night only once a steward has posted it. The rule is used
  * to say the rhythm in public copy and to suggest the next nights in /portal/events. The rule and the
- * times below are EDITABLE DATA; 6:30–9pm is a placeholder until the hosts confirm.
+ * times below are EDITABLE DATA: 5:30–7:30pm Denver (Aaron, 11-19).
  */
 
 export type SeriesSlug = "agents-night" | "civic-tech-night";
@@ -79,8 +79,8 @@ export const SERIES: readonly Series[] = [
       "you use: bring your setup, demo it, and build alongside others. AG and Benjamin demo their own personal " +
       "agent setups and share tips on how to build your own, and own it. Bring a laptop. All levels welcome.",
     rule: { nth: 1, weekday: 2 },
-    startTime: "18:30",
-    endTime: "21:00",
+    startTime: "17:30",
+    endTime: "19:30",
     timezone: "America/Denver",
     place: REGENHUB_PLACE,
     capacity: null,
@@ -95,8 +95,8 @@ export const SERIES: readonly Series[] = [
       "community needs, or just your curiosity, and build with your neighbors. Rooted in Boulder, with an eye " +
       "on Colorado. No background in politics or code required.",
     rule: { nth: 3, weekday: 2 },
-    startTime: "18:30",
-    endTime: "21:00",
+    startTime: "17:30",
+    endTime: "19:30",
     timezone: "America/Denver",
     place: REGENHUB_PLACE,
     capacity: null,
