@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Screenshots of the T-482 staging preview (sample data only): /, /events, both series pages,
+// Screenshots of the T-482 staging preview (sample data only): /, /events, the four series pages,
 // at 390x844 and 1440x900, plus the RSVP flow on the first Agents Building Night.
 // Usage: PLAYWRIGHT_DIR=<dir holding node_modules/playwright> node scripts/staging/shots.mjs [base] [outdir]
 import { createRequire } from "node:module";
@@ -7,7 +7,7 @@ const { chromium } = createRequire(process.env.PLAYWRIGHT_DIR + "/")("playwright
 const BASE = process.argv[2] ?? "http://127.0.0.1:18590";
 const OUT = process.argv[3] ?? "walkthrough";
 const browser = await chromium.launch();
-const pages = [["home", "/"], ["events", "/events"], ["agents-night", "/events/agents-night"], ["civic-tech-night", "/events/civic-tech-night"]];
+const pages = [["home", "/"], ["events", "/events"], ["agents-night", "/events/agents-night"], ["boulder-blockchain", "/events/boulder-blockchain"], ["civic-tech-night", "/events/civic-tech-night"], ["happy-hour", "/events/happy-hour"]];
 let n = 0;
 for (const [vw, w, h] of [["mobile", 390, 844], ["desktop", 1440, 900]]) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: vw === "mobile" ? 2 : 1 });
