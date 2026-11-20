@@ -120,8 +120,8 @@ export default async function MembershipPage({ searchParams }: PageProps) {
           </p>
           <h1 className="text-4xl sm:text-5xl font-bold text-forest">A place in the practice</h1>
           <p className="text-muted max-w-2xl mx-auto">
-            Techne Tuesdays are free and open to everyone, and they always will be. Membership, from $30 a month,
-            is how you join the people building here week to week.
+            Techne Tuesdays stay free and open to everyone. Membership, from $30 a month, gets you into the rooms
+            where members show their work and help each other with it.
           </p>
         </header>
 
@@ -169,7 +169,7 @@ export default async function MembershipPage({ searchParams }: PageProps) {
           <div className="glass-panel p-5 border border-gold/30 max-w-2xl mx-auto text-center space-y-3">
             <p className="font-medium">Full Access needs one more step</p>
             <p className="text-sm text-muted">
-              You&apos;re cleared for the Contributing Member tiers below. Full Access
+              You&apos;re cleared for the member plans below. Full Access
               ($250 Hot Desk / $500 Cold Desk) involves 24/7 access + a permanent door
               code, so we set up a quick chat first — reach out and we&apos;ll get you welcomed in.
             </p>

@@ -85,7 +85,19 @@ beforeEach(async () => {
   vi.stubEnv("REGENOS_COLLECTIVE_DID", plc("regenhub"));
   vi.stubEnv("RESEND_API_KEY", "re_test");
   vi.stubEnv("EMAIL_FROM", "RegenHub <hub@regenhub.test>");
-  vi.stubGlobal("fetch", edgeFetch(edge, realFetch));
+  const edgeOnly = edgeFetch(edge, realFetch);
+  vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
+    // The public read the RSVP route uses to read the event back (is it the collective's? members only?).
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.origin === "https://techne.test" && url.pathname === "/xrpc/pub.techne.draft.query.getRecords") {
+      const records = url.searchParams.getAll("uris").filter((u) => u === RSVP_EVENT.uri).map((uri) => ({
+        uri, cid: RSVP_EVENT.cid, author: plc("regenhub"), collection: "community.lexicon.calendar.event",
+        value: { $type: "community.lexicon.calendar.event", name: "Civic Tech Night", startsAt: "2099-01-01T01:00:00.000Z" },
+      }));
+      return Promise.resolve(Response.json({ records }));
+    }
+    return edgeOnly(input, init);
+  });
   vi.doMock("node:dns/promises", () => ({ resolveTxt: async () => { throw new Error("ENOTFOUND"); } }));
 });
 
@@ -96,6 +108,9 @@ afterEach(async () => {
 });
 
 // ── helpers ───────────────────────────────────────────────────────────────
+
+/** The one event the RSVP tests answer; the fake Techne read serves it as an open night. */
+const RSVP_EVENT = { uri: `at://${plc("regenhub")}/community.lexicon.calendar.event/3abc`, cid: "bafyreievent" };
 
 function account(name: string, server: FakeTechne = home) {
   const did = plc(name);
@@ -433,7 +448,7 @@ describe("sign-out", () => {
 // ── RSVP through the server-held session ─────────────────────────────────
 
 describe("RSVP", () => {
-  const EVENT = { uri: `at://${plc("regenhub")}/community.lexicon.calendar.event/3abc`, cid: "bafyreievent" };
+  const EVENT = RSVP_EVENT;
   const read = async () =>
     (await rsvpGET(new NextRequest(`${SITE}/api/techne/rsvp?event=${encodeURIComponent(EVENT.uri)}`))).json();
 

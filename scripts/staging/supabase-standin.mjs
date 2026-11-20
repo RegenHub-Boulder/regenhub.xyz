@@ -8,6 +8,7 @@
 //     GET /auth/v1/user, POST /auth/v1/logout
 // Sample members (all fictional, from <state>/people.json): the steward and Ana are members whose Techne account
 // is linked (members.did); Jo is a member who isn't linked yet (the link flow); Sam and Lee aren't members.
+// `subscriptions` is empty: the steward and Ana are desk members, so Studio Night's gate lets them in by type.
 // Usage: node supabase-standin.mjs --port 18604 --state <dir>
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
@@ -43,6 +44,10 @@ await pg.exec(`
     id bigserial primary key, actor_member_id integer references members(id) on delete set null,
     action text not null, target_table text, target_id text, idempotency_key text unique,
     payload jsonb not null default '{}'::jsonb, created_at timestamptz not null default now()
+  );
+  create table subscriptions (
+    id serial primary key, member_id integer references members(id), plan_key text not null default 'member_basic',
+    monthly_cents integer not null, status text not null
   );`);
 await pg.exec(readFileSync(join(ROOT, "supabase/migrations/064_techne_one_door.sql"), "utf8"));
 
