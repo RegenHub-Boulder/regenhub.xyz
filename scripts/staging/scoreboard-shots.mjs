@@ -69,7 +69,7 @@ assert.deepEqual(await cells("Applications"), ["0", "0", "0", "1", "0", "1"]);
 assert.deepEqual(await cells("Day passes bought"), ["0", "1", "1", "1", "1", "2"]);
 assert.deepEqual(await cells("First subscriptions"), ["1", "2", "1", "2", "1", "3"]);
 // Follow-ups, in order.
-const follow = body.slice(body.indexOf("People to follow up"));
+const follow = body.slice(body.lastIndexOf("People to follow up"));
 const order = ["Sample 16", "Sample 8", "Sample 7", "Sample 12", "Sample 9", "walkin@example.test", "Sample 13"];
 for (let i = 1; i < order.length; i++) assert.ok(follow.indexOf(order[i - 1]) < follow.indexOf(order[i]), `order: ${order[i - 1]} before ${order[i]}`);
 assert.ok(follow.includes("Member + 2 days/mo · cancelled Oct 31, 2026"), "Sample 7 cancelled Oct 31 in Denver");
@@ -88,7 +88,6 @@ assert.equal(await page.evaluate(() => navigator.clipboard.readText()), HEADLINE
 console.log("all scoreboard numbers match the hand-worked expectation");
 
 await shot(page, "scoreboard-desktop");
-await page.locator("text=People to follow up").scrollIntoViewIfNeeded();
 const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, storageState: await ctx.storageState() });
 const m = await mobile.newPage();
 await m.goto(BASE + "/admin/scoreboard", { waitUntil: "networkidle" });
