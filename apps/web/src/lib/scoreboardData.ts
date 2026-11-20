@@ -9,11 +9,16 @@ import { fetchAttendance, fetchCollectiveEvents } from "@/lib/regenos/events";
 import { membershipInvoices } from "@/lib/onchain/invoiceKind";
 import { dateIn } from "@/lib/series";
 import { readAll } from "@/lib/supabase/readAll";
+import { handleFor } from "@/lib/techne/did";
+import { AuditAction } from "@/lib/auditLog";
 import {
-  SCOREBOARD_GOALS, SCOREBOARD_TZ, canceledSince, dayPassPool, funnelByMonth, goalProgress, headlineText, lastMonths,
+  SCOREBOARD_GOALS, SCOREBOARD_TZ, canceledSince, dayPassPool, funnelByMonth, goalPace, goalProgress, headlineText, lastMonths,
   lastVisits, passBuyersNeverSubscribed, subscriptionFlow, turnoutBySeries,
   type MemberRow, type PurchaseRow, type SubRow, type TurnoutEvent,
 } from "@/lib/scoreboard";
+import {
+  ACTION_RULES, frequentGuests, latestStates, recommendedActions, visibleActions, type ActionMark, type ActionState,
+} from "@/lib/scoreboardActions";
 
 type Admin = ReturnType<typeof createServiceClient>;
 
@@ -93,10 +98,29 @@ async function turnout(now: Date): Promise<TurnoutEvent[] | null> {
   const events = await fetchCollectiveEvents({ after: new Date(now.getTime() - TURNOUT_PAST_DAYS * 86_400_000).toISOString() });
   if (!events) return null;
   // The same per-event read /admin/events does; a few at a time so a long calendar doesn't fan out at once.
-  const going = await mapLimit(events, 6, (e) => fetchAttendance(e.uri).then((a) => a?.going ?? null));
+  const going = await mapLimit(events, 6, (e) => fetchAttendance(e.uri));
   return events.map((e, i) => ({
-    uri: e.uri, name: e.name, startAt: e.startAt, url: e.url, seriesName: e.series?.name ?? null, going: going[i],
+    uri: e.uri, name: e.name, startAt: e.startAt, url: e.url, seriesName: e.series?.name ?? null,
+    going: going[i]?.going ?? null, goingDids: going[i]?.goingDids ?? [],
   }));
+}
+
+/** `admin_actions.action` for a Done / Not now / reopen on a recommended action; target is the action id. */
+export const ACTION_MARK = AuditAction.SCOREBOARD_ACTION_MARKED;
+
+/** The marks on recommended actions, latest per action. A failed read shows every action (nothing is hidden). */
+export async function readActionStates(admin: Admin): Promise<Map<string, ActionState>> {
+  try {
+    const rows = await readAll<{ target_id: string; payload: { state?: ActionMark; fingerprint?: string }; created_at: string }>(
+      "admin_actions", (f, t) => admin.from("admin_actions").select("id, target_id, payload, created_at")
+        .eq("action", ACTION_MARK).order("id", { ascending: true }).range(f, t));
+    return latestStates(rows.flatMap((r) => (r.payload?.state && typeof r.payload.fingerprint === "string"
+      ? [{ actionId: r.target_id, state: r.payload.state, fingerprint: r.payload.fingerprint, at: r.created_at }]
+      : [])));
+  } catch (e) {
+    console.error("[scoreboard] action marks read failed", e);
+    return new Map();
+  }
 }
 
 export async function readScoreboard(admin: Admin, now = new Date()) {
@@ -107,9 +131,9 @@ export async function readScoreboard(admin: Admin, now = new Date()) {
   const [rawSubs, members, interests, applications, purchases, newsletter, events] = await Promise.all([
     readAll<SubRow>("subscriptions", (f, t) => admin.from("subscriptions")
       .select("id, member_id, plan_key, status, monthly_cents, net_cents, payment_rail, created_at, canceled_at, updated_at, " +
-        "cancel_at_period_end, admin_canceled_at, admin_cancel_mode")
+        "cancel_at_period_end, admin_canceled_at, admin_cancel_mode, past_due_since, current_period_end")
       .order("id", { ascending: true }).range(f, t)),
-    readAll<MemberRow>("members", (f, t) => admin.from("members").select("id, name, email, member_type, disabled")
+    readAll<MemberRow>("members", (f, t) => admin.from("members").select("id, name, email, member_type, disabled, did")
       .order("id", { ascending: true }).range(f, t)),
     readAll<{ created_at: string }>("interests", (f, t) => admin.from("interests").select("id, created_at")
       .gte("created_at", since).order("id", { ascending: true }).range(f, t)),
@@ -128,10 +152,11 @@ export async function readScoreboard(admin: Admin, now = new Date()) {
   const paid = await paidOnchain(admin, canceledOnchain);
   const subs: SubRow[] = rawSubs.map((s) => (s.payment_rail === "onchain" && s.status === "canceled" ? { ...s, paid: paid.has(s.id) } : s));
 
-  // Last visits only for the people on the two follow-up lists: find who is on them, then read their visits.
+  // Last visits only for the people on the follow-up lists and the leavers the actions name: find who, then read.
   const followUpSince = SCOREBOARD_GOALS.followUpSince;
+  const leftSince = dateIn(new Date(now.getTime() - ACTION_RULES.leftWithinDays * 86_400_000).toISOString(), SCOREBOARD_TZ);
   const onLists = new Set<number>([
-    ...canceledSince(subs, members, new Map(), followUpSince).map((c) => c.memberId),
+    ...canceledSince(subs, members, new Map(), leftSince < followUpSince ? leftSince : followUpSince).map((c) => c.memberId),
     ...passBuyersNeverSubscribed(purchases, subs, members, new Map()).flatMap((b) => (b.memberId != null ? [b.memberId] : [])),
   ]);
   const visits = await lastVisitOf(admin, [...onLists], now);
@@ -143,18 +168,31 @@ export async function readScoreboard(admin: Admin, now = new Date()) {
   const funnel = funnelByMonth({ interests, applications, purchases, subs }, months);
   const pool = dayPassPool(members, subs);
   const today = dateIn(now.toISOString(), SCOREBOARD_TZ);
+
+  // Guests with no member row are named by their verified Techne handle (cached; a failed lookup shows the DID).
+  const linked = new Set(members.flatMap((m) => (m.did ? [m.did] : [])));
+  const unnamed = [...frequentGuests({ now, subs, members, events }).keys()].filter((d) => !linked.has(d));
+  const handles = new Map<string, string>();
+  await mapLimit(unnamed, 4, async (did) => {
+    const h = await handleFor(did).catch(() => null);
+    if (h) handles.set(did, h);
+  });
+  const all = recommendedActions({ now, subs, members, visits, passBuyers, events, goal, handles });
+  const actions = { all, ...visibleActions(all, await readActionStates(admin), now) };
   return {
     today,
     months,
     goal,
+    pace: goalPace(goal, now),
     flow,
     funnel,
     pool,
+    actions,
     canceled,
     passBuyers,
     turnout: events ? turnoutBySeries(events, now, TURNOUT_PAST_DAYS) : null,
     newsletter,
-    text: headlineText({ today, goal, flow, funnel, pool, newsletter }),
+    text: headlineText({ today, goal, flow, funnel, pool, newsletter, actions: actions.open }),
   };
 }
 

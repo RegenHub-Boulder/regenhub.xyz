@@ -50,7 +50,7 @@ export const AUDIT_ACTION = AuditAction.MCP_BILLING_WRITE;
 
 // ── gates ────────────────────────────────────────────────────
 
-function scopeDenied(auth: McpAuthInfo, tool: string, scope: "read" | "billing"): ToolResult | null {
+export function scopeDenied(auth: McpAuthInfo, tool: string, scope: "read" | "billing"): ToolResult | null {
   if (hasScope(auth.scopes, scope)) return null;
   return fail(`Denied: ${tool} requires the "${scope}" scope, which this token doesn't carry. Reconnect the MCP to re-consent.`);
 }

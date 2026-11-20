@@ -4,9 +4,11 @@ import { requireAdmin } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import { CopyTextBlock } from "@/components/admin/CopyTextBlock";
+import { NextActions, type NextAction } from "@/components/admin/NextActions";
 import { planLabel } from "@/lib/plans";
 import { SCOREBOARD_GOALS, SCOREBOARD_TZ, usd, type MonthFlow, type TurnoutEvent } from "@/lib/scoreboard";
 import { readScoreboard } from "@/lib/scoreboardData";
+import { ACTION_RULES, type RecommendedAction } from "@/lib/scoreboardActions";
 
 export const metadata = { title: "Scoreboard — Admin" };
 export const dynamic = "force-dynamic";
@@ -18,6 +20,10 @@ const day = (iso: string | null) =>
 const dayShort = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: SCOREBOARD_TZ }) : "—";
 const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`);
+const forList = (a: RecommendedAction): NextAction => ({
+  id: a.id, kind: a.kind, who: a.who, href: a.href, reason: a.reason, step: a.step, quick: a.quick, contact: a.contact ?? null,
+  priority: a.priority, fingerprint: a.fingerprint,
+});
 const pct = (part: number, whole: number) => (whole > 0 ? Math.min(100, Math.round((part / whole) * 100)) : 0);
 
 function Section({ title, note, children }: { title: string; note?: React.ReactNode; children: React.ReactNode }) {
@@ -98,7 +104,7 @@ function EventLine({ e }: { e: TurnoutEvent }) {
 export default async function ScoreboardPage() {
   if (!await requireAdmin()) redirect("/portal");
   const s = await readScoreboard(createServiceClient());
-  const { goal, flow, funnel } = s;
+  const { goal, flow, funnel, pace } = s;
   const r = goal.revenue;
 
   return (
@@ -109,6 +115,17 @@ export default async function ScoreboardPage() {
           Members, money and the funnel, for the family meeting. Goals set 2026-11-20, due {SCOREBOARD_GOALS.goalDate}.
         </p>
       </div>
+
+      <Section
+        title="What to do next"
+        note={`Ranked by what it does for the goals, then by how soon. Done hides one until its facts change; Not now hides it ${ACTION_RULES.notNowDays} days.`}
+      >
+        <NextActions
+          open={s.actions.open.map(forList)}
+          hidden={s.actions.hidden.map((a) => ({ ...forList(a), mark: a.mark.state }))}
+          top={ACTION_RULES.showTop}
+        />
+      </Section>
 
       <div className="grid md:grid-cols-2 gap-4">
         <Card className="glass-panel">
@@ -121,6 +138,12 @@ export default async function ScoreboardPage() {
             <p className="text-xs text-muted mt-3">
               {signed(goal.gained)} since {SCOREBOARD_GOALS.baselineDate} (started at {goal.baselineMembers}) ·{" "}
               {goal.membersToGo > 0 ? `${goal.membersToGo} to go` : "goal reached"}
+            </p>
+            <p className="text-xs text-muted mt-1" data-testid="members-pace">
+              On the straight line: {pace.expectedMembers.toFixed(1)} today ·{" "}
+              {pace.membersBehind > 0.05
+                ? <span className="text-amber-400">{pace.membersBehind.toFixed(1)} behind</span>
+                : <span className="text-sage">on pace</span>}
             </p>
             <p className="text-xs text-muted mt-1">
               {r.members} in good standing at any rate ({r.card} card, {r.onchain} USDC subscriptions)
@@ -150,6 +173,12 @@ export default async function ScoreboardPage() {
             </p>
             <p className="text-xs text-muted mt-1">
               {goal.revenueChangeCents < 0 ? "−" : "+"}{usd(Math.abs(goal.revenueChangeCents))} since {SCOREBOARD_GOALS.baselineDate} (started at {usd(SCOREBOARD_GOALS.baselineNetCents)})
+            </p>
+            <p className="text-xs text-muted mt-1" data-testid="revenue-pace">
+              On the straight line: {usd(pace.expectedNetCents)} today ·{" "}
+              {pace.netBehindCents > 0
+                ? <span className="text-amber-400">{usd(pace.netBehindCents)} behind</span>
+                : <span className="text-sage">on pace</span>}
             </p>
             {r.pastDue.subscriptions > 0 && (
               <p className="text-xs text-red-400 mt-1">{usd(r.pastDue.netCents)}/mo more is past due, not counted</p>

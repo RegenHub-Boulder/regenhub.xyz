@@ -202,8 +202,8 @@ describe("funnelByMonth", () => {
 describe("people to follow up", () => {
   it("cancelled since July 1 with no live subscription, latest first", () => {
     expect(canceledSince(SUBS, MEMBERS, VISITS)).toEqual([
-      { memberId: 8, name: "Sample 8", email: "sample8@example.test", planKey: "hot_desk", canceledAt: "2026-11-03T16:00:00Z", ending: false, lastVisit: null },
-      { memberId: 7, name: "Sample 7", email: "sample7@example.test", planKey: "member_2day", canceledAt: "2026-11-01T03:00:00Z", ending: false, lastVisit: "2026-10-20T16:00:00Z" },
+      { memberId: 8, name: "Sample 8", email: "sample8@example.test", planKey: "hot_desk", canceledAt: "2026-11-03T16:00:00Z", ending: false, netCents: 23750, lastVisit: null },
+      { memberId: 7, name: "Sample 7", email: "sample7@example.test", planKey: "member_2day", canceledAt: "2026-11-01T03:00:00Z", ending: false, netCents: 5000, lastVisit: "2026-10-20T16:00:00Z" },
     ]);
   });
 
@@ -214,10 +214,10 @@ describe("people to follow up", () => {
 
   it("day-pass buyers who never subscribed, matched by email, most recent first", () => {
     expect(passBuyersNeverSubscribed(PURCHASES, SUBS, MEMBERS, VISITS)).toEqual([
-      { memberId: 12, name: "Sample 12", email: "sample12@example.test", purchases: 2, lastPurchase: "2026-11-12T16:00:00Z", lastVisit: "2026-11-15T16:00:00Z" },
-      { memberId: 9, name: "Sample 9", email: "sample9@example.test", purchases: 1, lastPurchase: "2026-11-11T16:00:00Z", lastVisit: null },
-      { memberId: null, name: null, email: "walkin@example.test", purchases: 1, lastPurchase: "2026-09-09T16:00:00Z", lastVisit: null },
-      { memberId: 13, name: "Sample 13", email: "pat@example.test", purchases: 1, lastPurchase: "2026-08-08T16:00:00Z", lastVisit: "2026-08-09T16:00:00Z" },
+      { memberId: 12, name: "Sample 12", email: "sample12@example.test", purchases: 2, passes: 2, lastPurchase: "2026-11-12T16:00:00Z", lastVisit: "2026-11-15T16:00:00Z" },
+      { memberId: 9, name: "Sample 9", email: "sample9@example.test", purchases: 1, passes: 1, lastPurchase: "2026-11-11T16:00:00Z", lastVisit: null },
+      { memberId: null, name: null, email: "walkin@example.test", purchases: 1, passes: 1, lastPurchase: "2026-09-09T16:00:00Z", lastVisit: null },
+      { memberId: 13, name: "Sample 13", email: "pat@example.test", purchases: 1, passes: 1, lastPurchase: "2026-08-08T16:00:00Z", lastVisit: "2026-08-09T16:00:00Z" },
     ]);
   });
 
