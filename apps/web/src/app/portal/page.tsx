@@ -16,6 +16,7 @@ import { MembershipStatusCard } from "@/components/portal/MembershipStatusCard";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { planLabel, getPlan } from "@/lib/plans";
 import { isStewardEventsEnabled, isTechneSignInEnabled } from "@/lib/techne/config";
+import { STEWARD_PATH } from "@/lib/techne/session";
 import { isSyntheticEmail } from "@/lib/regenos/syntheticEmail";
 import { OnchainBillingCard } from "@/components/portal/OnchainBillingCard";
 import { RemoveWalletButton } from "@/components/portal/RemoveWalletButton";
@@ -475,7 +476,7 @@ export default async function PortalPage() {
 
         {/* Flag-gated only — the page itself says what you may do (the Techne door, or the old regenOS lane). */}
         {isStewardEventsEnabled() && (
-          <Link href="/portal/events">
+          <Link href={isTechneSignInEnabled() ? STEWARD_PATH : "/portal/events"}>
             <Card className="glass-panel hover-lift cursor-pointer">
               <CardContent className="p-6">
                 <CalendarDays className="w-8 h-8 text-sage mb-3" />

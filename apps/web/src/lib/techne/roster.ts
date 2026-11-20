@@ -15,8 +15,7 @@
  * collective's writer stamps it (it would publish who recruited whom).
  */
 
-import { MEMBERSHIP_NSID } from "./standing";
-import { MANAGE_ROLE, isLive, isOfferedRole, roleName, type OfferedRole } from "./roles";
+import { MANAGE_ROLE, MEMBERSHIP_NSID, isLive, isOfferedRole, roleName, type OfferedRole } from "./roles";
 import { listRecords, type TechneRecord } from "./query";
 import { isDid } from "./did";
 import { tid } from "./tid";
@@ -111,6 +110,28 @@ export async function fetchRoster(collective: string): Promise<Claim[] | null> {
     { revalidate: 0, strict: true, maxPages: 20 },
   );
   return rows ? claimsFrom(rows, collective) : null;
+}
+
+/** What RegenHub's roster says about one Techne account: everyone holding a live role, theirs if any, and whether
+ *  they are a steward (facilitator or above). */
+export interface StewardCheck {
+  claims: Claim[];
+  holders: Holder[];
+  me: Holder | null;
+  steward: boolean;
+}
+
+/** Facilitator and up steward RegenHub on this site: its roles (/admin/stewards) and its calendar (/admin/events). */
+export const isSteward = (h: Holder | null | undefined): boolean => !!h && h.role >= MANAGE_ROLE;
+
+/** The one steward check for RegenHub's pages and routes: the roster read fresh, and this DID's place in it. Null
+ *  when Techne couldn't be read in full. The site's own membership and admin flag play no part. */
+export async function stewardCheck(collective: string, did: string): Promise<StewardCheck | null> {
+  const claims = await fetchRoster(collective);
+  if (!claims) return null;
+  const holders = holdersFrom(claims);
+  const me = holders.find((h) => h.did === did) ?? null;
+  return { claims, holders, me, steward: isSteward(me) };
 }
 
 const update = (rkey: string, value: Record<string, unknown>): ApplyWrite => ({

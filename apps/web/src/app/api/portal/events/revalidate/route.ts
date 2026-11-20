@@ -16,7 +16,8 @@ import { isStewardEventsEnabled, isTechneSignInEnabled } from "@/lib/techne/conf
  * the landing page refetch a public calendar it would have refetched anyway.
  */
 export async function POST() {
-  // Either steward page calls this: the Techne door or the old regenOS lane.
+  // The old regenOS-lane page calls this (/portal/events with the door off, /portal/events/old with it on). The
+  // Techne page's writes expire the caches in POST /api/portal/events/write itself.
   if (!isStewardEventsEnabled()) {
     return NextResponse.json({ error: "NotFound" }, { status: 404 });
   }

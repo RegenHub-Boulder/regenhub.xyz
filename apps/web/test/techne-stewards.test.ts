@@ -34,7 +34,7 @@ import { GET as callbackGET } from "@/app/techne/callback/route";
 import { POST as stewardsPOST } from "@/app/api/techne/stewards/route";
 import StewardsPage from "@/app/admin/stewards/page";
 import { StewardRoster, type RosterRow } from "@/components/admin/StewardRoster";
-import { MEMBERSHIP_NSID } from "@/lib/techne/standing";
+import { MEMBERSHIP_NSID } from "@/lib/techne/roles";
 import { RosterRefusal, claimsFrom, fetchRoster, holdersFrom, rosterBatch, type Claim } from "@/lib/techne/roster";
 import { listRecords } from "@/lib/techne/query";
 
