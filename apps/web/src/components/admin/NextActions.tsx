@@ -60,7 +60,7 @@ function QuickButton({ quick, onSent }: { quick: NonNullable<NextAction["quick"]
   );
 }
 
-function Row({ a, onMark, dismissed }: { a: NextAction; onMark: (a: NextAction, s: Mark) => void; dismissed?: string }) {
+function Row({ a, onMark, onSent, dismissed }: { a: NextAction; onMark: (a: NextAction, s: Mark) => void; onSent?: () => void; dismissed?: string }) {
   return (
     <li className="py-2.5 flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4" data-testid="next-action" data-action-id={a.id}>
       <div className="min-w-0 flex-1">
@@ -85,7 +85,7 @@ function Row({ a, onMark, dismissed }: { a: NextAction; onMark: (a: NextAction, 
           </>
         ) : (
           <>
-            {a.quick && <QuickButton quick={a.quick} onSent={() => onMark(a, "done")} />}
+            {a.quick && <QuickButton quick={a.quick} onSent={onSent ?? (() => onMark(a, "done"))} />}
             <button type="button" onClick={() => onMark(a, "done")} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded btn-glass">
               <Check className="w-3 h-3" /> Done
             </button>
@@ -105,14 +105,20 @@ export function NextActions({ open, hidden, top }: { open: NextAction[]; hidden:
   const [pending, startTransition] = useTransition();
   // The last mark made here per action, so the lists move at once (before the refresh lands, and after it too).
   const [marked, setMarked] = useState<Map<string, Mark>>(new Map());
+  // Reminders sent from this list: the row stays in place, saying so, though it's marked Done.
+  const [sent, setSent] = useState<Set<string>>(new Set());
   const [all, setAll] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const onMark = async (a: NextAction, state: Mark) => {
     setError(null);
-    const before = marked.get(a.id);
-    setMarked((m) => new Map(m).set(a.id, state));
+    // Remember what this mark replaces, read from the latest state (not this render's), to undo it on failure.
+    let before: Mark | undefined;
+    setMarked((m) => {
+      before = m.get(a.id);
+      return new Map(m).set(a.id, state);
+    });
     try {
       await mark(a, state);
       startTransition(() => router.refresh());
@@ -127,7 +133,8 @@ export function NextActions({ open, hidden, top }: { open: NextAction[]; hidden:
     }
   };
 
-  const isOpen = (id: string, fallback: boolean) => (marked.has(id) ? marked.get(id) === "open" : fallback);
+  const isOpen = (id: string, fallback: boolean) =>
+    sent.has(id) && marked.get(id) === "done" ? true : marked.has(id) ? marked.get(id) === "open" : fallback;
   const list = [...open, ...hidden].filter((a) => isOpen(a.id, open.includes(a))).sort((x, y) => x.rank - y.rank);
   const shown = all ? list : list.slice(0, top);
   const back = hidden.filter((a) => !isOpen(a.id, false)).concat(
@@ -141,7 +148,10 @@ export function NextActions({ open, hidden, top }: { open: NextAction[]; hidden:
         <p className="text-sm text-muted">Nothing needs doing right now.</p>
       ) : (
         <ul className="divide-y divide-white/5">
-          {shown.map((a) => <Row key={a.id} a={a} onMark={onMark} />)}
+          {shown.map((a) => (
+            <Row key={a.id} a={a} onMark={onMark} dismissed={sent.has(a.id) && marked.get(a.id) === "done" ? "Reminder sent · done" : undefined}
+              onSent={() => { setSent((x) => new Set(x).add(a.id)); onMark(a, "done"); }} />
+          ))}
         </ul>
       )}
       <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-muted">

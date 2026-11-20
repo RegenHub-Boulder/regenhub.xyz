@@ -183,8 +183,8 @@ function paceActions(goal: GoalProgress, now: Date, goals: ScoreboardGoals, rule
       step: `${usd(need)}/mo more in the next two weeks closes it: ${plural(Math.ceil(need / BASIC_CENTS), `more ${usd(BASIC_CENTS)} member`)}, ` +
         `or ${plural(Math.ceil(need / HOT_DESK_CENTS), "hot desk")}.`,
       stakeCents: need, dueInDays: 14,
-      // Revenue now, in $30 steps: a member joining or leaving brings it back; the line rising or a cent of drift doesn't.
-      fingerprint: `${Math.round(goal.revenue.netCents / BASIC_CENTS)}`,
+      // Subscriptions in good standing: one starting or ending brings it back; the line rising or fee drift doesn't.
+      fingerprint: `${goal.revenue.subscriptions}`,
     });
   }
   return out;
@@ -297,7 +297,10 @@ function passBuyerActions(buyers: readonly PassBuyerFollowUp[], byId: ReadonlyMa
       reason: `${plural(b.passes, "day pass", "day passes")}, last bought ${day(b.lastPurchase)}` +
         (b.lastVisit ? `; last visit ${day(b.lastVisit)}` : "") + "; never subscribed.",
       step: "Invite them to join, or to the member demos before Friday 4:20 Happy Hour.",
-      stakeCents: BASIC_CENTS, dueInDays: Math.max(0, rules.passBuyerMaxAgeDays - daysBetween(lastSeen, now)),
+      // Until it stops being a lead: 180 days from last seen on 2+ passes, else 60 days from the visit.
+      stakeCents: BASIC_CENTS, dueInDays: Math.max(0, b.passes >= rules.passBuyerMinPasses
+        ? rules.passBuyerMaxAgeDays - daysBetween(lastSeen, now)
+        : rules.passBuyerVisitDays - daysBetween(b.lastVisit!, now)),
       // A new purchase is a new fact; a visit alone doesn't bring a dismissed invite back.
       fingerprint: `${b.passes}:${b.lastPurchase}`,
     }];
@@ -418,15 +421,15 @@ export function isHidden(action: Pick<RecommendedAction, "fingerprint">, state: 
   return now.getTime() < Date.parse(state.at) + rules.notNowDays * DAY;
 }
 
-/** Open actions in rank order, and the ones a dismissal hides (with why). */
+/** Open actions in rank order, and the ones a dismissal hides (with why). `rank` is the place in `actions`. */
 export function visibleActions(actions: readonly RecommendedAction[], states: ReadonlyMap<string, ActionState>, now: Date, rules: ActionRules = ACTION_RULES) {
-  const open: RecommendedAction[] = [];
-  const hidden: (RecommendedAction & { mark: ActionState })[] = [];
-  for (const a of actions) {
+  const open: (RecommendedAction & { rank: number })[] = [];
+  const hidden: (RecommendedAction & { rank: number; mark: ActionState })[] = [];
+  actions.forEach((a, rank) => {
     const s = states.get(a.id);
-    if (isHidden(a, s, now, rules)) hidden.push({ ...a, mark: s! });
-    else open.push(a);
-  }
+    if (isHidden(a, s, now, rules)) hidden.push({ ...a, rank, mark: s! });
+    else open.push({ ...a, rank });
+  });
   return { open, hidden };
 }
 

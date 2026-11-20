@@ -159,6 +159,8 @@ describe("day-pass buyer", () => {
     expect(two[0]).toMatchObject({ id: "pass_buyer:m1", reason: "2 day passes, last bought Sep 1; never subscribed." });
     const visited = run(purchases([[2, null, ago(100)]]), [member(2)], lastVisits([{ member_id: 2, created_at: ago(59) }]));
     expect(visited[0]?.id).toBe("pass_buyer:m2");
+    // One pass: a lead only while the visit is within 60 days, so 1 day left.
+    expect(visited[0]?.dueInDays).toBe(1);
     expect(run(purchases([[3, null, ago(100), 5]]), [member(3)])[0]?.reason).toMatch(/^5 day passes/);
   });
   it("stays quiet on one pass with no recent visit, and for a subscriber", () => {
@@ -279,7 +281,7 @@ describe("Done / Not now", () => {
     // Paid, then failed again: a new past_due_since, so it's back.
     const [again] = actions(ago(0.5));
     expect(again.id).toBe(a.id);
-    expect(visibleActions([again], states, NOW).open).toEqual([again]);
+    expect(visibleActions([again], states, NOW).open).toEqual([{ ...again, rank: 0 }]);
   });
   it("Not now hides it two weeks, or until the facts change", () => {
     const [a] = actions(ago(3));
@@ -291,7 +293,7 @@ describe("Done / Not now", () => {
   it("the latest mark wins, so Bring back reopens it", () => {
     const [a] = actions(ago(3));
     const states = latestStates([mark(a, "open", ago(0.1)), mark(a, "done", ago(1))]);
-    expect(visibleActions([a], states, NOW).open).toEqual([a]);
+    expect(visibleActions([a], states, NOW).open).toEqual([{ ...a, rank: 0 }]);
   });
 });
 
