@@ -40,7 +40,7 @@ export function NightFollowups({ nights }: { nights: NightFollowupView[] }) {
 
 function Night({ night }: { night: NightFollowupView }) {
   const router = useRouter();
-  const [keep, setKeep] = useState<Set<number>>(() => new Set(night.send.map((p) => p.memberId)));
+  const [keep, setKeep] = useState<Set<string>>(() => new Set(night.send.map((p) => p.did)));
   const [preview, setPreview] = useState<"guest" | "member" | null>(null);
   const [busy, setBusy] = useState<"send" | "skip" | "retry" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -112,7 +112,7 @@ function Night({ night }: { night: NightFollowupView }) {
     );
   }
 
-  const chosen = night.send.filter((p) => keep.has(p.memberId)).length;
+  const chosen = night.send.filter((p) => keep.has(p.did)).length;
   const shown = preview ? night.previews[preview] : undefined;
   return (
     <Card className="glass-panel" data-testid="followup-night">
@@ -127,17 +127,17 @@ function Night({ night }: { night: NightFollowupView }) {
             ) : (
               <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-1.5" data-testid="followup-people">
                 {night.send.map((p) => (
-                  <li key={p.memberId}>
+                  <li key={p.did}>
                     <label className="flex items-center gap-2 text-sm cursor-pointer">
                       <input
                         type="checkbox"
                         className="accent-[var(--color-sage,#7fb069)] w-4 h-4"
-                        checked={keep.has(p.memberId)}
+                        checked={keep.has(p.did)}
                         onChange={(e) =>
                           setKeep((k) => {
                             const next = new Set(k);
-                            if (e.target.checked) next.add(p.memberId);
-                            else next.delete(p.memberId);
+                            if (e.target.checked) next.add(p.did);
+                            else next.delete(p.did);
                             return next;
                           })
                         }

@@ -5,10 +5,11 @@ import { regenosCollectiveDid } from "@/lib/regenos/config";
 import { currentTechne } from "@/lib/techne/webSession";
 import { sameSiteJson, tooMany, withinIpLimit } from "@/lib/techne/guard";
 import { stewardCheck } from "@/lib/techne/roster";
+import { isDid } from "@/lib/techne/did";
 import { decideNightFollowups, retryNightFollowups } from "@/lib/nightFollowupData";
 
 /**
- * POST /api/portal/events/followups { event: <at-uri>, decision: "send" | "skip" | "retry", keep: [memberId, …] } — a
+ * POST /api/portal/events/followups { event: <at-uri>, decision: "send" | "skip" | "retry", keep: [did, …] } — a
  * steward's click on a night's follow-ups on /admin/events (retry: the notes of a sent night that didn't go). The only
  * way a follow-up is sent: nothing else calls decideNightFollowups or retryNightFollowups. Gated like the events write route: signed in with Techne here and facilitator or above in
  * RegenHub's roster, read fresh (lib/techne/roster.ts stewardCheck). A night is decided once.
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
   if (decision !== "send" && decision !== "skip" && decision !== "retry") {
     return NextResponse.json({ ok: false, error: "Send or skip?" }, { status: 400 });
   }
-  const keep = Array.isArray(body?.keep) ? body.keep.filter((n): n is number => Number.isInteger(n) && (n as number) > 0) : [];
+  const keep = Array.isArray(body?.keep) ? body.keep.filter((d): d is string => isDid(d)).slice(0, 1000) : [];
 
   const admin = createServiceClient();
   const who = await currentTechne(admin);

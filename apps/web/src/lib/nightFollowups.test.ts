@@ -11,6 +11,8 @@ const member = (id: number, over: Partial<FollowupMember> = {}): FollowupMember 
   disabled: false, show_in_directory: null, ...over,
 });
 
+const night0 = nightValues({ name: "Civic Tech Night", startAt: "2026-11-18T01:00:00Z", series: null }, [], new Date("2026-11-18T17:00:00Z"), "https://x.test");
+
 describe("followupBatch: who gets a note, and which", () => {
   const members = [
     member(1, { name: "Sam Guest" }),
@@ -76,6 +78,30 @@ describe("followupBatch: who gets a note, and which", () => {
     expect(ask("Sam Guest")).toBe(false); // guests aren't asked
   });
 
+  it("a Techne-only RSVP is reached by the confirmed email its sign-in recorded (guest note); never an unconfirmed one", () => {
+    const people = [
+      { did: "did:plc:kim", handle: "kim.techne.town", name: "Kim Lee", email: "kim@example.test", email_confirmed: true, member_id: null },
+      { did: "did:plc:unconf", handle: "u.techne.town", name: null, email: "u@example.test", email_confirmed: false, member_id: null },
+      { did: "did:plc:noname", handle: "nn.techne.town", name: null, email: "nn@example.test", email_confirmed: true, member_id: null },
+      // A confirmed email that matched member 3 at sign-in: treated as that member (Pat Paying, in standing).
+      { did: "did:plc:pat-techne", handle: "pat.techne.town", name: "Pat", email: "p3@example.test", email_confirmed: true, member_id: 3 },
+      { did: "did:plc:held", handle: "h.techne.town", name: "Held", email: "held@example.test", email_confirmed: true, member_id: null },
+    ];
+    const b = followupBatch({
+      goingDids: people.map((p) => p.did), members, people, subs, holds: new Map([["held@example.test", "unsubscribed"]]),
+    });
+    expect(b.send.map((p) => [p.did, p.name, p.email, p.variant, p.memberId])).toEqual([
+      ["did:plc:noname", "@nn.techne.town", "nn@example.test", "guest", null],
+      ["did:plc:kim", "Kim Lee", "kim@example.test", "guest", null],
+      ["did:plc:pat-techne", "Pat Paying", "p3@example.test", "member", 3],
+    ]);
+    expect(b.held.map((p) => [p.name, p.held])).toEqual([["Held", "unsubscribed"]]);
+    expect(b.noEmail).toBe(1); // the unconfirmed one
+    // "Hi Kim," from the Techne display name; "Hi there," when there is none (never the handle).
+    expect(personValues(b.send[1], night0, "https://x.test").first).toBe("Kim");
+    expect(personValues(b.send[0], night0, "https://x.test").first).toBe("there");
+  });
+
   it("with nothing held back, everyone linked is on the send list", () => {
     const b = followupBatch({ goingDids: ["did:plc:p1"], members, subs, holds: new Map() });
     expect(b.send.map((p) => p.email)).toEqual(["p1@example.test"]);
@@ -117,9 +143,11 @@ describe("the note", () => {
   const footer = { optOutUrl: `${SITE}/api/followups/optout?x=1`, unsubscribeUrl: `${SITE}/api/newsletter/unsubscribe?x=1` };
 
   it("guest: thanks, the next night, a Friday demo as a guest, Studio Night, membership; both footer links", () => {
-    const n = renderFollowup("guest", personValues({ name: "Sam Rivera", askForPage: false }, night, SITE), footer);
-    expect(n.subject).toBe("Civic Tech Night, and what's next");
+    const n = renderFollowup("guest", personValues({ greetName: "Sam Rivera", askForPage: false }, night, SITE), footer);
+    expect(n.subject).toBe("Thanks for coming to Civic Tech Night");
     expect(n.text).toContain("Hi Sam,");
+    expect(n.text).toContain("Thanks for coming to Civic Tech Night on Tuesday.");
+    expect(n.text).not.toMatch(/signing up|hope you could make it/i);
     expect(n.text).toContain("The next Civic Tech Night is Tuesday, December 15 at 6pm");
     expect(n.text).toMatch(/members get a few things of their own: on Fridays before Happy Hour/);
     expect(n.text).toContain("Studio Night");
@@ -130,23 +158,26 @@ describe("the note", () => {
   });
 
   it("member: thanks, the next Studio Night; the member-page line only when asked for", () => {
-    const asked = renderFollowup("member", personValues({ name: "Ana", askForPage: true }, night, SITE), footer);
+    const asked = renderFollowup("member", personValues({ greetName: "Ana", askForPage: true }, night, SITE), footer);
+    expect(asked.subject).toBe("Thanks for coming to Civic Tech Night");
+    expect(asked.text).toContain("Thanks for coming to Civic Tech Night on Tuesday.");
+    expect(asked.text).not.toMatch(/good one/);
     expect(asked.text).toContain("The next Studio Night is Tuesday, November 24 at 6pm");
     expect(asked.html).toContain(`href="${SITE}/portal/profile"`);
     expect(asked.text).not.toContain("membership");
-    const listed = renderFollowup("member", personValues({ name: "Ana", askForPage: false }, night, SITE), footer);
+    const listed = renderFollowup("member", personValues({ greetName: "Ana", askForPage: false }, night, SITE), footer);
     expect(listed.text).not.toContain("member page");
   });
 
   it("a night outside any series drops the 'next' line and keeps the rest", () => {
     const oneOff = nightValues({ name: "Open House", startAt: "2026-11-18T01:00:00Z", series: null }, [], now, SITE);
-    const n = renderFollowup("guest", personValues({ name: "Sam", askForPage: false }, oneOff, SITE), footer);
+    const n = renderFollowup("guest", personValues({ greetName: "Sam", askForPage: false }, oneOff, SITE), footer);
     expect(n.text).not.toMatch(/The next (?!one)/); // the series line; Studio Night's "next one" stays
     expect(n.text).toContain("regenhub.xyz/events");
   });
 
   it("escapes names in the HTML", () => {
-    const n = renderFollowup("guest", personValues({ name: "<b>Eve</b>", askForPage: false }, night, SITE), footer);
+    const n = renderFollowup("guest", personValues({ greetName: "<b>Eve</b>", askForPage: false }, night, SITE), footer);
     expect(n.html).toContain("Hi &lt;b&gt;Eve&lt;/b&gt;,");
     expect(n.html).not.toContain("<b>Eve");
   });

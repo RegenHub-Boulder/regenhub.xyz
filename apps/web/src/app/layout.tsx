@@ -5,6 +5,7 @@ import "./globals.css";
 // Validates required env vars at app boot — see lib/env.ts
 import "@/lib/env";
 import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
+import { NewsNote } from "@/components/techne/NewsNote";
 import { OG_IMAGES, SITE_DESCRIPTION, siteUrl } from "@/lib/metadata";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -50,6 +51,7 @@ export default function RootLayout({
       <body className={inter.className}>
         {children}
         <ServiceWorkerRegister />
+        <NewsNote />
       </body>
     </html>
   );

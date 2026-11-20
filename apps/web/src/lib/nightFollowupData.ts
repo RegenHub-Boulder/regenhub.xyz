@@ -13,7 +13,7 @@ import { PAYING_STATUSES } from "@/lib/memberStanding";
 import { fetchAttendance, fetchCollectiveEvents, fetchPublicRegenosEvent, type CollectiveEvent } from "@/lib/regenos/events";
 import {
   followupBatch, nightValues, nightsForFollowup, personValues, renderFollowup,
-  type FollowupMember, type FollowupVariant, type HeldReason, type RenderedNote,
+  type FollowupMember, type FollowupTechnePerson, type FollowupVariant, type HeldReason, type RenderedNote,
 } from "@/lib/nightFollowups";
 
 type Admin = ReturnType<typeof createServiceClient>;
@@ -26,9 +26,9 @@ const MEMBER_COLUMNS = "id, name, email, did, member_type, disabled, show_in_dir
  */
 const RETRY_WITHIN_MS = 23 * 3600_000;
 
-/** One person on the page: names only (a steward needn't be a site admin, so no emails). */
+/** One person on the page: names only (a steward needn't be a site admin, so no emails). Keyed by their Techne DID. */
 export interface FollowupRow {
-  memberId: number;
+  did: string;
   name: string;
   variant: FollowupVariant;
   held: HeldReason | null;
@@ -60,14 +60,33 @@ export interface NightFollowupView {
   rsvpsUnread: boolean;
 }
 
-/** The DB facts that decide a batch, for the people going to some nights. */
+/**
+ * The DB facts that decide a batch, for the people going to some nights: the members their DIDs are linked to, what
+ * their Techne sign-ins recorded (techne_people, migration 067: a member a confirmed email matched, or their own
+ * confirmed email), those members' paying subscriptions, and the holds on every email that could be written to.
+ */
 async function batchFacts(admin: Admin, dids: string[]) {
-  if (dids.length === 0) return { members: [] as FollowupMember[], subs: [], holds: new Map<string, HeldReason>() };
-  const { data: members, error } = await admin.from("members").select(MEMBER_COLUMNS).in("did", dids);
-  if (error) throw error;
-  const rows = (members ?? []) as FollowupMember[];
+  const none = { members: [] as FollowupMember[], people: [] as FollowupTechnePerson[], subs: [], holds: new Map<string, HeldReason>() };
+  if (dids.length === 0) return none;
+  const [byDid, known] = await Promise.all([
+    admin.from("members").select(MEMBER_COLUMNS).in("did", dids),
+    admin.from("techne_people").select("did, handle, name, email, email_confirmed, member_id").in("did", dids),
+  ]);
+  if (byDid.error) throw byDid.error;
+  if (known.error) throw known.error;
+  const people = (known.data ?? []) as FollowupTechnePerson[];
+  const rows = [...((byDid.data ?? []) as FollowupMember[])];
+  const extra = [...new Set(people.flatMap((p) => (p.member_id != null && !rows.some((m) => m.id === p.member_id) ? [p.member_id] : [])))];
+  if (extra.length) {
+    const { data, error } = await admin.from("members").select(MEMBER_COLUMNS).in("id", extra);
+    if (error) throw error;
+    rows.push(...((data ?? []) as FollowupMember[]));
+  }
   const ids = rows.map((m) => m.id);
-  const emails = [...new Set(rows.flatMap((m) => (m.email ? [m.email.trim().toLowerCase()] : [])))];
+  const emails = [...new Set([
+    ...rows.flatMap((m) => (m.email ? [m.email.trim().toLowerCase()] : [])),
+    ...people.flatMap((p) => (p.email && p.email_confirmed ? [p.email.trim().toLowerCase()] : [])),
+  ])];
   const [subs, holds] = await Promise.all([
     ids.length
       ? admin.from("subscriptions").select("member_id, status, monthly_cents").in("member_id", ids).in("status", PAYING_STATUSES)
@@ -78,14 +97,15 @@ async function batchFacts(admin: Admin, dids: string[]) {
   if (holds.error) throw holds.error;
   return {
     members: rows,
+    people,
     subs: (subs.data ?? []) as { member_id: number; status: string; monthly_cents: number }[],
     holds: new Map(((holds.data ?? []) as { email: string; reason: HeldReason }[]).map((h) => [h.email, h.reason])),
   };
 }
 
 const siteBase = () => (process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://regenhub.xyz").replace(/\/+$/, "");
-const row = (p: { memberId: number; name: string; variant: FollowupVariant; held: HeldReason | null }): FollowupRow => ({
-  memberId: p.memberId, name: p.name, variant: p.variant, held: p.held,
+const row = (p: { did: string; name: string; variant: FollowupVariant; held: HeldReason | null }): FollowupRow => ({
+  did: p.did, name: p.name, variant: p.variant, held: p.held,
 });
 
 type SentRow = {
@@ -128,6 +148,16 @@ export async function readNightFollowups(admin: Admin, events: readonly Collecti
     if (nErr) throw nErr;
     for (const m of data ?? []) names.set(m.id, m.name);
   }
+  // A note to someone known only by their Techne sign-in has no member: name it from techne_people.
+  const byEmail = new Map<string, string>();
+  const techneOnly = [...new Set(outcomeRows.flatMap((o) => (o.member_id == null ? [o.email] : [])))];
+  if (techneOnly.length) {
+    const { data, error: tErr } = await admin.from("techne_people").select("email, name, handle").in("email", techneOnly);
+    if (tErr) throw tErr;
+    for (const p of (data ?? []) as { email: string; name: string | null; handle: string | null }[]) {
+      byEmail.set(p.email, p.name || (p.handle ? `@${p.handle}` : p.email.split("@")[0]));
+    }
+  }
 
   return nights.map((n, i) => {
     const b = decided.get(n.uri);
@@ -140,7 +170,7 @@ export async function readNightFollowups(admin: Admin, events: readonly Collecti
     if (b) {
       const mine = outcomeRows.filter((o) => o.batch_id === b.id);
       base.outcomes = mine.map((o) => ({
-        name: (o.member_id && names.get(o.member_id)) || "(member removed)",
+        name: (o.member_id && names.get(o.member_id)) || byEmail.get(o.email) || (o.member_id == null ? "(Techne sign-in)" : "(member removed)"),
         variant: o.variant,
         status: o.status,
         held: (o.held_reason as HeldReason | null) ?? null,
@@ -186,7 +216,7 @@ const NO_SIGNING_KEY = "Email links can't be signed on this server (no unsubscri
 async function sendRows(
   admin: Admin,
   rows: readonly SentRow[],
-  people: ReadonlyMap<string, { name: string; askForPage: boolean }>,
+  people: ReadonlyMap<string, { greetName: string; askForPage: boolean }>,
   night: () => Promise<ReturnType<typeof nightValues>>,
 ): Promise<number> {
   let sent = 0;
@@ -196,7 +226,7 @@ async function sendRows(
       // subject, html and body_text are saved together, so html stands for all three.
       let note = r.html != null ? { subject: r.subject ?? "", html: r.html, text: r.body_text ?? "" } : null;
       if (!note) {
-        const who = people.get(r.email) ?? { name: "", askForPage: false };
+        const who = people.get(r.email) ?? { greetName: "", askForPage: false };
         note = renderFollowup(r.variant, personValues(who, await night(), siteBase()), footerFor(r.email));
         const { data: kept, error } = await admin.from("night_followups")
           .update({ subject: note.subject, html: note.html, body_text: note.text })
@@ -230,13 +260,13 @@ async function noteNight(event: CollectiveEvent, now: Date) {
 }
 
 /**
- * A steward's Send or Skip for one night. `keep`: the member ids the steward saw and left ticked; only they can get a
+ * A steward's Send or Skip for one night. `keep`: the Techne DIDs of the people the steward saw and left ticked; only they can get a
  * note, and only if they still qualify now (a person who unsubscribed since the page loaded is held, a new RSVP
  * isn't added). Send then mails each person in turn and records the outcome.
  */
 export async function decideNightFollowups(
   admin: Admin,
-  input: { eventUri: string; decision: "send" | "skip"; keep: number[]; stewardDid: string },
+  input: { eventUri: string; decision: "send" | "skip"; keep: string[]; stewardDid: string },
   now = new Date(),
 ): Promise<DecideResult> {
   const event = await readNight(input.eventUri);
@@ -247,18 +277,18 @@ export async function decideNightFollowups(
   const { data: already, error: readErr } = await admin.from("night_followup_batches").select("id").eq("event_uri", event.uri).maybeSingle();
   if (readErr) return { ok: false, status: 500, error: "Couldn't record that. Nothing was sent." };
   if (already) return { ok: false, status: 409, error: ALREADY_DECIDED };
-  let people: { member_id: number; email: string; variant: FollowupVariant }[] = [];
-  const byEmail = new Map<string, { name: string; askForPage: boolean }>();
+  let people: { member_id: number | null; email: string; variant: FollowupVariant }[] = [];
+  const byEmail = new Map<string, { greetName: string; askForPage: boolean }>();
   if (input.decision === "send") {
     const a = await fetchAttendance(event.uri);
     if (!a) return { ok: false, status: 503, error: "Couldn't read the night's RSVPs from Techne. Try again in a moment." };
     const batch = followupBatch({ goingDids: a.goingDids, ...(await batchFacts(admin, a.goingDids)) });
     const keep = new Set(input.keep);
-    const chosen = batch.send.filter((p) => keep.has(p.memberId));
+    const chosen = batch.send.filter((p) => keep.has(p.did));
     if (chosen.length === 0) return { ok: false, status: 400, error: "No one to send to. Skip the night instead." };
     if (!canSignEmailLinks()) return { ok: false, status: 500, error: NO_SIGNING_KEY };
     people = chosen.map((p) => ({ member_id: p.memberId, email: p.email, variant: p.variant }));
-    for (const p of chosen) byEmail.set(p.email, { name: p.name, askForPage: p.askForPage });
+    for (const p of chosen) byEmail.set(p.email, { greetName: p.greetName, askForPage: p.askForPage });
   }
   const { data, error } = await admin.rpc("decide_night_followups", {
     p_event_uri: event.uri,
@@ -304,14 +334,14 @@ export async function retryNightFollowups(admin: Admin, eventUri: string, stewar
   // now, for which the member's name is read. A failed read leaves the greeting plain rather than strand the claim.
   const rows = claimed;
   const unsaved = rows.filter((r) => r.html == null).flatMap((r) => (r.member_id ? [r.member_id] : []));
-  const people = new Map<string, { name: string; askForPage: boolean }>();
+  const people = new Map<string, { greetName: string; askForPage: boolean }>();
   if (unsaved.length) {
     const { data: members, error: mErr } = await admin.from("members").select("id, name, show_in_directory").in("id", unsaved);
     if (mErr) console.error("[night followups] retry: members read failed, sending with a plain greeting:", mErr);
     const byId = new Map((members ?? []).map((m) => [m.id as number, m as { name: string; show_in_directory: boolean | null }]));
     for (const r of rows) {
       const m = r.member_id ? byId.get(r.member_id) : undefined;
-      if (m) people.set(r.email, { name: m.name, askForPage: r.variant === "member" && m.show_in_directory == null });
+      if (m) people.set(r.email, { greetName: m.name, askForPage: r.variant === "member" && m.show_in_directory == null });
     }
   }
   const sent = await sendRows(admin, rows, people, once(() => noteNight(event, now)));
