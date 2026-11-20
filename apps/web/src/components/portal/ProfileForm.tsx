@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,12 +19,32 @@ interface Member {
   skills: string[] | null;
   profile_photo_url: string | null;
   member_type: string;
+  working_on: string | null;
+  links: string[] | null;
+  show_in_directory: boolean | null;
+  show_rsvps: boolean | null;
+  did: string | null;
 }
 
-export function ProfileForm({ member }: { member: Member }) {
+/** What the member's Techne profile offers where they haven't filled a field in (prefill), and their page. */
+export interface ProfileExtras {
+  techneBio: string | null;
+  techneAvatarUrl: string | null;
+  /** In standing (lib/memberStanding.ts) or a co-op owner: opting in would list them. */
+  canBeListed: boolean;
+  /** Their page path, when they're listed now. */
+  pagePath: string | null;
+}
+
+export function ProfileForm({ member, extras }: { member: Member; extras: ProfileExtras }) {
+  const prefilledBio = !member.bio && !!extras.techneBio;
   const [form, setForm] = useState({
     name: member.name,
-    bio: member.bio ?? "",
+    bio: member.bio ?? extras.techneBio ?? "",
+    working_on: member.working_on ?? "",
+    links: (member.links ?? []).join("\n"),
+    show_in_directory: member.show_in_directory === true,
+    show_rsvps: member.show_rsvps === true,
     skills: (member.skills ?? []).join(", "),
     telegram_username: member.telegram_username ?? "",
     ethereum_address: member.ethereum_address ?? "",
@@ -34,7 +55,14 @@ export function ProfileForm({ member }: { member: Member }) {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  function set(key: keyof typeof form) {
+  function toggle(key: "show_in_directory" | "show_rsvps") {
+    return (e: React.ChangeEvent<HTMLInputElement>) => {
+      setForm((f) => ({ ...f, [key]: e.target.checked }));
+      setSaved(false);
+    };
+  }
+
+  function set(key: Exclude<keyof typeof form, "show_in_directory" | "show_rsvps">) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       setForm((f) => ({ ...f, [key]: e.target.value }));
       setSaved(false);
@@ -63,6 +91,10 @@ export function ProfileForm({ member }: { member: Member }) {
           telegram_username: form.telegram_username || null,
           ethereum_address: form.ethereum_address || null,
           profile_photo_url: form.profile_photo_url || null,
+          working_on: form.working_on.trim() || null,
+          links: form.links,
+          show_in_directory: form.show_in_directory,
+          show_rsvps: form.show_rsvps,
         }),
       });
       const json = await res.json();
@@ -78,6 +110,88 @@ export function ProfileForm({ member }: { member: Member }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      <Card className="glass-panel" data-testid="member-page-settings">
+        <CardContent className="p-6 space-y-5">
+          <div>
+            <h2 className="text-lg font-semibold">Your member page</h2>
+            <p className="text-sm text-muted">
+              Members can have a page of their own and a place in the{" "}
+              <Link href="/members" className="text-sage underline">member directory</Link>. Only what&apos;s on this
+              page is shown; never your email, plan or door code.
+            </p>
+          </div>
+
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.show_in_directory}
+              onChange={toggle("show_in_directory")}
+              className="mt-1 h-4 w-4 accent-[var(--sage)]"
+              data-testid="directory-opt-in"
+            />
+            <span>
+              <span className="font-medium">Show me in the member directory</span>
+              <span className="block text-xs text-muted">
+                {extras.canBeListed
+                  ? "Your page goes live when you save. Untick to take it down."
+                  : "Your page shows while your membership is active."}
+              </span>
+            </span>
+          </label>
+          {extras.pagePath && form.show_in_directory && (
+            <p className="text-sm">
+              Your page:{" "}
+              <Link href={extras.pagePath} className="text-sage underline break-all">
+                regenhub.xyz{extras.pagePath}
+              </Link>
+            </p>
+          )}
+
+          <div className="space-y-2">
+            <Label htmlFor="working_on">What you&apos;re working on</Label>
+            <Input
+              id="working_on"
+              value={form.working_on}
+              onChange={set("working_on")}
+              maxLength={140}
+              placeholder="One line, e.g. a local-first app for seed libraries"
+              className="glass-input"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="links">Links</Label>
+            <textarea
+              id="links"
+              value={form.links}
+              onChange={set("links")}
+              rows={3}
+              placeholder={"yoursite.com\ngithub.com/you"}
+              className="w-full rounded-md px-3 py-2 text-sm glass-input resize-none"
+            />
+            <p className="text-xs text-muted">One per line, up to five.</p>
+          </div>
+
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.show_rsvps}
+              onChange={toggle("show_rsvps")}
+              className="mt-1 h-4 w-4 accent-[var(--sage)]"
+              data-testid="show-rsvps"
+            />
+            <span>
+              <span className="font-medium">Show the hub nights I&apos;ve been to</span>
+              <span className="block text-xs text-muted">
+                {member.did
+                  ? "Nights you RSVP'd to in the last 90 days. Never upcoming ones."
+                  : "Needs your Techne account linked (you RSVP with it)."}
+              </span>
+            </span>
+          </label>
+        </CardContent>
+      </Card>
+
       <Card className="glass-panel">
         <CardContent className="p-6 space-y-5">
           <div className="space-y-2">
@@ -125,6 +239,13 @@ export function ProfileForm({ member }: { member: Member }) {
                   className="w-12 h-12 rounded-full object-cover border border-white/10 shrink-0"
                   onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
                 />
+              ) : extras.techneAvatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- the Techne AppView's avatar URL
+                <img
+                  src={extras.techneAvatarUrl}
+                  alt="Your Techne avatar"
+                  className="w-12 h-12 rounded-full object-cover border border-white/10 shrink-0"
+                />
               ) : (
                 <div className="w-12 h-12 rounded-full bg-sage/15 border border-white/10 shrink-0" />
               )}
@@ -136,7 +257,10 @@ export function ProfileForm({ member }: { member: Member }) {
                 className="glass-input"
               />
             </div>
-            <p className="text-xs text-muted">Shown in the member directory on the home page. Use a Gravatar URL, your social-media avatar, or any public image.</p>
+            <p className="text-xs text-muted">
+              Shown on your member page and in the directory. Use a Gravatar URL, your social-media avatar, or any public image.
+              {extras.techneAvatarUrl && !form.profile_photo_url && " Leave it empty to use your Techne avatar."}
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -146,9 +270,10 @@ export function ProfileForm({ member }: { member: Member }) {
               value={form.bio}
               onChange={set("bio")}
               rows={3}
-              placeholder="What are you working on?"
+              placeholder="A few lines about you"
               className="w-full rounded-md px-3 py-2 text-sm glass-input resize-none"
             />
+            {prefilledBio && <p className="text-xs text-sage">Filled in from your Techne profile. Save to keep it.</p>}
           </div>
 
           <div className="space-y-2">
@@ -160,7 +285,7 @@ export function ProfileForm({ member }: { member: Member }) {
               placeholder="React, Python, Music, Permaculture…"
               className="glass-input"
             />
-            <p className="text-xs text-muted">Comma-separated — shown in the member directory</p>
+            <p className="text-xs text-muted">Comma-separated: shown on your member page</p>
           </div>
 
           <div className="space-y-2">

@@ -10,7 +10,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const STANDING_MEMBER_TYPES = ["hub_friend", "hot_desk", "cold_desk"] as const;
 export const MEMBER_MIN_MONTHLY_CENTS = 3000;
-const PAYING = ["active", "trialing"];
+/** Subscription statuses that count (the same pair membershipRevenue counts as paying). */
+export const PAYING_STATUSES = ["active", "trialing"] as const;
+const PAYING: readonly string[] = PAYING_STATUSES;
 
 export interface StandingMember {
   member_type: string | null;
@@ -44,7 +46,7 @@ export async function isMemberDid(client: SupabaseClient, did: string | null | u
     .from("subscriptions")
     .select("status, monthly_cents")
     .eq("member_id", member.id)
-    .in("status", PAYING);
+    .in("status", PAYING_STATUSES);
   if (subErr) throw subErr;
   return isMemberInStanding(member, subs ?? []);
 }
