@@ -92,6 +92,8 @@ export interface GoalProgress {
   gained: number;
   /** Members still needed to reach the target (0 once there). */
   membersToGo: number;
+  /** Net revenue now − on the baseline date. */
+  revenueChangeCents: number;
   revenueGoalCents: number;
   rentCents: number;
   /** Net revenue still needed for the goal / for rent (0 once there). */
@@ -115,6 +117,7 @@ export function goalProgress(subs: readonly SubRow[], goals: ScoreboardGoals = S
     targetMembers,
     gained: payingMembers - goals.baselineMembers,
     membersToGo: Math.max(0, targetMembers - payingMembers),
+    revenueChangeCents: revenue.netCents - goals.baselineNetCents,
     revenueGoalCents: goals.revenueGoalCents,
     rentCents: goals.rentCents,
     revenueToGoCents: Math.max(0, goals.revenueGoalCents - revenue.netCents),

@@ -143,6 +143,9 @@ export default async function ScoreboardPage() {
                 : <span className="text-sage">rent ({usd(goal.rentCents)}) covered</span>}
               {" "}· {usd(goal.revenueToGoCents)} to the goal
             </p>
+            <p className="text-xs text-muted mt-1">
+              {goal.revenueChangeCents < 0 ? "−" : "+"}{usd(Math.abs(goal.revenueChangeCents))} since {SCOREBOARD_GOALS.baselineDate} (started at {usd(SCOREBOARD_GOALS.baselineNetCents)})
+            </p>
             {r.pastDue.subscriptions > 0 && (
               <p className="text-xs text-red-400 mt-1">{usd(r.pastDue.netCents)}/mo more is past due, not counted</p>
             )}
@@ -150,7 +153,7 @@ export default async function ScoreboardPage() {
         </Card>
       </div>
 
-      <Section title="Copy as text" note="The headline, for the meeting doc.">
+      <Section title="Headline" note="A few plain lines for the meeting doc.">
         <CopyTextBlock text={s.text} />
       </Section>
 

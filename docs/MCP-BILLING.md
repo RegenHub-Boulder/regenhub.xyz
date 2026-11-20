@@ -78,9 +78,12 @@ Example: `list_open_invoices({})`. Today this should show the two open invoices 
 subscriptions (Brent Porter's Hot Desk and Aaron's Cold Desk), flagged as likely voidable.
 
 ### `billing_summary`
-MRR by plan, net of discounts and at list price; live subscriptions by rail; past-due and ending
-counts; overdue crypto membership invoices; prepaid days outstanding (day-pass balances plus unused guest-pass
-pool uses). Past-due rows count toward MRR until they end.
+Paying members and MRR by plan, net of discounts and at list price; live subscriptions by rail; past-due and
+ending counts; overdue crypto membership invoices; prepaid days outstanding (day-pass balances plus unused guest-pass
+pool uses). MRR and paying members use the one definition the admin pages and `/admin/scoreboard` share
+(`lib/membershipRevenue.ts`): active and trialing rows on both rails, members once each; past-due rows are listed
+but kept out of MRR (since T-497; before, they counted). A crypto row counts at its last payment, never above its
+plan price.
 
 Example: `billing_summary({})`
 

@@ -83,6 +83,7 @@ describe("goalProgress", () => {
     const g = goalProgress(SUBS);
     expect(g.payingMembers).toBe(5); // m1, m2, m3 ($95), m4 ($30 trialing), m10; not m6 ($15) nor m5 (past due)
     expect(g).toMatchObject({ baselineMembers: 14, targetMembers: 24, gained: -9, membersToGo: 19 });
+    expect(g.revenueChangeCents).toBe(101_500 - 171_000);
     expect(g).toMatchObject({ revenueGoalCents: 275_000, rentCents: 225_000, revenueToGoCents: 173_500, rentGapCents: 123_500 });
   });
 

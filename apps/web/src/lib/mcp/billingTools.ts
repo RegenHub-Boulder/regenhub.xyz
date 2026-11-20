@@ -741,7 +741,8 @@ export const DESCRIPTIONS = {
     "Read-only. Every unpaid invoice: open card invoices from Stripe (with failed-attempt counts, and a flag when the subscription is already " +
     "canceled, which usually means it should be voided) and unpaid crypto invoices (open, submitted, detected or exception), with overdue flags.",
   billing_summary:
-    "Read-only. MRR by plan (net of discounts and at list price), live subscription counts by rail, past-due and ending counts, overdue crypto " +
+    "Read-only. Paying members and MRR by plan (net of discounts and at list price; active and trialing only, the same definition as the " +
+    "admin pages and /admin/scoreboard), live subscription counts by rail, past-due (kept out of MRR) and ending counts, overdue crypto " +
     "invoices, and prepaid days outstanding (day-pass balances plus unused guest-pass pool uses).",
   void_stripe_invoice:
     "VOIDS a Stripe invoice: forgives its amount due; it can't be paid or reopened. Only an OPEN invoice can be voided; an already-void one " +

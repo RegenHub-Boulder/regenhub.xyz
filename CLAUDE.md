@@ -163,6 +163,18 @@ the next one, if mined within those 5 minutes or reported in the other order).
 Until it runs the code degrades to membership-only (`lib/onchain/invoiceKind.ts`: a `kind` filter is dropped when
 the column is missing, the passes page hides "Pay with USDC", the purchase route answers 503), so billing carries on.
 
+### Scoreboard (/admin/scoreboard, T-497)
+Staff page read at the family meeting: paying members ($30+/mo net) and membership revenue against the goals
+(`SCOREBOARD_GOALS` in `lib/scoreboard.ts`: 14 members and $1,710 on 2026-11-19, +10 members and $2,750/mo by
+2027-01-20, rent $2,250), new/cancelled subscriptions and the funnel per month, RSVPs per event (Techne, the same
+`fetchAttendance` /admin/events uses), the newsletter list and last issue, the people to follow up (staff only) and a
+"Copy as text" headline. The counts are pure functions in `lib/scoreboard.ts` (tested); `lib/scoreboardData.ts` reads
+the rows. **One definition of paying + MRR** (`lib/membershipRevenue.ts`): active and trialing, both rails, members
+once each, past due apart, net per row = `effectiveMonthlyCents` (never above list). The dashboard, Billing, the MCP
+`billing_summary`, the hub digest and newsletter stats all use it. Staging: `T482_SCOREBOARD=1
+scripts/staging/preview.sh` seeds fictional rows; `scripts/staging/scoreboard-shots.mjs` checks the page against
+the hand-worked numbers.
+
 ### Membership application flow (approve + notify)
 `/apply` (sign-in required) → `/api/portal/application` upserts the application, emails the
 applicant an acknowledgment, and pings the Telegram group with two buttons:
