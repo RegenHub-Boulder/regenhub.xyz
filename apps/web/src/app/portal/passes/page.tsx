@@ -346,7 +346,7 @@ export default async function PassesPage({ searchParams }: PageProps) {
               <div className="flex-1">
                 <h3 className="font-semibold mb-1">Become a Member</h3>
                 <p className="text-sm text-muted mb-4">
-                  $30/month includes 1 coworking day per month (passes never expire), member rate on additional day passes ($25 vs $30), and members-only events.
+                  $30 a month: Studio Night and the Friday member demos, a coworking day each month (unused days carry over), and day passes at the member rate ($25 vs $30).
                 </p>
                 <Link href="/membership">
                   <Button className="btn-primary-glass gap-2 text-sm">
@@ -371,7 +371,7 @@ export default async function PassesPage({ searchParams }: PageProps) {
               <div className="flex-1">
                 <h3 className="font-semibold mb-1">Ready for your own desk?</h3>
                 <p className="text-sm text-muted mb-4">
-                  Full Access members get a permanent door code, 24/7 access, and a path to co-op ownership.
+                  Full Access members get a permanent door code and 24/7 access.
                   Hot Desk is $250/month, Cold Desk (reserved) is $500/month.
                 </p>
                 <Link href="/membership">

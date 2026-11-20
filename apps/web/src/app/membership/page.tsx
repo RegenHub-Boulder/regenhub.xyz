@@ -7,28 +7,27 @@ import { Button } from "@/components/ui/button";
 import { SubscribeButton } from "@/components/membership/SubscribeButton";
 import { CryptoSubscribeButton } from "@/components/membership/CryptoSubscribeButton";
 import { Check, Sparkles, ArrowRight } from "lucide-react";
+import { MemberOffer } from "@/components/membership/MemberOffer";
 import { isSyntheticEmail } from "@/lib/regenos/syntheticEmail";
 
 export const metadata: Metadata = {
   title: "Membership — RegenHub",
   description:
-    "Join the cooperative as a contributing member. Five tiers from $30/mo, including desk membership with 24/7 access.",
+    "Membership at RegenHub, from $30 a month: member demos, Studio Night, coworking days and the member rate on day passes.",
 };
 
-// Perks shown on every social tier card
+// Perks shown on every social tier card (the offer itself is <MemberOffer>, above the plans)
 const SOCIAL_PERKS = [
+  "Member demos and Studio Night",
   "Day passes at the member rate ($25 instead of $30)",
-  "Monthly day passes accumulate — they never expire",
-  "Member-only events",
-  "Connection to the regenerative cooperative community",
+  "Unused days carry over; they never expire",
 ];
 
 // Perks shown on every desk tier card
 const DESK_PERKS = [
   "Permanent door code, 24/7 access",
-  "Member-only events",
+  "Member demos and Studio Night",
   "Guest day passes at the member rate ($25)",
-  "Path to co-op ownership",
 ];
 
 // The three ways in, in the order a stranger meets them.
@@ -49,7 +48,7 @@ const LADDER = [
     step: 3,
     title: "Membership",
     price: "from $30 / month",
-    body: "Contributing tiers support the cooperative and credit day passes monthly. Desk tiers add a permanent door code and 24/7 access.",
+    body: "The member nights and demos, plus coworking days each month. Desk plans add a permanent door code and 24/7 access.",
   },
 ] as const;
 
@@ -119,15 +118,14 @@ export default async function MembershipPage({ searchParams }: PageProps) {
             <Sparkles className="w-4 h-4" />
             RegenHub Membership
           </p>
-          <h1 className="text-4xl sm:text-5xl font-bold text-forest">
-            {showLadderInsteadOfCheckout ? "How to join" : "Pick your tier"}
-          </h1>
+          <h1 className="text-4xl sm:text-5xl font-bold text-forest">A place in the practice</h1>
           <p className="text-muted max-w-2xl mx-auto">
-            {showLadderInsteadOfCheckout
-              ? "RegenHub is a cooperative coworking space in Boulder. There are three ways in, and the first one is free."
-              : "Step into a cooperative building economic democracy in Boulder. Contributing tiers ($30–$100/mo) support the space and unlock member events. Full Access ($250–$500/mo) adds a permanent door code and 24/7 access."}
+            Techne Tuesdays stay free and open to everyone. Membership, from $30 a month, gets you into the rooms
+            where members show their work and help each other with it.
           </p>
         </header>
+
+        <MemberOffer />
 
         {wasCancelled && (
           <div className="glass-panel p-4 border border-white/10 text-center">
@@ -171,7 +169,7 @@ export default async function MembershipPage({ searchParams }: PageProps) {
           <div className="glass-panel p-5 border border-gold/30 max-w-2xl mx-auto text-center space-y-3">
             <p className="font-medium">Full Access needs one more step</p>
             <p className="text-sm text-muted">
-              You&apos;re cleared for the Contributing Member tiers below. Full Access
+              You&apos;re cleared for the member plans below. Full Access
               ($250 Hot Desk / $500 Cold Desk) involves 24/7 access + a permanent door
               code, so we set up a quick chat first — reach out and we&apos;ll get you welcomed in.
             </p>
@@ -191,6 +189,7 @@ export default async function MembershipPage({ searchParams }: PageProps) {
         {/* The ladder, in plain words — what a stranger actually needs to know. */}
         {showLadderInsteadOfCheckout && (
           <section className="space-y-5">
+            <h2 className="text-2xl font-semibold text-forest text-center">How to join</h2>
             <div className="grid md:grid-cols-3 gap-5">
               {LADDER.map(({ step, title, price, body }) => (
                 <Card key={title} className="glass-panel">
@@ -230,8 +229,8 @@ export default async function MembershipPage({ searchParams }: PageProps) {
         {!hasActiveSub && !showLadderInsteadOfCheckout && (
           <section className="space-y-5">
             <div className="text-center">
-              <h2 className="text-2xl font-semibold text-forest">Contributing Member</h2>
-              <p className="text-sm text-muted mt-1">Support the cooperative + accumulate day passes</p>
+              <h2 className="text-2xl font-semibold text-forest">Plans</h2>
+              <p className="text-sm text-muted mt-1">Every plan includes everything above. They differ in coworking days.</p>
             </div>
             <div className="grid md:grid-cols-3 gap-5">
               {socialPlans.map(({ key, def }) => {

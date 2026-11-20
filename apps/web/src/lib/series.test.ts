@@ -1,11 +1,52 @@
 import { describe, expect, it } from "vitest";
-import { SERIES, getSeries, ordinalShort, plannedNight, seriesOf, techneTuesdays, topicOf, zonedTimeToUtc } from "./series";
+import { SERIES, getSeries, nthWeekdayOfMonth, ordinalShort, plannedNight, rhythmOf, ruleDatesFrom, seriesOf, techneTuesdays, topicOf, zonedTimeToUtc } from "./series";
 
 const agents = getSeries("agents-night")!;
 const civic = getSeries("civic-tech-night")!;
 
+const studio = getSeries("studio-night")!;
+
+describe("Studio Night", () => {
+  it("is members only, 6–8pm Denver, on the 4th Tuesday", () => {
+    expect(studio.membersOnly).toBe(true);
+    expect([studio.startTime, studio.endTime, studio.timezone]).toEqual(["18:00", "20:00", "America/Denver"]);
+    expect(rhythmOf(studio)).toBe("Fourth Tuesday of each month");
+  });
+
+  it("falls on the 4th Tuesday, not the last, in a month with five Tuesdays", () => {
+    // December 2026 has Tuesdays 1, 8, 15, 22, 29.
+    expect(nthWeekdayOfMonth(2026, 12, studio.rule as { nth: 4; weekday: number })).toBe("2026-12-22");
+    // March 2027 has Tuesdays 2, 9, 16, 23, 30.
+    expect(nthWeekdayOfMonth(2027, 3, studio.rule as { nth: 4; weekday: number })).toBe("2027-03-23");
+  });
+
+  it("falls on the 4th Tuesday in four-Tuesday months, across a year end", () => {
+    // Nov 2026: 3, 10, 17, 24. Jan 2027: 5, 12, 19, 26. Feb 2027: 2, 9, 16, 23.
+    expect(ruleDatesFrom(studio.rule, "2026-11-20", 4)).toEqual(["2026-11-24", "2026-12-22", "2027-01-26", "2027-02-23"]);
+    // On the night itself it is still offered.
+    expect(ruleDatesFrom(studio.rule, "2026-11-24", 1)).toEqual(["2026-11-24"]);
+    expect(ruleDatesFrom(studio.rule, "2026-11-25", 1)).toEqual(["2026-12-22"]);
+  });
+
+  it("starts 6pm Mountain in winter and summer", () => {
+    expect(plannedNight(studio, "2026-12-22").startsAt).toBe("2026-12-23T01:00:00.000Z");
+    expect(plannedNight(studio, "2027-06-22").startsAt).toBe("2027-06-23T00:00:00.000Z");
+  });
+
+  it("is found by name and isn't a Techne Tuesday", () => {
+    expect(seriesOf({ name: "Studio Night: local models" })?.slug).toBe("studio-night");
+    expect(techneTuesdays().some(({ series }) => series.slug === "studio-night")).toBe(false);
+  });
+
+  it("Happy Hour carries the members-only Friday demos", () => {
+    expect(getSeries("happy-hour")?.memberPart?.title).toBe("Member demos before Happy Hour");
+    expect(getSeries("happy-hour")?.membersOnly).toBeFalsy();
+  });
+});
+
 describe("series keys", () => {
-  it("knows the four series by slug and nothing else", () => {
+  it("knows the five series by slug and nothing else", () => {
+    expect(getSeries("studio-night")?.name).toBe("Studio Night");
     expect(agents.name).toBe("Agents Building Night");
     expect(civic.name).toBe("Civic Tech Night");
     expect(getSeries("boulder-blockchain")?.name).toBe("Boulder Blockchain Meetup");

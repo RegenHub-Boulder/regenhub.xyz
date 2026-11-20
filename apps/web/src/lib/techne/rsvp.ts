@@ -69,3 +69,6 @@ export function countGoing(rows: RsvpRow[], eventUri: string): Attendance {
 export function goingLine(a: { going: number }): string {
   return a.going === 0 ? "No RSVPs yet" : `${a.going} going`;
 }
+
+/** The RSVP route's answer to a non-member on a members-only night (403); the panel shows "Members only" for it. */
+export const MEMBERS_ONLY_REFUSAL = "This night is for members.";

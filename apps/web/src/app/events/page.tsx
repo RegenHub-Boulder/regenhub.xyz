@@ -17,7 +17,8 @@ import { ordinalShort, techneTuesdays } from "@/lib/series";
  * lu.ma and an event card used to leave for scenius.social; both now land here,
  * and a card from here opens `/events/<did>/<rkey>` on this same site.
  *
- * Leads with the community nights (the Techne Tuesdays and the Friday Happy Hour: lib/series.ts),
+ * Leads with the community nights (the Techne Tuesdays, Studio Night for members and the Friday Happy Hour:
+ * lib/series.ts),
  * each with its next date, then the rest of the calendar.
  *
  * Same fallback contract as the landing section (components/landing/UpcomingEvents.tsx):
@@ -55,7 +56,12 @@ export default async function EventsPage() {
             Upcoming Events
           </h1>
           <p className="text-xl text-muted max-w-2xl mx-auto">
-            Public events at RegenHub are open to everyone. You don&apos;t have to be a member to come.
+            Techne Tuesdays and Happy Hour are open to everyone: you don&apos;t have to be a member to come.
+            Studio Night and the Friday demos are for{" "}
+            <Link href="/membership" className="text-sage underline">
+              members
+            </Link>
+            .
           </p>
         </div>
 
