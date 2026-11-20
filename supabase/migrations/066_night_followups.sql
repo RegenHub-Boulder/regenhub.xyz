@@ -8,6 +8,9 @@
 --   night_followup_optouts   per-person "no follow-ups after nights" (the link in every note), by email
 --   night_followup_batches   one row per night once a steward decided: send or skip. A night is decided once.
 --   night_followups          one row per person in a sent batch: who, which note, sent / failed / held (and why)
+--   night_followup_hold      why one email can't get a follow-up now (or null): unsubscribed from email, opted out of
+--                            follow-ups, or a follow-up in the last 7 days. The one rule: the page's preview
+--                            (night_followup_holds) and the send (decide_night_followups) both ask it.
 --   decide_night_followups   the decision in one transaction: the batch row, a row per person (held if they
 --                            unsubscribed from email, opted out of follow-ups, or got a follow-up in the last 7
 --                            days), and the admin_actions row. Answers the rows to send.
@@ -15,6 +18,7 @@
 -- The scoreboard reads night_followups (sent, guest note) for "followed up → joined within 30 days".
 -- Server-only: RLS on, no policies, the function granted to service_role alone. Additive.
 -- Reverse: drop function decide_night_followups(text, text, timestamptz, text, text, jsonb);
+--   drop function night_followup_holds(jsonb); drop function night_followup_hold(text);
 --   drop table night_followups, night_followup_batches, night_followup_optouts;
 set local lock_timeout = '5s';
 
@@ -60,6 +64,26 @@ create index night_followups_member_idx on night_followups (member_id, created_a
 alter table night_followups enable row level security;
 revoke all on night_followups from public, anon, authenticated;
 
+-- Why `p_email` can't get a follow-up now, or null. Case-insensitive on every table.
+create function night_followup_hold(p_email text) returns text
+language sql stable security definer set search_path = public as $$
+  select case
+    when exists (select 1 from email_unsubscribes u where lower(u.email) = lower(trim(p_email))) then 'unsubscribed'
+    when exists (select 1 from night_followup_optouts o where o.email = lower(trim(p_email))) then 'opted_out'
+    when exists (select 1 from night_followups f
+                   where f.email = lower(trim(p_email)) and f.status in ('sending', 'sent')
+                     and f.created_at > now() - interval '7 days') then 'this_week'
+  end;
+$$;
+
+-- The same, for the page's preview: ["a@b.c", ...] → the emails held and why (lowercase).
+create function night_followup_holds(p_emails jsonb) returns table (email text, reason text)
+language sql stable security definer set search_path = public as $$
+  select e.email, night_followup_hold(e.email)
+    from (select distinct lower(trim(value)) as email from jsonb_array_elements_text(coalesce(p_emails, '[]'::jsonb))) e
+   where night_followup_hold(e.email) is not null;
+$$;
+
 -- A steward's decision on one night. p_people: [{ "member_id": 1, "email": "a@b.c", "variant": "guest" }, ...], the
 -- people the steward saw and kept. Raises 'night_followups_decided' if the night was already decided. Each person is
 -- checked under a lock on their email, so two nights sent at once can't both reach them in the same week.
@@ -94,14 +118,7 @@ begin
         continue;
       end if;
       perform pg_advisory_xact_lock(hashtext('night_followup:' || v_email));
-      v_reason := case
-        when exists (select 1 from email_unsubscribes u where lower(u.email) = v_email) then 'unsubscribed'
-        when exists (select 1 from night_followup_optouts o where o.email = v_email) then 'opted_out'
-        when exists (select 1 from night_followups f
-                       where f.email = v_email and f.status in ('sending', 'sent')
-                         and f.created_at > now() - interval '7 days') then 'this_week'
-        else null
-      end;
+      v_reason := night_followup_hold(v_email);
       insert into night_followups (batch_id, event_uri, member_id, email, variant, status, held_reason)
         values (v_batch, p_event_uri, nullif(v_person->>'member_id', '')::integer, v_email, v_person->>'variant',
                 case when v_reason is null then 'sending' else 'held' end, v_reason)
@@ -123,5 +140,8 @@ begin
       from night_followups f where f.batch_id = v_batch order by f.id;
 end;
 $$;
+revoke all on function night_followup_hold(text) from public, anon, authenticated;
+revoke all on function night_followup_holds(jsonb) from public, anon, authenticated;
+grant execute on function night_followup_holds(jsonb) to service_role;
 revoke all on function decide_night_followups(text, text, timestamptz, text, text, jsonb) from public, anon, authenticated;
 grant execute on function decide_night_followups(text, text, timestamptz, text, text, jsonb) to service_role;

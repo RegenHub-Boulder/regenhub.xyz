@@ -41,11 +41,11 @@ function Night({ night }: { night: NightFollowupView }) {
   const router = useRouter();
   const [keep, setKeep] = useState<Set<number>>(() => new Set(night.send.map((p) => p.memberId)));
   const [preview, setPreview] = useState<"guest" | "member" | null>(null);
-  const [busy, setBusy] = useState<"send" | "skip" | null>(null);
+  const [busy, setBusy] = useState<"send" | "skip" | "retry" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
-  async function decide(decision: "send" | "skip") {
+  async function decide(decision: "send" | "skip" | "retry") {
     setBusy(decision);
     setError(null);
     try {
@@ -59,7 +59,7 @@ function Night({ night }: { night: NightFollowupView }) {
       setDone(
         decision === "skip"
           ? "Skipped."
-          : `Sent ${out.sent}${out.failed ? `, ${out.failed} failed` : ""}${out.held ? `, ${out.held} held back` : ""}.`,
+          : `Sent ${out.sent}${out.failed ? `, ${out.failed} didn't go` : ""}${out.held ? `, ${out.held} held back` : ""}.`,
       );
       router.refresh();
     } catch (err) {
@@ -90,10 +90,22 @@ function Night({ night }: { night: NightFollowupView }) {
             {other.length > 0 &&
               " " +
                 other
-                  .map((o) => `${o.name}: ${o.status === "held" && o.held ? HELD_TEXT[o.held] : o.status === "failed" ? "didn't send" : "sending"}`)
+                  .map((o) => `${o.name}: ${o.status === "held" && o.held ? HELD_TEXT[o.held] : o.status === "failed" ? "didn't go" : "sending"}`)
                   .join("; ") +
                 "."}
           </p>
+          {night.retryable > 0 &&
+            (done ? (
+              <p className="text-sm text-sage">{done}</p>
+            ) : (
+              <div className="pt-2 space-y-2">
+                {error && <p className="text-sm text-red-400" role="alert">{error}</p>}
+                <Button onClick={() => decide("retry")} disabled={busy !== null} className="btn-glass gap-2 px-5">
+                  {busy === "retry" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                  Try the {night.retryable} that didn&apos;t go again
+                </Button>
+              </div>
+            ))}
         </CardContent>
       </Card>
     );

@@ -298,10 +298,13 @@ describe("followupFunnel: followed up after a night → joined within 30 days", 
       { member_id: 23, sent_at: "2026-10-10T16:00:00Z" },
       { member_id: 24, sent_at: "2026-11-01T16:00:00Z" },
       { member_id: null, sent_at: "2026-11-01T16:00:00Z" }, // member removed since
+      { member_id: 25, sent_at: "2026-10-29T16:00:00Z" }, // notes in two months, one join: counted once, in November
+      { member_id: 25, sent_at: "2026-11-04T16:00:00Z" },
     ];
+    subs.push(sub(5, 25, "member_basic", "active", 3000, 3000, "2026-11-10T16:00:00Z"));
     expect(followupFunnel(followups, subs, months)).toEqual([
-      { month: "2026-10", followedUp: 1, joined: 0 },
-      { month: "2026-11", followedUp: 3, joined: 1 },
+      { month: "2026-10", followedUp: 2, joined: 0 },
+      { month: "2026-11", followedUp: 4, joined: 2 },
     ]);
   });
 });

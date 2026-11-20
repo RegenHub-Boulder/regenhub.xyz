@@ -1,11 +1,11 @@
 /**
- * One send function (lib/email.ts deliver): every email the web app sends reaches a mail service only through the
+ * One send function (lib/email.ts sendEmailDetailed): every email the web app sends reaches a mail service only through the
  * provider EMAIL_PROVIDER names, so moving to Amazon SES is a setting plus one provider entry (T-497).
  */
 import { afterEach, expect, it, vi } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { deliver, emailProvider, isEmailConfigured, sendEmail, sendEmailDetailed } from "@/lib/email";
+import { emailProvider, isEmailConfigured, sendEmail, sendEmailDetailed } from "@/lib/email";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -37,7 +37,7 @@ it("the provider is a setting: an unknown one sends nothing, through either send
   expect(emailProvider()).toBeNull();
   expect(isEmailConfigured()).toBe(false);
   const mail = { to: "a@example.test", subject: "s", html: "<p>h</p>" };
-  expect(await deliver(mail)).toMatchObject({ ok: false, error: expect.stringContaining("unknown EMAIL_PROVIDER") });
+  expect(await sendEmailDetailed(mail)).toMatchObject({ ok: false, error: expect.stringContaining("unknown EMAIL_PROVIDER") });
   expect(await sendEmail(mail)).toBe(false);
   expect(await sendEmailDetailed(mail)).toMatchObject({ ok: false });
   expect(net).not.toHaveBeenCalled();
@@ -53,9 +53,9 @@ it("the staging outbox provider works only with the Techne stand-in on, never on
   const mail = { to: "a@example.test", subject: "staged", html: "<p>h</p>" };
   vi.stubEnv("TECHNE_STAGING_STANDIN", "1");
   vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://regenhub.xyz");
-  expect(await deliver(mail)).toMatchObject({ ok: false, error: "email not configured" });
+  expect(await sendEmailDetailed(mail)).toMatchObject({ ok: false, error: "email not configured" });
   vi.stubEnv("NEXT_PUBLIC_SITE_URL", "http://127.0.0.1:18700");
-  expect(await deliver(mail)).toMatchObject({ ok: true });
+  expect(await sendEmailDetailed(mail)).toMatchObject({ ok: true });
   const { stagingOutboxMails } = await import("@/lib/staging/outbox");
   expect(stagingOutboxMails()[0]).toMatchObject({ to: "a@example.test", subject: "staged" });
 });

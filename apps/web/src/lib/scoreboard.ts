@@ -295,7 +295,10 @@ export interface FollowupMonth {
   joined: number;
 }
 
-/** Guest notes sent (`night_followups`, status sent) → first subscriptions within 30 days, by the month of the note. */
+/**
+ * Guest notes sent (`night_followups`, status sent) → first subscriptions within 30 days, by the month of the note.
+ * A person counts once per month they were followed up; a join counts once, in the month of the last note before it.
+ */
 export function followupFunnel(
   followups: readonly { member_id: number | null; sent_at: string | null }[],
   subs: readonly SubRow[],
@@ -308,18 +311,28 @@ export function followupFunnel(
     const prev = first.get(s.member_id);
     if (prev === undefined || t < prev) first.set(s.member_id, t);
   }
-  const rows = new Map(months.map((m) => [m, { month: m, followedUp: 0, joined: 0, seen: new Set<number>() }]));
-  for (const f of [...followups].sort((a, b) => (a.sent_at ?? "").localeCompare(b.sent_at ?? ""))) {
+  const rows = new Map(months.map((m) => [m, { month: m, followedUp: 0, joined: 0 }]));
+  const seen = new Set<string>();
+  const lastBeforeJoin = new Map<number, number>();
+  for (const f of followups) {
     if (f.member_id == null || !f.sent_at) continue;
-    const row = rows.get(monthOf(f.sent_at));
-    if (!row || row.seen.has(f.member_id)) continue;
-    row.seen.add(f.member_id);
-    row.followedUp += 1;
     const sent = Date.parse(f.sent_at);
+    const month = monthOf(f.sent_at);
+    const row = rows.get(month);
+    if (row && !seen.has(`${month}:${f.member_id}`)) {
+      seen.add(`${month}:${f.member_id}`);
+      row.followedUp += 1;
+    }
     const joinedAt = first.get(f.member_id);
-    if (joinedAt !== undefined && joinedAt > sent && joinedAt <= sent + FOLLOWUP_JOIN_DAYS * 86_400_000) row.joined += 1;
+    if (joinedAt !== undefined && joinedAt > sent && joinedAt <= sent + FOLLOWUP_JOIN_DAYS * 86_400_000) {
+      lastBeforeJoin.set(f.member_id, Math.max(lastBeforeJoin.get(f.member_id) ?? 0, sent));
+    }
   }
-  return [...rows.values()].map(({ month, followedUp, joined }) => ({ month, followedUp, joined }));
+  for (const sent of lastBeforeJoin.values()) {
+    const row = rows.get(monthOf(new Date(sent).toISOString()));
+    if (row) row.joined += 1;
+  }
+  return [...rows.values()];
 }
 
 // ── People to follow up ──────────────────────────────────────────────────────

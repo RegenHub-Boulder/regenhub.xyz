@@ -29,7 +29,7 @@ vi.mock("next/cache", () => ({ revalidateTag: () => {}, revalidatePath: () => {}
 import { POST as signinPOST } from "@/app/techne/signin/route";
 import { GET as callbackGET } from "@/app/techne/callback/route";
 import { POST as followupsPOST } from "@/app/api/portal/events/followups/route";
-import { GET as optoutGET } from "@/app/api/followups/optout/route";
+import { GET as optoutGET, POST as optoutPOST } from "@/app/api/followups/optout/route";
 import EventsPage from "@/app/admin/events/page";
 import { NightFollowups } from "@/components/portal/NightFollowups";
 import type { NightFollowupView } from "@/lib/nightFollowupData";
@@ -179,7 +179,7 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
   }
   const nightOnPage = async (uri: string) => followupsIn((await EventsPage()) as ReactElement)?.find((x) => x.eventUri === uri) ?? null;
 
-  const click = async (event: string, decision: "send" | "skip", keep: number[]) => {
+  const click = async (event: string, decision: "send" | "skip" | "retry", keep: number[]) => {
     const res = await followupsPOST(
       new Request(`${SITE}/api/portal/events/followups`, {
         method: "POST",
@@ -210,7 +210,7 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
 
     const ids = night!.send.map((p) => p.memberId);
     expect(await click(uri, "send", ids)).toMatchObject({ status: 200, ok: true, sent: 2, held: 0 });
-    // Through lib/email.ts deliver → the Resend provider → Resend's API (the edge): one mail each, nobody else.
+    // Through lib/email.ts sendEmailDetailed → the Resend provider → Resend's API (the edge): one mail each, nobody else.
     expect(edge.mails.map((m) => [m.to, m.subject])).toEqual([
       ["ana@example.test", "Thanks for coming to Civic Tech Night"],
       ["sam@example.test", "Thanks for coming to Civic Tech Night"],
@@ -271,8 +271,13 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
 
     // Ana follows the "no more notes" link in her mail.
     const link = /href="([^"]*\/api\/followups\/optout[^"]*)"/.exec(edge.mails.find((m) => m.to === "ana@example.test")!.html)![1].replace(/&amp;/g, "&");
-    expect((await optoutGET(new Request(link))).status).toBe(200);
-    expect((await optoutGET(new Request(link.replace(/token=[^&]+/, "token=forged")))).status).toBe(400);
+    // Opening the link (or a mail scanner opening it) only shows the button; the button's POST opts her out.
+    const shown = await optoutGET(new Request(link));
+    expect(shown.status).toBe(200);
+    expect(await shown.text()).toContain("Stop the notes");
+    expect((await pg.query("select email from night_followup_optouts")).rows).toEqual([]);
+    expect((await optoutPOST(new Request(link.replace(/token=[^&]+/, "token=forged"), { method: "POST" }))).status).toBe(400);
+    expect((await optoutPOST(new Request(link, { method: "POST" }))).status).toBe(200);
     expect((await pg.query("select email from night_followup_optouts")).rows).toEqual([{ email: "ana@example.test" }]);
     // Past the week, she stays out; Sam is back.
     await pg.query("update night_followups set created_at = now() - interval '8 days'");
@@ -292,6 +297,27 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
     expect(edge.mails).toEqual([]);
     expect(await rows()).toEqual([]);
     expect((await pg.query("select * from night_followup_batches")).rows).toEqual([]);
+  });
+
+  it("a note that didn't go is recorded and shown, and Retry sends it once, under the same key", async () => {
+    const uri = await pastNight("Civic Tech Night", 15, [SAM]);
+    await signInAs(STEWARD.did);
+    const sam = (await nightOnPage(uri))!.send[0];
+    vi.stubEnv("RESEND_API_KEY", ""); // the provider is down for the first click
+    expect(await click(uri, "send", [sam.memberId])).toMatchObject({ status: 200, sent: 0, failed: 1 });
+    expect(edge.mails).toEqual([]);
+    const failed = (await nightOnPage(uri))!;
+    expect(failed.outcomes).toEqual([expect.objectContaining({ name: "Sam Sample", status: "failed" })]);
+    expect(failed.retryable).toBe(1);
+
+    vi.stubEnv("RESEND_API_KEY", "test-only");
+    expect(await click(uri, "retry", [])).toMatchObject({ status: 200, sent: 1, failed: 0 });
+    expect(edge.mails.map((m) => m.to)).toEqual(["sam@example.test"]);
+    const after = (await nightOnPage(uri))!;
+    expect(after.outcomes.map((o) => o.status)).toEqual(["sent"]);
+    expect(after.retryable).toBe(0);
+    expect(await click(uri, "retry", [])).toMatchObject({ status: 200, sent: 0 });
+    expect(edge.mails).toHaveLength(1);
   });
 
   it("a night that hasn't ended, or ended days ago, can't be sent", async () => {

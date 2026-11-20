@@ -62,16 +62,15 @@ export interface FollowupBatch {
 }
 
 /**
- * Who would get a note for one night. `recent` = emails (lowercase) sent a follow-up in the last FOLLOWUP_CAP_DAYS;
- * `unsubscribed` / `optedOut` = lowercase emails.
+ * Who would get a note for one night. `holds`: lowercase email → why it can't get a follow-up now, as the database
+ * answers it (migration 066 night_followup_holds: unsubscribed, opted out, or a follow-up this week), the same rule
+ * the send applies.
  */
 export function followupBatch(input: {
   goingDids: readonly string[];
   members: readonly FollowupMember[];
   subs: readonly (StandingSubscription & { member_id: number })[];
-  unsubscribed: ReadonlySet<string>;
-  optedOut: ReadonlySet<string>;
-  recent: ReadonlySet<string>;
+  holds: ReadonlyMap<string, HeldReason>;
 }): FollowupBatch {
   const byDid = new Map(input.members.flatMap((m) => (m.did ? [[m.did, m] as const] : [])));
   const out: FollowupBatch = { send: [], held: [], noEmail: 0 };
@@ -86,15 +85,7 @@ export function followupBatch(input: {
     if (seen.has(email)) continue;
     seen.add(email);
     const member = isMemberInStanding(m, input.subs.filter((s) => s.member_id === m.id));
-    const held: HeldReason | null = m.disabled
-      ? "disabled"
-      : input.unsubscribed.has(email)
-        ? "unsubscribed"
-        : input.optedOut.has(email)
-          ? "opted_out"
-          : input.recent.has(email)
-            ? "this_week"
-            : null;
+    const held: HeldReason | null = m.disabled ? "disabled" : (input.holds.get(email) ?? null);
     const person: FollowupPerson = {
       memberId: m.id,
       name: m.name,

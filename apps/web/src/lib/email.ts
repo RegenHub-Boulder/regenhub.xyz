@@ -50,7 +50,7 @@ export interface SendResult {
 }
 
 // ============================================================
-// The provider seam: every email this app sends goes through deliver(), and only the provider below talks to a
+// The provider seam: every email this app sends goes through sendEmailDetailed() (sendEmail wraps it), and only the provider below talks to a
 // mail service. Which provider is a setting (EMAIL_PROVIDER, default "resend"); moving to Amazon SES later is a new
 // entry in providers(), not a change to any caller. test/email-seam.test.ts fails if another file reaches a provider.
 // ============================================================
@@ -127,8 +127,28 @@ export function isEmailConfigured(): boolean {
   return !!emailProvider()?.configured() && !!process.env.EMAIL_FROM;
 }
 
-/** The one send function. Fills in from / reply-to / text, then hands the message to the configured provider. */
-export async function deliver(input: SendEmailInput): Promise<SendResult> {
+/**
+ * Send a transactional email.
+ *
+ * Returns true on success. Logs + returns false on failure — callers should
+ * treat email as best-effort, not load-bearing for app correctness. If email
+ * isn't configured, returns false silently.
+ */
+export async function sendEmail(input: SendEmailInput): Promise<boolean> {
+  const result = await sendEmailDetailed(input);
+  if (!result.ok) {
+    if (result.error === "email not configured") console.warn("[email] no email provider configured — skipping send");
+    else console.error("[email] send error:", result.error);
+  }
+  return result.ok;
+}
+
+/**
+ * The one send function. Fills in from / reply-to / text, then hands the message to the configured provider, and
+ * answers a structured result so a bulk sender can tell a rate limit (retry) from a hard failure (give up) and record
+ * the provider's message id. Used directly by the newsletter engine and the night follow-ups.
+ */
+export async function sendEmailDetailed(input: SendEmailInput): Promise<SendResult> {
   const provider = emailProvider();
   if (!provider) {
     return { ok: false, rateLimited: false, quotaExceeded: false, error: `unknown EMAIL_PROVIDER "${process.env.EMAIL_PROVIDER}"` };
@@ -145,30 +165,6 @@ export async function deliver(input: SendEmailInput): Promise<SendResult> {
   });
 }
 
-/**
- * Send a transactional email.
- *
- * Returns true on success. Logs + returns false on failure — callers should
- * treat email as best-effort, not load-bearing for app correctness. If email
- * isn't configured, returns false silently.
- */
-export async function sendEmail(input: SendEmailInput): Promise<boolean> {
-  const result = await deliver(input);
-  if (!result.ok) {
-    if (result.error === "email not configured") console.warn("[email] no email provider configured — skipping send");
-    else console.error("[email] send error:", result.error);
-  }
-  return result.ok;
-}
-
-/**
- * Like sendEmail, but returns a structured result so a bulk sender can tell a
- * rate-limit (retry) apart from a hard failure (give up) and record the provider's
- * message id. Used by the newsletter send engine and the night follow-ups.
- */
-export async function sendEmailDetailed(input: SendEmailInput): Promise<SendResult> {
-  return deliver(input);
-}
 
 // ============================================================
 // Templates

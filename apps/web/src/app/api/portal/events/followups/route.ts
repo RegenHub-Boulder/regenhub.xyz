@@ -5,12 +5,12 @@ import { regenosCollectiveDid } from "@/lib/regenos/config";
 import { currentTechne } from "@/lib/techne/webSession";
 import { sameSiteJson, tooMany, withinIpLimit } from "@/lib/techne/guard";
 import { stewardCheck } from "@/lib/techne/roster";
-import { decideNightFollowups } from "@/lib/nightFollowupData";
+import { decideNightFollowups, retryNightFollowups } from "@/lib/nightFollowupData";
 
 /**
- * POST /api/portal/events/followups { event: <at-uri>, decision: "send" | "skip", keep: [memberId, …] } — a steward's
- * click on a night's follow-ups on /admin/events. The only way a follow-up is sent: nothing else calls
- * decideNightFollowups. Gated like the events write route: signed in with Techne here and facilitator or above in
+ * POST /api/portal/events/followups { event: <at-uri>, decision: "send" | "skip" | "retry", keep: [memberId, …] } — a
+ * steward's click on a night's follow-ups on /admin/events (retry: the notes of a sent night that didn't go). The only
+ * way a follow-up is sent: nothing else calls decideNightFollowups or retryNightFollowups. Gated like the events write route: signed in with Techne here and facilitator or above in
  * RegenHub's roster, read fresh (lib/techne/roster.ts stewardCheck). A night is decided once.
  *   → { ok: true, sent, failed, held } | { ok: false, error }
  */
@@ -25,7 +25,9 @@ export async function POST(req: Request) {
   if (typeof event !== "string" || !/^at:\/\/did:[a-z]+:[A-Za-z0-9._:%-]+\/community\.lexicon\.calendar\.event\/[A-Za-z0-9._:~-]+$/.test(event)) {
     return NextResponse.json({ ok: false, error: "Which night?" }, { status: 400 });
   }
-  if (decision !== "send" && decision !== "skip") return NextResponse.json({ ok: false, error: "Send or skip?" }, { status: 400 });
+  if (decision !== "send" && decision !== "skip" && decision !== "retry") {
+    return NextResponse.json({ ok: false, error: "Send or skip?" }, { status: 400 });
+  }
   const keep = Array.isArray(body?.keep) ? body.keep.filter((n): n is number => Number.isInteger(n) && (n as number) > 0) : [];
 
   const admin = createServiceClient();
@@ -39,7 +41,10 @@ export async function POST(req: Request) {
   if (!check.steward) {
     return NextResponse.json({ ok: false, error: "Only RegenHub's facilitators and managers on Techne can send follow-ups." }, { status: 403 });
   }
-  const out = await decideNightFollowups(admin, { eventUri: event, decision, keep, stewardDid: who.did });
+  const out =
+    decision === "retry"
+      ? await retryNightFollowups(admin, event)
+      : await decideNightFollowups(admin, { eventUri: event, decision, keep, stewardDid: who.did });
   if (!out.ok) return NextResponse.json({ ok: false, error: out.error }, { status: out.status });
   return NextResponse.json(out);
 }

@@ -10,7 +10,6 @@ const member = (id: number, over: Partial<FollowupMember> = {}): FollowupMember 
   id, name: `Person ${id}`, email: `p${id}@example.test`, did: `did:plc:p${id}`, member_type: "day_pass",
   disabled: false, show_in_directory: null, ...over,
 });
-const none = new Set<string>();
 
 describe("followupBatch: who gets a note, and which", () => {
   const members = [
@@ -38,9 +37,7 @@ describe("followupBatch: who gets a note, and which", () => {
     goingDids: going,
     members,
     subs,
-    unsubscribed: new Set(["unsub@example.test"]),
-    optedOut: new Set(["p7@example.test"]),
-    recent: new Set(["p8@example.test"]),
+    holds: new Map([["unsub@example.test", "unsubscribed"], ["p7@example.test", "opted_out"], ["p8@example.test", "this_week"]]),
   });
   const variantOf = (name: string) => batch.send.find((p) => p.name === name)?.variant;
 
@@ -80,7 +77,7 @@ describe("followupBatch: who gets a note, and which", () => {
   });
 
   it("with nothing held back, everyone linked is on the send list", () => {
-    const b = followupBatch({ goingDids: ["did:plc:p1"], members, subs, unsubscribed: none, optedOut: none, recent: none });
+    const b = followupBatch({ goingDids: ["did:plc:p1"], members, subs, holds: new Map() });
     expect(b.send.map((p) => p.email)).toEqual(["p1@example.test"]);
   });
 });
