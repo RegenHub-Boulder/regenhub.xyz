@@ -110,7 +110,9 @@ export async function GET(req: NextRequest) {
       portalFailed = true;
     }
   }
-  if (portalFailed && /^\/(portal|admin|apply)([/?#]|$)/.test(app.next)) {
+  // The stewards' pages need only the Techne sign-in (their gate is the Techne role), so they never wait on it.
+  const needsPortal = /^\/(portal|admin|apply)([/?#]|$)/.test(app.next) && !/^\/admin\/(events|stewards)([/?#]|$)/.test(app.next);
+  if (portalFailed && needsPortal) {
     const u = new URL(loginUrlFor(app.next), siteOrigin());
     u.searchParams.set("error", "techne_portal");
     return NextResponse.redirect(u, 303);

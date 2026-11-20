@@ -55,7 +55,6 @@ export async function POST(req: Request) {
   }
 
   const admin = createServiceClient();
-  if (!(await withinIpLimit(admin, req, "events"))) return tooMany();
   let signedIn;
   try {
     signedIn = await techneSession(admin);
@@ -66,6 +65,8 @@ export async function POST(req: Request) {
   if (!signedIn) {
     return NextResponse.json({ ok: false, error: "Your Techne sign-in has ended. Sign in with Techne again, then retry." }, { status: 401 });
   }
+  // Counted once signed in, so signed-out calls can't spend the hub's shared IP budget.
+  if (!(await withinIpLimit(admin, req, "events"))) return tooMany();
   const check = await stewardCheck(collective, signedIn.who.did);
   if (!check) {
     return NextResponse.json({ ok: false, error: "Couldn't read RegenHub's roles from Techne just now. Try again in a moment." }, { status: 503 });

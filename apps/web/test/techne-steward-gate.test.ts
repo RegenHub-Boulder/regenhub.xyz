@@ -237,6 +237,14 @@ describe("/admin/events: the Techne role, not a site membership (stand-in)", () 
     expect(await names()).toEqual(expect.arrayContaining(["Agents Building Night", "Civic Tech Night"]));
   });
 
+  it("a steward whose portal session can't open still lands on /admin/events (it needs only Techne)", async () => {
+    // Linked to a member row with no email: the portal session can't be minted.
+    await pg.query("insert into members (name, email, did) values ('Robin', null, $1)", [STEWARD.did]);
+    await signInAs(STEWARD.did); // asserts the landing is /admin/events, not /auth/login?error=techne_portal
+    expect(portalSessionEmail(browser.jar)).toBeNull();
+    expect(formIn(await page())).not.toBeNull();
+  });
+
   it("a site admin and member with no Techne role gets the explainer and no form; the route refuses, nothing lands", async () => {
     await signInAs(ANA.did);
     expect(portalSessionEmail(browser.jar)).toBe("ana@example.test"); // the one door gave her a portal session

@@ -15,6 +15,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { currentTechne } from "@/lib/techne/webSession";
 import { shortDid } from "@/lib/techne/did";
 import { memberForDid } from "@/lib/techne/portalDoor";
+import { STEWARD_PATH } from "@/lib/techne/session";
 import { SignInWithTechne, SignOutOfTechne } from "@/components/techne/SignInWithTechne";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { LinkMembershipForm } from "@/components/auth/LinkMembershipForm";
@@ -105,7 +106,7 @@ function NotLinked({ did, handle, mode, next }: { did: string; handle: string | 
           {/* RegenHub's stewards on Techne need no membership here (/admin/events decides by the Techne role). */}
           <p className="text-xs text-muted" data-testid="steward-door">
             A facilitator or manager of RegenHub on Techne?{" "}
-            <Link href="/admin/events" className="text-sage hover:underline">
+            <Link href={STEWARD_PATH} className="text-sage hover:underline">
               Manage events
             </Link>
             .

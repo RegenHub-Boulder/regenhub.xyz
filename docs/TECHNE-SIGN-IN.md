@@ -12,8 +12,8 @@ public docs only (techne.computer/llms.txt and what it lists, reference.html, te
   regenOS-lane page at `/portal/events` (`components/portal/legacy/`, main's code unchanged, Import from Luma
   included), its nav link and dashboard card, and the revalidate route, all on `REGENOS_LOGIN_ENABLED`
   (`isStewardEventsEnabled`, `lib/techne/config.ts`).
-- With it **on**, the stewards' page is `/admin/events` (`/portal/events` redirects there; gated by the Techne role, not a site membership, since 11-19): the same server-held session as RSVP (one door, below). The old page stays reachable at `/portal/events/old`, linked as
-  "Old steward page" from the new one while the regenOS lane is on, until Aaron retires it.
+- With it **on**, the stewards' page is `/admin/events` (`/portal/events` redirects there; gated by the Techne role, not a site membership, since 11-19): the same server-held session as RSVP (one door, below). The old page stays reachable at `/portal/events/old` while the regenOS lane is on (nothing links to it), until
+  Aaron retires it.
 - The calendar on that page is the documented public read every visitor gets, plus each event's config and
   listing (`query.getRecords`), so edits keep them and removal deletes exactly what exists.
 - **Everyone signed in with Techne gets the posting form.** RegenHub's public membership claims only word a hint
