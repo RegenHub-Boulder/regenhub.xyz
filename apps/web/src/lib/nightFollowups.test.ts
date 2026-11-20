@@ -118,10 +118,10 @@ describe("the note", () => {
 
   it("guest: thanks, the next night, a Friday demo as a guest, Studio Night, membership; both footer links", () => {
     const n = renderFollowup("guest", personValues({ name: "Sam Rivera", askForPage: false }, night, SITE), footer);
-    expect(n.subject).toBe("Thanks for coming to Civic Tech Night");
+    expect(n.subject).toBe("Civic Tech Night, and what's next");
     expect(n.text).toContain("Hi Sam,");
     expect(n.text).toContain("The next Civic Tech Night is Tuesday, December 15 at 6pm");
-    expect(n.text).toMatch(/Fridays before 420 Happy Hour.*as our guest/);
+    expect(n.text).toMatch(/members get a few things of their own: on Fridays before Happy Hour/);
     expect(n.text).toContain("Studio Night");
     expect(n.html).toContain(`href="${SITE}/membership"`);
     expect(n.html).toContain(`href="${footer.optOutUrl.replace(/&/g, "&amp;")}"`);

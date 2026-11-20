@@ -202,7 +202,7 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
     expect(night!.send.map((p) => [p.name, p.variant])).toEqual([["Ana Sample", "member"], ["Sam Sample", "guest"]]);
     expect(night!.held.map((p) => [p.name, p.held])).toEqual([["Lee Sample", "unsubscribed"]]);
     expect(night!.noEmail).toBe(1); // Kim: Techne only
-    expect(night!.previews.guest?.subject).toBe("Thanks for coming to Civic Tech Night");
+    expect(night!.previews.guest?.subject).toBe("Civic Tech Night, and what's next");
     expect(night!.previews.member?.html).toContain("/portal/profile");
     // Rendering the page sent nothing and recorded nothing.
     expect(edge.mails).toEqual([]);
@@ -212,8 +212,8 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
     expect(await click(uri, "send", ids)).toMatchObject({ status: 200, ok: true, sent: 2, held: 0 });
     // Through lib/email.ts sendEmailDetailed → the Resend provider → Resend's API (the edge): one mail each, nobody else.
     expect(edge.mails.map((m) => [m.to, m.subject])).toEqual([
-      ["ana@example.test", "Thanks for coming to Civic Tech Night"],
-      ["sam@example.test", "Thanks for coming to Civic Tech Night"],
+      ["ana@example.test", "Civic Tech Night, and what's next"],
+      ["sam@example.test", "Civic Tech Night, and what's next"],
     ]);
     const sam = edge.mails.find((m) => m.to === "sam@example.test")!;
     expect(sam.html).toContain(`${SITE}/membership`);

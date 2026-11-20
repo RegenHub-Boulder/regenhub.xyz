@@ -242,7 +242,7 @@ export function renderFollowup(
 ): RenderedNote {
   const copy = FOLLOWUP_COPY[variant];
   const vals = values as unknown as Record<string, string | undefined>;
-  const subject = (fill(copy.subject, vals) ?? [{ text: "Thanks for coming" }]).map((p) => ("text" in p ? p.text : p.link)).join("");
+  const subject = (fill(copy.subject, vals) ?? [{ text: "What's next at RegenHub" }]).map((p) => ("text" in p ? p.text : p.link)).join("");
   const paras = copy.paragraphs.map((p) => fill(p, vals)).filter((p): p is Piece[] => p !== null);
   const htmlParas = paras
     .map(

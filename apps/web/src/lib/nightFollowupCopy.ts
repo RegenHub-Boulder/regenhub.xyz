@@ -14,22 +14,22 @@
  */
 export const FOLLOWUP_COPY = {
   guest: {
-    subject: "Thanks for coming to {night}",
+    subject: "{night}, and what's next",
     paragraphs: [
       "Hi {first},",
-      "Thanks for coming to {night} on {weekday}. It was good to have you there.",
+      "Thanks for signing up for {night} on {weekday}. We hope you could make it.",
       "The next {series} is [{nextWhen}]({nextUrl}).",
       "See what else is coming up at [regenhub.xyz/events]({eventsUrl}).",
-      "If you'd like to come closer: on Fridays before 420 Happy Hour, members show each other what they're building. Come to one as our guest; just reply and we'll save you a seat.",
-      "Studio Night, the fourth Tuesday, is for members: an evening to work on your agent, your data and your tools with people who get it. The next one is {studioWhen}.",
+      "420 Happy Hour is every Friday and open to everyone. Come say hi.",
+      "If you'd like to come closer, members get a few things of their own: on Fridays before Happy Hour they show each other what they're building, and Studio Night, the fourth Tuesday, is an evening to work on your agent, your data and your tools with people who get it. The next one is {studioWhen}.",
       "Membership starts at $30 a month. Here's what it includes: [regenhub.xyz/membership]({membershipUrl})",
     ],
   },
   member: {
-    subject: "Thanks for coming to {night}",
+    subject: "{night}, and what's next",
     paragraphs: [
       "Hi {first},",
-      "Thanks for coming to {night} on {weekday}. Good to see you there.",
+      "Thanks for signing up for {night} on {weekday}. Hope it was a good one.",
       "The next Studio Night is [{studioWhen}]({studioUrl}). Bring whatever you're stuck on.",
       "Your member page isn't up yet. It takes a few minutes and helps the people you met find you again: [fill it in]({profileUrl}).",
     ],
