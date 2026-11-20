@@ -18,10 +18,7 @@ function getResend(): Resend | null {
   return resendClient;
 }
 
-export function isEmailConfigured(): boolean {
-  return !!process.env.RESEND_API_KEY && !!process.env.EMAIL_FROM;
-}
-
+import { outboxProvider } from "@/lib/staging/outbox";
 import { defaultEmailFrom as defaultFrom, defaultEmailReplyTo as defaultReplyTo } from "@regenhub/shared";
 
 export interface SendEmailInput {
@@ -38,40 +35,6 @@ export interface SendEmailInput {
   replyTo?: string;
 }
 
-
-/**
- * Send a transactional email via Resend.
- *
- * Returns true on success. Logs + returns false on failure — callers should
- * treat email as best-effort, not load-bearing for app correctness. If email
- * isn't configured, returns false silently.
- */
-export async function sendEmail(input: SendEmailInput): Promise<boolean> {
-  const resend = getResend();
-  if (!resend) {
-    console.warn("[email] RESEND_API_KEY not set — skipping send");
-    return false;
-  }
-  try {
-    const { error } = await resend.emails.send({
-      from: input.from ?? defaultFrom(),
-      to: input.to,
-      subject: input.subject,
-      html: input.html,
-      text: input.text ?? input.html.replace(/<[^>]+>/g, ""),
-      replyTo: input.replyTo ?? defaultReplyTo(),
-    });
-    if (error) {
-      console.error("[email] Resend send error:", error);
-      return false;
-    }
-    return true;
-  } catch (err) {
-    console.error("[email] Unexpected send error:", err);
-    return false;
-  }
-}
-
 export interface SendResult {
   /** Provider acceptance is uncertain; recover only within its idempotency window. */
   ambiguous?: boolean;
@@ -81,9 +44,32 @@ export interface SendResult {
   /** Daily sending quota reached — won't clear for hours. STOP and resume later;
    *  do NOT burn the recipient's retry budget. */
   quotaExceeded: boolean;
-  /** Resend message id on success. */
+  /** Provider message id on success. */
   id?: string;
   error?: string;
+}
+
+// ============================================================
+// The provider seam: every email this app sends goes through sendEmailDetailed() (sendEmail wraps it), and only the provider below talks to a
+// mail service. Which provider is a setting (EMAIL_PROVIDER, default "resend"); moving to Amazon SES later is a new
+// entry in providers(), not a change to any caller. test/email-seam.test.ts fails if another file reaches a provider.
+// ============================================================
+
+/** One message, everything filled in, as a provider takes it. */
+export interface OutgoingEmail {
+  from: string;
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  replyTo: string;
+  idempotencyKey?: string;
+}
+
+export interface EmailProvider {
+  name: string;
+  configured(): boolean;
+  send(mail: OutgoingEmail): Promise<SendResult>;
 }
 
 /** Classify a Resend error string. Quota is checked first (a daily-quota error can
@@ -94,39 +80,91 @@ function classifyError(blob: string): { rateLimited: boolean; quotaExceeded: boo
   return { rateLimited, quotaExceeded };
 }
 
+const resendProvider: EmailProvider = {
+  name: "resend",
+  configured: () => !!process.env.RESEND_API_KEY,
+  async send(mail) {
+    const resend = getResend();
+    if (!resend) return { ok: false, rateLimited: false, quotaExceeded: false, error: "email not configured" };
+    try {
+      const { data, error } = await resend.emails.send({
+        from: mail.from,
+        to: mail.to,
+        subject: mail.subject,
+        html: mail.html,
+        text: mail.text,
+        replyTo: mail.replyTo,
+      }, { idempotencyKey: mail.idempotencyKey });
+      if (error) {
+        const message = (error as { message?: string }).message ?? "send failed";
+        const { rateLimited, quotaExceeded } = classifyError(`${(error as { name?: string }).name ?? ""} ${message}`);
+        // Only explicit rejection codes are terminal. Unknown/new provider errors
+        // must retain the claim because the request may have been accepted.
+        const rejected = /^(validation_error|invalid_from_address|invalid_parameter|missing_required_field|invalid_api_key|missing_api_key|restricted_api_key|invalid_access|invalid_attachment|invalid_region|security_error)$/.test(error.name);
+        return { ok: false, rateLimited, quotaExceeded, ambiguous: !rateLimited && !quotaExceeded && !rejected, error: message };
+      }
+      if (!data?.id) return { ok: false, ambiguous: true, rateLimited: false, quotaExceeded: false, error: "Provider returned no message id" };
+      return { ok: true, rateLimited: false, quotaExceeded: false, id: data.id };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const { rateLimited, quotaExceeded } = classifyError(msg);
+      return { ok: false, rateLimited, quotaExceeded, ambiguous: true, error: msg };
+    }
+  },
+};
+
+/** `outbox` is the staging preview's stand-in (lib/staging/outbox.ts): it works only with the Techne stand-in on. */
+// Read at call time, not module load: lib/staging/outbox.ts imports this module too.
+const providers = (): Record<string, EmailProvider> => ({ resend: resendProvider, outbox: outboxProvider });
+
+/** The provider EMAIL_PROVIDER names (default "resend"), or null for a name this build doesn't know. */
+export function emailProvider(): EmailProvider | null {
+  const name = (process.env.EMAIL_PROVIDER || "resend").trim().toLowerCase();
+  return providers()[name] ?? null;
+}
+
+export function isEmailConfigured(): boolean {
+  return !!emailProvider()?.configured() && !!process.env.EMAIL_FROM;
+}
+
 /**
- * Like sendEmail, but returns a structured result so a bulk sender can tell a
- * rate-limit (retry) apart from a hard failure (give up) and record the Resend
- * message id. Used by the newsletter send engine.
+ * Send a transactional email.
+ *
+ * Returns true on success. Logs + returns false on failure — callers should
+ * treat email as best-effort, not load-bearing for app correctness. If email
+ * isn't configured, returns false silently.
+ */
+export async function sendEmail(input: SendEmailInput): Promise<boolean> {
+  const result = await sendEmailDetailed(input);
+  if (!result.ok) {
+    if (result.error === "email not configured") console.warn("[email] no email provider configured — skipping send");
+    else console.error("[email] send error:", result.error);
+  }
+  return result.ok;
+}
+
+/**
+ * The one send function. Fills in from / reply-to / text, then hands the message to the configured provider, and
+ * answers a structured result so a bulk sender can tell a rate limit (retry) from a hard failure (give up) and record
+ * the provider's message id. Used directly by the newsletter engine and the night follow-ups.
  */
 export async function sendEmailDetailed(input: SendEmailInput): Promise<SendResult> {
-  const resend = getResend();
-  if (!resend) return { ok: false, rateLimited: false, quotaExceeded: false, error: "email not configured" };
-  try {
-    const { data, error } = await resend.emails.send({
-      from: input.from ?? defaultFrom(),
-      to: input.to,
-      subject: input.subject,
-      html: input.html,
-      text: input.text ?? input.html.replace(/<[^>]+>/g, ""),
-      replyTo: input.replyTo ?? defaultReplyTo(),
-    }, { idempotencyKey: input.idempotencyKey });
-    if (error) {
-      const message = (error as { message?: string }).message ?? "send failed";
-      const { rateLimited, quotaExceeded } = classifyError(`${(error as { name?: string }).name ?? ""} ${message}`);
-      // Only explicit rejection codes are terminal. Unknown/new provider errors
-      // must retain the claim because the request may have been accepted.
-      const rejected = /^(validation_error|invalid_from_address|invalid_parameter|missing_required_field|invalid_api_key|missing_api_key|restricted_api_key|invalid_access|invalid_attachment|invalid_region|security_error)$/.test(error.name);
-      return { ok: false, rateLimited, quotaExceeded, ambiguous: !rateLimited && !quotaExceeded && !rejected, error: message };
-    }
-    if (!data?.id) return { ok: false, ambiguous: true, rateLimited: false, quotaExceeded: false, error: "Provider returned no message id" };
-    return { ok: true, rateLimited: false, quotaExceeded: false, id: data.id };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    const { rateLimited, quotaExceeded } = classifyError(msg);
-    return { ok: false, rateLimited, quotaExceeded, ambiguous: true, error: msg };
+  const provider = emailProvider();
+  if (!provider) {
+    return { ok: false, rateLimited: false, quotaExceeded: false, error: `unknown EMAIL_PROVIDER "${process.env.EMAIL_PROVIDER}"` };
   }
+  if (!provider.configured()) return { ok: false, rateLimited: false, quotaExceeded: false, error: "email not configured" };
+  return provider.send({
+    from: input.from ?? defaultFrom(),
+    to: input.to,
+    subject: input.subject,
+    html: input.html,
+    text: input.text ?? input.html.replace(/<[^>]+>/g, ""),
+    replyTo: input.replyTo ?? defaultReplyTo(),
+    idempotencyKey: input.idempotencyKey,
+  });
 }
+
 
 // ============================================================
 // Templates

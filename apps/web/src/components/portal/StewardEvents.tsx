@@ -24,6 +24,7 @@ export function StewardEvents({
   readFailed,
   editingOff,
   draft,
+  followups,
 }: {
   /** Who this browser is signed in with Techne as (server-side). */
   techne: { did: string; handle: string | null };
@@ -39,6 +40,8 @@ export function StewardEvents({
   editingOff: boolean;
   /** A Luma night to open the new-event form with ("Add here" on the Luma check). */
   draft?: ParsedLumaEvent;
+  /** The follow-ups after nights (components/portal/NightFollowups.tsx), shown above the calendar. */
+  followups?: React.ReactNode;
 }) {
   const who = (
     <div className="text-xs text-muted flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="steward-who">
@@ -82,6 +85,7 @@ export function StewardEvents({
           Couldn&apos;t read each event&apos;s settings from Techne, so Edit and Remove are off. Reload to try again.
         </p>
       )}
+      {followups}
       <ManageEvents authority={authority} events={events} nights={nights} posted={posted} write={write} draft={draft} />
     </div>
   );

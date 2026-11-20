@@ -18,6 +18,9 @@ import { handleFor, shortDid } from "@/lib/techne/did";
 import { SignInWithTechne, SignOutOfTechne } from "@/components/techne/SignInWithTechne";
 import { fetchLumaCalendar, lumaDraft, matchLuma } from "@/lib/lumaCalendar";
 import { LumaSyncSection } from "@/components/admin/LumaSyncSection";
+import { createServiceClient } from "@/lib/supabase/admin";
+import { readNightFollowups, type NightFollowupView } from "@/lib/nightFollowupData";
+import { NightFollowups } from "@/components/portal/NightFollowups";
 
 export const metadata = { title: "Manage Events — RegenHub" };
 
@@ -156,9 +159,17 @@ export default async function ManageEventsPage({
   ]);
   const chunks: string[][] = [];
   for (let i = 0; i < siblingUris.length; i += 100) chunks.push(siblingUris.slice(i, i + 100));
-  const [goingCounts, answers] = await Promise.all([
+  // The follow-ups after the nights that just ended (T-497). A failed read says so; the calendar still shows.
+  const followupsRead: Promise<NightFollowupView[] | null> = read
+    ? readNightFollowups(createServiceClient(), events, now).catch((err) => {
+        console.error("[admin/events] follow-ups read failed:", err);
+        return null;
+      })
+    : Promise.resolve([]);
+  const [goingCounts, answers, followups] = await Promise.all([
     goingCountsRead,
     Promise.all(chunks.map((c) => getRecords(c, { revalidate: 0 }))),
+    followupsRead,
   ]);
   // Unknown siblings would make an edit create records that exist (the batch fails) or a removal leave
   // them behind: with any chunk unread, nothing is editable until a reload.
@@ -214,6 +225,15 @@ export default async function ManageEventsPage({
         readFailed={read === null}
         editingOff={read !== null && !siblingsKnown}
         draft={fromLuma ? lumaDraft(fromLuma) : undefined}
+        followups={
+          followups === null ? (
+            <p className="text-sm text-red-300" role="alert">
+              Couldn&apos;t read the follow-ups after nights just now. Reload to try again.
+            </p>
+          ) : (
+            <NightFollowups nights={followups} />
+          )
+        }
       />
       {read && <LumaSyncSection sync={lumaSync} now={now} />}
     </div>
