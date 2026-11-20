@@ -121,10 +121,14 @@ export function netMonthlyFromDiscounts(
   };
 }
 
-/** What to show / sum as "money in". Falls back to list until Stripe is synced. */
+/**
+ * What to show / sum as "money in": the net rate, falling back to list until Stripe is synced. Never above list:
+ * a crypto row's `net_cents` is the last amount paid, so after a move to a cheaper plan it would overstate until
+ * the next payment (after a move up it understates for at most one period).
+ */
 export function effectiveMonthlyCents(s: {
   monthly_cents: number;
   net_cents?: number | null;
 }): number {
-  return typeof s.net_cents === "number" ? s.net_cents : s.monthly_cents;
+  return typeof s.net_cents === "number" ? Math.min(s.net_cents, s.monthly_cents) : s.monthly_cents;
 }

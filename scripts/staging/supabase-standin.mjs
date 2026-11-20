@@ -8,8 +8,8 @@
 //     GET /auth/v1/user, POST /auth/v1/logout
 // Sample members (all fictional, from <state>/people.json): the steward and Ana are members whose Techne account
 // is linked (members.did); Jo is a member who isn't linked yet (the link flow); Sam and Lee aren't members.
-// `subscriptions` is empty: the steward and Ana are desk members, so Studio Night's gate lets them in by type.
-// Usage: node supabase-standin.mjs --port 18604 --state <dir>
+// `subscriptions` is empty unless --scoreboard: the steward and Ana are desk members, so Studio Night's gate lets them in by type.
+// Usage: node supabase-standin.mjs --port 18604 --state <dir> [--scoreboard]
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
@@ -63,6 +63,12 @@ for (const [p, name, email, linked, type] of seed) {
   await pg.query("insert into members(name, email, did, member_type) values ($1, $2, $3, $4)", [
     name, email, linked ? p.did : null, type,
   ]);
+}
+
+// --scoreboard (T-497): the fictional rows /admin/scoreboard reads, and the steward as an admin to read them.
+if (process.argv.includes("--scoreboard")) {
+  const { seedScoreboard } = await import(join(ROOT, "scripts/staging/scoreboard-seed.mjs"));
+  await seedScoreboard(pg);
 }
 
 const users = new Map(); // access token -> user

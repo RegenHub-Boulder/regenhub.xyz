@@ -1,8 +1,9 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { readAll } from "@/lib/supabase/readAll";
 import { fetchUpcomingLumaEvents, type LumaEvent } from "@/lib/luma";
 import type { HubDigestStats } from "@/lib/email";
-import { effectiveMonthlyCents } from "@/lib/stripeNet";
+import { GOOD_STANDING_STATUSES, REVENUE_COLUMNS, membershipRevenue, type RevenueRow } from "@/lib/membershipRevenue";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -104,7 +105,7 @@ export async function compileFortnightStats(admin: ServiceClient): Promise<HubDi
     { count: dayCodesIssued },
     { count: freeDaySignups },
   ] = await Promise.all([
-    admin.from("subscriptions").select("monthly_cents, net_cents, status").in("status", ["active", "trialing"]),
+    admin.from("subscriptions").select(REVENUE_COLUMNS).in("status", [...GOOD_STANDING_STATUSES]).returns<RevenueRow[]>(),
     admin.from("members").select("*", { count: "exact", head: true }).eq("disabled", false).eq("member_type", "cold_desk"),
     admin.from("members").select("*", { count: "exact", head: true }).eq("disabled", false).eq("member_type", "hot_desk"),
     admin.from("members").select("*", { count: "exact", head: true }).eq("disabled", false).eq("member_type", "hub_friend"),
@@ -115,10 +116,12 @@ export async function compileFortnightStats(admin: ServiceClient): Promise<HubDi
     admin.from("free_day_claims").select("*", { count: "exact", head: true }).gte("created_at", startIso).lt("created_at", endIso),
   ]);
 
+  const revenue = membershipRevenue(billingSubs ?? []);
   return {
     monthLabel: windowLabel,
-    mrrCents: (billingSubs ?? []).reduce((s, r) => s + effectiveMonthlyCents(r), 0),
-    payingMembers: (billingSubs ?? []).length,
+    // The shared definition (lib/membershipRevenue.ts): the same numbers the admin pages show.
+    mrrCents: revenue.netCents,
+    payingMembers: revenue.members,
     tierCounts: [
       { label: "Cold Desk", count: coldDesk ?? 0 },
       { label: "Hot Desk", count: hotDesk ?? 0 },
@@ -140,23 +143,30 @@ export interface Recipient {
   name: string | null;
 }
 
-/** Members + interests, deduped, minus unsubscribes. */
+/**
+ * Members + interests, deduped, minus unsubscribes. Every row is read (paged past PostgREST's cap) and a failed read
+ * throws: a missing unsubscribe list must never mean mailing people who left, nor a short list a full one.
+ */
 export async function compileAudience(admin: ServiceClient): Promise<Recipient[]> {
-  const [{ data: members }, { data: interests }, { data: unsubs }] = await Promise.all([
-    admin.from("members").select("name, email").eq("disabled", false).not("email", "is", null),
-    admin.from("interests").select("name, email").not("email", "is", null),
-    admin.from("email_unsubscribes").select("email"),
+  type Row = { name: string | null; email: string | null };
+  const [members, interests, unsubs] = await Promise.all([
+    readAll<Row>("members", (f, t) => admin.from("members").select("id, name, email").eq("disabled", false)
+      .not("email", "is", null).order("id", { ascending: true }).range(f, t)),
+    readAll<Row>("interests", (f, t) => admin.from("interests").select("id, name, email").not("email", "is", null)
+      .order("id", { ascending: true }).range(f, t)),
+    readAll<{ email: string }>("email_unsubscribes", (f, t) => admin.from("email_unsubscribes").select("email")
+      .order("email", { ascending: true }).range(f, t)),
   ]);
 
-  const blocked = new Set((unsubs ?? []).map((u) => u.email.toLowerCase()));
+  const blocked = new Set(unsubs.map((u) => u.email.toLowerCase()));
   const seen = new Map<string, Recipient>();
-  for (const m of members ?? []) {
+  for (const m of members) {
     if (!m.email) continue;
     const key = m.email.toLowerCase();
     if (blocked.has(key)) continue;
     seen.set(key, { email: m.email, name: m.name });
   }
-  for (const i of interests ?? []) {
+  for (const i of interests) {
     if (!i.email) continue;
     const key = i.email.toLowerCase();
     if (blocked.has(key) || seen.has(key)) continue;

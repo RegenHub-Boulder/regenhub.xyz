@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { sendEmail, hubHealthDigestEmail, type HubDigestStats } from "@/lib/email";
 import { logAction } from "@/lib/auditLog";
-import { effectiveMonthlyCents } from "@/lib/stripeNet";
+import { GOOD_STANDING_STATUSES, REVENUE_COLUMNS, membershipRevenue, type RevenueRow } from "@/lib/membershipRevenue";
 import { hasBearerSecret } from "@/lib/secretAuth";
 
 /**
@@ -70,7 +70,7 @@ export async function POST(req: Request) {
     { data: noteRow },
     { data: recipients },
   ] = await Promise.all([
-    admin.from("subscriptions").select("monthly_cents, net_cents, status").in("status", ["active", "trialing"]),
+    admin.from("subscriptions").select(REVENUE_COLUMNS).in("status", [...GOOD_STANDING_STATUSES]).returns<RevenueRow[]>(),
     admin.from("members").select("*", { count: "exact", head: true }).eq("disabled", false).eq("member_type", "cold_desk"),
     admin.from("members").select("*", { count: "exact", head: true }).eq("disabled", false).eq("member_type", "hot_desk"),
     admin.from("members").select("*", { count: "exact", head: true }).eq("disabled", false).eq("member_type", "hub_friend"),
@@ -83,10 +83,12 @@ export async function POST(req: Request) {
     admin.from("members").select("id, name, email").eq("disabled", false).not("email", "is", null),
   ]);
 
+  const revenue = membershipRevenue(billingSubs ?? []);
   const stats: HubDigestStats = {
     monthLabel,
-    mrrCents: (billingSubs ?? []).reduce((s, r) => s + effectiveMonthlyCents(r), 0),
-    payingMembers: (billingSubs ?? []).length,
+    // The shared definition (lib/membershipRevenue.ts): the same numbers the admin pages show.
+    mrrCents: revenue.netCents,
+    payingMembers: revenue.members,
     tierCounts: [
       { label: "Cold Desk", count: coldDesk ?? 0 },
       { label: "Hot Desk", count: hotDesk ?? 0 },
