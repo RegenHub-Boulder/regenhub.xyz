@@ -124,6 +124,19 @@ function shape(rows: Record<string, unknown>[], headers: Headers, method: string
 }
 
 export function pglitePostgrest(pg: PGlite, users: Map<string, FakeAuthUser>) {
+  // A JSON array for an array column (text[] etc.) goes in as an array, as PostgREST does; for json/jsonb, as JSON.
+  const arrayColumns = new Map<string, Promise<Set<string>>>();
+  const arrayColsOf = (table: string) => {
+    // Only a found answer is kept: a table created later (or a failed read) is looked up again.
+    if (!arrayColumns.has(table)) {
+      const read = pg.query<{ c: string }>(
+        "select column_name c from information_schema.columns where table_schema = 'public' and table_name = $1 and data_type = 'ARRAY'",
+        [table]).then((r) => new Set(r.rows.map((x) => x.c)));
+      arrayColumns.set(table, read);
+      read.then((cols) => { if (cols.size === 0) arrayColumns.delete(table); }, () => arrayColumns.delete(table));
+    }
+    return arrayColumns.get(table)!;
+  };
   async function handle(url: URL, method: string, headers: Headers, bodyText: string | null): Promise<Response> {
     const path = url.pathname;
     if (path === "/auth/v1/user") {
@@ -153,6 +166,9 @@ export function pglitePostgrest(pg: PGlite, users: Map<string, FakeAuthUser>) {
     const table = path.match(/^\/rest\/v1\/([a-z_][a-z0-9_]*)$/);
     if (!table) throw new Unsupported(`${method} ${path}`);
     const name = ident(table[1]);
+    const arrayCols = await arrayColsOf(table[1]);
+    const param = (col: string, v: unknown) =>
+      Array.isArray(v) && arrayCols.has(col) ? v : v !== null && typeof v === "object" ? JSON.stringify(v) : v;
     const params = url.searchParams;
     const prefer = headers.get("Prefer") ?? "";
     const returning = prefer.includes("return=representation") ? ` returning ${selectList(params.get("select"))}` : "";
@@ -177,8 +193,7 @@ export function pglitePostgrest(pg: PGlite, users: Map<string, FakeAuthUser>) {
         const records = Array.isArray(body) ? body : [body];
         const cols = [...new Set(records.flatMap((r) => Object.keys(r)))];
         const values = records.map((r) => `(${cols.map((c) => {
-          const v = r[c];
-          args.push(v !== null && typeof v === "object" ? JSON.stringify(v) : v);
+          args.push(param(c, r[c]));
           return `$${args.length}`;
         }).join(", ")})`);
         let conflict = "";
@@ -196,7 +211,7 @@ export function pglitePostgrest(pg: PGlite, users: Map<string, FakeAuthUser>) {
       if (method === "PATCH") {
         const body = JSON.parse(bodyText ?? "{}") as Record<string, unknown>;
         const sets = Object.entries(body).map(([k, v]) => {
-          args.push(v !== null && typeof v === "object" ? JSON.stringify(v) : v);
+          args.push(param(k, v));
           return `${ident(k)} = $${args.length}`;
         });
         const result = await pg.query(`update ${name} set ${sets.join(", ")}${whereClause(params, args)}${returning}`, args);

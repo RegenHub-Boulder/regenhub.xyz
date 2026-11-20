@@ -117,7 +117,11 @@ export interface Database {
           bio: string | null;
           skills: string[] | null;
           profile_photo_url: string | null;
-          show_in_directory: boolean;
+          /** null = not asked yet; see lib/memberDirectory.ts (migration 065). */
+          show_in_directory: boolean | null;
+          working_on: string | null;
+          links: string[];
+          show_rsvps: boolean;
           stripe_customer_id: string | null;
           approved_for_daily: boolean;
           approved_for_daily_at: string | null;
@@ -150,6 +154,10 @@ export interface Database {
           bio?: string | null;
           skills?: string[] | null;
           profile_photo_url?: string | null;
+          show_in_directory?: boolean | null;
+          working_on?: string | null;
+          links?: string[];
+          show_rsvps?: boolean;
           stripe_customer_id?: string | null;
           approved_for_daily?: boolean;
           approved_for_daily_at?: string | null;

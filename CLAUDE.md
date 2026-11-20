@@ -90,6 +90,8 @@ DEPLOYMENT.md               # Full infra guide for agents + humans
 - `access_logs` — every door access event
 - `interests` — public "stay in touch" signups from `/interest`. Linked to `members` via `member_id` (nullable FK). The funnel runs `interests → application → member → auth.users`; whichever events fire first, triggers backfill the linkage so admins can see who came from where.
 
+- Member page fields on `members` (migration 065): `show_in_directory` (the opt-in: null = not asked, false = no, true = listed while in standing; co-op owners defaulted on), `working_on`, `links` (≤5 URLs), `show_rsvps`. See "Member pages and the directory" below.
+
 ### Identity linkage
 Three identities can exist for one person: an `interests` row (email-only signup), a `members` row (full profile, may pre-exist via Telegram bot or admin add), and an `auth.users` row (created on first magic-link sign-in). They're stitched together by email via two trigger functions plus per-route fallbacks:
 - `link_member_on_auth` (migration 004 + extended in 020) fires on `auth.users` insert/update; links `members.supabase_user_id` and `interests.member_id` to whichever rows match the email.
@@ -231,6 +233,21 @@ Stripe still refuses because a switch's schedule attached meanwhile (or a landed
 once more; if the release fails the operation stays open for the cron, never abandoned. A trigger clears any switch left on a marked or ended row; `begin_plan_switch`,
 `record_plan_switch` and the trigger refuse a new one while a cancel is recorded or running, and
 `/api/portal/change-plan` refuses every plan change then, on both rails.
+
+### Member pages and the directory (T-482, migration 065)
+`/members` lists, and `/members/<techne-handle>` (or `/members/<id>` without a Techne link) shows, members who opted
+in (`show_in_directory = true`), aren't disabled, and are in standing by the one definition in `lib/memberStanding.ts`
+(hub friend/desk, or an active/trialing subscription at $30+); co-op owners also stay listed. Everyone else gets
+the same plain 404; a lapsed or disabled member drops out and keeps their fields. `lib/memberDirectory.ts` holds who
+is listed and `PublicMember`, the only shape that leaves the server (name, photo, working-on line, bio, skills,
+links, handle; `toPublicMember` copies field by field so a newly selected column can't leak). Photo falls back to
+the Techne avatar (`lib/techne/profile.ts`: anonymous `social.scenius.getProfile` on `REGENOS_BASE_URL`). Recent
+nights (`lib/memberNights.ts`) only with `show_rsvps`, only the collective's own past nights in the last 90 days
+(`fetchCollectiveEvents({ ownOnly })`, no listed calendars), never upcoming ones. `/members/<id>` of a linked member
+redirects (307, handles change) to the handle. Members edit it on `/portal/profile` (PATCH `/api/portal/profile`, own
+row only; an unrelated save leaves an unasked null alone); `/portal` asks once (`DirectoryAsk`) while
+`show_in_directory` is null. The landing section reads `/api/members/directory?limit=6`.
+Staging: `scripts/staging/member-pages-preview.sh` + `member-pages-shots.mjs`.
 
 ### Desk → daily switch (`lib/planSwitch.ts`, migration 060)
 Card or crypto Hot/Cold Desk members can move themselves to a daily plan; it takes effect when the paid desk period

@@ -10,6 +10,9 @@ import InviteCard from "@/components/portal/InviteCard";
 import { ManageSubscriptionButton } from "@/components/portal/ManageSubscriptionButton";
 import { CancelPlanSwitchButton, ChangePlanButton } from "@/components/portal/ChangePlanButton";
 import { OnboardingChecklist } from "@/components/portal/OnboardingChecklist";
+import { DirectoryAsk } from "@/components/portal/DirectoryAsk";
+import { PAYING_STATUSES } from "@/lib/memberStanding";
+import { isListed } from "@/lib/memberDirectory";
 import { HubActivityCard } from "@/components/portal/HubActivityCard";
 import { DayPassRedemptionHero } from "@/components/portal/DayPassRedemptionHero";
 import { MembershipStatusCard } from "@/components/portal/MembershipStatusCard";
@@ -117,6 +120,17 @@ export default async function PortalPage() {
       .limit(1)
       .maybeSingle();
     activeSubscription = data;
+  }
+
+  // Ask once whether to be in the member directory (lib/memberDirectory.ts), of a member who could be listed.
+  let askDirectory = false;
+  if (member && member.show_in_directory == null && !member.disabled) {
+    const { data: paying } = await supabase
+      .from("subscriptions")
+      .select("status, monthly_cents")
+      .eq("member_id", member.id)
+      .in("status", PAYING_STATUSES);
+    askDirectory = isListed({ ...member, show_in_directory: true }, paying ?? []);
   }
 
   let onchainWallet: { address: string; verification_method: string } | null = null;
@@ -380,6 +394,8 @@ export default async function PortalPage() {
 
 
       <DayPassRedemptionHero member={member} />
+
+      {askDirectory && <DirectoryAsk />}
 
       {isNewMember && (
         <OnboardingChecklist

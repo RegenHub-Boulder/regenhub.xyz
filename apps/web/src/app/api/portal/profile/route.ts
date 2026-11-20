@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { WORKING_ON_MAX, normalizeLinks } from "@/lib/memberDirectory";
 
 /**
  * PATCH /api/portal/profile
@@ -10,14 +11,33 @@ import { createServiceClient } from "@/lib/supabase/admin";
  * (see migration 031) — letting members write directly was a privilege-
  * escalation foothold (they could flip is_admin or mint day passes by
  * bypassing this route entirely). We hand-pick the writeable columns here.
+ *
+ * The member page fields (migration 065): `working_on` (one line), `links` (up to five http(s) URLs),
+ * `show_in_directory` and `show_rsvps` (booleans). Whether they're shown at all is lib/memberDirectory.ts's call.
  */
 export async function PATCH(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await request.json();
-  const { name, bio, skills, telegram_username, ethereum_address, profile_photo_url } = body;
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== "object") return NextResponse.json({ error: "Expected a JSON object" }, { status: 400 });
+  const { name, bio, skills, telegram_username, ethereum_address, profile_photo_url, working_on, show_in_directory, show_rsvps } = body;
+
+  if (working_on !== undefined && working_on !== null && (typeof working_on !== "string" || working_on.replace(/\s+/g, " ").trim().length > WORKING_ON_MAX)) {
+    return NextResponse.json({ error: `"Working on" is one line, up to ${WORKING_ON_MAX} characters.` }, { status: 400 });
+  }
+  for (const [key, value] of [["show_in_directory", show_in_directory], ["show_rsvps", show_rsvps]] as const) {
+    if (value !== undefined && typeof value !== "boolean") {
+      return NextResponse.json({ error: `${key} must be true or false` }, { status: 400 });
+    }
+  }
+  let links: string[] | undefined;
+  if (body.links !== undefined) {
+    const checked = normalizeLinks(body.links);
+    if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 });
+    links = checked.links;
+  }
 
   if (profile_photo_url && typeof profile_photo_url === "string") {
     if (!/^https?:\/\//i.test(profile_photo_url)) {
@@ -72,6 +92,10 @@ export async function PATCH(request: Request) {
       ...(normalizedTelegram !== undefined && { telegram_username: normalizedTelegram }),
       ...(ethereum_address !== undefined && { ethereum_address }),
       ...(profile_photo_url !== undefined && { profile_photo_url }),
+      ...(working_on !== undefined && { working_on: working_on?.replace(/\s+/g, " ").trim() || null }),
+      ...(links !== undefined && { links }),
+      ...(show_in_directory !== undefined && { show_in_directory }),
+      ...(show_rsvps !== undefined && { show_rsvps }),
     })
     .eq("supabase_user_id", user.id);
 

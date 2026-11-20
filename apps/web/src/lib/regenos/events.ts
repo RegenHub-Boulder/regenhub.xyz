@@ -191,6 +191,8 @@ export interface CollectiveEventsOptions {
    * other calendars past their first 500 are best effort (listings have no date to window on).
    */
   strict?: boolean;
+  /** Only the collective's own events: other calendars' events it lists are not read (member pages, T-482). */
+  ownOnly?: boolean;
 }
 
 /**
@@ -241,11 +243,14 @@ export async function fetchCollectiveEvents(opts: CollectiveEventsOptions = {}):
   );
   // Listings have no date to window on and grow with every night posted (each own event has its `-ctx`
   // listing), so they are never read strictly to the end: only a failed first page counts as unread.
-  const listings = listRecords<{ event?: { uri?: string } }>(
-    { where: { all: [{ type: { is: EVENT_LISTING_NSID } }, { author: { is: collective } }] } },
-    read,
-  );
+  const listings = opts.ownOnly
+    ? Promise.resolve([] as TechneRecord<{ event?: { uri?: string } }>[])
+    : listRecords<{ event?: { uri?: string } }>(
+        { where: { all: [{ type: { is: EVENT_LISTING_NSID } }, { author: { is: collective } }] } },
+        read,
+      );
   const [ownRows, listingRows] = await Promise.all([own, listings]);
+  if (opts.ownOnly && ownRows === null) return null;
   if (ownRows === null && listingRows === null) return null;
   // Strict (the stewards' page, the feeds): the collective's own events are the calendar; without them,
   // every confirmed night would look unposted, and a feed would drop them.

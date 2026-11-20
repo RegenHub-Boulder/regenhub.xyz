@@ -1,16 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { User } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, User } from "lucide-react";
 import type { DirectoryMember } from "@/app/api/members/directory/route";
+import { MemberCard } from "@/components/members/MemberCard";
 
+/** How many members the landing page shows before "See all members". */
+const LANDING_COUNT = 6;
+
+/** The landing page's slice of the member directory (/members has all of it; lib/memberDirectory.ts says who). */
 export function MemberDirectory() {
   const [members, setMembers] = useState<DirectoryMember[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    fetch("/api/members/directory")
+    fetch(`/api/members/directory?limit=${LANDING_COUNT}`)
       .then((r) => r.json())
       .then((d) => {
         setMembers(d.members ?? []);
@@ -21,15 +26,15 @@ export function MemberDirectory() {
 
   if (!loaded) {
     return (
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {[1, 2, 3].map((i) => (
-          <Card key={i} className="glass-panel animate-pulse">
-            <CardContent className="p-6">
-              <div className="w-12 h-12 rounded-full bg-white/10 mb-4" />
-              <div className="h-4 bg-white/10 rounded mb-2 w-2/3" />
+          <div key={i} className="glass-panel rounded-xl p-5 animate-pulse flex gap-4">
+            <div className="w-14 h-14 rounded-full bg-white/10 shrink-0" />
+            <div className="flex-1 space-y-2">
+              <div className="h-4 bg-white/10 rounded w-2/3" />
               <div className="h-3 bg-white/5 rounded w-full" />
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         ))}
       </div>
     );
@@ -39,55 +44,31 @@ export function MemberDirectory() {
     return (
       <div className="glass-panel p-12 text-center">
         <User className="w-10 h-10 text-muted mx-auto mb-4" />
-        <p className="text-muted">Member directory coming soon.</p>
-        <p className="text-sm text-muted mt-1">Be the first to apply and shape the community!</p>
+        <p className="text-muted">No members listed yet.</p>
+        <p className="text-sm text-muted mt-1">
+          Members choose to be listed from their profile.{" "}
+          <Link href="/membership" className="text-sage hover:underline">
+            About membership
+          </Link>
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-      {members.map((m) => (
-        <Card key={m.name} className="glass-panel hover-lift">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-3 mb-3">
-              {m.profile_photo_url ? (
-                <img
-                  src={m.profile_photo_url}
-                  alt={m.name}
-                  className="w-10 h-10 rounded-full object-cover"
-                />
-              ) : (
-                <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: "rgba(45,90,61,0.25)" }}>
-                  <User className="w-5 h-5 text-sage" />
-                </div>
-              )}
-              <div>
-                <p className="font-semibold text-sm">{m.name}</p>
-                <p className="text-xs text-muted">Co-op Member</p>
-              </div>
-            </div>
-            {m.bio && (
-              <p className="text-sm text-muted leading-relaxed line-clamp-3 mb-3">{m.bio}</p>
-            )}
-            {m.skills && m.skills.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {m.skills.slice(0, 4).map((s) => (
-                  <span
-                    key={s}
-                    className="text-xs px-2 py-0.5 rounded-full border border-white/10 text-muted"
-                  >
-                    {s}
-                  </span>
-                ))}
-                {m.skills.length > 4 && (
-                  <span className="text-xs text-muted px-1">+{m.skills.length - 4}</span>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      ))}
+    <div className="space-y-6">
+      <ul className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {members.map((m) => (
+          <li key={m.slug}>
+            <MemberCard member={m} />
+          </li>
+        ))}
+      </ul>
+      <p className="text-center">
+        <Link href="/members" className="inline-flex items-center gap-1 text-sage hover:underline">
+          See all members <ArrowRight className="w-4 h-4" />
+        </Link>
+      </p>
     </div>
   );
 }

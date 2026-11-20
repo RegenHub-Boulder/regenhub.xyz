@@ -4,7 +4,7 @@ import { DAY_PASS_MEMBER_CENTS, DAY_PASS_PUBLIC_CENTS, PLANS, formatCents } from
 import { getSeries, rhythmOf } from "@/lib/series";
 
 /**
- * What a member gets (Aaron, 11-20): the practice first (demos, Studio Night, the directory, the archive), then
+ * What a member gets (Aaron, 11-20): the practice first (demos, Studio Night, the member page and directory, the archive), then
  * the coworking days by plan. The days and prices come from lib/plans.ts and Studio Night's rhythm from
  * lib/series.ts, so this copy can't drift from what's sold or posted.
  */
@@ -54,8 +54,15 @@ export function MemberOffer() {
     {
       icon: UserRound,
       title: "Your member page",
-      soon: true,
-      body: <>A page of your own and a place in the member directory, on your Techne account.</>,
+      body: (
+        <>
+          A page of your own and a place in the{" "}
+          <Link href="/members" className="text-sage underline">
+            member directory
+          </Link>
+          , on your Techne account, if you want one.
+        </>
+      ),
     },
     {
       icon: Archive,

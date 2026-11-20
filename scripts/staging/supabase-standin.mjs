@@ -9,7 +9,8 @@
 // Sample members (all fictional, from <state>/people.json): the steward and Ana are members whose Techne account
 // is linked (members.did); Jo is a member who isn't linked yet (the link flow); Sam and Lee aren't members.
 // `subscriptions` is empty unless --scoreboard: the steward and Ana are desk members, so Studio Night's gate lets them in by type.
-// Usage: node supabase-standin.mjs --port 18604 --state <dir> [--scoreboard]
+// --member-pages adds the member directory's sample people (member-pages-seed.mjs).
+// Usage: node supabase-standin.mjs --port 18604 --state <dir> [--scoreboard] [--member-pages]
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
@@ -38,6 +39,7 @@ await pg.exec(`
     is_admin boolean not null default false, approved_for_daily boolean not null default true,
     approved_for_full boolean not null default true, day_passes_balance integer not null default 0,
     telegram_username text, ethereum_address text, bio text, skills text[], profile_photo_url text,
+    is_coop_member boolean not null default false, show_in_directory boolean not null default true,
     created_at timestamptz not null default now()
   );
   create table admin_actions (
@@ -50,6 +52,8 @@ await pg.exec(`
     monthly_cents integer not null, status text not null
   );`);
 await pg.exec(readFileSync(join(ROOT, "supabase/migrations/064_techne_one_door.sql"), "utf8"));
+// Member pages (T-482): the real 065 on the columns it reads (is_coop_member, 008; show_in_directory, 005).
+await pg.exec(readFileSync(join(ROOT, "supabase/migrations/065_member_pages.sql"), "utf8"));
 
 const people = JSON.parse(readFileSync(join(STATE, "people.json"), "utf8"));
 const byName = (n) => people.find((p) => p.name.startsWith(n));
@@ -63,6 +67,12 @@ for (const [p, name, email, linked, type] of seed) {
   await pg.query("insert into members(name, email, did, member_type) values ($1, $2, $3, $4)", [
     name, email, linked ? p.did : null, type,
   ]);
+}
+
+// --member-pages (T-482): the directory's sample members.
+if (process.argv.includes("--member-pages")) {
+  const { seedMemberPages } = await import(join(ROOT, "scripts/staging/member-pages-seed.mjs"));
+  await seedMemberPages(pg);
 }
 
 // --scoreboard (T-497): the fictional rows /admin/scoreboard reads, and the steward as an admin to read them.
