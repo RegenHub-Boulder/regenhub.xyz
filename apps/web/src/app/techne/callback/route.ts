@@ -49,8 +49,10 @@ export async function GET(req: NextRequest) {
 
   let did: string;
   let app;
+  let signedIn;
   try {
     const out = await oauth.callback(req.nextUrl.searchParams);
+    signedIn = out;
     did = out.did;
     app = unpackState(out.appState);
   } catch (err) {
@@ -90,8 +92,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Who this is, with their email (best-effort; never fails the sign-in).
-  const session = await oauth.restore(did).catch(() => null);
-  const person = await rememberPerson(admin, { did, handle, session });
+  const person = await rememberPerson(admin, { did, handle, session: signedIn.session ?? null, homeAccount: signedIn.homeAccount });
   if (person?.newsletterAdded) {
     jar.set(NEWS_NOTE_COOKIE, "1", { ...cookieOptions(600), httpOnly: false });
   }

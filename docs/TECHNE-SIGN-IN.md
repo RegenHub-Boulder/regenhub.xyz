@@ -124,6 +124,11 @@ email matching one member who has no Techne account), and puts a confirmed email
 leaves a one-time line, "We'll send you RegenHub news. No thanks". None of it opens the portal or writes
 `members.did` (that still takes the emailed link), and none of it can fail a sign-in: a PDS that doesn't answer, or a
 grant without the email scope, just records no email.
+- **Whose "confirmed" counts:** only the home PDS's (pds.techne.town, or `TECHNE_PDS_URL`), the server whose sign-up
+  proves the email with a code. An account on another server (reached by hand-back) keeps its email as unconfirmed: it
+  links no member, joins no list and gets no note, because anyone can run a PDS that says an address is confirmed.
+- **The list decision is per email:** a new email on the PDS is looked at again at the next sign-in; "No thanks"
+  stays (it was about us, not the address). A disabled member's email doesn't count as already on the list.
 - **Before this shipped:** an account that signed in earlier has a grant without the email scope. Nothing breaks
   (RSVP and posting keep working on the old grant); its email is read at its next sign-in. No backfill, no forced
   re-consent: a new sign-in shows the PDS's consent with the email line, and the email link stays the fallback.

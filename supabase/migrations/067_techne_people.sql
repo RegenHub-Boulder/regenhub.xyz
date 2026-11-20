@@ -39,6 +39,8 @@ create table techne_people (
   -- the stay-in-touch list: 'added' (this put them on it), 'already' (on it or a member), 'unsubscribed', 'declined'
   -- ("No thanks"). Null: not decided yet (no confirmed email so far).
   newsletter      text check (newsletter in ('added', 'already', 'unsubscribed', 'declined')),
+  -- the email that decision was about: a new email on the PDS is looked at again ('declined' stays: it was about us)
+  newsletter_email text,
   interest_id     bigint references interests(id) on delete set null,
   first_seen      timestamptz not null default now(),
   last_seen       timestamptz not null default now()
@@ -62,6 +64,7 @@ declare
   v_link text;
   v_interest bigint;
   v_added boolean := false;
+  v_decided boolean := false;
 begin
   if p_did is null or p_did !~ '^did:[a-z]+:[A-Za-z0-9._:%-]+$' then
     raise exception 'techne_people_bad_did';
@@ -93,14 +96,17 @@ begin
     end if;
   end if;
 
-  -- The stay-in-touch list: a confirmed email, decided once (a "No thanks" or an add is never redone).
+  -- The stay-in-touch list: a confirmed email, decided once per email ("No thanks" is never redone; an add is redone
+  -- only for a new email, and the old address's row stays: it was given to us).
   if v_person.email is not null and v_person.email_confirmed
-     and v_person.newsletter is distinct from 'added' and v_person.newsletter is distinct from 'declined' then
+     and v_person.newsletter is distinct from 'declined'
+     and (v_person.newsletter is distinct from 'added' or v_person.newsletter_email is distinct from v_person.email) then
     perform pg_advisory_xact_lock(hashtext('techne_newsletter:' || v_person.email));
+    v_decided := true;
     if exists (select 1 from email_unsubscribes u where lower(trim(u.email)) = v_person.email) then
       v_person.newsletter := 'unsubscribed';
     elsif exists (select 1 from interests i where lower(trim(i.email)) = v_person.email)
-       or exists (select 1 from members m where lower(trim(m.email)) = v_person.email) then
+       or exists (select 1 from members m where lower(trim(m.email)) = v_person.email and not m.disabled) then
       v_person.newsletter := 'already';
     else
       insert into interests (email, name, source_path, member_id)
@@ -115,6 +121,7 @@ begin
     member_id = v_member,
     member_link = v_link,
     newsletter = v_person.newsletter,
+    newsletter_email = case when v_decided then v_person.email else t.newsletter_email end,
     interest_id = coalesce(v_interest, t.interest_id)
    where t.did = p_did;
 

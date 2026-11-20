@@ -16,7 +16,7 @@ import { fetchTechneProfile } from "./profile";
 
 type Admin = ReturnType<typeof createServiceClient>;
 
-const READ_WAIT_MS = 4000;
+const READ_WAIT_MS = 3000;
 
 export interface AccountEmail {
   email: string;
@@ -73,16 +73,21 @@ export async function recordSignIn(
   return { memberId: row?.member_id ?? null, memberLink: row?.member_link ?? null, newsletterAdded: row?.newsletter_added === true };
 }
 
-/** The callback's whole step: read the email and the name, then record. Never throws. */
+/**
+ * The callback's whole step: read the email and the name, then record. Never throws. `homeAccount`: the account is on
+ * the home PDS (techne.town), the only server whose "confirmed" is taken; any other server's email is kept as
+ * unconfirmed, so it links no member, joins no list and gets no note (anyone can run a PDS that claims an address).
+ */
 export async function rememberPerson(
   admin: Admin,
-  o: { did: string; handle: string | null; session: Session | null },
+  o: { did: string; handle: string | null; session: Session | null; homeAccount: boolean },
 ): Promise<RecordedPerson | null> {
   try {
-    const [email, profile] = await Promise.all([
+    const [read, profile] = await Promise.all([
       o.session ? readAccountEmail(o.session) : Promise.resolve(null),
       fetchTechneProfile(o.did, { revalidate: 0 }).catch(() => null),
     ]);
+    const email = read && { email: read.email, confirmed: read.confirmed && o.homeAccount };
     return await recordSignIn(admin, { did: o.did, handle: o.handle, name: profile?.displayName ?? null, email });
   } catch (err) {
     console.error("[techne] recording the person failed:", err instanceof Error ? err.message : err);

@@ -95,7 +95,7 @@ export function followupBatch(input: {
   const byId = new Map(input.members.map((m) => [m.id, m] as const));
   const techne = new Map((input.people ?? []).map((p) => [p.did, p] as const));
   const out: FollowupBatch = { send: [], held: [], noEmail: 0 };
-  const seen = new Set<string>();
+  const found: FollowupPerson[] = [];
   for (const did of new Set(input.goingDids)) {
     const t = techne.get(did);
     // The member: linked by DID, else the one this account's confirmed email matched at sign-in.
@@ -107,23 +107,26 @@ export function followupBatch(input: {
       out.noEmail += 1;
       continue;
     }
-    if (seen.has(email)) continue;
-    seen.add(email);
-    let person: FollowupPerson;
     if (m) {
       const member = isMemberInStanding(m, input.subs.filter((s) => s.member_id === m.id));
-      person = {
+      found.push({
         did, memberId: m.id, name: m.name, greetName: m.name, email,
         variant: member ? "member" : "guest",
         askForPage: member && m.show_in_directory == null,
         held: m.disabled ? "disabled" : (input.holds.get(email) ?? null),
-      };
+      });
     } else {
-      person = {
-        did, memberId: null, name: t!.name || (t!.handle ? `@${t!.handle}` : did), greetName: t!.name ?? "", email,
-        variant: "guest", askForPage: false, held: input.holds.get(email) ?? null,
-      };
+      found.push({
+        did, memberId: null, name: t!.name || (t!.handle ? `@${t!.handle}` : "(Techne sign-in)"), greetName: t!.name ?? "",
+        email, variant: "guest", askForPage: false, held: input.holds.get(email) ?? null,
+      });
     }
+  }
+  // One note per email, and a member's own entry wins over a Techne-only account claiming the same address.
+  const seen = new Set<string>();
+  for (const person of [...found.filter((p) => p.memberId != null), ...found.filter((p) => p.memberId == null)]) {
+    if (seen.has(person.email)) continue;
+    seen.add(person.email);
     (person.held ? out.held : out.send).push(person);
   }
   const byName = (a: FollowupPerson, b: FollowupPerson) => a.name.localeCompare(b.name);

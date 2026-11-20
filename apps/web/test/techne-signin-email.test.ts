@@ -28,6 +28,7 @@ const HOME = "https://pds.test";
 let pg: PGlite;
 let edge: Edge;
 let home: FakeTechne;
+let alt: FakeTechne;
 let privateJwk = "";
 const realFetch = globalThis.fetch;
 
@@ -38,9 +39,10 @@ beforeAll(async () => {
 beforeEach(async () => {
   pg = await doorDb();
   home = new FakeTechne(HOME, async () => (await jwksGET()).json() as Promise<{ keys: unknown[] }>);
+  alt = new FakeTechne("https://alt.test", async () => (await jwksGET()).json() as Promise<{ keys: unknown[] }>);
   edge = {
     pg, users: new Map<string, FakeAuthUser>(), authByEmail: new Map(), didDocs: new Map(), webDocs: new Map(),
-    mails: [], servers: [home], passthrough: () => false,
+    mails: [], servers: [home, alt], passthrough: () => false,
   };
   browser.jar = new Map();
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://supabase.test");
@@ -163,6 +165,49 @@ describe("every Techne sign-in is a person with an email", () => {
     await addMember("Pat Member", "pat@example.test", plc("patother"));
     await signIn(pat.did);
     expect(await person(pat.did)).toMatchObject({ member_id: null, member_link: null });
+  });
+
+  it("an account on another server: its email is kept but its 'confirmed' isn't taken (anyone can run a PDS that says so)", async () => {
+    const did = plc("eve");
+    edge.didDocs.set(did, didDoc(did, alt.origin, "eve.alt.test"));
+    alt.handles.set("eve.alt.test", did);
+    home.handles.set("eve.alt.test", did);
+    alt.emails.set(did, { email: "ana@example.test", confirmed: true }); // claims a member's address
+    const id = await addMember("Ana Member", "ana@example.test");
+    const start = await signinPOST(new Request(`${SITE}/techne/signin`, {
+      method: "POST", headers: { origin: SITE, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ next: "/events/x" }).toString(),
+    }));
+    // techne.town's page hands her back to her own server, which signs her in.
+    const again = await callbackGET(new NextRequest(home.handBack(start.headers.get("location")!, "eve.alt.test")));
+    const to = await callbackGET(new NextRequest(alt.approve(again.headers.get("location")!, did)));
+    expect(new URL(to.headers.get("location")!).pathname).toBe("/events/x");
+    expect(await person(did)).toMatchObject({ email: "ana@example.test", email_confirmed: false, member_id: null, newsletter: null });
+    expect(await list()).toEqual([]);
+    expect((await one(pg, "select did from members where id = $1", [id])).did).toBeNull();
+  });
+
+  it("a new email on the PDS is looked at again; a No thanks stays", async () => {
+    const kim = account("kim", { email: "kim@example.test", confirmed: true });
+    await signIn(kim.did);
+    home.emails.set(kim.did, { email: "kim-new@example.test", confirmed: true });
+    browser.jar = new Map();
+    await signIn(kim.did);
+    expect((await list()).map((r) => r.email)).toEqual(["kim@example.test", "kim-new@example.test"]);
+    expect(browser.jar.get(NEWS_NOTE_COOKIE)).toBe("1");
+    expect(await noThanks().then((r) => r.status)).toBe(200);
+    expect((await list()).map((r) => r.email)).toEqual(["kim@example.test"]); // only the row this added goes
+    home.emails.set(kim.did, { email: "kim-third@example.test", confirmed: true });
+    browser.jar = new Map();
+    await signIn(kim.did);
+    expect((await list()).map((r) => r.email)).toEqual(["kim@example.test"]);
+  });
+
+  it("a former member (disabled) isn't 'already on the list': the newsletter skips disabled members", async () => {
+    const fay = account("fay", { email: "fay@example.test", confirmed: true });
+    await one(pg, "insert into members(name, email, disabled) values ('Fay', 'fay@example.test', true) returning id");
+    await signIn(fay.did);
+    expect(await person(fay.did)).toMatchObject({ newsletter: "added" });
   });
 
   it("respects an unsubscribe: an unsubscribed email is never put back on the list", async () => {

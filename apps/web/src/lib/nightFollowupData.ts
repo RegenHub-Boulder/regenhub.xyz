@@ -153,10 +153,11 @@ export async function readNightFollowups(admin: Admin, events: readonly Collecti
   const byEmail = new Map<string, string>();
   const techneOnly = [...new Set(outcomeRows.flatMap((o) => (o.member_id == null ? [o.email] : [])))];
   if (techneOnly.length) {
+    // Before 067 runs this table is missing: those rows keep "(member removed)", as before.
     const { data, error: tErr } = await admin.from("techne_people").select("email, name, handle").in("email", techneOnly);
-    if (tErr) throw tErr;
+    if (tErr) console.error("[night followups] techne_people read failed:", tErr.message);
     for (const p of (data ?? []) as { email: string; name: string | null; handle: string | null }[]) {
-      byEmail.set(p.email, p.name || (p.handle ? `@${p.handle}` : p.email.split("@")[0]));
+      byEmail.set(p.email, p.name || (p.handle ? `@${p.handle}` : "(Techne sign-in)"));
     }
   }
 
@@ -171,7 +172,7 @@ export async function readNightFollowups(admin: Admin, events: readonly Collecti
     if (b) {
       const mine = outcomeRows.filter((o) => o.batch_id === b.id);
       base.outcomes = mine.map((o) => ({
-        name: (o.member_id && names.get(o.member_id)) || byEmail.get(o.email) || (o.member_id == null ? "(Techne sign-in)" : "(member removed)"),
+        name: (o.member_id && names.get(o.member_id)) || byEmail.get(o.email) || "(member removed)",
         variant: o.variant,
         status: o.status,
         held: (o.held_reason as HeldReason | null) ?? null,
@@ -343,6 +344,15 @@ export async function retryNightFollowups(admin: Admin, eventUri: string, stewar
     for (const r of rows) {
       const m = r.member_id ? byId.get(r.member_id) : undefined;
       if (m) people.set(r.email, { greetName: m.name, askForPage: r.variant === "member" && m.show_in_directory == null });
+    }
+  }
+  // A Techne-only person's greeting is their Techne display name (techne_people), as on the first attempt.
+  const unsavedTechne = rows.filter((r) => r.html == null && r.member_id == null).map((r) => r.email);
+  if (unsavedTechne.length) {
+    const { data, error: tErr } = await admin.from("techne_people").select("email, name").in("email", unsavedTechne);
+    if (tErr) console.error("[night followups] retry: techne_people read failed, sending with a plain greeting:", tErr);
+    for (const p of (data ?? []) as { email: string; name: string | null }[]) {
+      if (p.name) people.set(p.email, { greetName: p.name, askForPage: false });
     }
   }
   const sent = await sendRows(admin, rows, people, once(() => noteNight(event, now)));

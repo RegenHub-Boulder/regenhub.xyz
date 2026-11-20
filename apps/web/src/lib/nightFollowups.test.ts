@@ -102,6 +102,19 @@ describe("followupBatch: who gets a note, and which", () => {
     expect(personValues(b.send[0], night0, "https://x.test").first).toBe("there");
   });
 
+  it("a member's own entry wins over a Techne-only account claiming the same email, whatever the RSVP order", () => {
+    const people = [{ did: "did:plc:claim", handle: "c.techne.town", name: "Claimer", email: "p2@example.test", email_confirmed: true, member_id: null }];
+    for (const goingDids of [["did:plc:claim", "did:plc:p2"], ["did:plc:p2", "did:plc:claim"]]) {
+      const b = followupBatch({ goingDids, members, people, subs, holds: new Map() });
+      expect(b.send.map((p) => [p.name, p.variant])).toEqual([["Ana Desk", "member"]]);
+    }
+    // And a disabled member's address isn't mailed through someone else's Techne account either.
+    const gone = [{ did: "did:plc:claim9", handle: "g.techne.town", name: "G", email: "p9@example.test", email_confirmed: true, member_id: null }];
+    const b = followupBatch({ goingDids: ["did:plc:claim9", "did:plc:p9"], members, people: gone, subs, holds: new Map() });
+    expect(b.send).toEqual([]);
+    expect(b.held.map((p) => [p.name, p.held])).toEqual([["Gone", "disabled"]]);
+  });
+
   it("with nothing held back, everyone linked is on the send list", () => {
     const b = followupBatch({ goingDids: ["did:plc:p1"], members, subs, holds: new Map() });
     expect(b.send.map((p) => p.email)).toEqual(["p1@example.test"]);

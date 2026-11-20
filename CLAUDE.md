@@ -94,7 +94,9 @@ DEPLOYMENT.md               # Full infra guide for agents + humans
 - `access_logs` — every door access event
 - `interests` — public "stay in touch" signups from `/interest`. Linked to `members` via `member_id` (nullable FK). The funnel runs `interests → application → member → auth.users`; whichever events fire first, triggers backfill the linkage so admins can see who came from where. A Techne sign-in adds rows with `source_path = 'techne'` (below).
 - `techne_people` (migration 067, T-497) — one row per Techne account that ever signed in here: DID, handle, display
-  name, email + `email_confirmed` (read from the person's PDS at sign-in, scope `transition:email`), `member_id` (by
+  name, email + `email_confirmed` (read from the person's PDS at sign-in, scope `transition:email`; "confirmed" is
+  taken only from the home PDS, techne.town, whose sign-up proves the email: another server's is kept unconfirmed,
+  since anyone can run a PDS that claims an address), `member_id` (by
   `members.did`, or a CONFIRMED email matching one member with no Techne account; never writes `members.did`, never
   opens the portal, door or billing), and the stay-in-touch decision (`added` / `already` / `unsubscribed` /
   `declined`). `record_techne_sign_in` runs in `/techne/callback` (`lib/techne/person.ts`); a confirmed email not on the
