@@ -50,11 +50,14 @@ const interests = [
 const applications = [["sample15@example.test", "2026-09-01T16:00:00Z"], ["sample16@example.test", "2026-11-05T16:00:00Z"]];
 
 export async function seedScoreboard(pg) {
+  // The base stand-in has a small subscriptions table (Studio Night's gate); this one is a superset of it.
   await pg.exec(`
+    drop table if exists subscriptions;
     create table subscriptions (
       id serial primary key, member_id integer not null, payment_rail text not null default 'stripe', plan_key text not null,
       monthly_cents integer not null, net_cents integer, status text not null, canceled_at timestamptz,
       cancel_at_period_end boolean not null default false, admin_canceled_at timestamptz, admin_cancel_mode text,
+      past_due_since timestamptz, current_period_end timestamptz,
       created_at timestamptz not null default now(), updated_at timestamptz not null default now());
     create table interests (id serial primary key, email text not null, name text, created_at timestamptz not null default now());
     create table applications (id serial primary key, email text not null, name text not null, created_at timestamptz not null default now());
@@ -82,7 +85,9 @@ export async function seedScoreboard(pg) {
   }
   // Sub 8: an admin asked on Oct 25 (USDC, period end); it ended Nov 3. Counts in November.
   await pg.query("update subscriptions set admin_canceled_at = '2026-10-25T16:00:00Z', admin_cancel_mode = 'period_end', canceled_at = '2026-11-03T16:00:00Z' where id = 8");
-  await pg.query("update subscriptions set cancel_at_period_end = true where id = 14");
+  await pg.query("update subscriptions set cancel_at_period_end = true, current_period_end = '2026-12-01T16:00:00Z' where id = 14");
+  // What to do next (T-497): Sample 5's card failed on Nov 12.
+  await pg.query("update subscriptions set past_due_since = '2026-11-12T16:00:00Z' where id = 5");
   // The USDC subscriptions (3, 8, 11) were paid: a paid membership invoice each.
   for (const id of [3, 8, 11]) await pg.query("insert into onchain_invoices(subscription_id, status) values ($1, 'paid')", [id]);
   for (const [member, email, at, invoice] of purchases) {

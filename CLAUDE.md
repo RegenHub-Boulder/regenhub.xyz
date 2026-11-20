@@ -189,7 +189,7 @@ goal pace (behind the straight line from baseline to goal). Thresholds are `ACTI
 and a fingerprint of its facts; "Done" / "Not now" (14 days) are `admin_actions` rows (`scoreboard_action_marked`,
 target = action id, via `POST /api/admin/scoreboard/actions`), and a dismissal holds only while the fingerprint
 matches. "Copy as text" ends with the top 5 (names only). The MCP reads the same: `scoreboard_summary`,
-`recommended_actions`.
+`recommended_actions`. Staging: `scripts/staging/next-actions-shots.mjs` drives the list (Done, reload, Bring back).
 
 ### Membership application flow (approve + notify)
 `/apply` (sign-in required) → `/api/portal/application` upserts the application, emails the
