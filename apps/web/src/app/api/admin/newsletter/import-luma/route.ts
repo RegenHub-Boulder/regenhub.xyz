@@ -12,11 +12,12 @@ const MAX_CSV_CHARS = 5_000_000;
  * interests list (source_path 'luma'), with one-click unsubscribe like any recipient. No Luma API: the admin
  * uploads the export.
  *
- * Skipped: rows Luma marks unsubscribed, invalid emails, repeats in the file, anyone already a member or on the
- * interests list, and anyone who unsubscribed from our newsletter. Without `commit` it's a dry run: the same
+ * Skipped: rows Luma marks unsubscribed, guests only invited or declined, invalid emails, repeats in the file,
+ * anyone already in the audience (an enabled member, or on the interests list; compileAudience's sources), and
+ * anyone who unsubscribed from our newsletter. Without `commit` it's a dry run: the same
  * counts, nothing written. With it, the counts are worked out again from the lists as they are now, then the
  * new rows are inserted.
- *   → { rows, add, alreadyHave, unsubscribedHere, unsubscribedOnLuma, invalid, duplicate, imported? }
+ *   → { rows, add, alreadyHave, unsubscribedHere, unsubscribedOnLuma, notRegistered, invalid, duplicate, imported? }
  */
 export async function POST(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -37,7 +38,7 @@ export async function POST(req: Request) {
       readAll<{ email: string | null }>("interests", (f, t) =>
         admin.from("interests").select("id, email").order("id", { ascending: true }).range(f, t)),
       readAll<{ email: string | null }>("members", (f, t) =>
-        admin.from("members").select("id, email").not("email", "is", null).order("id", { ascending: true }).range(f, t)),
+        admin.from("members").select("id, email").eq("disabled", false).not("email", "is", null).order("id", { ascending: true }).range(f, t)),
       readAll<{ email: string }>("email_unsubscribes", (f, t) =>
         admin.from("email_unsubscribes").select("email").order("email", { ascending: true }).range(f, t)),
     ]);
@@ -56,6 +57,7 @@ export async function POST(req: Request) {
     alreadyHave: plan.alreadyHave,
     unsubscribedHere: plan.unsubscribedHere,
     unsubscribedOnLuma: read.unsubscribedOnLuma,
+    notRegistered: read.notRegistered,
     invalid: read.invalid,
     duplicate: read.duplicate,
   };

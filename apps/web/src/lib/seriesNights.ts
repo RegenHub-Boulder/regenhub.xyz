@@ -13,13 +13,14 @@ export type PostedNight = { seriesSlug: string | null; startAt: string | null; c
 /**
  * The dates (in the series' timezone) that have a posted night of the series; cancelled ones only if asked.
  * A night in no series that sits in this series' slot (its weekday, within 30 min of its start) takes the date
- * too: a night renamed beyond recognition ("Ugly Sweater Party") is still that Friday's Happy Hour, and offering
- * the date again would post a second night on top of it.
+ * too, for suggestions (`bySlot`): a night renamed beyond recognition ("Ugly Sweater Party") is still that Friday's
+ * Happy Hour, and suggesting the date again would post a second night on top of it. A steward can still pick that
+ * date by hand (a one-off event at 4pm shouldn't make that Friday's Happy Hour impossible to post).
  */
-function takenDates(series: Series, posted: PostedNight[], withCancelled: boolean): Set<string> {
+function takenDates(series: Series, posted: PostedNight[], withCancelled: boolean, bySlot: boolean): Set<string> {
   return new Set(
     posted
-      .filter((e) => (e.seriesSlug === series.slug || (!e.seriesSlug && inSeriesSlot(series, e.startAt))) && e.startAt)
+      .filter((e) => (e.seriesSlug === series.slug || (bySlot && !e.seriesSlug && inSeriesSlot(series, e.startAt))) && e.startAt)
       .filter((e) => withCancelled || !e.cancelled)
       .map((e) => dateIn(e.startAt!, series.timezone)),
   );
@@ -34,7 +35,7 @@ export const SUGGESTED_NIGHTS = 3;
  * night isn't suggested again (the hosts called it off), though a steward can still pick it by hand.
  */
 export function unpostedNights(series: Series, posted: PostedNight[], now: Date, count = SUGGESTED_NIGHTS): PlannedNight[] {
-  const taken = takenDates(series, posted, true);
+  const taken = takenDates(series, posted, true, true);
   const out: PlannedNight[] = [];
   // From today in the series zone, so tonight's still-running night counts.
   let from = dateIn(now.toISOString(), series.timezone);
@@ -68,7 +69,7 @@ export function pickedNight(
   }
   const night = plannedNight(series, date);
   if (Date.parse(night.endsAt) <= now.getTime()) return { error: "That night is already over" };
-  if (takenDates(series, posted, false).has(date)) return { error: `${series.name} is already posted for that date` };
+  if (takenDates(series, posted, false, false).has(date)) return { error: `${series.name} is already posted for that date` };
   return { night };
 }
 

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ExternalLink, Plus } from "lucide-react";
 import { HUB_TIMEZONE } from "@/lib/regenos/eventForm";
 import { LUMA_CALENDAR_PAGE, type LumaSync } from "@/lib/lumaCalendar";
+import { STEWARD_PATH } from "@/lib/techne/session";
 
 /** How far ahead the check looks: the nights a steward would still list on Luma. */
 export const LUMA_SYNC_DAYS = 60;
@@ -91,7 +92,7 @@ export function LumaSyncSection({ sync, now }: { sync: LumaSync | null; now: Dat
                       </a>
                     </span>
                     <Link
-                      href={`/admin/events?fromLuma=${encodeURIComponent(e.id)}`}
+                      href={`${STEWARD_PATH}?fromLuma=${encodeURIComponent(e.id)}`}
                       className="shrink-0 inline-flex items-center gap-1 text-xs text-sage hover:underline"
                     >
                       <Plus className="w-3 h-3" /> Add here

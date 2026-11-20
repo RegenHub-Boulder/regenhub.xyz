@@ -345,8 +345,9 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   "Agents Building Night: topic"), or with a `uris` entry ending `/events/<slug>`. **Add the next nights writes that
   `uris` entry** (the stable key; the edit form keeps it), so a renamed night stays in its series. A night posted
   before the key still matches if the series name appears in it as whole words and it starts in the series' slot
-  (rule date, within 30 min of the start: "Ugly Sweater Party 420 Happy Hour" on a Friday at 4:20); for suggestions,
-  any night in no series that sits in a series' slot takes that date (`lib/series.ts` `inSeriesSlot`). Nights posted as "Agents Night" (the series' former name, `formerNames`) still match. A series may name `hosts` (Agents Building and Civic Tech: "AG and Benjamin"), shown on the series page and cards. Event keys are TIDs (`mintRkey`), as the
+  (rule date, within 30 min of the start: "Ugly Sweater Party 420 Happy Hour" on a Friday at 4:20); for suggestions
+  only, any night in no series that sits in a series' slot takes that date (`lib/series.ts` `inSeriesSlot`); a hand
+  pick of that date is still allowed. Nights posted as "Agents Night" (the series' former name, `formerNames`) still match. A series may name `hosts` (Agents Building and Civic Tech: "AG and Benjamin"), shown on the series page and cards. Event keys are TIDs (`mintRkey`), as the
   lexicon declares; old `ev-…` keys still read. Every create/edit sends `timezone: "America/Denver"`.
   `/events/<slug>` is the series page (next posted night, posted nights after it, past nights; with none upcoming
   it says "Next date coming soon"), built from `lib/seriesEvents.ts`. `/` (right under the hero) and `/events`
@@ -405,7 +406,8 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   Details: docs/TECHNE-SIGN-IN.md "Managing RegenHub's roles".
 - **Luma without the API** (the API needs Luma Plus): `/admin/newsletter` → Audience → **Import Luma CSV…** takes a
   Luma people export or an event's guests export (`lib/lumaCsv.ts`, `POST /api/admin/newsletter/import-luma`), shows
-  new / already have / skipped (unsubscribed on Luma, unsubscribed from our newsletter, invalid, repeats), then
+  new / already have / skipped (unsubscribed on Luma, guests only invited or declined, unsubscribed from our
+  newsletter, invalid, repeats; "already have" = enabled members + interests, the audience's own sources), then
   inserts the new ones into `interests` (`source_path 'luma'`). The old API contact pull is gone.
 - Deliberately NOT changed: the newsletter still reads Luma directly (`lib/newsletter.ts:142`). Its
   copy is Luma-branded end to end; switching it is a product decision, not a plumbing one.

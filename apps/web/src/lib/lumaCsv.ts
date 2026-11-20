@@ -3,7 +3,8 @@
  *
  * Two exports work: the calendar's people (Luma admin → People → Export: name, first_name, last_name, email,
  * subscription_status, …) and an event's guests (Manage event → Guests → Export: name, first_name, last_name,
- * email, approval_status, …). Only `email` is required. Pure, so it's tested in node; the route
+ * email, approval_status, …). Only `email` is required. Guests only invited (never registered) or declined are left
+ * out: they never asked to hear from us. Pure, so it's tested in node; the route
  * (/api/admin/newsletter/import-luma) reads the lists and writes the rows.
  */
 
@@ -54,6 +55,8 @@ export interface LumaCsvRead {
   rows: number;
   /** Rows Luma marks unsubscribed from the calendar. */
   unsubscribedOnLuma: number;
+  /** Guests export: people only invited (never registered) or declined by the host. */
+  notRegistered: number;
   /** Rows with no usable email. */
   invalid: number;
   /** Rows repeating an email met earlier in the file. */
@@ -74,13 +77,18 @@ export function readLumaCsv(text: string): LumaCsvRead | { error: string } {
   const first = col("first_name");
   const last = col("last_name");
   const status = col("subscription_status");
+  const approval = col("approval_status");
 
-  const out: LumaCsvRead = { contacts: [], rows: data.length, unsubscribedOnLuma: 0, invalid: 0, duplicate: 0 };
+  const out: LumaCsvRead = { contacts: [], rows: data.length, unsubscribedOnLuma: 0, notRegistered: 0, invalid: 0, duplicate: 0 };
   const seen = new Set<string>();
   for (const r of data) {
     const cell = (i: number) => (i >= 0 ? (r[i] ?? "").trim() : "");
     if (/^unsubscribed$/i.test(cell(status))) {
       out.unsubscribedOnLuma++;
+      continue;
+    }
+    if (/^(invited|declined)$/i.test(cell(approval))) {
+      out.notRegistered++;
       continue;
     }
     const addr = cell(email).toLowerCase();

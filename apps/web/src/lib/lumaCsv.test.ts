@@ -28,6 +28,7 @@ describe("readLumaCsv", () => {
       contacts: [{ email: "a@example.test", name: "Ann A" }],
       rows: 4,
       unsubscribedOnLuma: 1,
+      notRegistered: 0,
       invalid: 1,
       duplicate: 1,
     });

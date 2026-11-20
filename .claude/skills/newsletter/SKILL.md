@@ -17,7 +17,7 @@ Cadence: every other week (open to weekly later). One issue per run.
 memory. Luma's API needs Luma Plus, which we don't pay for; its public iCal feed needs no key:
 
 ```bash
-curl -s "https://api.lu.ma/ics/get?entity=calendar&id=cal-ZCWMKx1NMCXGd7v" > /tmp/regenhub-luma.ics
+curl -s "https://api.lu.ma/ics/get?entity=calendar&id=cal-ZCWMKx1NMCXGd7v" > "$TMPDIR/regenhub-luma.ics"
 # VEVENTs: DTSTART (UTC), SUMMARY, and the page in DESCRIPTION ("Get up-to-date information at: https://luma.com/…")
 ```
 

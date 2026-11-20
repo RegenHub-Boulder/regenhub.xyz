@@ -98,19 +98,19 @@ export function ManageEvents({
   const [busyRkey, setBusyRkey] = useState<string | null>(null);
   const router = useRouter();
 
-  // After mount, so the times fill in the browser's own zone, as the form reads them. Once: the address loses
-  // its `?fromLuma=` so a refresh after posting (or a reload) doesn't open the form again.
-  const draftKey = draft ? `${draft.url}|${draft.startAt}` : null;
+  // After mount, so the times fill in the browser's own zone, as the form reads them. Each "Add here" is a
+  // navigation that sends a new draft object, so the same night can be opened again after a Cancel. The address
+  // then loses its `?fromLuma=`, so a refresh after posting (or a reload) doesn't open the form again.
   useEffect(() => {
     if (!draft) return;
     setForm(lumaEventToFormValues(draft));
     setError(null);
     setEditing("");
+    // Through the router, so its own idea of the address (what a refresh re-requests) drops the draft too.
     const url = new URL(window.location.href);
     url.searchParams.delete("fromLuma");
-    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the draft's identity, not the object
-  }, [draftKey]);
+    router.replace(url.pathname + url.search + url.hash, { scroll: false });
+  }, [draft, router]);
 
   function set<K extends keyof EventFormValues>(key: K) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>

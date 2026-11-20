@@ -75,7 +75,7 @@ export interface CollectiveBatch {
 
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 
-/** The input's links, https only and at most 10; undefined when it sends none (an edit keeps the event's own). */
+/** The input's links, https only and at most 10; undefined when it sends none usable (an edit keeps the event's own). */
 function urisOf(raw: unknown): { $type: string; uri: string; name?: string }[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const out = raw.flatMap((u: { uri?: unknown; name?: unknown } | null) => {
@@ -84,7 +84,7 @@ function urisOf(raw: unknown): { $type: string; uri: string; name?: string }[] |
     const name = str(u?.name);
     return [{ $type: `${EVENT_NSID}#uri`, uri, ...(name ? { name: name.slice(0, 200) } : {}) }];
   });
-  return out.slice(0, 10);
+  return out.length ? out.slice(0, 10) : undefined;
 }
 
 /** The event record from the input, on top of what an edit keeps (fields the form doesn't own). */

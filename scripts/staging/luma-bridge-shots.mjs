@@ -64,6 +64,19 @@ await page.waitForFunction(() => document.querySelector("#ev-name")?.value);
 await settle();
 console.log("prefilled:", await page.inputValue("#ev-name"), await page.inputValue("#ev-starts"), "url now", page.url());
 await shot("add-here-prefilled", page.locator("form:has(#ev-name)"));
+// Cancel, then Add here again: the same night opens again.
+await page.click("form:has(#ev-name) button:has-text('Cancel')");
+await page.click("[data-testid=luma-only] a:has-text('Add here')");
+await page.waitForFunction(() => document.querySelector("#ev-name")?.value === "Sample Saturday Workshop");
+console.log("reopened after cancel:", await page.inputValue("#ev-name"));
+// Create it: the form closes and stays closed, and the night is now on Luma too.
+await page.click("button:has-text('Create event')");
+await page.waitForSelector("h3:has-text('Sample Saturday Workshop')", { timeout: 20000 });
+await settle();
+const stillOpen = await page.locator("#ev-name").count();
+console.log("form open after create:", stillOpen, "| luma-only left:", await page.locator("[data-testid=luma-only]").count());
+if (stillOpen) throw new Error("the new-event form opened again after Create");
+console.log("luma check after create:", (await page.locator("[data-testid=luma-sync]").innerText()).replace(/\s+/g, " "));
 
 // 4. Newsletter → Audience → Import Luma CSV: the dry run, then the import.
 await page.goto(BASE + "/admin/newsletter", { waitUntil: "networkidle" });

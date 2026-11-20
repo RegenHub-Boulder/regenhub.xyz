@@ -10,6 +10,7 @@ interface Summary {
   alreadyHave: number;
   unsubscribedHere: number;
   unsubscribedOnLuma: number;
+  notRegistered: number;
   invalid: number;
   duplicate: number;
   imported?: number;
@@ -76,6 +77,7 @@ export function LumaCsvImport({ disabled }: { disabled?: boolean }) {
     ? [
         summary.unsubscribedOnLuma && `${summary.unsubscribedOnLuma} unsubscribed on Luma`,
         summary.unsubscribedHere && `${summary.unsubscribedHere} unsubscribed from our newsletter`,
+        summary.notRegistered && `${summary.notRegistered} invited or declined`,
         summary.invalid && plural(summary.invalid, "invalid email"),
         summary.duplicate && plural(summary.duplicate, "repeat"),
       ].filter(Boolean)

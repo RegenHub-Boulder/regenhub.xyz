@@ -9,7 +9,7 @@
  * series and the series differ. Names may differ (a night renamed here or there still matches).
  */
 
-import { hasEnded, seriesOf, dateIn, SLOT_TOLERANCE_MIN } from "@/lib/series";
+import { hasEnded, seriesOf, dateIn, zonedTimeToUtc, SLOT_TOLERANCE_MIN } from "@/lib/series";
 import { HUB_TIMEZONE } from "@/lib/regenos/eventForm";
 import { splitAddress, type ParsedLumaEvent } from "@/lib/lumaImport";
 
@@ -54,24 +54,11 @@ function icsTime(value: string, params: Record<string, string>): string | null {
   if (!m) return null;
   const [, y, mo, d, h = "00", mi = "00", s = "00", z] = m;
   if (z) return new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s)).toISOString();
-  const zone = params.TZID || HUB_TIMEZONE;
-  // The wall clock in `zone`, shifted to UTC (twice, for the hour around a change), as lib/series zonedTimeToUtc.
-  const wanted = Date.UTC(+y, +mo - 1, +d, +h, +mi, +s);
-  let fmt: Intl.DateTimeFormat;
   try {
-    fmt = new Intl.DateTimeFormat("en-US", {
-      timeZone: zone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
-    });
+    return zonedTimeToUtc(`${y}-${mo}-${d}`, `${h}:${mi}`, params.TZID || HUB_TIMEZONE).toISOString();
   } catch {
-    return null;
+    return null; // an unknown TZID
   }
-  const wallAt = (ms: number) => {
-    const p = Object.fromEntries(fmt.formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
-    return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
-  };
-  let guess = wanted;
-  for (let i = 0; i < 2; i++) guess += wanted - wallAt(guess);
-  return new Date(guess).toISOString();
 }
 
 /** Every VEVENT in an iCal feed that has a start and a name, in feed order. */
@@ -139,7 +126,8 @@ export async function fetchLumaCalendar(): Promise<LumaCalendarEvent[] | null> {
   try {
     const res = await fetch(lumaIcsUrl(), {
       headers: { accept: "text/calendar" },
-      signal: AbortSignal.timeout(8_000),
+      // Short: the stewards' page waits for this read (cached 15 min, so rarely).
+      signal: AbortSignal.timeout(4_000),
       next: { revalidate: 900 },
     } as RequestInit);
     if (!res.ok) return null;

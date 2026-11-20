@@ -31,10 +31,12 @@ describe("a renamed Happy Hour still counts as that Friday's Happy Hour", () => 
     expect(pickedNight(happy, "2026-12-18", postedFrom([record]), NOW)).toEqual({ error: "420 Happy Hour is already posted for that date" });
   });
 
-  it("renamed beyond the series name, no key: not on the series page, but its slot is taken, so the date isn't offered", () => {
+  it("renamed beyond the series name, no key: not on the series page, but its slot is taken, so the date isn't suggested", () => {
     const record = { name: "Ugly Sweater Party", startsAt: DEC18 } as CalendarEventBody;
     expect(seriesOf(record)).toBeNull();
     expect(dates(unpostedNights(happy, postedFrom([record]), NOW))).not.toContain("2026-12-18");
+    // It may be a one-off at 4pm rather than the Happy Hour: a steward can still post the Happy Hour by hand.
+    expect(pickedNight(happy, "2026-12-18", postedFrom([record]), NOW)).toMatchObject({ night: { date: "2026-12-18" } });
   });
 
   it("the series name at another time, or a different night that day, is not the series", () => {
@@ -78,5 +80,10 @@ describe("a renamed Happy Hour still counts as that Friday's Happy Hour", () => 
     const value = (putEventBatch(HUB, input, null, NOW).input.writes[0] as unknown as { value: { uris: { uri: string }[] } }).value;
     expect(value.uris[0]).toEqual({ $type: "community.lexicon.calendar.event#uri", uri: "https://example.test/a", name: "A" });
     expect(value.uris).toHaveLength(10);
+    // An edit whose links are all refused keeps the event's own (the series key isn't wiped).
+    const kept = { uris: [{ uri: "https://regenhub.xyz/events/happy-hour" }], name: "420 Happy Hour" };
+    const edited = putEventBatch(HUB, { rkey: "3maaaaaaaab2a", name: "Renamed", uris: [{ uri: "http://insecure.test" }] },
+      { rkey: "3maaaaaaaab2a", value: kept, config: null, hasListing: true }, NOW).input.writes[0] as unknown as { value: CalendarEventBody };
+    expect(seriesOf(edited.value)?.slug).toBe("happy-hour");
   });
 });
