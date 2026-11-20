@@ -211,6 +211,8 @@ export default async function ScoreboardPage() {
             { label: "Applications", values: funnel.map((m) => m.applications) },
             { label: "Day passes bought", values: funnel.map((m) => m.passesBought) },
             { label: "First subscriptions", values: funnel.map((m) => m.firstSubscriptions), strong: true },
+            { label: "Followed up after a night", values: s.followUps ? s.followUps.map((m) => m.followedUp) : s.months.map(() => "—") },
+            { label: "→ joined within 30 days", values: s.followUps ? s.followUps.map((m) => m.joined) : s.months.map(() => "—"), sub: true },
           ]}
         />
       </Section>

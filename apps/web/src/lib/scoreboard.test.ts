@@ -4,6 +4,7 @@ import {
   SCOREBOARD_GOALS,
   canceledSince,
   dayPassPool,
+  followupFunnel,
   funnelByMonth,
   goalProgress,
   headlineText,
@@ -277,6 +278,33 @@ describe("headlineText", () => {
     expect(text.split("\n").slice(2)).toEqual([
       "Membership revenue: $3,015/mo net, $3,160 at list (goal $2,750, rent $2,250, rent covered)",
       "Day-pass members who never subscribed: 0",
+    ]);
+  });
+});
+
+describe("followupFunnel: followed up after a night → joined within 30 days", () => {
+  const months = ["2026-10", "2026-11"];
+  it("counts each person once per month, and a first subscription only if it started within 30 days after the note", () => {
+    const subs = [
+      sub(1, 21, "member_basic", "active", 3000, 3000, "2026-11-05T16:00:00Z"), // 4 days after: joined
+      sub(2, 22, "member_basic", "active", 3000, 3000, "2026-12-20T16:00:00Z"), // 49 days after: not
+      sub(3, 23, "member_basic", "active", 3000, 3000, "2026-09-01T16:00:00Z"), // was already a member before the note
+      sub(4, 24, "member_basic", "incomplete", 3000, 3000, "2026-11-03T16:00:00Z"), // never started
+    ];
+    const followups = [
+      { member_id: 21, sent_at: "2026-11-01T16:00:00Z" },
+      { member_id: 21, sent_at: "2026-11-15T16:00:00Z" }, // second note, same month: once
+      { member_id: 22, sent_at: "2026-11-01T16:00:00Z" },
+      { member_id: 23, sent_at: "2026-10-10T16:00:00Z" },
+      { member_id: 24, sent_at: "2026-11-01T16:00:00Z" },
+      { member_id: null, sent_at: "2026-11-01T16:00:00Z" }, // member removed since
+      { member_id: 25, sent_at: "2026-10-29T16:00:00Z" }, // notes in two months, one join: counted once, in November
+      { member_id: 25, sent_at: "2026-11-04T16:00:00Z" },
+    ];
+    subs.push(sub(5, 25, "member_basic", "active", 3000, 3000, "2026-11-10T16:00:00Z"));
+    expect(followupFunnel(followups, subs, months)).toEqual([
+      { month: "2026-10", followedUp: 2, joined: 0 },
+      { month: "2026-11", followedUp: 4, joined: 2 },
     ]);
   });
 });

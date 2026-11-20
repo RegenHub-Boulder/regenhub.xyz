@@ -44,6 +44,15 @@ function unsubscribeSecrets(): string[] {
   return secrets;
 }
 
+/** Whether this server has a key to sign unsubscribe and opt-out links (false only in production with none set). */
+export function canSignEmailLinks(): boolean {
+  try {
+    return unsubscribeSecrets().length > 0;
+  } catch {
+    return false;
+  }
+}
+
 function sign(email: string, secret: string): string {
   return createHmac("sha256", secret).update(`unsub:${email.toLowerCase()}`).digest("hex").slice(0, 32);
 }
@@ -66,6 +75,25 @@ export function verifyUnsubscribeToken(email: string, token: string): boolean {
 export function unsubscribeUrl(email: string, siteUrl: string): string {
   const base = siteUrl.replace(/\/$/, "");
   return `${base}/api/newsletter/unsubscribe?email=${encodeURIComponent(email)}&token=${unsubscribeToken(email)}`;
+}
+
+/** The same keys, scoped to "no more notes after nights" (lib/nightFollowups.ts): a different prefix, so neither
+ *  token works as the other. */
+function signOptout(email: string, secret: string): string {
+  return createHmac("sha256", secret).update(`nofollowup:${email.toLowerCase()}`).digest("hex").slice(0, 32);
+}
+
+export function verifyFollowupOptoutToken(email: string, token: string): boolean {
+  const given = Buffer.from(token);
+  return unsubscribeSecrets().some((secret) => {
+    const expected = Buffer.from(signOptout(email, secret));
+    return given.length === expected.length && timingSafeEqual(given, expected);
+  });
+}
+
+export function followupOptoutUrl(email: string, siteUrl: string): string {
+  const base = siteUrl.replace(/\/$/, "");
+  return `${base}/api/followups/optout?email=${encodeURIComponent(email)}&token=${signOptout(email, unsubscribeSecrets()[0])}`;
 }
 
 // ---------- ISO week (for issue keys + biweekly parity) ----------

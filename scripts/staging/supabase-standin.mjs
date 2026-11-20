@@ -10,7 +10,8 @@
 // is linked (members.did); Jo is a member who isn't linked yet (the link flow); Sam and Lee aren't members.
 // `subscriptions` is empty unless --scoreboard: the steward and Ana are desk members, so Studio Night's gate lets them in by type.
 // --member-pages adds the member directory's sample people (member-pages-seed.mjs).
-// Usage: node supabase-standin.mjs --port 18604 --state <dir> [--scoreboard] [--member-pages]
+// --followups adds the night follow-ups' sample people (T-497).
+// Usage: node supabase-standin.mjs --port 18604 --state <dir> [--scoreboard] [--member-pages] [--followups]
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
@@ -54,6 +55,9 @@ await pg.exec(`
 await pg.exec(readFileSync(join(ROOT, "supabase/migrations/064_techne_one_door.sql"), "utf8"));
 // Member pages (T-482): the real 065 on the columns it reads (is_coop_member, 008; show_in_directory, 005).
 await pg.exec(readFileSync(join(ROOT, "supabase/migrations/065_member_pages.sql"), "utf8"));
+// Night follow-ups (T-497): 035's email_unsubscribes (the rest of 035 needs Supabase's auth schema) and the real 066.
+await pg.exec("create table email_unsubscribes (email text primary key, created_at timestamptz not null default now(), source text)");
+await pg.exec(readFileSync(join(ROOT, "supabase/migrations/066_night_followups.sql"), "utf8"));
 
 const people = JSON.parse(readFileSync(join(STATE, "people.json"), "utf8"));
 const byName = (n) => people.find((p) => p.name.startsWith(n));
@@ -67,6 +71,15 @@ for (const [p, name, email, linked, type] of seed) {
   await pg.query("insert into members(name, email, did, member_type) values ($1, $2, $3, $4)", [
     name, email, linked ? p.did : null, type,
   ]);
+}
+
+// --followups (T-497): Sam is a day-pass guest and Lee unsubscribed from the newsletter, both linked to their Techne
+// accounts, so the night's batch shows a guest note, a member note (Ana) and a held person; Jo stays unlinked.
+if (process.argv.includes("--followups")) {
+  for (const [p, name, email, type] of [[byName("Sam"), "Sam Sample", "sam-sample@example.test", "day_pass"], [byName("Lee"), "Lee Sample", "lee-sample@example.test", "day_pass"]]) {
+    if (p) await pg.query("insert into members(name, email, did, member_type) values ($1, $2, $3, $4)", [name, email, p.did, type]);
+  }
+  await pg.query("insert into email_unsubscribes(email, source) values ('lee-sample@example.test', 'link')");
 }
 
 // --member-pages (T-482): the directory's sample members.

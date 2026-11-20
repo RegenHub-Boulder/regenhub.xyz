@@ -22,6 +22,7 @@ export function StewardEvents({
   posted,
   readFailed,
   editingOff,
+  followups,
 }: {
   /** Who this browser is signed in with Techne as (server-side). */
   techne: { did: string; handle: string | null };
@@ -35,6 +36,8 @@ export function StewardEvents({
   readFailed: boolean;
   /** The calendar read, but not each event's config and listing: editing waits for a reload. */
   editingOff: boolean;
+  /** The follow-ups after nights (components/portal/NightFollowups.tsx), shown above the calendar. */
+  followups?: React.ReactNode;
 }) {
   const who = (
     <div className="text-xs text-muted flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="steward-who">
@@ -78,6 +81,7 @@ export function StewardEvents({
           Couldn&apos;t read each event&apos;s settings from Techne, so Edit and Remove are off. Reload to try again.
         </p>
       )}
+      {followups}
       <ManageEvents authority={authority} events={events} nights={nights} posted={posted} write={write} />
     </div>
   );
