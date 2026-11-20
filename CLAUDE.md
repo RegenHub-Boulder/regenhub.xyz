@@ -324,6 +324,15 @@ that the switch is still pending and due, so a desk given by hand later is left 
 row earlier. On-chain plan edits (member and admin) go through `changeOnchainPlan`, under the same reservation, so
 they are ordered with the sweep.
 
+### Members-only newsletter issues (migration 067)
+`newsletter_issues.audience` is `public` (default: members + the stay-in-touch list) or `members` (only members in
+standing per `lib/memberStanding.ts`, with an email, minus unsubscribes; the interests list is never included).
+`compileAudience(admin, audience)` and `prepareIssue(admin, id, audience)` take it; send, cron, prepare and the
+draft route read it from the issue. Changing a draft's audience re-prepares its queue (anyone no longer in it is
+skipped). A members issue's email says "For RegenHub members" and has no web link; `/news` lists it for nobody and
+`/news/<key>` 404s it. The MCP `save_newsletter_draft` takes an optional `audience`. The scoreboard's list size stays
+the public audience.
+
 ### Add a new member via bot
 Use `/admin → Add member` as an admin in the Telegram bot.
 

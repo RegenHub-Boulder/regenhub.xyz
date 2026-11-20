@@ -20,6 +20,7 @@ export default async function NewsIndexPage() {
     .from("newsletter_issues")
     .select("issue_key, subject, created_at")
     .eq("status", "sent")
+    .eq("audience", "public")
     .order("created_at", { ascending: false });
   const issues = (data ?? []) as IssueRow[];
 

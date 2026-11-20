@@ -14,7 +14,8 @@ const cardFont = "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 export async function generateMetadata({ params }: { params: Promise<{ key: string }> }): Promise<Metadata> {
   const { key } = await params;
   const admin = createServiceClient();
-  const { data } = await admin.from("newsletter_issues").select("subject").eq("issue_key", key).maybeSingle();
+  const { data } = await admin.from("newsletter_issues").select("subject, audience").eq("issue_key", key).maybeSingle();
+  if (data && data.audience !== "public") return { title: "RegenHub Dispatch" };
   return { title: data?.subject ? `${data.subject} — RegenHub` : "RegenHub Dispatch" };
 }
 
@@ -23,10 +24,11 @@ export default async function NewsIssuePage({ params }: { params: Promise<{ key:
   const admin = createServiceClient();
   const { data: issue } = await admin
     .from("newsletter_issues")
-    .select("issue_key, subject, markdown_body, status, created_at")
+    .select("issue_key, subject, markdown_body, status, audience, created_at")
     .eq("issue_key", key)
     .maybeSingle();
-  if (!issue || !issue.markdown_body) notFound();
+  // Members-only issues are never public: the same 404 as an unknown key.
+  if (!issue || !issue.markdown_body || issue.audience !== "public") notFound();
 
   const dateLabel = issue.created_at
     ? new Date(issue.created_at).toLocaleDateString("en-US", { timeZone: "America/Denver", year: "numeric", month: "long", day: "numeric" })

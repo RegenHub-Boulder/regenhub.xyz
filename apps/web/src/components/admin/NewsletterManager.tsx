@@ -15,6 +15,7 @@ interface Issue {
   updated_at: string | null;
   recipients_count: number;
   sent_count: number;
+  audience?: string;
 }
 
 // Client-side mirror of issueKeyFor() — the ISO-week anchor used for the
@@ -42,6 +43,12 @@ function freshKey(existing: Set<string>): string {
 function fmtDate(s: string | null): string {
   if (!s) return "";
   return new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function AudienceTag({ audience }: { audience?: string }) {
+  return audience === "members"
+    ? <span className="rounded bg-sage/20 px-1.5 py-px text-[10px] font-medium text-sage">Members</span>
+    : null;
 }
 
 function StatusBadge({ issue }: { issue: Issue }) {
@@ -81,9 +88,9 @@ export function NewsletterManager({ initialIssues }: { initialIssues: Issue[] })
   const selected = typeof selectedId === "number" ? issues.find((i) => i.id === selectedId) ?? null : null;
   const studioDraft =
     selectedId === "new"
-      ? { id: null, issue_key: seedKey, subject: "", markdown_body: "", status: "draft" }
+      ? { id: null, issue_key: seedKey, subject: "", markdown_body: "", status: "draft", audience: "public" }
       : selected
-        ? { id: selected.id, issue_key: selected.issue_key, subject: selected.subject, markdown_body: selected.markdown_body, status: selected.status }
+        ? { id: selected.id, issue_key: selected.issue_key, subject: selected.subject, markdown_body: selected.markdown_body, status: selected.status, audience: selected.audience ?? "public" }
         : null;
   // Remount the studio on selection change so its internal editor state resets.
   const studioKey = selectedId === "new" ? `new-${seedKey}` : `issue-${selectedId}`;
@@ -115,7 +122,10 @@ export function NewsletterManager({ initialIssues }: { initialIssues: Issue[] })
                   active ? "border-sage/50 bg-white/10" : "border-white/10 hover:bg-white/5"
                 }`}
               >
-                <div className="text-sm font-medium text-foreground truncate">{i.subject || "Untitled"}</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-medium text-foreground truncate">{i.subject || "Untitled"}</span>
+                  <AudienceTag audience={i.audience} />
+                </div>
                 <div className="flex items-center justify-between mt-1 gap-2">
                   <span className="text-[11px] text-muted truncate">{fmtDate(i.created_at) || i.issue_key}</span>
                   <StatusBadge issue={i} />

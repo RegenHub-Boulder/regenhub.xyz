@@ -1,7 +1,7 @@
 import { defaultEmailFrom, defaultEmailReplyTo } from "@regenhub/shared";
 import { randomUUID } from "crypto";
 import type { createServiceClient } from "@/lib/supabase/admin";
-import { compileAudience } from "@/lib/newsletter";
+import { compileAudience, type NewsletterAudience } from "@/lib/newsletter";
 import { readAll } from "@/lib/supabase/readAll";
 import { renderDraftEmail } from "@/lib/newsletterMarkdown";
 import { sendEmailDetailed } from "@/lib/email";
@@ -24,8 +24,8 @@ export interface Progress {
 }
 
 /** Materialize the audience into pending ledger rows. Idempotent. */
-export async function prepareIssue(admin: Admin, issueId: number): Promise<{ audience: number; total: number }> {
-  const audience = await compileAudience(admin);
+export async function prepareIssue(admin: Admin, issueId: number, issueAudience: NewsletterAudience): Promise<{ audience: number; total: number }> {
+  const audience = await compileAudience(admin, issueAudience);
   const { data, error } = await admin.rpc("newsletter_prepare", {
     p_issue: issueId, p_rows: audience.filter((r) => r.email),
   });
@@ -79,7 +79,7 @@ export interface BatchResult {
 export async function sendBatch(
   admin: Admin,
   issueId: number,
-  opts: { markdown: string; subject: string; siteUrl: string; issueKey?: string; limit?: number },
+  opts: { markdown: string; subject: string; siteUrl: string; issueKey?: string; limit?: number; audience?: NewsletterAudience },
 ): Promise<BatchResult> {
   const token = randomUUID();
   const { data: snapshots, error } = await admin.rpc("newsletter_begin_run", {
@@ -96,10 +96,12 @@ export async function sendBatch(
       .in("status", ["pending", "sending"]).order("id", { ascending: true }).limit(100);
     if (readError) throw readError;
     const base = snapshot.site_url.replace(/\/$/, "");
+    // A members issue has no public web page: no "read on the web" link, and the header says who it is for.
+    const audience = opts.audience ?? "public";
     for (const row of rows ?? []) {
       if (processed >= Math.min(Math.max(opts.limit ?? 20, 1), 100)) break;
       const { html, text } = renderDraftEmail(snapshot.markdown_body,
-        unsubscribeUrl(row.email, snapshot.site_url), `${base}/news/${snapshot.issue_key}`);
+        unsubscribeUrl(row.email, snapshot.site_url), audience === "members" ? undefined : `${base}/news/${snapshot.issue_key}`, audience);
       const payload = { from: defaultEmailFrom(), replyTo: defaultEmailReplyTo(), to: row.email, subject: snapshot.subject, html, text,
         idempotencyKey: `newsletter:${issueId}:${row.id}` };
       const { data: claims, error: claimError } = await admin.rpc("newsletter_claim_recipient", {

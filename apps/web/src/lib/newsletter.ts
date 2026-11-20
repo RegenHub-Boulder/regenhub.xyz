@@ -4,7 +4,7 @@ import { readAll } from "@/lib/supabase/readAll";
 import { fetchUpcomingLumaEvents, type LumaEvent } from "@/lib/luma";
 import type { HubDigestStats } from "@/lib/email";
 import { GOOD_STANDING_STATUSES, REVENUE_COLUMNS, membershipRevenue, type RevenueRow } from "@/lib/membershipRevenue";
-
+import { isMemberInStanding, PAYING_STATUSES, type StandingSubscription } from "@/lib/memberStanding";
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
 /**
@@ -171,25 +171,47 @@ export interface Recipient {
   name: string | null;
 }
 
+export type NewsletterAudience = "public" | "members";
+export const NEWSLETTER_AUDIENCES: readonly NewsletterAudience[] = ["public", "members"];
+
+/** Anything that isn't exactly "members" is public: the default for every issue before 067. */
+export function normalizeAudience(value: unknown): NewsletterAudience {
+  return value === "members" ? "members" : "public";
+}
+
 /**
- * Members + interests, deduped, minus unsubscribes. Every row is read (paged past PostgREST's cap) and a failed read
- * throws: a missing unsubscribe list must never mean mailing people who left, nor a short list a full one.
+ * Who an issue goes to. Every row is read (paged past PostgREST's cap) and a failed read throws: a missing
+ * unsubscribe list must never mean mailing people who left, nor a short list a full one.
+ *  - public: members + interests, deduped, minus unsubscribes.
+ *  - members: members in standing (lib/memberStanding.ts: hub friend or desk, or an active/trialing subscription at
+ *    $30+) with an email, minus unsubscribes. The stay-in-touch list is never included.
  */
-export async function compileAudience(admin: ServiceClient): Promise<Recipient[]> {
-  type Row = { name: string | null; email: string | null };
-  const [members, interests, unsubs] = await Promise.all([
-    readAll<Row>("members", (f, t) => admin.from("members").select("id, name, email").eq("disabled", false)
+export async function compileAudience(admin: ServiceClient, audience: NewsletterAudience = "public"): Promise<Recipient[]> {
+  type Row = { id: number; name: string | null; email: string | null; member_type: string | null };
+  const membersOnly = audience === "members";
+  const [members, interests, unsubs, subs] = await Promise.all([
+    readAll<Row>("members", (f, t) => admin.from("members").select("id, name, email, member_type").eq("disabled", false)
       .not("email", "is", null).order("id", { ascending: true }).range(f, t)),
-    readAll<Row>("interests", (f, t) => admin.from("interests").select("id, name, email").not("email", "is", null)
-      .order("id", { ascending: true }).range(f, t)),
+    membersOnly ? Promise.resolve([] as { name: string | null; email: string | null }[])
+      : readAll<{ name: string | null; email: string | null }>("interests", (f, t) => admin.from("interests").select("id, name, email").not("email", "is", null)
+        .order("id", { ascending: true }).range(f, t)),
     readAll<{ email: string }>("email_unsubscribes", (f, t) => admin.from("email_unsubscribes").select("email")
       .order("email", { ascending: true }).range(f, t)),
+    membersOnly
+      ? readAll<StandingSubscription & { id: number; member_id: number }>("subscriptions", (f, t) => admin.from("subscriptions")
+        .select("id, member_id, status, monthly_cents").in("status", [...PAYING_STATUSES])
+        .order("id", { ascending: true }).range(f, t))
+      : Promise.resolve([]),
   ]);
+
+  const subsByMember = new Map<number, StandingSubscription[]>();
+  for (const s of subs) subsByMember.set(s.member_id, [...(subsByMember.get(s.member_id) ?? []), s]);
 
   const blocked = new Set(unsubs.map((u) => u.email.toLowerCase()));
   const seen = new Map<string, Recipient>();
   for (const m of members) {
     if (!m.email) continue;
+    if (membersOnly && !isMemberInStanding({ member_type: m.member_type, disabled: false }, subsByMember.get(m.id) ?? [])) continue;
     const key = m.email.toLowerCase();
     if (blocked.has(key)) continue;
     seen.set(key, { email: m.email, name: m.name });

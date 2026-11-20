@@ -12,6 +12,7 @@ interface Draft {
   subject: string;
   markdown_body: string | null;
   status: string;
+  audience?: string;
 }
 interface Progress {
   total: number;
@@ -54,6 +55,9 @@ export function NewsletterStudio({
   const [issueKey] = useState(initialDraft?.issue_key ?? null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [audience, setAudience] = useState<"public" | "members">(initialDraft?.audience === "members" ? "members" : "public");
+  const [audienceCount, setAudienceCount] = useState<number | null>(null);
+  const members = audience === "members";
 
   const [busy, setBusy] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -74,9 +78,10 @@ export function NewsletterStudio({
   async function saveDraft(): Promise<number | null> {
     setBusy("save"); setErr(null); setMsg(null);
     try {
-      const d = await api<{ draft: Draft }>("/api/admin/newsletter/draft", { subject, markdown, issue_key: issueKey });
+      const d = await api<{ draft: Draft }>("/api/admin/newsletter/draft", { subject, markdown, issue_key: issueKey, audience });
       setIssueId(d.draft.id); setStatus(d.draft.status); setMsg("Draft saved.");
       onMutate?.(d.draft.id ?? undefined);
+      if (d.draft.id) await refreshStatus(d.draft.id);
       return d.draft.id;
     } catch (e) { setErr(errMessage(e)); return null; }
     finally { setBusy(null); }
@@ -85,7 +90,7 @@ export function NewsletterStudio({
   async function preview() {
     setBusy("preview"); setErr(null); setMsg(null);
     try {
-      const r = await api<{ ok: boolean; sent_to: string }>("/api/admin/newsletter/preview", { subject, markdown, issue_key: issueKey });
+      const r = await api<{ ok: boolean; sent_to: string }>("/api/admin/newsletter/preview", { subject, markdown, issue_key: issueKey, audience });
       setMsg(r.ok ? `Preview sent to ${r.sent_to}.` : "Preview failed to send (check email config).");
     } catch (e) { setErr(errMessage(e)); }
     finally { setBusy(null); }
@@ -106,6 +111,7 @@ export function NewsletterStudio({
       const d = await res.json();
       if (d.progress) setProgress(d.progress);
       if (d.issue?.status) setStatus(d.issue.status);
+      setAudienceCount(typeof d.audience_count === "number" ? d.audience_count : null);
     } catch { /* ignore */ }
   }
 
@@ -128,7 +134,7 @@ export function NewsletterStudio({
     if (!retry) {
       // Only the not-yet-sent recipients actually go out (the ledger skips sent ones).
       const toSend = progress.pending + progress.failed;
-      const ok = window.confirm(`Send "${subject}" to ${toSend} recipient${toSend === 1 ? "" : "s"}? This goes to real inboxes (already-sent are skipped).`);
+      const ok = window.confirm(`Send "${subject}" to ${toSend} ${members ? "member" : "recipient"}${toSend === 1 ? "" : "s"}${members ? " (members only)" : ""}? This goes to real inboxes (already-sent are skipped).`);
       if (!ok) return;
     }
     setErr(null); setMsg(null); setSending(true); stopRef.current = false;
@@ -164,7 +170,7 @@ export function NewsletterStudio({
       {/* Compose */}
       <Card className="glass-panel border border-sage/20">
         <CardContent className="p-5 space-y-3">
-          <h3 className="text-sm font-semibold">Compose {issueKey ? <span className="text-muted font-normal">· {issueKey}</span> : null}{sent ? <span className="text-emerald-400 font-normal"> · sent</span> : null}</h3>
+          <h3 className="text-sm font-semibold">Compose {issueKey ? <span className="text-muted font-normal">· {issueKey}</span> : null}{sent ? <span className="text-emerald-400 font-normal"> · sent</span> : null}{members ? <span className="ml-2 rounded bg-sage/20 px-1.5 py-px text-[11px] font-medium text-sage">Members</span> : null}</h3>
           <div>
             <label className="text-xs text-muted">Subject</label>
             <input
@@ -216,12 +222,28 @@ export function NewsletterStudio({
       <Card className="glass-panel border border-sage/20">
         <CardContent className="p-5 space-y-3">
           <div className="flex items-center gap-2"><Users className="w-4 h-4 text-sage" /><h3 className="text-sm font-semibold">Audience</h3></div>
+          <div role="radiogroup" aria-label="Audience" className="inline-flex rounded-md border border-white/10 p-0.5 text-xs">
+            {(["public", "members"] as const).map((a) => (
+              <button
+                key={a}
+                type="button"
+                role="radio"
+                aria-checked={audience === a}
+                disabled={sent || !!busy}
+                onClick={() => { setAudience(a); setAudienceCount(null); setProgress(null); setMsg("Audience changed. Save the draft, then Prepare audience."); }}
+                className={`rounded px-3 py-1 ${audience === a ? "bg-sage/30 text-foreground" : "text-muted hover:text-foreground"}`}
+              >
+                {a === "public" ? "Everyone" : "Members only"}
+              </button>
+            ))}
+          </div>
           <p className="text-xs text-muted">
-            Recipients = members + the interests list (incl. imported Luma contacts) − unsubscribes.
-            Importing Luma adds new calendar people to the interests list with one-click unsubscribe.
+            {members
+              ? "Recipients = members in standing (hub friends, desk members, or a paid plan of $30+ a month) − unsubscribes. The email says “For RegenHub members”, and the issue stays off the public archive."
+              : "Recipients = members + the interests list (incl. imported Luma contacts) − unsubscribes. Importing Luma adds new calendar people to the interests list with one-click unsubscribe."}
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" disabled={!!busy || sent} onClick={importLuma} className="btn-glass text-xs gap-1 h-7">
+            <Button size="sm" disabled={!!busy || sent || members} onClick={importLuma} className="btn-glass text-xs gap-1 h-7">
               {busy === "luma" ? <Loader2 className="w-3 h-3 animate-spin" /> : <DownloadCloud className="w-3 h-3" />} Import Luma contacts
             </Button>
             <Button size="sm" disabled={!!busy || sent} onClick={prepare} className="btn-glass text-xs gap-1 h-7">
@@ -254,13 +276,16 @@ export function NewsletterStudio({
           <div className="flex flex-wrap gap-2">
             {!sending ? (
               <Button size="sm" disabled={!!busy || sent || !progress?.total} onClick={() => runSend(false)} className="btn-glass text-xs gap-1 h-7">
-                <Send className="w-3 h-3" /> Send to all
+                <Send className="w-3 h-3" /> {members ? "Send to members" : "Send to all"}
               </Button>
             ) : (
               <Button size="sm" onClick={() => { stopRef.current = true; }} className="btn-glass text-xs gap-1 h-7">
                 <Square className="w-3 h-3" /> Pause
               </Button>
             )}
+            <span className="self-center text-xs text-muted" data-testid="send-audience">
+              {members ? "Members only" : "Everyone"} · {progress?.total ? progress.total : audienceCount ?? "?"} recipient{(progress?.total ? progress.total : audienceCount) === 1 ? "" : "s"}
+            </span>
             {progress && progress.failed > 0 && !sending && (
               <Button size="sm" disabled={!!busy} onClick={() => runSend(true)} className="btn-glass text-xs gap-1 h-7">
                 <RotateCcw className="w-3 h-3" /> Retry {progress.failed} failed

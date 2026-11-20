@@ -53,7 +53,7 @@ function buildServer(auth: McpAuthInfo): McpServer {
     "save_newsletter_draft",
     "Create or update a RegenHub newsletter draft so an admin can review it and send it from /admin/newsletter. " +
       "Upserts by issue_key and always leaves status='draft' — it NEVER sends to anyone. " +
-      "Use an ISO-week issue_key like '2026-W27'. Pass the body as Markdown with no frontmatter. " +
+      "Use an ISO-week issue_key like '2026-W27'. Optional audience 'members' makes it a members-only issue. Pass the body as Markdown with no frontmatter. " +
       "Returns the draft id and the review + web-preview URLs.",
     {
       issue_key: z
@@ -62,13 +62,17 @@ function buildServer(auth: McpAuthInfo): McpServer {
         .describe("ISO-week issue key, e.g. 2026-W27"),
       subject: z.string().min(1).describe("Email subject line (no surrounding quotes)"),
       markdown_body: z.string().min(1).describe("Newsletter body in Markdown, no frontmatter"),
+      audience: z
+        .enum(["public", "members"])
+        .optional()
+        .describe("Who it goes to: 'public' (members + stay-in-touch list; the default) or 'members' (members in standing only; never on the public /news archive). Omit to keep an existing draft's audience."),
     },
-    async ({ issue_key, subject, markdown_body }) => {
+    async ({ issue_key, subject, markdown_body, audience }) => {
       const sb = createServiceClient();
       // Never overwrite an already-sent issue.
       const { data: existing } = await sb
         .from("newsletter_issues")
-        .select("id, status")
+        .select("id, status, delivery_snapshot")
         .eq("issue_key", issue_key)
         .maybeSingle();
       if (existing?.status === "sent") {
@@ -77,10 +81,16 @@ function buildServer(auth: McpAuthInfo): McpServer {
           content: [{ type: "text" as const, text: `Issue ${issue_key} has already been sent — not overwriting.` }],
         };
       }
+      if (existing?.delivery_snapshot) {
+        return {
+          isError: true,
+          content: [{ type: "text" as const, text: `Issue ${issue_key} has started sending and is frozen — not changing it.` }],
+        };
+      }
       const { data, error } = await sb
         .from("newsletter_issues")
-        .upsert({ issue_key, subject, markdown_body, status: "draft" }, { onConflict: "issue_key" })
-        .select("id, issue_key, status")
+        .upsert({ issue_key, subject, markdown_body, status: "draft", ...(audience ? { audience } : {}) }, { onConflict: "issue_key" })
+        .select("id, issue_key, status, audience")
         .single();
       if (error) {
         return { isError: true, content: [{ type: "text" as const, text: `Failed to save draft: ${error.message}` }] };
@@ -89,8 +99,9 @@ function buildServer(auth: McpAuthInfo): McpServer {
       return {
         content: [{
           type: "text" as const,
-          text: `Saved draft ${data.issue_key} (id ${data.id}, status ${data.status}).\n` +
-            `Review & send: ${o}/admin/newsletter\nWeb preview: ${o}/news/${data.issue_key}`,
+          text: `Saved draft ${data.issue_key} (id ${data.id}, status ${data.status}, audience ${data.audience}).\n` +
+            `Review & send: ${o}/admin/newsletter` +
+            (data.audience === "members" ? "\nMembers-only: no public web preview." : `\nWeb preview: ${o}/news/${data.issue_key}`),
         }],
       };
     },

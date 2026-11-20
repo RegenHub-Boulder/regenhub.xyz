@@ -22,7 +22,7 @@ export default async function NewsletterPage() {
   const supabase = createServiceClient();
   const { data: issues } = await supabase
     .from("newsletter_issues")
-    .select("id, issue_key, subject, markdown_body, status, created_at, updated_at, recipients_count, sent_count")
+    .select("id, issue_key, subject, markdown_body, status, created_at, updated_at, recipients_count, sent_count, audience")
     .order("updated_at", { ascending: false });
 
   return (
