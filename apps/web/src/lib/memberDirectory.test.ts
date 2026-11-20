@@ -9,7 +9,12 @@ describe("normalizeLinks", () => {
       links: ["https://ana.example/", "https://github.com/ana"],
     });
   });
-  it.each([["javascript:alert(1)"], ["data:text/html,hi"], ["ftp://x.example"], ["localhost"], ["https://"]])("refuses %s", (bad) => {
+  it("splits on spaces or comma-space too", () => {
+    expect(normalizeLinks("a.example, b.example c.example")).toEqual({
+      ok: true, links: ["https://a.example/", "https://b.example/", "https://c.example/"],
+    });
+  });
+  it.each([["user:1password@evil.example"], ["https://me:pw@site.example"], ["javascript:alert(1)"], ["data:text/html,hi"], ["ftp://x.example"], ["localhost"], ["https://"]])("refuses %s", (bad) => {
     expect(normalizeLinks([bad]).ok).toBe(false);
   });
   it("keeps commas inside a URL and adds https to host:port", () => {

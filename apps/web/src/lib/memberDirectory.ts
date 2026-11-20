@@ -86,10 +86,10 @@ export async function listedMembers(client: SupabaseClient): Promise<DirectoryRo
 export const MAX_LINKS = 5;
 export const WORKING_ON_MAX = 140;
 
-/** Pure: a link list as typed (array, or text one per line) → clean http(s) URLs, or an error to show. A URL may
- *  hold commas, so text splits on newlines only. */
+/** Pure: a link list as typed (array, or text one per line; spaces or ", " between links also work, but a bare
+ *  comma doesn't split, since URLs hold commas) → clean http(s) URLs, or an error to show. */
 export function normalizeLinks(input: unknown): { ok: true; links: string[] } | { ok: false; error: string } {
-  const raw = Array.isArray(input) ? input : typeof input === "string" ? input.split(/\r?\n/) : input == null ? [] : null;
+  const raw = Array.isArray(input) ? input : typeof input === "string" ? input.split(/,?\s+/) : input == null ? [] : null;
   if (raw === null) return { ok: false, error: "Links must be a list of URLs." };
   const links: string[] = [];
   for (const item of raw) {
@@ -102,7 +102,7 @@ export function normalizeLinks(input: unknown): { ok: true; links: string[] } | 
     } catch {
       return { ok: false, error: `"${s.slice(0, 60)}" isn't a link.` };
     }
-    if ((url.protocol !== "https:" && url.protocol !== "http:") || !url.hostname.includes(".") || s.length > 200) {
+    if ((url.protocol !== "https:" && url.protocol !== "http:") || !url.hostname.includes(".") || url.username || url.password || s.length > 200) {
       return { ok: false, error: `"${s.slice(0, 60)}" isn't a web link.` };
     }
     if (!links.includes(url.toString())) links.push(url.toString());

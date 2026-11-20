@@ -142,7 +142,7 @@ function signIn(userId: string | null) {
   } as never);
 }
 
-const directory = async () => (await (await directoryGET()).json()) as { members: Record<string, unknown>[] };
+const directory = async () => (await (await directoryGET(new Request("http://localhost/api/members/directory"))).json()) as { members: Record<string, unknown>[] };
 const page = async (slug: string) => MemberPage({ params: Promise.resolve({ slug }) });
 const digestOf = async (p: Promise<unknown>) => {
   try {

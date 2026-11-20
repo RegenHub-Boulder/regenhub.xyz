@@ -242,9 +242,11 @@ the same plain 404; a lapsed or disabled member drops out and keeps their fields
 is listed and `PublicMember`, the only shape that leaves the server (name, photo, working-on line, bio, skills,
 links, handle; `toPublicMember` copies field by field so a newly selected column can't leak). Photo falls back to
 the Techne avatar (`lib/techne/profile.ts`: anonymous `social.scenius.getProfile` on `REGENOS_BASE_URL`). Recent
-nights (`lib/memberNights.ts`) only with `show_rsvps`, only the collective's past nights in the last 90 days, never
-upcoming ones. Members edit it on `/portal/profile` (PATCH `/api/portal/profile`, own row only); `/portal` asks once
-(`DirectoryAsk`) while `show_in_directory` is null. The landing section reads `/api/members/directory`.
+nights (`lib/memberNights.ts`) only with `show_rsvps`, only the collective's own past nights in the last 90 days
+(`fetchCollectiveEvents({ ownOnly })`, no listed calendars), never upcoming ones. `/members/<id>` of a linked member
+redirects (307, handles change) to the handle. Members edit it on `/portal/profile` (PATCH `/api/portal/profile`, own
+row only; an unrelated save leaves an unasked null alone); `/portal` asks once (`DirectoryAsk`) while
+`show_in_directory` is null. The landing section reads `/api/members/directory?limit=6`.
 Staging: `scripts/staging/member-pages-preview.sh` + `member-pages-shots.mjs`.
 
 ### Desk → daily switch (`lib/planSwitch.ts`, migration 060)

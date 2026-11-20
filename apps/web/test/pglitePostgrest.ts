@@ -127,10 +127,13 @@ export function pglitePostgrest(pg: PGlite, users: Map<string, FakeAuthUser>) {
   // A JSON array for an array column (text[] etc.) goes in as an array, as PostgREST does; for json/jsonb, as JSON.
   const arrayColumns = new Map<string, Promise<Set<string>>>();
   const arrayColsOf = (table: string) => {
+    // Only a found answer is kept: a table created later (or a failed read) is looked up again.
     if (!arrayColumns.has(table)) {
-      arrayColumns.set(table, pg.query<{ c: string }>(
+      const read = pg.query<{ c: string }>(
         "select column_name c from information_schema.columns where table_schema = 'public' and table_name = $1 and data_type = 'ARRAY'",
-        [table]).then((r) => new Set(r.rows.map((x) => x.c))));
+        [table]).then((r) => new Set(r.rows.map((x) => x.c)));
+      arrayColumns.set(table, read);
+      read.then((cols) => { if (cols.size === 0) arrayColumns.delete(table); }, () => arrayColumns.delete(table));
     }
     return arrayColumns.get(table)!;
   };
