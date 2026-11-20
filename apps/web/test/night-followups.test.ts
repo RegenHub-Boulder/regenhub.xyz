@@ -311,13 +311,29 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
     expect(failed.retryable).toBe(1);
 
     vi.stubEnv("RESEND_API_KEY", "test-only");
-    expect(await click(uri, "retry", [])).toMatchObject({ status: 200, sent: 1, failed: 0 });
+    // Two clicks at once (two tabs): one claims the note, the other finds nothing to send.
+    const both = await Promise.all([click(uri, "retry", []), click(uri, "retry", [])]);
+    expect(both.map((b) => b.sent).sort()).toEqual([0, 1]);
     expect(edge.mails.map((m) => m.to)).toEqual(["sam@example.test"]);
     const after = (await nightOnPage(uri))!;
     expect(after.outcomes.map((o) => o.status)).toEqual(["sent"]);
     expect(after.retryable).toBe(0);
     expect(await click(uri, "retry", [])).toMatchObject({ status: 200, sent: 0 });
     expect(edge.mails).toHaveLength(1);
+    expect((await pg.query("select action from admin_actions where action = 'night_followups_retried'")).rows.length).toBeGreaterThan(0);
+  });
+
+  it("Retry asks the hold rule again: someone who opted out after a failed send isn't retried", async () => {
+    const uri = await pastNight("Civic Tech Night", 14, [SAM]);
+    await signInAs(STEWARD.did);
+    const sam = (await nightOnPage(uri))!.send[0];
+    vi.stubEnv("RESEND_API_KEY", "");
+    expect(await click(uri, "send", [sam.memberId])).toMatchObject({ failed: 1 });
+    await pg.query("insert into night_followup_optouts (email) values ('sam@example.test')");
+    vi.stubEnv("RESEND_API_KEY", "test-only");
+    expect(await click(uri, "retry", [])).toMatchObject({ status: 200, sent: 0 });
+    expect(edge.mails).toEqual([]);
+    expect((await nightOnPage(uri))!.outcomes).toEqual([expect.objectContaining({ status: "held", held: "opted_out" })]);
   });
 
   it("a night that hasn't ended, or ended days ago, can't be sent", async () => {

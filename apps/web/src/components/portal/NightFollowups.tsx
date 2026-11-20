@@ -31,7 +31,8 @@ export function NightFollowups({ nights }: { nights: NightFollowupView[] }) {
         </p>
       </div>
       {nights.map((n) => (
-        <Night key={n.eventUri} night={n} />
+        // Keyed by state too: after a click, the refreshed night starts fresh (its new buttons, no stale message).
+        <Night key={`${n.eventUri}:${n.state}:${n.retryable}`} night={n} />
       ))}
     </section>
   );

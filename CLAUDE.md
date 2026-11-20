@@ -220,8 +220,10 @@ pointed at `/membership`; members are thanked, told the next Studio Night, and (
   sent/failed/held + reason), `night_followup_optouts`; `decide_night_followups` records the decision, each person
   (checked under a per-email lock, so two nights sent at once can't both reach someone the same week) and the
   `admin_actions` row (`night_followups_decided`) in one transaction. Each send has idempotency key
-  `night-followup-<id>`. A note that didn't go (failed, or stuck at sending after a crash) is shown on the night with
-  a retry button, within 23 hours (inside Resend's idempotency window, so a note the provider took isn't sent twice).
+  `night-followup-<id>`. A note that didn't go (failed but not refused for good, or stuck at sending 5 minutes after
+  an attempt) shows a Retry button on the night for 23 hours (inside Resend's idempotency window).
+  `retry_night_followups` claims those rows under the same per-email lock, asks the hold rule again (audited
+  `night_followups_retried`); each outcome is written only against its own attempt number (`attempts`).
 - Staging: `T497_FOLLOWUPS=1 scripts/staging/preview.sh` seeds a night that just ended with sample RSVPs and sends to
   the staging outbox; `scripts/staging/followups-shots.mjs` drives review, previews and Send.
 

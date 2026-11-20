@@ -43,7 +43,7 @@ export async function POST(req: Request) {
   }
   const out =
     decision === "retry"
-      ? await retryNightFollowups(admin, event)
+      ? await retryNightFollowups(admin, event, who.did)
       : await decideNightFollowups(admin, { eventUri: event, decision, keep, stewardDid: who.did });
   if (!out.ok) return NextResponse.json({ ok: false, error: out.error }, { status: out.status });
   return NextResponse.json(out);

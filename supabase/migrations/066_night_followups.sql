@@ -11,14 +11,17 @@
 --   night_followup_hold      why one email can't get a follow-up now (or null): unsubscribed from email, opted out of
 --                            follow-ups, or a follow-up in the last 7 days. The one rule: the page's preview
 --                            (night_followup_holds) and the send (decide_night_followups) both ask it.
+--   retry_night_followups    a steward's Retry on a sent night: claims the notes that didn't go (failed but not refused
+--                            for good, or stuck at sending 5 minutes after an attempt), within 23 hours (Resend's
+--                            idempotency window), re-asking the hold rule under the same lock; audited.
 --   decide_night_followups   the decision in one transaction: the batch row, a row per person (held if they
 --                            unsubscribed from email, opted out of follow-ups, or got a follow-up in the last 7
 --                            days), and the admin_actions row. Answers the rows to send.
 --
 -- The scoreboard reads night_followups (sent, guest note) for "followed up → joined within 30 days".
 -- Server-only: RLS on, no policies, the function granted to service_role alone. Additive.
--- Reverse: drop function decide_night_followups(text, text, timestamptz, text, text, jsonb);
---   drop function night_followup_holds(jsonb); drop function night_followup_hold(text);
+-- Reverse: drop function retry_night_followups(text, text); drop function decide_night_followups(text, text, timestamptz, text, text, jsonb);
+--   drop function night_followup_holds(jsonb); drop function night_followup_hold(text, bigint);
 --   drop table night_followups, night_followup_batches, night_followup_optouts;
 set local lock_timeout = '5s';
 
@@ -55,6 +58,11 @@ create table night_followups (
   held_reason text,
   provider_id text,
   error       text,
+  -- the provider refused it for good (e.g. an invalid address): never retried
+  permanent   boolean not null default false,
+  -- each send attempt bumps it; an outcome is recorded only against the attempt that made it
+  attempts    integer not null default 0,
+  attempted_at timestamptz,
   created_at  timestamptz not null default now(),
   sent_at     timestamptz,
   unique (batch_id, email)
@@ -65,13 +73,14 @@ alter table night_followups enable row level security;
 revoke all on night_followups from public, anon, authenticated;
 
 -- Why `p_email` can't get a follow-up now, or null. Case-insensitive on every table.
-create function night_followup_hold(p_email text) returns text
+create function night_followup_hold(p_email text, p_except bigint default null) returns text
 language sql stable security definer set search_path = public as $$
   select case
     when exists (select 1 from email_unsubscribes u where lower(u.email) = lower(trim(p_email))) then 'unsubscribed'
     when exists (select 1 from night_followup_optouts o where o.email = lower(trim(p_email))) then 'opted_out'
     when exists (select 1 from night_followups f
                    where f.email = lower(trim(p_email)) and f.status in ('sending', 'sent')
+                     and f.id is distinct from p_except
                      and f.created_at > now() - interval '7 days') then 'this_week'
   end;
 $$;
@@ -79,9 +88,10 @@ $$;
 -- The same, for the page's preview: ["a@b.c", ...] → the emails held and why (lowercase).
 create function night_followup_holds(p_emails jsonb) returns table (email text, reason text)
 language sql stable security definer set search_path = public as $$
-  select e.email, night_followup_hold(e.email)
+  select e.email, h.reason
     from (select distinct lower(trim(value)) as email from jsonb_array_elements_text(coalesce(p_emails, '[]'::jsonb))) e
-   where night_followup_hold(e.email) is not null;
+    cross join lateral (select night_followup_hold(e.email) as reason) h
+   where h.reason is not null;
 $$;
 
 -- A steward's decision on one night. p_people: [{ "member_id": 1, "email": "a@b.c", "variant": "guest" }, ...], the
@@ -89,7 +99,7 @@ $$;
 -- checked under a lock on their email, so two nights sent at once can't both reach them in the same week.
 create function decide_night_followups(
   p_event_uri text, p_event_name text, p_event_start timestamptz, p_decision text, p_actor_did text, p_people jsonb
-) returns table (id bigint, member_id integer, email text, variant text, status text, held_reason text)
+) returns table (id bigint, member_id integer, email text, variant text, status text, held_reason text, attempts integer)
 language plpgsql security definer set search_path = public as $$
 #variable_conflict use_column
 declare
@@ -119,9 +129,10 @@ begin
       end if;
       perform pg_advisory_xact_lock(hashtext('night_followup:' || v_email));
       v_reason := night_followup_hold(v_email);
-      insert into night_followups (batch_id, event_uri, member_id, email, variant, status, held_reason)
+      insert into night_followups (batch_id, event_uri, member_id, email, variant, status, held_reason, attempts, attempted_at)
         values (v_batch, p_event_uri, nullif(v_person->>'member_id', '')::integer, v_email, v_person->>'variant',
-                case when v_reason is null then 'sending' else 'held' end, v_reason)
+                case when v_reason is null then 'sending' else 'held' end, v_reason,
+                case when v_reason is null then 1 else 0 end, case when v_reason is null then now() end)
         on conflict on constraint night_followups_batch_id_email_key do nothing;
     end loop;
   end if;
@@ -136,12 +147,63 @@ begin
                          'held', (select count(*) from night_followups f where f.batch_id = v_batch and f.status = 'held')));
 
   return query
-    select f.id, f.member_id, f.email, f.variant, f.status, f.held_reason
+    select f.id, f.member_id, f.email, f.variant, f.status, f.held_reason, f.attempts
       from night_followups f where f.batch_id = v_batch order by f.id;
 end;
 $$;
-revoke all on function night_followup_hold(text) from public, anon, authenticated;
+
+-- Retry on a sent night: each note that didn't go and may go again is claimed (status sending, attempts + 1) under the
+-- lock on its email, after asking the hold rule again (this row aside), or held if the person since unsubscribed,
+-- opted out, or got another follow-up this week. Answers the claimed rows; the caller sends each and records the
+-- outcome only against its own attempt number.
+create function retry_night_followups(p_event_uri text, p_actor_did text)
+  returns table (id bigint, member_id integer, email text, variant text, status text, held_reason text, attempts integer)
+language plpgsql security definer set search_path = public as $$
+#variable_conflict use_column
+declare
+  v_batch bigint;
+  v_row night_followups%rowtype;
+  v_reason text;
+  v_claimed bigint[] := '{}';
+begin
+  select b.id into v_batch from night_followup_batches b where b.event_uri = p_event_uri and b.decision = 'send';
+  if v_batch is null then
+    raise exception 'night_followups_not_sent';
+  end if;
+  for v_row in
+    select * from night_followups f
+     where f.batch_id = v_batch and f.created_at > now() - interval '23 hours'
+       and ((f.status = 'failed' and not f.permanent)
+            or (f.status = 'sending' and f.attempted_at < now() - interval '5 minutes'))
+     order by f.email
+  loop
+    perform pg_advisory_xact_lock(hashtext('night_followup:' || v_row.email));
+    v_reason := night_followup_hold(v_row.email, v_row.id);
+    -- Only the attempt this loop read: a Retry that ran meanwhile (it held the lock first) has moved it on.
+    if v_reason is not null then
+      update night_followups f set status = 'held', held_reason = v_reason
+       where f.id = v_row.id and f.attempts = v_row.attempts and f.status = v_row.status;
+    else
+      update night_followups f set status = 'sending', error = null, attempts = f.attempts + 1, attempted_at = now()
+       where f.id = v_row.id and f.attempts = v_row.attempts and f.status = v_row.status;
+      if found then
+        v_claimed := v_claimed || v_row.id;
+      end if;
+    end if;
+  end loop;
+  insert into admin_actions (actor_member_id, action, target_table, target_id, payload)
+    values ((select m.id from members m where m.did = p_actor_did limit 1), 'night_followups_retried',
+            'night_followup_batches', v_batch::text,
+            jsonb_build_object('event_uri', p_event_uri, 'by_did', p_actor_did, 'claimed', cardinality(v_claimed)));
+  return query
+    select f.id, f.member_id, f.email, f.variant, f.status, f.held_reason, f.attempts
+      from night_followups f where f.id = any(v_claimed) order by f.id;
+end;
+$$;
+revoke all on function night_followup_hold(text, bigint) from public, anon, authenticated;
 revoke all on function night_followup_holds(jsonb) from public, anon, authenticated;
 grant execute on function night_followup_holds(jsonb) to service_role;
 revoke all on function decide_night_followups(text, text, timestamptz, text, text, jsonb) from public, anon, authenticated;
 grant execute on function decide_night_followups(text, text, timestamptz, text, text, jsonb) to service_role;
+revoke all on function retry_night_followups(text, text) from public, anon, authenticated;
+grant execute on function retry_night_followups(text, text) to service_role;

@@ -39,7 +39,6 @@ it("the provider is a setting: an unknown one sends nothing, through either send
   const mail = { to: "a@example.test", subject: "s", html: "<p>h</p>" };
   expect(await sendEmailDetailed(mail)).toMatchObject({ ok: false, error: expect.stringContaining("unknown EMAIL_PROVIDER") });
   expect(await sendEmail(mail)).toBe(false);
-  expect(await sendEmailDetailed(mail)).toMatchObject({ ok: false });
   expect(net).not.toHaveBeenCalled();
 
   vi.stubEnv("EMAIL_PROVIDER", "resend");

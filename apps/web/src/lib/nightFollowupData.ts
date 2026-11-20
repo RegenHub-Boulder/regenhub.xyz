@@ -88,12 +88,17 @@ const row = (p: { memberId: number; name: string; variant: FollowupVariant; held
   memberId: p.memberId, name: p.name, variant: p.variant, held: p.held,
 });
 
-type SentRow = { id: number; batch_id: number; member_id: number | null; email: string; variant: FollowupVariant; status: OutcomeStatus; held_reason: string | null; created_at: string };
-
-const retryableRow = (r: Pick<SentRow, "status" | "created_at">, now: Date) => {
-  const age = now.getTime() - Date.parse(r.created_at);
-  return age < RETRY_WITHIN_MS && (r.status === "failed" || (r.status === "sending" && age > STUCK_AFTER_MS));
+type SentRow = {
+  id: number; batch_id: number; member_id: number | null; email: string; variant: FollowupVariant; status: OutcomeStatus;
+  held_reason: string | null; created_at: string; permanent: boolean; attempted_at: string | null; attempts: number;
 };
+const SENT_COLUMNS = "id, batch_id, member_id, email, variant, status, held_reason, created_at, permanent, attempted_at, attempts";
+
+/** Mirrors retry_night_followups' choice (migration 066), to show the button; the SQL decides. */
+const retryableRow = (r: Pick<SentRow, "status" | "created_at" | "permanent" | "attempted_at">, now: Date) =>
+  now.getTime() - Date.parse(r.created_at) < RETRY_WITHIN_MS &&
+  ((r.status === "failed" && !r.permanent) ||
+    (r.status === "sending" && !!r.attempted_at && now.getTime() - Date.parse(r.attempted_at) > STUCK_AFTER_MS));
 
 /**
  * What /admin/events shows: each night of `events` (the page's own calendar read) that ended in the last few days,
@@ -111,7 +116,7 @@ export async function readNightFollowups(admin: Admin, events: readonly Collecti
   const [going, outcomes] = await Promise.all([
     Promise.all(nights.map((n) => (decided.has(n.uri) ? Promise.resolve(null) : fetchAttendance(n.uri)))),
     sentIds.length
-      ? admin.from("night_followups").select("id, batch_id, member_id, email, variant, status, held_reason, created_at").in("batch_id", sentIds).order("id")
+      ? admin.from("night_followups").select(SENT_COLUMNS).in("batch_id", sentIds).order("id")
       : Promise.resolve({ data: [], error: null }),
   ]);
   if (outcomes.error) throw outcomes.error;
@@ -174,12 +179,13 @@ const footerFor = (email: string) => ({ optOutUrl: followupOptoutUrl(email, site
 
 /**
  * Send each row through the one send function and record the outcome. Never throws: a row that couldn't be sent is
- * `failed` with the reason (an outcome the provider can't confirm says so), and Retry may send it again under the
- * same idempotency key.
+ * `failed` with the reason (an outcome the provider can't confirm says so; a refusal for good is `permanent`), and
+ * Retry may send it again under the same idempotency key. An outcome is written only against the attempt that made
+ * it, so a slow request can't overwrite a newer one. A rate limit is waited out once, as the provider asks.
  */
 async function sendRows(
   admin: Admin,
-  rows: readonly Pick<SentRow, "id" | "email" | "variant">[],
+  rows: readonly Pick<SentRow, "id" | "email" | "variant" | "attempts">[],
   people: ReadonlyMap<string, { name: string; askForPage: boolean }>,
   night: ReturnType<typeof nightValues>,
 ): Promise<number> {
@@ -189,15 +195,24 @@ async function sendRows(
     let update: Record<string, unknown>;
     try {
       const note = renderFollowup(r.variant, personValues(who, night, siteBase()), footerFor(r.email));
-      const res = await sendEmailDetailed({ to: r.email, ...note, idempotencyKey: `night-followup-${r.id}` });
+      const mail = { to: r.email, ...note, idempotencyKey: `night-followup-${r.id}` };
+      let res = await sendEmailDetailed(mail);
+      if (!res.ok && res.rateLimited) {
+        await new Promise((ok) => setTimeout(ok, 1100));
+        res = await sendEmailDetailed(mail);
+      }
       update = res.ok
         ? { status: "sent", provider_id: res.id ?? null, sent_at: new Date().toISOString(), error: null }
-        : { status: "failed", error: res.ambiguous ? `not confirmed by the provider: ${res.error ?? ""}` : (res.error ?? "send failed") };
+        : {
+            status: "failed",
+            permanent: !res.ambiguous && !res.rateLimited && !res.quotaExceeded && res.error !== "email not configured",
+            error: res.ambiguous ? `not confirmed by the provider: ${res.error ?? ""}` : (res.error ?? "send failed"),
+          };
     } catch (err) {
       update = { status: "failed", error: err instanceof Error ? err.message : String(err) };
     }
     if (update.status === "sent") sent += 1;
-    const { error } = await admin.from("night_followups").update(update).eq("id", r.id);
+    const { error } = await admin.from("night_followups").update(update).eq("id", r.id).eq("attempts", r.attempts).eq("status", "sending");
     if (error) console.error("[night followups] recording a send failed:", error);
   }
   return sent;
@@ -266,34 +281,29 @@ export async function decideNightFollowups(
 }
 
 /**
- * Retry a sent night's notes that didn't go: failed, or stuck at sending (the request died mid-batch), within the
- * provider's idempotency window, under each row's own key, so a note the provider already took isn't delivered twice
- * even if two clicks race.
+ * Retry a sent night's notes that didn't go: failed (not refused for good), or stuck at sending after a crash, within
+ * the provider's idempotency window, under each row's own key. migration 066 retry_night_followups claims them under
+ * the per-email lock, re-asks the hold rule (an unsubscribe or another note this week since holds them), and audits
+ * the click; two clicks can't claim the same attempt.
  */
-export async function retryNightFollowups(admin: Admin, eventUri: string, now = new Date()): Promise<DecideResult> {
+export async function retryNightFollowups(admin: Admin, eventUri: string, stewardDid: string, now = new Date()): Promise<DecideResult> {
   const event = await readNight(eventUri);
   if (!event || !event.startAt) return { ok: false, status: 404, error: "Couldn't find that night just now. Reload and try again." };
-  const { data: batch, error } = await admin.from("night_followup_batches").select("id, decision").eq("event_uri", event.uri).maybeSingle();
-  if (error) return { ok: false, status: 500, error: "Couldn't read the follow-ups. Try again." };
-  if (!batch || batch.decision !== "send") return { ok: false, status: 409, error: "Nothing was sent for that night." };
-  const { data: rows, error: rErr } = await admin
-    .from("night_followups").select("id, batch_id, member_id, email, variant, status, held_reason, created_at")
-    .eq("batch_id", batch.id).in("status", ["failed", "sending"]);
-  if (rErr) return { ok: false, status: 500, error: "Couldn't read the follow-ups. Try again." };
-  const due = ((rows ?? []) as SentRow[]).filter((r) => retryableRow(r, now));
-  if (due.length === 0) return { ok: true, sent: 0, failed: 0, held: 0 };
-  // Claim each row as read (failed → sending); a row another click changed meanwhile is left to it.
-  const claimed: SentRow[] = [];
-  for (const r of due) {
-    const { data: got } = await admin
-      .from("night_followups").update({ status: "sending", error: null })
-      .eq("id", r.id).eq("status", r.status).eq("created_at", r.created_at).select("id");
-    if (got?.length) claimed.push(r);
+  try {
+    footerFor("check@regenhub.invalid");
+  } catch {
+    return { ok: false, status: 500, error: "Email links can't be signed on this server (no unsubscribe key). Nothing was sent." };
   }
+  const { data, error } = await admin.rpc("retry_night_followups", { p_event_uri: event.uri, p_actor_did: stewardDid });
+  if (error) {
+    if (/night_followups_not_sent/.test(error.message ?? "")) return { ok: false, status: 409, error: "Nothing was sent for that night." };
+    console.error("[night followups] retry failed:", error);
+    return { ok: false, status: 500, error: "Couldn't start the retry. Try again." };
+  }
+  const claimed = (data ?? []) as SentRow[];
+  if (claimed.length === 0) return { ok: true, sent: 0, failed: 0, held: 0 };
   const ids = claimed.flatMap((r) => (r.member_id ? [r.member_id] : []));
-  const { data: members } = ids.length
-    ? await admin.from("members").select("id, name, show_in_directory").in("id", ids)
-    : { data: [] };
+  const { data: members } = ids.length ? await admin.from("members").select("id, name, show_in_directory").in("id", ids) : { data: [] };
   const byId = new Map((members ?? []).map((m) => [m.id as number, m as { name: string; show_in_directory: boolean | null }]));
   const people = new Map(claimed.map((r) => {
     const m = r.member_id ? byId.get(r.member_id) : undefined;
