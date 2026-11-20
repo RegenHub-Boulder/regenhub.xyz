@@ -39,8 +39,8 @@ import {
 type ServiceClient = ReturnType<typeof createServiceClient>;
 export type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean };
 
-const text = (s: string): ToolResult => ({ content: [{ type: "text", text: s }] });
-const fail = (s: string): ToolResult => ({ isError: true, content: [{ type: "text", text: s }] });
+export const text = (s: string): ToolResult => ({ content: [{ type: "text", text: s }] });
+export const fail = (s: string): ToolResult => ({ isError: true, content: [{ type: "text", text: s }] });
 const usd = (cents: number | null | undefined) => (cents == null ? "?" : `$${(cents / 100).toFixed(2)}`);
 const day = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : "—");
 const unixDay = (unix: number | null | undefined) => (unix ? new Date(unix * 1000).toISOString().slice(0, 10) : "—");

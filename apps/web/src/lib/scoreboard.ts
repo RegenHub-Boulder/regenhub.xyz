@@ -38,7 +38,8 @@ export const SCOREBOARD_GOALS = {
   followUpSince: "2026-07-01",
 } as const;
 
-export type ScoreboardGoals = typeof SCOREBOARD_GOALS;
+/** The goals' shape (numbers and dates, not the literals above), so tests and what-ifs can pass others. */
+export type ScoreboardGoals = { readonly [K in keyof typeof SCOREBOARD_GOALS]: (typeof SCOREBOARD_GOALS)[K] extends number ? number : string };
 
 export interface SubRow extends RevenueRow {
   id: number;

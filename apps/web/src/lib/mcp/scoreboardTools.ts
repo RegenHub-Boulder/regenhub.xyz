@@ -1,9 +1,10 @@
 import type { McpAuthInfo } from "./oauth";
-import { scopeDenied, type ToolResult } from "./billingTools";
+import { fail, scopeDenied, text, type ToolResult } from "./billingTools";
 import type { createServiceClient } from "@/lib/supabase/admin";
 import { readScoreboard, type Scoreboard } from "@/lib/scoreboardData";
 import { SCOREBOARD_GOALS, headlineText, usd } from "@/lib/scoreboard";
 import type { RecommendedAction } from "@/lib/scoreboardActions";
+import { ACTION_KIND_LABEL } from "@/lib/scoreboardActionKinds";
 
 /**
  * The MCP's scoreboard tools (T-497): the numbers and the recommended actions /admin/scoreboard shows, so Uni can
@@ -14,8 +15,6 @@ import type { RecommendedAction } from "@/lib/scoreboardActions";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
-const text = (s: string): ToolResult => ({ content: [{ type: "text", text: s }] });
-const fail = (s: string): ToolResult => ({ isError: true, content: [{ type: "text", text: s }] });
 const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`);
 
 async function read(admin: ServiceClient): Promise<Scoreboard | ToolResult> {
@@ -73,15 +72,9 @@ export async function scoreboardSummaryHandler(admin: ServiceClient, auth: McpAu
   return text(lines.join("\n"));
 }
 
-const KIND: Record<RecommendedAction["kind"], string> = {
-  goal_pace_members: "goal pace", goal_pace_revenue: "goal pace", past_due: "past due", set_to_end: "set to end",
-  left_recently: "left recently", new_member: "new member", pass_buyer: "day-pass buyer", frequent_guest: "regular guest",
-  promote_night: "promote a night",
-};
-
 function actionLines(a: RecommendedAction, n: number, mark?: string): string[] {
   return [
-    `${n}. [${a.priority}] ${a.who}${a.memberId != null ? ` (member ${a.memberId})` : ""} — ${KIND[a.kind]}${mark ? ` — ${mark}` : ""}`,
+    `${n}. [${a.priority}] ${a.who}${a.memberId != null ? ` (member ${a.memberId})` : ""} — ${ACTION_KIND_LABEL[a.kind].toLowerCase()}${mark ? ` — ${mark}` : ""}`,
     `   Why: ${a.reason}`,
     `   Step: ${a.step}`,
     `   id: ${a.id}`,

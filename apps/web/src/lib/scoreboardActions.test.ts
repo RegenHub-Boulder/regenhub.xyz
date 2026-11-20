@@ -62,6 +62,17 @@ describe("goal pace", () => {
     expect(r.step).toBe("$333/mo more in the next two weeks closes it: 12 more $30 members, or 2 hot desks.");
   });
 
+  it("a Done holds while the line rises, and comes back when a member joins or leaves", () => {
+    const [a] = recommendedActions(input({ goal: onPace(13, 150_000) }));
+    const done = latestStates([{ actionId: a.id, state: "done", fingerprint: a.fingerprint, at: NOW.toISOString() }]);
+    const week = new Date(NOW.getTime() + 7 * DAY);
+    const [same] = recommendedActions(input({ now: week, goal: onPace(13, 150_000) })).filter((x) => x.kind === "goal_pace_members");
+    expect(same.step).not.toBe(a.step); // the line moved on…
+    expect(isHidden(same, done.get(a.id), week)).toBe(true); // …but nothing happened
+    const [joined] = recommendedActions(input({ now: week, goal: onPace(14, 150_000) })).filter((x) => x.kind === "goal_pace_members");
+    expect(isHidden(joined, done.get(a.id), week)).toBe(false);
+  });
+
   it("stays quiet on pace and just short of the slack", () => {
     expect(recommendedActions(input())).toEqual([]);
     // 0.5 members and $29 behind: under the slack of 1 member and $30.
@@ -155,6 +166,10 @@ describe("day-pass buyer", () => {
     expect(run(purchases([[1, null, ago(100)], [1, null, ago(80)]]), [member(1)], new Map(), [sub(1, 1, "member_basic", "canceled", 3000, ago(70), { canceled_at: ago(10) })])
       .filter((a) => a.kind === "pass_buyer")).toEqual([]);
   });
+  it("stays quiet for a buyer not seen in 180 days, however many passes", () => {
+    expect(run(purchases([[1, null, ago(181), 5]]), [member(1)])).toEqual([]);
+    expect(run(purchases([[1, null, ago(179), 5]]), [member(1)])[0]?.id).toBe("pass_buyer:m1");
+  });
   it("names a buyer with no member record by a hash, never the email, and keeps the email as staff contact only", () => {
     const [a] = run(purchases([[null, "Walk.In@example.test", ago(30)], [null, "walk.in@example.test", ago(20)]]), []);
     expect(a.id).toBe(`pass_buyer:e${emailKey("walk.in@example.test")}`);
@@ -181,6 +196,19 @@ describe("regular guest", () => {
     const a = recommendedActions(input({ members, events, handles: new Map([["did:plc:guest", "riley.techne.pub"]]) }));
     expect(a.map((x) => x.who).sort()).toEqual(["@riley.techne.pub", "Sample 2"]);
     expect(a.find((x) => x.memberId === 2)).toMatchObject({ href: "/admin/members/2", reason: "Going to 2 nights in the last 60 days (latest b, Oct 31); not a member." });
+  });
+  it("a dismissal comes back on a new night, not when an old one leaves the window", () => {
+    const at = (t: Date) => recommendedActions(input({ now: t, members, events })).find((x) => x.memberId === 2)!;
+    const done = latestStates([{ actionId: "frequent_guest:did:plc:daypass", state: "done", fingerprint: at(NOW).fingerprint, at: NOW.toISOString() }]);
+    // 15 days on, night "a" (50 days ago today) is outside the window: one night left, so no action at all; with a
+    // third night it is back, since the latest night is new.
+    const later = new Date(NOW.getTime() + 15 * DAY);
+    const third = ev("g", ago(-10), ["did:plc:daypass"]);
+    const withThird = recommendedActions(input({ now: later, members, events: [...events, third] })).find((x) => x.memberId === 2)!;
+    expect(visibleActions([withThird], done, later).open).toHaveLength(1);
+    // Same nights, a day later: still the same latest night, still hidden.
+    const nextDay = new Date(NOW.getTime() + DAY);
+    expect(visibleActions([at(nextDay)], done, nextDay).open).toEqual([]);
   });
   it("stays quiet for a member with a live subscription", () => {
     const subs = [sub(1, 2, "member_basic", "past_due", 3000, ago(100))];
@@ -229,7 +257,7 @@ describe("ranking", () => {
       { member_id: 2, email: null, created_at: ago(50), passes_granted: 2 },
     ];
     const a = recommendedActions(input({ members, passBuyers: passBuyersNeverSubscribed(p, [], members, new Map()) }));
-    expect(a.map((x) => [x.id, x.dueInDays])).toEqual([["pass_buyer:m2", 10], ["pass_buyer:m1", 50]]);
+    expect(a.map((x) => [x.id, x.dueInDays])).toEqual([["pass_buyer:m2", 130], ["pass_buyer:m1", 170]]);
   });
 });
 

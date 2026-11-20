@@ -4,11 +4,14 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Clock, Loader2, Mail, RotateCcw } from "lucide-react";
+import { ACTION_KIND_LABEL, type ActionKind } from "@/lib/scoreboardActionKinds";
 
 /** The fields of a RecommendedAction (lib/scoreboardActions.ts) the list shows. */
 export interface NextAction {
   id: string;
-  kind: string;
+  /** Position in the full ranked list, so one brought back lands in its place. */
+  rank: number;
+  kind: ActionKind;
   who: string;
   href: string | null;
   reason: string;
@@ -18,18 +21,6 @@ export interface NextAction {
   priority: "high" | "medium" | "low";
   fingerprint: string;
 }
-
-const KIND_LABEL: Record<string, string> = {
-  goal_pace_members: "Goal pace",
-  goal_pace_revenue: "Goal pace",
-  past_due: "Past due",
-  set_to_end: "Set to end",
-  left_recently: "Left recently",
-  new_member: "New member",
-  pass_buyer: "Day-pass buyer",
-  frequent_guest: "Regular guest",
-  promote_night: "Promote a night",
-};
 
 const DOT = { high: "bg-red-400", medium: "bg-amber-400", low: "bg-sage" } as const;
 
@@ -44,7 +35,8 @@ async function mark(a: NextAction, state: Mark) {
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "Couldn't save that");
 }
 
-function QuickButton({ quick }: { quick: NonNullable<NextAction["quick"]> }) {
+/** Sent = the step is done: the caller marks the action Done, so it stays done for the next admin too. */
+function QuickButton({ quick, onSent }: { quick: NonNullable<NextAction["quick"]>; onSent: () => void }) {
   const [state, setState] = useState<"idle" | "busy" | "sent" | string>("idle");
   return (
     <span className="inline-flex items-center gap-1">
@@ -56,6 +48,7 @@ function QuickButton({ quick }: { quick: NonNullable<NextAction["quick"]> }) {
           const res = await fetch(quick.endpoint, { method: "POST" }).catch(() => null);
           const data = await res?.json().catch(() => null);
           setState(res?.ok ? "sent" : data?.error ?? "Send failed");
+          if (res?.ok) onSent();
         }}
         className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded btn-glass"
       >
@@ -76,7 +69,7 @@ function Row({ a, onMark, dismissed }: { a: NextAction; onMark: (a: NextAction, 
           {a.href
             ? <Link href={a.href} className="font-semibold hover:text-sage">{a.who}</Link>
             : <span className="font-semibold">{a.who}</span>}
-          <span className="text-xs text-muted ml-2">{KIND_LABEL[a.kind] ?? a.kind}</span>
+          <span className="text-xs text-muted ml-2">{ACTION_KIND_LABEL[a.kind]}</span>
           {a.contact && <span className="text-xs text-muted ml-2 break-all">{a.contact}</span>}
         </p>
         <p className="text-xs text-muted mt-0.5">{a.reason}</p>
@@ -92,7 +85,7 @@ function Row({ a, onMark, dismissed }: { a: NextAction; onMark: (a: NextAction, 
           </>
         ) : (
           <>
-            {a.quick && <QuickButton quick={a.quick} />}
+            {a.quick && <QuickButton quick={a.quick} onSent={() => onMark(a, "done")} />}
             <button type="button" onClick={() => onMark(a, "done")} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded btn-glass">
               <Check className="w-3 h-3" /> Done
             </button>
@@ -135,7 +128,7 @@ export function NextActions({ open, hidden, top }: { open: NextAction[]; hidden:
   };
 
   const isOpen = (id: string, fallback: boolean) => (marked.has(id) ? marked.get(id) === "open" : fallback);
-  const list = [...open, ...hidden].filter((a) => isOpen(a.id, open.includes(a)));
+  const list = [...open, ...hidden].filter((a) => isOpen(a.id, open.includes(a))).sort((x, y) => x.rank - y.rank);
   const shown = all ? list : list.slice(0, top);
   const back = hidden.filter((a) => !isOpen(a.id, false)).concat(
     open.filter((a) => !isOpen(a.id, true)).map((a) => ({ ...a, mark: marked.get(a.id)! })),

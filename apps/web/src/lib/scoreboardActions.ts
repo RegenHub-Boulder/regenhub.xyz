@@ -12,6 +12,7 @@
  * urgency (days until it's too late, fewer first). Thresholds are data in ACTION_RULES, not logic.
  */
 import { createHash } from "node:crypto";
+import type { ActionKind } from "./scoreboardActionKinds";
 import { planLabel } from "./plans";
 import { dateIn } from "./series";
 import { isBilled, isGoodStanding } from "./membershipRevenue";
@@ -28,6 +29,8 @@ export const ACTION_RULES = {
   /** Day-pass buyer, never subscribed: this many passes, or a visit within `passBuyerVisitDays`. */
   passBuyerMinPasses: 2,
   passBuyerVisitDays: 60,
+  /** …and seen (bought or visited) within this many days: a buyer gone longer is cold, not a lead. */
+  passBuyerMaxAgeDays: 180,
   /** Going to this many nights within `guestWindowDays`, not a member: invite. */
   guestMinNights: 2,
   guestWindowDays: 60,
@@ -50,9 +53,7 @@ export const ACTION_RULES = {
 
 export type ActionRules = typeof ACTION_RULES;
 
-export type ActionKind =
-  | "goal_pace_members" | "goal_pace_revenue" | "past_due" | "set_to_end" | "left_recently" | "new_member"
-  | "pass_buyer" | "frequent_guest" | "promote_night";
+export type { ActionKind } from "./scoreboardActionKinds";
 
 /**
  * Monthly cents at stake, times this, is an action's goal impact. Money already billed and slipping (past due) counts
@@ -169,7 +170,8 @@ function paceActions(goal: GoalProgress, now: Date, goals: ScoreboardGoals, rule
         `${pace.expectedMembers.toFixed(1)} today (${pace.membersBehind.toFixed(1)} behind).`,
       step: `${plural(need, `more ${usd(goals.minMemberCents)}+ member`)} in the next two weeks gets back on pace.`,
       stakeCents: need * goals.minMemberCents, dueInDays: 14,
-      fingerprint: `${goal.payingMembers}:${need}`,
+      // The count itself: the line rising day by day doesn't bring a dismissed line back; a member joining or leaving does.
+      fingerprint: `${goal.payingMembers}`,
     });
   }
   if (pace.netBehindCents >= rules.paceRevenueSlackCents) {
@@ -181,8 +183,8 @@ function paceActions(goal: GoalProgress, now: Date, goals: ScoreboardGoals, rule
       step: `${usd(need)}/mo more in the next two weeks closes it: ${plural(Math.ceil(need / BASIC_CENTS), `more ${usd(BASIC_CENTS)} member`)}, ` +
         `or ${plural(Math.ceil(need / HOT_DESK_CENTS), "hot desk")}.`,
       stakeCents: need, dueInDays: 14,
-      // In $30 steps, so a cent of drift doesn't bring a dismissed line back.
-      fingerprint: `${Math.ceil(need / BASIC_CENTS)}`,
+      // Revenue now, in $30 steps: a member joining or leaving brings it back; the line rising or a cent of drift doesn't.
+      fingerprint: `${Math.round(goal.revenue.netCents / BASIC_CENTS)}`,
     });
   }
   return out;
@@ -283,9 +285,10 @@ function passBuyerActions(buyers: readonly PassBuyerFollowUp[], byId: ReadonlyMa
     if (b.memberId != null && byId.get(b.memberId)?.disabled) return [];
     const recent = b.lastVisit != null && daysBetween(b.lastVisit, now) <= rules.passBuyerVisitDays;
     if (b.passes < rules.passBuyerMinPasses && !recent) return [];
+    const lastSeen = b.lastVisit && b.lastVisit > b.lastPurchase ? b.lastVisit : b.lastPurchase;
+    if (daysBetween(lastSeen, now) > rules.passBuyerMaxAgeDays) return [];
     const key = b.memberId != null ? `m${b.memberId}` : b.email ? `e${emailKey(b.email)}` : null;
     if (!key) return [];
-    const lastSeen = b.lastVisit && b.lastVisit > b.lastPurchase ? b.lastVisit : b.lastPurchase;
     return [{
       id: `pass_buyer:${key}`, kind: "pass_buyer" as const,
       who: b.name ?? "A day-pass buyer with no member record", memberId: b.memberId,
@@ -294,7 +297,7 @@ function passBuyerActions(buyers: readonly PassBuyerFollowUp[], byId: ReadonlyMa
       reason: `${plural(b.passes, "day pass", "day passes")}, last bought ${day(b.lastPurchase)}` +
         (b.lastVisit ? `; last visit ${day(b.lastVisit)}` : "") + "; never subscribed.",
       step: "Invite them to join, or to the member demos before Friday 4:20 Happy Hour.",
-      stakeCents: BASIC_CENTS, dueInDays: Math.max(0, rules.passBuyerVisitDays - daysBetween(lastSeen, now)),
+      stakeCents: BASIC_CENTS, dueInDays: Math.max(0, rules.passBuyerMaxAgeDays - daysBetween(lastSeen, now)),
       // A new purchase is a new fact; a visit alone doesn't bring a dismissed invite back.
       fingerprint: `${b.passes}:${b.lastPurchase}`,
     }];
@@ -336,7 +339,8 @@ function guestActions(input: ActionInput, rules: ActionRules): Draft[] {
         `(latest ${last.name}, ${day(last.startAt!)}); not a member.`,
       step: "Invite them to Studio Night as a guest, or to join.",
       stakeCents: BASIC_CENTS, dueInDays: Math.max(0, rules.guestWindowDays - daysBetween(last.startAt!, input.now)),
-      fingerprint: `${nights.length}`,
+      // The latest night: a new one is a new fact; an old one leaving the window isn't.
+      fingerprint: last.uri,
     }];
   });
 }
@@ -437,4 +441,4 @@ export function latestStates(rows: readonly ActionState[]): Map<string, ActionSt
 }
 
 /** Action ids are ours (kind:subject): checked before a mark is stored. */
-export const ACTION_ID = /^[a-z_]+(?::[A-Za-z0-9:._/-]{1,300})?$/;
+export const ACTION_ID = /^[a-z_]+(?::[A-Za-z0-9:._/~%-]{1,300})?$/;

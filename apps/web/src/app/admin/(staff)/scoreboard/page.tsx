@@ -20,8 +20,8 @@ const day = (iso: string | null) =>
 const dayShort = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: SCOREBOARD_TZ }) : "—";
 const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`);
-const forList = (a: RecommendedAction): NextAction => ({
-  id: a.id, kind: a.kind, who: a.who, href: a.href, reason: a.reason, step: a.step, quick: a.quick, contact: a.contact ?? null,
+const forList = (a: RecommendedAction, rank: number): NextAction => ({
+  id: a.id, rank, kind: a.kind, who: a.who, href: a.href, reason: a.reason, step: a.step, quick: a.quick, contact: a.contact ?? null,
   priority: a.priority, fingerprint: a.fingerprint,
 });
 const pct = (part: number, whole: number) => (whole > 0 ? Math.min(100, Math.round((part / whole) * 100)) : 0);
@@ -121,8 +121,8 @@ export default async function ScoreboardPage() {
         note={`Ranked by what it does for the goals, then by how soon. Done hides one until its facts change; Not now hides it ${ACTION_RULES.notNowDays} days.`}
       >
         <NextActions
-          open={s.actions.open.map(forList)}
-          hidden={s.actions.hidden.map((a) => ({ ...forList(a), mark: a.mark.state }))}
+          open={s.actions.open.map((a) => forList(a, s.actions.all.indexOf(a)))}
+          hidden={s.actions.hidden.map((a) => ({ ...forList(a, s.actions.all.findIndex((x) => x.id === a.id)), mark: a.mark.state }))}
           top={ACTION_RULES.showTop}
         />
       </Section>
@@ -176,7 +176,7 @@ export default async function ScoreboardPage() {
             </p>
             <p className="text-xs text-muted mt-1" data-testid="revenue-pace">
               On the straight line: {usd(pace.expectedNetCents)} today ·{" "}
-              {pace.netBehindCents > 0
+              {pace.netBehindCents >= 100
                 ? <span className="text-amber-400">{usd(pace.netBehindCents)} behind</span>
                 : <span className="text-sage">on pace</span>}
             </p>

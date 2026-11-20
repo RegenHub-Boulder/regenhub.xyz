@@ -173,12 +173,15 @@ export async function readScoreboard(admin: Admin, now = new Date()) {
   const linked = new Set(members.flatMap((m) => (m.did ? [m.did] : [])));
   const unnamed = [...frequentGuests({ now, subs, members, events }).keys()].filter((d) => !linked.has(d));
   const handles = new Map<string, string>();
-  await mapLimit(unnamed, 4, async (did) => {
-    const h = await handleFor(did).catch(() => null);
-    if (h) handles.set(did, h);
-  });
+  const [states] = await Promise.all([
+    readActionStates(admin),
+    mapLimit(unnamed, 4, async (did) => {
+      const h = await handleFor(did).catch(() => null);
+      if (h) handles.set(did, h);
+    }),
+  ]);
   const all = recommendedActions({ now, subs, members, visits, passBuyers, events, goal, handles });
-  const actions = { all, ...visibleActions(all, await readActionStates(admin), now) };
+  const actions = { all, ...visibleActions(all, states, now) };
   return {
     today,
     months,
