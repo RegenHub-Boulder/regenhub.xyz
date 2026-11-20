@@ -9,13 +9,15 @@
  * - A subscription that never started is not a subscription here: `incomplete`/`incomplete_expired`, or a USDC
  *   row with no paid membership invoice (an unpaid checkout an admin cancelled turns `canceled`). Card rows are
  *   made by Stripe Checkout only once the first payment went through, so a card row has always started.
- * - A cancellation counts in the month it was asked for, whether it has taken effect yet (a period-end cancel
- *   still running counts too), so a month's number doesn't change after the meeting. Asked = `admin_canceled_at`
- *   (an admin cancel, either rail), else `canceled_at` (Stripe's: when the member asked). A row with neither isn't
- *   dated, so it isn't counted (`updated_at` moves with every later write).
+ * - A cancellation counts in the month it ended: `canceled_at` of a `canceled` row, which every path stamps when
+ *   the row ends (Stripe's deletion webhook, the USDC billing cron, revoke, an admin cancel), else
+ *   `admin_canceled_at`. That is stamped in real time, so a past month's number never changes after the meeting.
+ *   A row with neither isn't counted (`updated_at` moves with every later write). Cancels asked for but still
+ *   running to the end of a paid period are counted apart, as "set to end".
  * - Months are calendar months in America/Denver.
  */
 import { dateIn } from "./series";
+import { effectiveMonthlyCents } from "./stripeNet";
 import { isBilled, isGoodStanding, membershipRevenue, type MembershipRevenue, type RevenueRow } from "./membershipRevenue";
 
 export const SCOREBOARD_TZ = "America/Denver";
@@ -91,15 +93,23 @@ export function lastMonths(now: Date, n = 6, tz: string = SCOREBOARD_TZ): string
 /** Still billed, but set to end (period-end cancel, or an admin cancel still running). */
 export const isEnding = (s: SubRow) => isBilled(s.status) && !!(s.cancel_at_period_end || s.admin_cancel_mode);
 
-/** When the cancellation was asked for, or null if the row isn't cancelled or ending. */
+/** When a cancelled row ended, or null (not cancelled, or undated). */
 export const canceledOn = (s: SubRow): string | null =>
-  s.status === "canceled" || isEnding(s) ? s.admin_canceled_at ?? s.canceled_at ?? null : null;
+  s.status === "canceled" ? s.canceled_at ?? s.admin_canceled_at ?? null : null;
+
+/** When an ending row's cancel was asked for (an admin's, else Stripe's stamp), or null. */
+export const askedOn = (s: SubRow): string | null => (isEnding(s) ? s.admin_canceled_at ?? s.canceled_at ?? null : null);
 
 // ── Goal progress ────────────────────────────────────────────────────────────
 
 export interface GoalProgress {
   revenue: MembershipRevenue;
-  /** Distinct members in good standing whose plans come to `minMemberCents`+ a month at list price. */
+  /** Paying now, but a cancel is set for the end of the paid period (still in the numbers above). */
+  ending: { members: number; netCents: number };
+  /**
+   * Distinct members in good standing whose plans come to `minMemberCents`+ a month at list price and who pay
+   * something (a full comp isn't paying).
+   */
   payingMembers: number;
   baselineMembers: number;
   targetMembers: number;
@@ -118,16 +128,24 @@ export interface GoalProgress {
 
 export function goalProgress(subs: readonly SubRow[], goals: ScoreboardGoals = SCOREBOARD_GOALS): GoalProgress {
   const revenue = membershipRevenue(subs);
-  const perMember = new Map<number, number>();
+  const perMember = new Map<number, { list: number; net: number }>();
   for (const s of subs) {
     if (!isGoodStanding(s.status)) continue;
-    perMember.set(s.member_id, (perMember.get(s.member_id) ?? 0) + s.monthly_cents);
+    const m = perMember.get(s.member_id) ?? { list: 0, net: 0 };
+    m.list += s.monthly_cents;
+    m.net += effectiveMonthlyCents(s);
+    perMember.set(s.member_id, m);
   }
-  const payingMembers = [...perMember.values()].filter((c) => c >= goals.minMemberCents).length;
+  const payingMembers = [...perMember.values()].filter((m) => m.list >= goals.minMemberCents && m.net > 0).length;
+  const endingRows = subs.filter((s) => isGoodStanding(s.status) && isEnding(s));
   const targetMembers = goals.baselineMembers + goals.memberGain;
   return {
     revenue,
     payingMembers,
+    ending: {
+      members: new Set(endingRows.map((s) => s.member_id)).size,
+      netCents: endingRows.reduce((n, s) => n + effectiveMonthlyCents(s), 0),
+    },
     baselineMembers: goals.baselineMembers,
     targetMembers,
     gained: payingMembers - goals.baselineMembers,
@@ -224,7 +242,7 @@ export interface CanceledFollowUp {
   name: string;
   email: string | null;
   planKey: string;
-  /** When it was asked for. */
+  /** When it ended, or (ending) when it was asked for. */
   canceledAt: string;
   /** Asked, but the paid period is still running. */
   ending: boolean;
@@ -264,7 +282,7 @@ export function canceledSince(
   const byId = new Map(members.map((m) => [m.id, m]));
   const latest = new Map<number, CanceledFollowUp>();
   for (const s of subs) {
-    const at = canceledOn(s);
+    const at = canceledOn(s) ?? askedOn(s);
     if (!at || dateIn(at, SCOREBOARD_TZ) < since || live.has(s.member_id) || !started(s)) continue;
     const prev = latest.get(s.member_id);
     if (prev && prev.canceledAt >= at) continue;
@@ -387,7 +405,8 @@ export function headlineText(input: {
   const lines = [
     `RegenHub scoreboard, ${input.today}`,
     `Paying members (${usd(SCOREBOARD_GOALS.minMemberCents)}+/mo): ${goal.payingMembers} (${sign(goal.gained)} since ${SCOREBOARD_GOALS.baselineDate}; goal ${goal.targetMembers} by ${SCOREBOARD_GOALS.goalDate}, ${goal.membersToGo} to go)` +
-      (r.pastDue.members > 0 ? `; ${r.pastDue.members} more past due` : ""),
+      (r.pastDue.members > 0 ? `; ${r.pastDue.members} more past due` : "") +
+      (goal.ending.members > 0 ? `; ${goal.ending.members} set to end` : ""),
     `Membership revenue: ${usd(r.netCents)}/mo net, ${usd(r.listCents)} at list (goal ${usd(goal.revenueGoalCents)}, rent ${usd(goal.rentCents)}${goal.rentGapCents > 0 ? `, ${usd(goal.rentGapCents)} short of rent` : ", rent covered"})`,
   ];
   if (prev) lines.push(`${monthName(prev.month)}: ${prev.started} new, ${prev.canceled} cancelled (${sign(prev.net)})`);

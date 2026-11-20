@@ -94,6 +94,8 @@ describe("goalProgress", () => {
     expect(goalProgress([usdcBasic]).payingMembers).toBe(1); // the USDC rail discount doesn't drop a $30 member
     expect(goalProgress(twoSmall).payingMembers).toBe(1);
     expect(goalProgress([oneSmall]).payingMembers).toBe(0);
+    const comp = sub(93, 33, "member_basic", "active", 3000, 0, "2026-11-01T16:00:00Z"); // 100% off
+    expect(goalProgress([comp]).payingMembers).toBe(0);
   });
 });
 
@@ -121,7 +123,7 @@ describe("subscriptionFlow", () => {
   });
 });
 
-describe("cancellations count when asked for", () => {
+describe("cancellations count when they end; ones still running are set apart", () => {
   // Card: Stripe stamps canceled_at when a period-end cancel is asked; the row stays active until the period ends.
   const cardEnding = sub(20, 12, "member_basic", "active", 3000, 3000, "2026-09-20T16:00:00Z",
     { cancel_at_period_end: true, canceled_at: "2026-11-05T16:00:00Z" });
@@ -134,17 +136,19 @@ describe("cancellations count when asked for", () => {
     expect(subscriptionFlow([undated], MONTHS).map((m) => m.canceled)).toEqual([0, 0, 0, 0, 0, 0]);
   });
 
-  it("in the month asked: a card cancel still running and a USDC cancel that ended later", () => {
+  it("in the month it ended: the USDC cancel asked in Oct counts in Nov; the card one still running counts nowhere yet", () => {
     const f = subscriptionFlow([cardEnding, onchainEnded], MONTHS);
-    expect(f.map((m) => m.canceled)).toEqual([0, 0, 0, 0, 1, 1]); // USDC in Oct (asked), card in Nov (still active)
+    expect(f.map((m) => m.canceled)).toEqual([0, 0, 0, 0, 0, 1]);
   });
 
-  it("an ending member still counts as paying until the period ends, and is on the follow-up list", () => {
-    expect(goalProgress([cardEnding]).payingMembers).toBe(1);
+  it("an ending member still counts as paying, is reported as set to end, and is on the follow-up list", () => {
+    const g = goalProgress([cardEnding]);
+    expect(g.payingMembers).toBe(1);
+    expect(g.ending).toEqual({ members: 1, netCents: 3000 });
     const list = canceledSince([cardEnding, onchainEnded], MEMBERS, new Map());
     expect(list.map((c) => [c.memberId, c.canceledAt, c.ending])).toEqual([
+      [13, "2026-11-18T16:00:00Z", false],
       [12, "2026-11-05T16:00:00Z", true],
-      [13, "2026-10-25T16:00:00Z", false],
     ]);
   });
 });

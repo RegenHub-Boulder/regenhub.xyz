@@ -52,17 +52,15 @@ async function lastVisitOf(admin: Admin, memberIds: number[], now: Date): Promis
  * rows need asking: a USDC row turns active only on a payment, and stays `incomplete` until then.
  */
 async function paidOnchain(admin: Admin, subscriptionIds: number[]): Promise<Set<number>> {
-  const paid = new Set<number>();
-  for (let i = 0; i < subscriptionIds.length; i += 200) {
-    const ids = subscriptionIds.slice(i, i + 200);
-    const rows = await readAll<{ subscription_id: number }>("onchain_invoices", (from, to) =>
+  const chunks: number[][] = [];
+  for (let i = 0; i < subscriptionIds.length; i += 200) chunks.push(subscriptionIds.slice(i, i + 200));
+  const rows = await mapLimit(chunks, 4, (ids) =>
+    readAll<{ subscription_id: number }>("onchain_invoices", (from, to) =>
       membershipInvoices((kindColumn) => {
         const q = admin.from("onchain_invoices").select("id, subscription_id").eq("status", "paid").in("subscription_id", ids);
         return (kindColumn ? q.eq("kind", "membership") : q).order("id", { ascending: true }).range(from, to);
-      }));
-    for (const r of rows) paid.add(r.subscription_id);
-  }
-  return paid;
+      })));
+  return new Set(rows.flat().map((r) => r.subscription_id));
 }
 
 async function newsletterNumbers(admin: Admin) {

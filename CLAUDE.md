@@ -164,8 +164,9 @@ Until it runs the code degrades to membership-only (`lib/onchain/invoiceKind.ts`
 the column is missing, the passes page hides "Pay with USDC", the purchase route answers 503), so billing carries on.
 
 ### Scoreboard (/admin/scoreboard, T-497)
-Staff page read at the family meeting: paying members (on $30+/mo plans at list price, so a promo code or the USDC
-discount doesn't drop a $30 member) and net membership revenue against the goals
+Staff page read at the family meeting: paying members (on $30+/mo plans at list price and paying something, so a
+promo code or the USDC discount doesn't drop a $30 member and a full comp doesn't count) and net membership revenue
+against the goals
 (`SCOREBOARD_GOALS` in `lib/scoreboard.ts`: 14 members and $1,710 on 2026-11-19, +10 members and $2,750/mo by
 2027-01-20, rent $2,250), new/cancelled subscriptions and the funnel per month, RSVPs per event (Techne, the same
 `fetchAttendance` /admin/events uses), the newsletter list and last issue, the people to follow up (staff only) and a
@@ -173,8 +174,10 @@ discount doesn't drop a $30 member) and net membership revenue against the goals
 the rows. **One definition of paying + MRR** (`lib/membershipRevenue.ts`): active and trialing, both rails, members
 once each, past due apart, net per row = `effectiveMonthlyCents` (never above list). The dashboard, Billing, the MCP
 `billing_summary`, the admin and hub digests and newsletter stats all use it. A cancellation counts in the month it
-was asked (`admin_canceled_at`, else Stripe's `canceled_at`, which the deletion webhook now keeps instead of stamping
-the end time), period-end ones included; a USDC row with no paid membership invoice never started. Staging: `T482_SCOREBOARD=1
+ended (`canceled_at`, stamped in real time by every path that ends a row, so a past month never changes); cancels
+still running to the end of a paid period show as "set to end" and on the follow-up list; a USDC row with no paid
+membership invoice never started. `compileAudience` (newsletter list) pages past the row cap and throws on a failed
+read; shared pager: `lib/supabase/readAll.ts`. Staging: `T482_SCOREBOARD=1
 scripts/staging/preview.sh` seeds fictional rows; `scripts/staging/scoreboard-shots.mjs` checks the page against
 the hand-worked numbers.
 

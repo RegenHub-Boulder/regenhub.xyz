@@ -126,6 +126,11 @@ export default async function ScoreboardPage() {
               {r.members} in good standing at any rate ({r.card} card, {r.onchain} USDC subscriptions)
               {r.pastDue.members > 0 && <span className="text-red-400"> · {r.pastDue.members} past due, not counted</span>}
             </p>
+            {goal.ending.members > 0 && (
+              <p className="text-xs text-amber-400 mt-1">
+                {goal.ending.members} set to end with their paid period ({usd(goal.ending.netCents)}/mo), still counted
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -157,7 +162,7 @@ export default async function ScoreboardPage() {
         <CopyTextBlock text={s.text} />
       </Section>
 
-      <Section title="Subscriptions per month" note="Card and USDC. A cancellation counts in the month it was asked for, ended or still running to the end of its paid period.">
+      <Section title="Subscriptions per month" note="Card and USDC. A cancellation counts in the month it ended; one asked for but still running is under People to follow up.">
         <MonthTable
           months={s.months}
           rows={[
@@ -240,7 +245,7 @@ export default async function ScoreboardPage() {
             <FollowUpTable
               rows={s.canceled.map((c) => ({
                 key: `c${c.memberId}`, href: `/admin/members/${c.memberId}`, name: c.name, email: c.email,
-                detail: `${planLabel(c.planKey)} · ${c.ending ? "ending, asked" : "cancelled"} ${day(c.canceledAt)}`, last: c.lastVisit ? `visited ${day(c.lastVisit)}` : "no visit this year",
+                detail: `${planLabel(c.planKey)} · ${c.ending ? "ending, asked" : "cancelled"} ${day(c.canceledAt)}`, last: c.lastVisit ? `visited ${day(c.lastVisit)}` : "no visit in the last year",
               }))}
               empty="No cancellations since then."
             />
@@ -253,7 +258,7 @@ export default async function ScoreboardPage() {
                 href: b.memberId != null ? `/admin/members/${b.memberId}` : null,
                 name: b.name ?? "(no member record)", email: b.email,
                 detail: `${b.purchases} pass${b.purchases === 1 ? "" : "es"} · last bought ${day(b.lastPurchase)}`,
-                last: b.lastVisit ? `visited ${day(b.lastVisit)}` : "no visit this year",
+                last: b.lastVisit ? `visited ${day(b.lastVisit)}` : "no visit in the last year",
               }))}
               empty="No one yet."
             />
@@ -263,8 +268,8 @@ export default async function ScoreboardPage() {
 
       <p className="text-xs text-muted">
         Paying = an active or trialing subscription, either rail, counted once per member; the goal counts members whose
-        plans come to {usd(SCOREBOARD_GOALS.minMemberCents)} or more a month at list price (a promo code or the USDC
-        discount doesn&apos;t take them off). Revenue is net of discounts (list until Stripe has synced it, never above
+        plans come to {usd(SCOREBOARD_GOALS.minMemberCents)} or more a month at list price and who pay something (a promo
+        code or the USDC discount doesn&apos;t take them off; a full comp isn&apos;t paying). Revenue is net of discounts (list until Stripe has synced it, never above
         list). Past due is shown apart. The dashboard, Billing and the MCP billing summary use the same definition.
       </p>
     </div>

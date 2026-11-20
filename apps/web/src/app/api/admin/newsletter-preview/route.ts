@@ -29,7 +29,14 @@ export async function POST() {
   const admin = createServiceClient();
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
 
-  const [issue, audience] = await Promise.all([compileIssue(admin), compileAudience(admin)]);
+  // The preview only reports the audience size: a failed audience read reports null and the preview still goes out.
+  const [issue, audience] = await Promise.all([
+    compileIssue(admin),
+    compileAudience(admin).catch((e) => {
+      console.error("[newsletter-preview] audience read failed", e);
+      return null;
+    }),
+  ]);
 
   const html = renderNewsletterHtml(issue, user.email, siteUrl);
   const text = renderNewsletterText(issue, user.email, siteUrl);
@@ -47,6 +54,6 @@ export async function POST() {
     subject: issue.subject,
     note_included: !!issue.note,
     events_count: issue.events.length,
-    audience_size: audience.length,
+    audience_size: audience?.length ?? null,
   });
 }

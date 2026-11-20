@@ -22,7 +22,8 @@ All people and amounts are made up (scripts/staging/scoreboard-seed.mjs). The nu
    the gold tick is rent." Point at the past-due line: shown, not counted.
 2. **Headline.** "One click copies these lines for the meeting doc." Click Copy as text; it turns to Copied.
 3. **Subscriptions per month.** "New, cancelled and the net, six months, split by plan. A cancellation counts in
-   the month someone asked, so last month's number doesn't change after the meeting."
+   the month it ended, so last month's number doesn't change after the meeting; ones still running show as set to
+   end."
 4. **Funnel per month.** "Stay-in-touch signups, applications, day passes bought, and first subscriptions."
 5. **Turnout and newsletter.** "RSVPs per night from Techne, by series; the newsletter list and how the last issue
    went out."

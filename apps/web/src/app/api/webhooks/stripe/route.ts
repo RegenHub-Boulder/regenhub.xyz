@@ -255,9 +255,7 @@ async function handleSubscriptionDeleted(admin: ServiceClient, sub: Stripe.Subsc
     .from("subscriptions")
     .update({
       status: sub.status,
-      // Stripe's canceled_at is when the cancel was asked (for a period-end cancel, before it ends), the same value
-      // the update sync mirrors; the scoreboard counts a cancellation in that month. Now, if Stripe sent none.
-      canceled_at: sub.canceled_at ? new Date(sub.canceled_at * 1000).toISOString() : new Date().toISOString(),
+      canceled_at: new Date().toISOString(),
       cancel_at_period_end: sub.cancel_at_period_end,
       // A desk → daily switch still pending dies with the subscription.
       pending_plan_key: null,

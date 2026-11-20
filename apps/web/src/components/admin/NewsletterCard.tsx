@@ -11,7 +11,7 @@ interface PreviewResult {
   issue_key: string;
   note_included: boolean;
   events_count: number;
-  audience_size: number;
+  audience_size: number | null;
 }
 
 /**
@@ -65,7 +65,7 @@ export function NewsletterCard() {
         {result && (
           <div className="text-xs text-muted space-y-0.5">
             <p className="text-sage">✓ Preview sent to {result.sent_preview_to}</p>
-            <p>Issue {result.issue_key} · {result.events_count} event{result.events_count === 1 ? "" : "s"} · note {result.note_included ? "included" : "not set"} · would reach {result.audience_size} people</p>
+            <p>Issue {result.issue_key} · {result.events_count} event{result.events_count === 1 ? "" : "s"} · note {result.note_included ? "included" : "not set"} · {result.audience_size == null ? "the audience couldn't be read" : `would reach ${result.audience_size} people`}</p>
           </div>
         )}
         {error && <p className="text-xs text-red-400">{error}</p>}

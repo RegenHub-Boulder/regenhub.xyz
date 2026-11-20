@@ -2,6 +2,7 @@ import { defaultEmailFrom, defaultEmailReplyTo } from "@regenhub/shared";
 import { randomUUID } from "crypto";
 import type { createServiceClient } from "@/lib/supabase/admin";
 import { compileAudience } from "@/lib/newsletter";
+import { readAll } from "@/lib/supabase/readAll";
 import { renderDraftEmail } from "@/lib/newsletterMarkdown";
 import { sendEmailDetailed } from "@/lib/email";
 import { unsubscribeUrl } from "@/lib/newsletter";
@@ -34,16 +35,10 @@ export async function prepareIssue(admin: Admin, issueId: number): Promise<{ aud
 
 /** Count the ledger by status. */
 export async function issueProgress(admin: Admin, issueId: number): Promise<Progress> {
-  // Page the ledger; PostgREST's default row cap must not mark a large issue done early.
-  const rows: { status: string; attempts: number }[] = [];
-  for (let offset = 0; ; offset += 500) {
-    const { data, error } = await admin.from("newsletter_sends")
-      .select("status, attempts").eq("issue_id", issueId)
-      .order("id", { ascending: true }).range(offset, offset + 499);
-    if (error) throw error;
-    rows.push(...(data ?? []));
-    if (!data || data.length < 500) break;
-  }
+  // Every row: PostgREST's default row cap must not mark a large issue done early.
+  const rows = await readAll<{ status: string; attempts: number }>("newsletter_sends", (f, t) =>
+    admin.from("newsletter_sends").select("id, status, attempts").eq("issue_id", issueId)
+      .order("id", { ascending: true }).range(f, t));
   const p: Progress = { total: 0, sent: 0, failed: 0, pending: 0, sending: 0, unknown: 0, done: false };
   for (const r of rows) {
     p.total++;
