@@ -167,7 +167,7 @@ the column is missing, the passes page hides "Pay with USDC", the purchase route
 Staff page read at the family meeting: paying members (on $30+/mo plans at list price and paying something, so a
 promo code or the USDC discount doesn't drop a $30 member and a full comp doesn't count) and net membership revenue
 against the goals
-(`SCOREBOARD_GOALS` in `lib/scoreboard.ts`: 14 members and $1,710 on 2026-11-19, +10 members and $2,750/mo by
+(`SCOREBOARD_GOALS` in `lib/scoreboard.ts`: 12 members and $1,710 on 2026-11-19, +10 members and $2,750/mo by
 2027-01-20, rent $2,250), new/cancelled subscriptions and the funnel per month, RSVPs per event (Techne, the same
 `fetchAttendance` /admin/events uses), the newsletter list and last issue, the people to follow up (staff only) and a
 "Copy as text" headline. The counts are pure functions in `lib/scoreboard.ts` (tested); `lib/scoreboardData.ts` reads

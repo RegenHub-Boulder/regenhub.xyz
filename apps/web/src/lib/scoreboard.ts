@@ -25,7 +25,7 @@ export const SCOREBOARD_TZ = "America/Denver";
 export const SCOREBOARD_GOALS = {
   /** The starting point the goals are measured from. */
   baselineDate: "2026-11-19",
-  baselineMembers: 14,
+  baselineMembers: 12, // prod 11-19: 12 paying (14 active minus 2 comped), $1,710 net
   baselineNetCents: 171_000,
   goalDate: "2027-01-20",
   /** Net new paying members by the goal date. */

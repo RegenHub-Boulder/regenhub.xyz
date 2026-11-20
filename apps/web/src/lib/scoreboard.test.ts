@@ -82,7 +82,7 @@ describe("goalProgress", () => {
   it("counts members on $30+/mo plans against the baseline and the money against goal and rent", () => {
     const g = goalProgress(SUBS);
     expect(g.payingMembers).toBe(6); // m1, m2, m3, m4 ($30 trialing), m6 ($30 plan at 50% off), m10; not m5 (past due)
-    expect(g).toMatchObject({ baselineMembers: 14, targetMembers: 24, gained: -8, membersToGo: 18 });
+    expect(g).toMatchObject({ baselineMembers: 12, targetMembers: 22, gained: -6, membersToGo: 16 });
     expect(g.revenueChangeCents).toBe(101_500 - 171_000);
     expect(g).toMatchObject({ revenueGoalCents: 275_000, rentCents: 225_000, revenueToGoCents: 173_500, rentGapCents: 123_500 });
   });
