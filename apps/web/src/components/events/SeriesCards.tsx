@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, CalendarDays } from "lucide-react";
+import { ArrowRight, CalendarDays, Lock } from "lucide-react";
 import { formatEventWhen } from "@/components/events/EventList";
 import { rhythmOf } from "@/lib/series";
 import { nextNightLabel, nextStart, type SeriesOverview } from "@/lib/seriesEvents";
@@ -17,7 +17,17 @@ export function SeriesCard({ overview }: { overview: SeriesOverview }) {
     <Link href={href} className="block transition-opacity hover:opacity-90" data-testid={`series-card-${series.slug}`}>
       <div className="glass-panel-subtle rounded-lg p-5 h-full flex flex-col gap-2 hover-lift">
         <p className="font-semibold text-xl leading-snug">{series.name}</p>
+        {series.membersOnly && (
+          <p className="text-sm font-medium flex items-center gap-1.5" data-testid="series-card-members-only">
+            <Lock className="w-3.5 h-3.5 text-sage" /> Members only
+          </p>
+        )}
         <p className="text-sm text-muted">{series.blurb}</p>
+        {series.memberPart && (
+          <p className="text-sm flex items-center gap-1.5">
+            <Lock className="w-3.5 h-3.5 text-sage" /> {series.memberPart.title}
+          </p>
+        )}
         <p className="text-sm text-muted">
           {rhythmOf(series)}
           {series.hosts ? ` · Hosted by ${series.hosts}` : ""}

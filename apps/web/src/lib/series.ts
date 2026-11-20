@@ -1,6 +1,6 @@
 /**
  * RegenHub's event series: the three Techne Tuesdays (Agents Building Night, Boulder Blockchain Meetup,
- * Civic Tech Night) and the Friday 420 Happy Hour.
+ * Civic Tech Night), Studio Night (members only, 4th Tuesday) and the Friday 420 Happy Hour.
  *
  * Techne has no series record (techne.pub lists none), so a series is data in
  * this file, and a night belongs to a series by what its own event record says:
@@ -15,14 +15,18 @@
  * (`"key": "tid"`); the series is never encoded in the key.
  *
  * A series meets on a rule: the nth weekday of each month (Agents Building Night 1st Tuesday, Boulder Blockchain
- * 2nd Tuesday, Civic Tech Night 3rd Tuesday), or a weekday every week (420 Happy Hour, Fridays).
+ * 2nd Tuesday, Civic Tech Night 3rd Tuesday, Studio Night 4th Tuesday), or a weekday every week (420 Happy Hour,
+ * Fridays).
+ *
+ * A `membersOnly` series (Studio Night; Aaron, 11-20) is still an ordinary public event on Techne: the gate is
+ * this site's RSVP (lib/memberStanding.ts). It is not a Techne Tuesday: those stay free and open to everyone.
  * The rule invents no events: a visitor sees a night only once a steward has posted it. The rule is used
  * to say the rhythm in public copy and to suggest the next nights in /admin/events. The rules and the
  * times below are EDITABLE DATA: the Tuesdays 6–8pm Denver, as the Blockchain meetup always has been;
  * Happy Hour 4:20–6:20pm (Aaron, 11-19).
  */
 
-export type SeriesSlug = "agents-night" | "boulder-blockchain" | "civic-tech-night" | "happy-hour";
+export type SeriesSlug = "agents-night" | "boulder-blockchain" | "civic-tech-night" | "studio-night" | "happy-hour";
 
 export interface SeriesPlace {
   name: string;
@@ -59,6 +63,10 @@ export interface Series {
   elsewhere?: { label: string; url: string };
   /** One line, for cards. */
   blurb: string;
+  /** Members only: said on the series page, its cards and its nights' pages, and RSVP needs a membership. */
+  membersOnly?: boolean;
+  /** A members-only part of an open series (Happy Hour's Friday demos), shown on its page, card and nights. */
+  memberPart?: { title: string; about: string };
   /** A short paragraph for the series page. */
   about: string;
   /** The rhythm. Suggests nights in /admin/events and words `rhythmOf`; posts nothing by itself. */
@@ -129,10 +137,29 @@ export const SERIES: readonly Series[] = [
     capacity: null,
   },
   {
+    slug: "studio-night",
+    name: "Studio Night",
+    membersOnly: true,
+    blurb: "Hang out with other members and get help with your agent, your data, your tools.",
+    about:
+      "A night for members. Hang out with other members and get help with your agent, your data and your tools: " +
+      "bring what you're stuck on, or just come work alongside people who get it.",
+    rule: { every: "month", nth: 4, weekday: 2 },
+    startTime: "18:00",
+    endTime: "20:00",
+    timezone: "America/Denver",
+    place: REGENHUB_PLACE,
+    capacity: null,
+  },
+  {
     slug: "happy-hour",
     name: "420 Happy Hour",
     blurb: "Wind down the week with the hub, on the roof when it's warm.",
     about: "Wind down the week with the hub, on the roof when it's warm. Members, neighbors and friends all welcome.",
+    memberPart: {
+      title: "Member demos before Happy Hour",
+      about: "Before Happy Hour, members show each other what they're building. The demos are for members; Happy Hour is for everyone.",
+    },
     rule: { every: "week", weekday: 5 },
     startTime: "16:20",
     endTime: "18:20",
@@ -151,9 +178,11 @@ export function rhythmOf(series: Pick<Series, "rule">): string {
   return rule.every === "week" ? `Every ${WEEKDAYS[rule.weekday]}` : `${ORDINALS[rule.nth]} ${WEEKDAYS[rule.weekday]} of each month`;
 }
 
-/** The monthly Tuesday series in month order: together they're "Techne Tuesdays". */
+/** The open monthly Tuesday series in month order: together they're "Techne Tuesdays" (Studio Night, members only, isn't one). */
 export function techneTuesdays(): { series: Series; nth: number }[] {
-  return SERIES.flatMap((s) => (s.rule.every === "month" && s.rule.weekday === 2 ? [{ series: s, nth: s.rule.nth }] : [])).sort(
+  return SERIES.flatMap((s) =>
+    s.rule.every === "month" && s.rule.weekday === 2 && !s.membersOnly ? [{ series: s, nth: s.rule.nth }] : [],
+  ).sort(
     (a, b) => a.nth - b.nth,
   );
 }

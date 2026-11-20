@@ -5,13 +5,16 @@ import { TechneUnreachable, endLapsedSession, techneSession, unreachableResponse
 import { ownRsvp, writeRsvp } from "@/lib/techne/rsvpWrite";
 import { isLapsedToken, isSignedOutAnswer } from "@/lib/techne/call";
 import { sameSiteJson } from "@/lib/techne/guard";
+import { MEMBERS_ONLY_REFUSAL, rsvpGate } from "@/lib/techne/rsvpGate";
 import type { RsvpStatus } from "@/lib/techne/rsvp";
 
 /**
  * RSVP through this server's Techne session (the browser holds none: one door, one sign-in).
- *   GET  ?event=<at-uri>                 → { signedIn: false } | { signedIn: true, did, handle, own }
+ *   GET  ?event=<at-uri>                 → { signedIn: false } | { signedIn: true, did, handle, own, gate }
  *   POST { event: {uri, cid}, status, rkey? } → { rkey, status }: the person's own RSVP record, written on their PDS
  *        (`rkey`: the record GET answered, so a change rewrites it; without it the server looks it up first)
+ * A members-only night (Studio Night) takes a member in standing: GET says `gate: "not-member"`, POST answers 403
+ * (lib/techne/rsvpGate.ts). An event this site can't read back is refused (404/503), never guessed.
  * 404 while the door is off.
  */
 export const dynamic = "force-dynamic";
@@ -41,8 +44,14 @@ export async function GET(req: NextRequest) {
     }
     return unreachable(); // a look-up that failed must not read as "not answered yet"
   }
+  let gate;
+  try {
+    gate = await rsvpGate(createServiceClient(), event, signedIn.who.did);
+  } catch {
+    return unreachable();
+  }
   return NextResponse.json(
-    { signedIn: true, did: signedIn.who.did, handle: signedIn.who.handle, own },
+    { signedIn: true, did: signedIn.who.did, handle: signedIn.who.handle, own, gate },
     { headers: { "cache-control": "no-store" } },
   );
 }
@@ -75,6 +84,19 @@ export async function POST(req: Request) {
     throw err;
   }
   if (!signedIn) return NextResponse.json({ error: "Sign in with Techne again." }, { status: 401 });
+  let gate;
+  try {
+    gate = await rsvpGate(createServiceClient(), uri, signedIn.who.did);
+  } catch {
+    return unreachable();
+  }
+  // A non-member may still say they can't make it (a lapsed member's earlier "going" shouldn't stay counted).
+  if (gate === "not-member" && status !== "notgoing") {
+    return NextResponse.json({ error: MEMBERS_ONLY_REFUSAL }, { status: 403 });
+  }
+  if (gate === "unknown") {
+    return NextResponse.json({ error: "Couldn't find that event just now. Reload and try again." }, { status: 404 });
+  }
   try {
     // Never guess: a failed look-up must not write a second RSVP for the same event.
     const rkey0 = known ?? (await ownRsvp(signedIn.session, uri))?.rkey;

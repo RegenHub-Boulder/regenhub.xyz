@@ -296,10 +296,19 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   lane is removed.
 - `lib/events.ts` — the seam `lib/luma.ts:10-11` promised. One `UpcomingEvent` shape, two sources,
   chosen by config: regenOS first, Luma second.
-- **Series** (`lib/series.ts`, T-482): four. The **Techne Tuesdays** (one line on `/events`, `techneTuesdays()`):
+- **Series** (`lib/series.ts`, T-482): five. The **Techne Tuesdays** (one line on `/events`, `techneTuesdays()`):
   Agents Building Night 1st Tuesday, Boulder Blockchain Meetup (`boulder-blockchain`, links out to its Meetup page,
-  `elsewhere`) 2nd Tuesday, Civic Tech Night 3rd Tuesday, all 6–8pm; and **420 Happy Hour** (`happy-hour`) every
-  Friday 4:20–6:20pm (Aaron, 11-19). A rule is `{every: "month", nth, weekday}` or `{every: "week", weekday}`
+  `elsewhere`) 2nd Tuesday, Civic Tech Night 3rd Tuesday, all 6–8pm; **Studio Night** (`studio-night`,
+  `membersOnly`, not a Techne Tuesday) 4th Tuesday 6–8pm; and **420 Happy Hour** (`happy-hour`) every
+  Friday 4:20–6:20pm (Aaron, 11-19), whose `memberPart` names the members-only "Member demos before Happy Hour".
+  **Members only** (Aaron, 11-20): the series page, its card and its nights' pages say so, and RSVP to a
+  members-only night needs a member in standing (`lib/memberStanding.ts`: a non-disabled `members` row on the
+  signed-in Techne DID that is `hub_friend`/`hot_desk`/`cold_desk`, or has an `active`/`trialing` subscription at
+  `monthly_cents >= 3000`). `/api/techne/rsvp` reads the event back from Techne and checks
+  (`lib/techne/rsvpGate.ts`): GET answers `gate`, POST answers 403 for a non-member and 404 for an event it can't
+  read. Techne has no members-only flag for a public event (visibility is placement: a permissioned event lives in
+  an invite space the public read can't see), so these nights stay public on Techne and the gate is this site's.
+  `/membership` leads with the offer (`components/membership/MemberOffer.tsx`, days and prices from `lib/plans.ts`). A rule is `{every: "month", nth, weekday}` or `{every: "week", weekday}`
   (`ruleDatesFrom`, `nthWeekdayOfMonth`); `rhythmOf` words it ("First Tuesday of each month", "Every Friday"),
   shown on the series page and cards. The rule invents no events: a visitor sees a night only once
   a steward posts it, feeds are built from posted records, and with none posted ahead the page still says "Next
