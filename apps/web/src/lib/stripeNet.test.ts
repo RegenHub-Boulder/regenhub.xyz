@@ -123,4 +123,7 @@ describe("effectiveMonthlyCents", () => {
     expect(effectiveMonthlyCents({ monthly_cents: 25000, net_cents: null })).toBe(25000);
     expect(effectiveMonthlyCents({ monthly_cents: 25000 })).toBe(25000);
   });
+  it("never counts more than list (a crypto row's last payment after a move to a cheaper plan)", () => {
+    expect(effectiveMonthlyCents({ monthly_cents: 25000, net_cents: 50000 })).toBe(25000);
+  });
 });
