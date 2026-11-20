@@ -213,12 +213,12 @@ export function NewsletterStudio({
             To add Luma people, export a CSV from Luma (the calendar&apos;s People, or an event&apos;s Guests) and import it:
             you see what it would add before anything is written.
           </p>
-          <div className="flex flex-wrap items-start gap-2">
-            <LumaCsvImport disabled={!!busy} />
+          <div className="flex flex-wrap gap-2">
             <Button size="sm" disabled={!!busy || sent} onClick={prepare} className="btn-glass text-xs gap-1 h-7">
               {busy === "prepare" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Users className="w-3 h-3" />} Prepare audience
             </Button>
           </div>
+          <LumaCsvImport disabled={!!busy} />
         </CardContent>
       </Card>
 

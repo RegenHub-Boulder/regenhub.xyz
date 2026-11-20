@@ -10,7 +10,7 @@
 // is linked (members.did); Jo is a member who isn't linked yet (the link flow); Sam and Lee aren't members.
 // `subscriptions` is empty unless --scoreboard: the steward and Ana are desk members, so Studio Night's gate lets them in by type.
 // --member-pages adds the member directory's sample people (member-pages-seed.mjs).
-// Usage: node supabase-standin.mjs --port 18604 --state <dir> [--scoreboard] [--member-pages]
+// Usage: node supabase-standin.mjs --port 18604 --state <dir> [--scoreboard] [--member-pages] [--luma-bridge]
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
@@ -79,6 +79,12 @@ if (process.argv.includes("--member-pages")) {
 if (process.argv.includes("--scoreboard")) {
   const { seedScoreboard } = await import(join(ROOT, "scripts/staging/scoreboard-seed.mjs"));
   await seedScoreboard(pg);
+}
+
+// --luma-bridge (T-482): the interests list, unsubscribes and a draft issue for the Luma CSV import, the steward as admin.
+if (process.argv.includes("--luma-bridge")) {
+  const { seedLumaBridge } = await import(join(ROOT, "scripts/staging/luma-bridge-seed.mjs"));
+  await seedLumaBridge(pg);
 }
 
 const users = new Map(); // access token -> user
