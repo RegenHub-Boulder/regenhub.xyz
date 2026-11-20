@@ -258,7 +258,7 @@ describe("headlineText", () => {
     });
     expect(text).toBe([
       "RegenHub scoreboard, 2026-11-20",
-      `Paying members ($30+/mo): 6 (-8 since ${SCOREBOARD_GOALS.baselineDate}; goal 24 by 2027-01-20, 18 to go); 1 more past due`,
+      `Paying members ($30+/mo): 6 (-6 since ${SCOREBOARD_GOALS.baselineDate}; goal 22 by 2027-01-20, 16 to go); 1 more past due`,
       "Membership revenue: $1,015/mo net, $1,160 at list (goal $2,750, rent $2,250, $1,235 short of rent)",
       "October: 1 new, 1 cancelled (0)",
       "November so far: 2 new, 1 cancelled (+1)",
