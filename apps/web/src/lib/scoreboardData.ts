@@ -35,16 +35,21 @@ async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T) 
   return out;
 }
 
+/** `fn` over `ids` in chunks of 200 (a short URL), four chunks at a time. */
+const inChunks = <R>(ids: number[], fn: (chunk: number[]) => Promise<R[]>): Promise<R[]> => {
+  const chunks: number[][] = [];
+  for (let i = 0; i < ids.length; i += 200) chunks.push(ids.slice(i, i + 200));
+  return mapLimit(chunks, 4, fn).then((r) => r.flat());
+};
+
 /** The listed people's latest granted door visit within the last year: one read per 200 people, bounded in time. */
 async function lastVisitOf(admin: Admin, memberIds: number[], now: Date): Promise<Map<number, string>> {
   const since = new Date(now.getTime() - VISIT_LOOKBACK_DAYS * 86_400_000).toISOString();
-  const chunks: number[][] = [];
-  for (let i = 0; i < memberIds.length; i += 200) chunks.push(memberIds.slice(i, i + 200));
-  const rows = await mapLimit(chunks, 4, (ids) =>
+  const rows = await inChunks(memberIds, (ids) =>
     readAll<{ member_id: number | null; created_at: string }>("access_logs", (f, t) =>
-      admin.from("access_logs").select("member_id, created_at").eq("result", "granted").in("member_id", ids)
+      admin.from("access_logs").select("id, member_id, created_at").eq("result", "granted").in("member_id", ids)
         .gte("created_at", since).order("id", { ascending: true }).range(f, t)));
-  return lastVisits(rows.flat());
+  return lastVisits(rows);
 }
 
 /**
@@ -52,15 +57,13 @@ async function lastVisitOf(admin: Admin, memberIds: number[], now: Date): Promis
  * rows need asking: a USDC row turns active only on a payment, and stays `incomplete` until then.
  */
 async function paidOnchain(admin: Admin, subscriptionIds: number[]): Promise<Set<number>> {
-  const chunks: number[][] = [];
-  for (let i = 0; i < subscriptionIds.length; i += 200) chunks.push(subscriptionIds.slice(i, i + 200));
-  const rows = await mapLimit(chunks, 4, (ids) =>
+  const rows = await inChunks(subscriptionIds, (ids) =>
     readAll<{ subscription_id: number }>("onchain_invoices", (from, to) =>
       membershipInvoices((kindColumn) => {
         const q = admin.from("onchain_invoices").select("id, subscription_id").eq("status", "paid").in("subscription_id", ids);
         return (kindColumn ? q.eq("kind", "membership") : q).order("id", { ascending: true }).range(from, to);
       })));
-  return new Set(rows.flat().map((r) => r.subscription_id));
+  return new Set(rows.map((r) => r.subscription_id));
 }
 
 async function newsletterNumbers(admin: Admin) {

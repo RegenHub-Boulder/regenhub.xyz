@@ -1,8 +1,9 @@
 /**
- * Every row a query matches, a page at a time, so PostgREST's row cap (1000 on our Supabase) can't shorten a list or
- * a count. `page(from, to)` must order by a unique column. Throws on a read error rather than return a short list.
+ * Every row a query matches, a page at a time, so PostgREST's row cap can't shorten a list or a count. Pages are
+ * 500 rows, under the cap (Supabase's default is 1000), so a page shorter than asked is the end. `page(from, to)`
+ * must order by a unique column. Throws on a read error rather than return a short list.
  */
-const PAGE = 1000;
+const PAGE = 500;
 
 export async function readAll<T>(
   label: string,

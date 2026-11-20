@@ -9,11 +9,10 @@
  * - A subscription that never started is not a subscription here: `incomplete`/`incomplete_expired`, or a USDC
  *   row with no paid membership invoice (an unpaid checkout an admin cancelled turns `canceled`). Card rows are
  *   made by Stripe Checkout only once the first payment went through, so a card row has always started.
- * - A cancellation counts in the month it ended: `canceled_at` of a `canceled` row, which every path stamps when
- *   the row ends (Stripe's deletion webhook, the USDC billing cron, revoke, an admin cancel), else
- *   `admin_canceled_at`. That is stamped in real time, so a past month's number never changes after the meeting.
- *   A row with neither isn't counted (`updated_at` moves with every later write). Cancels asked for but still
- *   running to the end of a paid period are counted apart, as "set to end".
+ * - A cancellation counts in the month it ended: `canceled_at` of a `canceled` row (every path that ends a row
+ *   stamps it then), else `admin_canceled_at`. A row with neither isn't counted (`updated_at` moves with every
+ *   write). Known imprecision: a later Stripe sync of an ended card row can write Stripe's own canceled_at (when the
+ *   cancel was asked) over it. Cancels still running to the end of a paid period are "set to end".
  * - Months are calendar months in America/Denver.
  */
 import { dateIn } from "./series";
@@ -91,7 +90,9 @@ export function lastMonths(now: Date, n = 6, tz: string = SCOREBOARD_TZ): string
 }
 
 /** Still billed, but set to end (period-end cancel, or an admin cancel still running). */
-export const isEnding = (s: SubRow) => isBilled(s.status) && !!(s.cancel_at_period_end || s.admin_cancel_mode);
+/** Still billed, set to end with its paid period (an admin cancel-now still finishing isn't this: it ends now). */
+export const isEnding = (s: SubRow) =>
+  isBilled(s.status) && !!(s.cancel_at_period_end || s.admin_cancel_mode === "period_end");
 
 /** When a cancelled row ended, or null (not cancelled, or undated). */
 export const canceledOn = (s: SubRow): string | null =>
@@ -104,7 +105,7 @@ export const askedOn = (s: SubRow): string | null => (isEnding(s) ? s.admin_canc
 
 export interface GoalProgress {
   revenue: MembershipRevenue;
-  /** Paying now, but a cancel is set for the end of the paid period (still in the numbers above). */
+  /** Of `payingMembers`: a cancel is set for the end of the paid period (still counted until then). */
   ending: { members: number; netCents: number };
   /**
    * Distinct members in good standing whose plans come to `minMemberCents`+ a month at list price and who pay
@@ -136,8 +137,10 @@ export function goalProgress(subs: readonly SubRow[], goals: ScoreboardGoals = S
     m.net += effectiveMonthlyCents(s);
     perMember.set(s.member_id, m);
   }
-  const payingMembers = [...perMember.values()].filter((m) => m.list >= goals.minMemberCents && m.net > 0).length;
-  const endingRows = subs.filter((s) => isGoodStanding(s.status) && isEnding(s));
+  const counted = new Set([...perMember].filter(([, m]) => m.list >= goals.minMemberCents && m.net > 0).map(([id]) => id));
+  const payingMembers = counted.size;
+  // Only members the goal counts, so "N set to end" reads as N of the paying members.
+  const endingRows = subs.filter((s) => isGoodStanding(s.status) && isEnding(s) && counted.has(s.member_id));
   const targetMembers = goals.baselineMembers + goals.memberGain;
   return {
     revenue,

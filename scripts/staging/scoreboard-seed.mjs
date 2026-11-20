@@ -1,6 +1,8 @@
 // STAGING ONLY. Fictional rows for /admin/scoreboard (T-497), loaded by supabase-standin.mjs --scoreboard.
-// They are the rows of apps/web/src/lib/scoreboard.test.ts (member ids + 100), so the page can be checked against
-// the same hand-worked numbers, plus a newsletter issue. The sample steward becomes an admin to read the page.
+// They are the rows of apps/web/src/lib/scoreboard.test.ts (member ids + 100), plus four the unit tests cover on
+// their own (an unpaid USDC checkout an admin cancelled, a card member set to end, a full comp, and a USDC cancel
+// asked in October that ended in November), and a newsletter issue. scoreboard-shots.mjs checks the page against
+// the numbers worked by hand from these rows. The sample steward becomes an admin to read the page.
 // Nobody here is a real person; every email is @example.test.
 
 const subs = [
@@ -19,9 +21,13 @@ const subs = [
   [12, 111, "member_2day", "canceled", 5000, 5000, "stripe", "2026-03-01T16:00:00Z", "2026-06-20T16:00:00Z"],
   // A USDC checkout Sample 12 never paid, then cancelled by an admin: it must count nowhere.
   [13, 112, "hot_desk", "canceled", 25000, 23750, "onchain", "2026-10-10T16:00:00Z", "2026-10-12T16:00:00Z"],
+  // Sample 16 asked on Nov 8 to cancel at period end: still paying, "set to end", on the follow-up list.
+  [14, 116, "hot_desk", "active", 25000, 25000, "stripe", "2026-09-01T16:00:00Z", "2026-11-08T16:00:00Z"],
+  // Sample 17 is on a full comp: a $30 plan at $0, so not a paying member for the goal.
+  [15, 117, "member_basic", "active", 3000, 0, "stripe", "2026-11-04T16:00:00Z"],
 ];
-const types = { 101: "hot_desk", 102: "cold_desk", 105: "hot_desk", 108: "hot_desk", 110: "hot_desk" };
-const members = Array.from({ length: 15 }, (_, i) => {
+const types = { 101: "hot_desk", 102: "cold_desk", 105: "hot_desk", 108: "hot_desk", 110: "hot_desk", 116: "hot_desk" };
+const members = Array.from({ length: 17 }, (_, i) => {
   const id = 101 + i;
   return [id, `Sample ${i + 1}`, id === 113 ? "pat@example.test" : `sample${i + 1}@example.test`, types[id] ?? "day_pass", id === 114];
 });
@@ -74,7 +80,9 @@ export async function seedScoreboard(pg) {
       [id, member, plan, status, monthly, net, rail, created, canceledAt ?? null, updatedAt ?? created],
     );
   }
-  await pg.query("update subscriptions set admin_canceled_at = '2026-11-03T16:00:00Z', admin_cancel_mode = 'now' where id = 8");
+  // Sub 8: an admin asked on Oct 25 (USDC, period end); it ended Nov 3. Counts in November.
+  await pg.query("update subscriptions set admin_canceled_at = '2026-10-25T16:00:00Z', admin_cancel_mode = 'period_end', canceled_at = '2026-11-03T16:00:00Z' where id = 8");
+  await pg.query("update subscriptions set cancel_at_period_end = true where id = 14");
   // The USDC subscriptions (3, 8, 11) were paid: a paid membership invoice each.
   for (const id of [3, 8, 11]) await pg.query("insert into onchain_invoices(subscription_id, status) values ($1, 'paid')", [id]);
   for (const [member, email, at, invoice] of purchases) {

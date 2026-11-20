@@ -145,6 +145,10 @@ describe("cancellations count when they end; ones still running are set apart", 
     const g = goalProgress([cardEnding]);
     expect(g.payingMembers).toBe(1);
     expect(g.ending).toEqual({ members: 1, netCents: 3000 });
+    // Not "set to end": an admin cancel-now still finishing, or a member the goal doesn't count (a full comp).
+    const cancelingNow = sub(24, 15, "hot_desk", "active", 25000, 25000, "2026-09-01T16:00:00Z", { admin_cancel_mode: "now", admin_canceled_at: "2026-11-19T16:00:00Z" });
+    const compEnding = sub(25, 16, "member_basic", "active", 3000, 0, "2026-09-01T16:00:00Z", { cancel_at_period_end: true, canceled_at: "2026-11-10T16:00:00Z" });
+    expect(goalProgress([cardEnding, cancelingNow, compEnding]).ending).toEqual({ members: 1, netCents: 3000 });
     const list = canceledSince([cardEnding, onchainEnded], MEMBERS, new Map());
     expect(list.map((c) => [c.memberId, c.canceledAt, c.ending])).toEqual([
       [13, "2026-11-18T16:00:00Z", false],
