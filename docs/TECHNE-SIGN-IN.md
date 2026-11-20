@@ -12,8 +12,8 @@ public docs only (techne.computer/llms.txt and what it lists, reference.html, te
   regenOS-lane page at `/portal/events` (`components/portal/legacy/`, main's code unchanged, Import from Luma
   included), its nav link and dashboard card, and the revalidate route, all on `REGENOS_LOGIN_ENABLED`
   (`isStewardEventsEnabled`, `lib/techne/config.ts`).
-- With it **on**, `/portal/events` is the Techne door: the same server-held session as RSVP (one door, below). The old page stays reachable at `/portal/events/old`, linked as
-  "Old steward page" from the new one while the regenOS lane is on, until Aaron retires it.
+- With it **on**, the stewards' page is `/admin/events` (`/portal/events` redirects there; gated by the Techne role, not a site membership, since 11-19): the same server-held session as RSVP (one door, below). The old page stays reachable at `/portal/events/old` while the regenOS lane is on (nothing links to it), until
+  Aaron retires it.
 - The calendar on that page is the documented public read every visitor gets, plus each event's config and
   listing (`query.getRecords`), so edits keep them and removal deletes exactly what exists.
 - **Everyone signed in with Techne gets the posting form.** RegenHub's public membership claims only word a hint
@@ -121,11 +121,11 @@ says "Sign-in with Techne didn't finish" and the email link still opens the port
 
 | Surface | Shows |
 |---|---|
-| `/auth/login` (and `/portal`, `/portal/*`, `/admin` redirects to it) | "Sign in with Techne" + "Make one"; "Use an email link instead" folded. Signed in to both: straight to `next`. Signed in with Techne, not linked: "Already a member?" email link form, "Not a member yet?" links, Sign out |
+| `/auth/login` (and `/portal`, `/portal/*`, `/admin` redirects to it) | "Sign in with Techne" + "Make one"; "Use an email link instead" folded. Signed in to both: straight to `next`. Signed in with Techne, not linked: "Already a member?" email link form, "Not a member yet?" links, "A facilitator or manager of RegenHub on Techne? Manage events", Sign out |
 | `/apply` signed out | Same door; a non-member is asked for an email link to apply with |
 | `/login` | Redirects to `/auth/login` |
 | Event page RSVP panel | "Sign in with Techne" (back to the event); the sign-in also opens the portal for a linked member. "Sign out" ends both, back to the event |
-| `/portal/events` | Signed out of the portal: `/auth/login?next=/portal/events`. In the portal but not signed in with Techne (came by email link): "Sign in with Techne" |
+| `/admin/events` (`/portal/events` redirects here) | Not signed in with Techne: "Sign in with Techne". Signed in at facilitator or above in RegenHub on Techne: the calendar and form, with or without a site membership. Anyone else: an explainer naming the managers, no form |
 | `/portal/profile`, admin member page | The linked Techne account with Unlink |
 | `/auth/techne/link?code=` | "Sign in with the Techne account you asked from", then "Link and open my portal" |
 | Portal header | "Sign out" ends both sessions |
@@ -211,13 +211,15 @@ shipped.
   `references` role as `at://{did}`.
 - Read: `query.listRecords` `{type is pub.techne.draft.membership, author is <collective>, references is
   at://<did>}` — public, no sign-in (reference.html *Query*; building-an-app.md *Read*). The DID comes from the
-  person's Techne session. `lib/techne/standing.ts` counts only claims in the collective's own repo about exactly
-  that DID, inside `validFrom`/`validUntil`, and takes the highest role.
+  person's Techne session. `lib/techne/roster.ts` (`claimsFrom`, `holdersFrom`) counts only claims in the
+  collective's own repo, inside `validFrom`/`validUntil`, and takes each person's highest role.
 - Live, 2026-11-17: RegenHub has one public membership, `unforced.techne.town`, role 40.
 - Limit: a claim the collective placed in its member space is invisible to this read and to the default scopes
   ("The platform narrows the queries to public data and the app's own space", building-an-app.md *Permissions*).
-- This read only words the hint on the page (everyone signed in gets the form). Techne checks every write itself.
-  `GET /api/portal/events/standing` needs the portal session and reads through a one-minute cache.
+- Since 11-19 this read is the gate, not a hint: `stewardCheck` (the whole roster, read fresh) decides who gets
+  `/admin/events` and `/admin/stewards` and who their write routes accept (facilitator, 30, or above). Techne
+  still checks every write itself. The old hint route (`GET /api/portal/events/standing`, `lib/techne/standing.ts`)
+  is gone.
 
 ### Managing RegenHub's roles: /admin/stewards (T-482, Aaron 11-19)
 
@@ -276,7 +278,7 @@ Each line was checked with one real read-only call on 2026-11-17.
 | `REGENOS_BASE_URL=https://techne.computer` (from `https://scenius.social`) | The docs' API host; the documented reads answer there | `query.listRecords` (RegenHub's events, its listings, its memberships by `references`), `query.getRecords` (one event), the RSVP-by-subject query: all 200 with data. `/.well-known/did.json` names `https://techne.computer` as `#atproto_appview` |
 | `REGENOS_COLLECTIVE_DID` unchanged (`did:plc:dl3lexgjfg2euvkqvao4wsgs`) | | plc.directory: handle `regenhub.techne.town`, PDS `https://pds.techne.town`; descriptor `pub.techne.draft.collective/self` = "RegenHub" |
 | `TECHNE_OAUTH_PRIVATE_JWK` = the output of `node scripts/techne-oauth-key.mjs` (secret; Coolify only) | The OAuth client's signing key (`private_key_jwt`). Without it the door stays off | pds.techne.town lists `private_key_jwt` with ES256 (read-only, 11-17); the first real sign-in proves it accepts ours |
-| `TECHNE_SIGNIN_ENABLED=true` (new name; drop `TECHNE_RSVP_ENABLED` if set) | Turns on the door, `/techne/client-metadata.json`, `/techne/callback`, the Techne `/portal/events` (old page moves to `/portal/events/old`) | `https://pds.techne.town/.well-known/oauth-authorization-server`: issuer pds.techne.town, `client_id_metadata_document_supported: true`, DPoP ES256; handle resolution `unforced.techne.town` → did:plc:3hmy2v5fvvdh7vuujef5upvl. `https://regenhub.xyz/techne/client-metadata.json` answers 200 today with main's public (`none`) browser client: the flag is already on in production; `/techne/jwks.json` and `/techne/signin` are 404 until this PR ships |
+| `TECHNE_SIGNIN_ENABLED=true` (new name; drop `TECHNE_RSVP_ENABLED` if set) | Turns on the door, `/techne/client-metadata.json`, `/techne/callback`, the Techne `/admin/events` (`/portal/events` redirects there; the old page moves to `/portal/events/old`) | `https://pds.techne.town/.well-known/oauth-authorization-server`: issuer pds.techne.town, `client_id_metadata_document_supported: true`, DPoP ES256; handle resolution `unforced.techne.town` → did:plc:3hmy2v5fvvdh7vuujef5upvl. `https://regenhub.xyz/techne/client-metadata.json` answers 200 today with main's public (`none`) browser client: the flag is already on in production; `/techne/jwks.json` and `/techne/signin` are 404 until this PR ships |
 | `REGENOS_LOGIN_ENABLED=false` (Uni set it off 11-17 as a stopgap; keep it off) | That lane is what emailed a scenius link that went to beacon.techne.computer | With the one door no page shows the lane either way. With it off, `/login` redirects there, `/oauth/callback` is a 404, **the "Old steward page" goes away**, and **`/admin/members` "Sync claims to regenOS" turns off too** (it rides the same lane) |
 | Apply migration `064_techne_one_door.sql` **before** deploying (MCP `run_migration`; it is additive and main's code never touches its tables) | The one door's tables and functions; deployed without them, sign-in can't start (`/auth/login?error=techne_start`) | Confirmed in a test: with the OAuth-state table missing, sign-in answers 303 to `/auth/login?error=techne_start` |
 | No `TECHNE_PDS_URL`, `TECHNE_PLC_URL`, `TECHNE_HANDLE_DOMAIN`, `TECHNE_PLATFORM_DID`, `TECHNE_STAGING_STANDIN` | Production uses the SDK's defaults; the stand-in is refused for regenhub.xyz anyway | |

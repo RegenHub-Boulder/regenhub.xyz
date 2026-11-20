@@ -41,8 +41,8 @@ export function platformProxy(config: { platform?: string }): string {
   return `${config.platform ?? DEFAULT_PLATFORM}#atproto_appview`;
 }
 
-/** The stewards' page. */
-export const STEWARD_PATH = "/portal/events";
+/** The stewards' events page (beside /admin/stewards; /portal/events redirects here). */
+export const STEWARD_PATH = "/admin/events";
 
 /**
  * Where a sign-in goes back to: any same-origin path (the same rule as /auth/login's `next`, lib/safeNext.ts),

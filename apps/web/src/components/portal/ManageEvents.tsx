@@ -111,9 +111,8 @@ export function ManageEvents({
     setEditing(event.rkey);
   }
 
-  /** Drop the landing page's 5-minute events cache so the change is visible immediately. */
+  /** Show the change: the write route already expired the cached Techne reads and `/`. */
   async function refresh() {
-    await fetch("/api/portal/events/revalidate", { method: "POST" }).catch(() => {});
     router.refresh();
   }
 

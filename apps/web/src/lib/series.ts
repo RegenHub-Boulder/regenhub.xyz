@@ -17,7 +17,7 @@
  * A series meets on a rule: the nth weekday of each month (Agents Building Night 1st Tuesday, Boulder Blockchain
  * 2nd Tuesday, Civic Tech Night 3rd Tuesday), or a weekday every week (420 Happy Hour, Fridays).
  * The rule invents no events: a visitor sees a night only once a steward has posted it. The rule is used
- * to say the rhythm in public copy and to suggest the next nights in /portal/events. The rules and the
+ * to say the rhythm in public copy and to suggest the next nights in /admin/events. The rules and the
  * times below are EDITABLE DATA: the Tuesdays 6–8pm Denver, as the Blockchain meetup always has been;
  * Happy Hour 4:20–6:20pm (Aaron, 11-19).
  */
@@ -61,7 +61,7 @@ export interface Series {
   blurb: string;
   /** A short paragraph for the series page. */
   about: string;
-  /** The rhythm. Suggests nights in /portal/events and words `rhythmOf`; posts nothing by itself. */
+  /** The rhythm. Suggests nights in /admin/events and words `rhythmOf`; posts nothing by itself. */
   rule: SeriesRule;
   /** Default local wall-clock `HH:mm` in `timezone` for a new night. */
   startTime: string;

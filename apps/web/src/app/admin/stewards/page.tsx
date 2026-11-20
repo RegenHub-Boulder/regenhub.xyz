@@ -3,7 +3,7 @@ import { ShieldCheck } from "lucide-react";
 import { techneConfig } from "@/lib/techne/config";
 import { regenosCollectiveDid } from "@/lib/regenos/config";
 import { currentTechne } from "@/lib/techne/webSession";
-import { fetchRoster, holdersFrom } from "@/lib/techne/roster";
+import { stewardCheck } from "@/lib/techne/roster";
 import { MANAGE_ROLE, roleName } from "@/lib/techne/roles";
 import { handleFor, shortDid } from "@/lib/techne/did";
 import { SignInWithTechne, SignOutOfTechne } from "@/components/techne/SignInWithTechne";
@@ -60,7 +60,7 @@ export default async function StewardsPage() {
     );
   }
 
-  const claims = await fetchRoster(collective);
+  const check = await stewardCheck(collective, techne.did);
   const who = (
     <div className="text-xs text-muted flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="stewards-who">
       <span>
@@ -69,7 +69,7 @@ export default async function StewardsPage() {
       <SignOutOfTechne next={PATH} />
     </div>
   );
-  if (!claims) {
+  if (!check) {
     return (
       <div className="space-y-8">
         {header}
@@ -81,16 +81,15 @@ export default async function StewardsPage() {
     );
   }
 
-  const holders = holdersFrom(claims);
+  const { holders, me } = check;
   const rows: RosterRow[] = await Promise.all(
     holders.map(async (h) => {
       const handle = await handleFor(h.did);
       return { did: h.did, role: h.role, since: h.since, label: handle ? `@${handle}` : shortDid(h.did) };
     }),
   );
-  const me = holders.find((h) => h.did === techne.did) ?? null;
 
-  if (!me || me.role < MANAGE_ROLE) {
+  if (!check.steward) {
     const managers = rows.filter((r) => r.role >= MANAGE_ROLE);
     return (
       <div className="space-y-8">

@@ -1,3 +1,22 @@
+# T-482 stewards post events without a site membership (staging, sample data)
+
+**What's judged:** a facilitator of RegenHub on Techne who is not a site member can now post and edit nights, and a
+site member without that role gets no form. Look at who is signed in (top line) and whether the form shows.
+
+## Run it
+Stand-ins only (no production anything): a no-records AppView, `scripts/staging/techne-standin.mjs`,
+`scripts/staging/supabase-standin.mjs`, and this build started with `TECHNE_SIGNIN_ENABLED=true
+TECHNE_STAGING_STANDIN=1`. Open `/portal/events`.
+
+## Steps (screens in `walkthrough/steward-events-gate/`, 1100 wide)
+1. **Signed out** (`01`). *"The old portal link now opens Manage Events beside Stewards, and asks for Techne."*
+2. **Sam, facilitator, not a member** (`02`). *"Sam has no membership here. The Techne role is enough: the form is
+   there."*
+3. **Sam posts a night** (`03`). *"One tick, Post. It's on RegenHub's calendar, with Edit and Remove."*
+4. **Ana, a member with no role** (`04`). *"A membership, even admin, doesn't give the form. She's told who to ask."*
+
+---
+
 # T-482 recurring Tuesdays: Agents Night 1st Tuesday, Civic Tech Night 3rd Tuesday
 
 **What's judged:** that the rhythm is now said in public ("First Tuesday of each month") while no event is invented:

@@ -4,16 +4,23 @@ import { loginUrlFor } from "@/lib/safeNext";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { MobileNav, type NavLink } from "@/components/nav/MobileNav";
-import { isStewardEventsEnabled } from "@/lib/techne/config";
+import { isStewardEventsEnabled, techneConfig } from "@/lib/techne/config";
+import { STEWARD_PATH } from "@/lib/techne/session";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 
 export const metadata = { title: "Member Portal — RegenHub" };
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
+  const path = (await headers()).get("x-pathname");
+  const door = !!techneConfig();
+  // The stewards' page moved to /admin/events: it answers to the Techne role, not a membership, so an old link
+  // goes there before this frame asks for a member session.
+  if (door && /^\/portal\/events\/?(\?|$)/.test(path ?? "")) redirect(STEWARD_PATH);
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  if (!user) redirect(loginUrlFor((await headers()).get("x-pathname")));
+  if (!user) redirect(loginUrlFor(path));
 
   const { data: member } = await supabase
     .from("members")
@@ -24,15 +31,16 @@ export default async function PortalLayout({ children }: { children: React.React
   // Matches the admin layout's gate: disabling a member also removes admin.
   const isAdmin = !!member?.is_admin && !member.disabled;
 
-  // Flag-gated only: the page itself says what you may do. The Techne door, or the old regenOS lane.
+  // Flag-gated only: the page itself says what you may do. The Techne door (/admin/events), or the old regenOS lane.
   const eventsEnabled = isStewardEventsEnabled();
+  const eventsHref = door ? STEWARD_PATH : "/portal/events";
 
   const links: NavLink[] = [
     { href: "/portal", label: "Dashboard" },
     { href: "/portal/my-code", label: "My Code" },
     { href: "/portal/passes", label: "Live Codes" },
     { href: "/portal/profile", label: "Profile" },
-    ...(eventsEnabled ? [{ href: "/portal/events", label: "Events" }] : []),
+    ...(eventsEnabled ? [{ href: eventsHref, label: "Events" }] : []),
     ...(isAdmin ? [{ href: "/admin", label: "Admin", accent: true }] : []),
   ];
 
@@ -52,7 +60,7 @@ export default async function PortalLayout({ children }: { children: React.React
               <Link href="/portal/passes" className="text-muted hover:text-foreground transition-colors">Live Codes</Link>
               <Link href="/portal/profile" className="text-muted hover:text-foreground transition-colors">Profile</Link>
               {eventsEnabled && (
-                <Link href="/portal/events" className="text-muted hover:text-foreground transition-colors">Events</Link>
+                <Link href={eventsHref} className="text-muted hover:text-foreground transition-colors">Events</Link>
               )}
               {isAdmin && (
                 <Link href="/admin" className="text-gold hover:text-gold/80 transition-colors">Admin</Link>

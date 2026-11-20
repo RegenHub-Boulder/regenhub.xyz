@@ -6,8 +6,8 @@ import { regenosCollectiveDid } from "@/lib/regenos/config";
 import { TechneUnreachable, endLapsedSession, techneSession, unreachableResponse } from "@/lib/techne/serverSession";
 import { sameSiteJson, tooMany, withinIpLimit } from "@/lib/techne/guard";
 import { sendCollectiveBatch, writeErrorText } from "@/lib/techne/collectiveWrite";
-import { RosterRefusal, fetchRoster, holdersFrom, rosterBatch, type RosterChange } from "@/lib/techne/roster";
-import { MANAGE_ROLE, isOfferedRole, type OfferedRole } from "@/lib/techne/roles";
+import { RosterRefusal, rosterBatch, stewardCheck, type RosterChange } from "@/lib/techne/roster";
+import { isOfferedRole, type OfferedRole } from "@/lib/techne/roles";
 import { didForHandle } from "@/lib/techne/did";
 import { TECHNE_READS_TAG } from "@/lib/techne/query";
 
@@ -51,10 +51,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Your Techne sign-in has ended. Sign in with Techne again, then retry." }, { status: 401 });
   }
 
-  const claims = await fetchRoster(collective);
-  if (!claims) return NextResponse.json({ ok: false, error: "Couldn't read RegenHub's roles from Techne just now. Try again in a moment." }, { status: 503 });
-  const me = holdersFrom(claims).find((h) => h.did === signedIn.who.did);
-  if (!me || me.role < MANAGE_ROLE) {
+  const check = await stewardCheck(collective, signedIn.who.did);
+  if (!check) return NextResponse.json({ ok: false, error: "Couldn't read RegenHub's roles from Techne just now. Try again in a moment." }, { status: 503 });
+  if (!check.steward) {
     return NextResponse.json(
       { ok: false, error: "Only RegenHub's facilitators and managers on Techne can change its roles." },
       { status: 403 },
@@ -78,14 +77,14 @@ export async function POST(req: Request) {
   const change: RosterChange = op === "end" ? { op: "end", did: target } : { op, did: target, role: body!.role as OfferedRole };
   let batch;
   try {
-    batch = rosterBatch(collective, claims, change);
+    batch = rosterBatch(collective, check.claims, change);
   } catch (err) {
     if (err instanceof RosterRefusal) return NextResponse.json({ ok: false, error: err.message }, { status: 409 });
     throw err;
   }
   const out = await sendCollectiveBatch(signedIn.session, config, batch);
   if (out.ok) {
-    // The events page's role hint and every other cached Techne read.
+    // Every cached Techne read.
     revalidateTag(TECHNE_READS_TAG, { expire: 0 });
     return NextResponse.json({ ok: true });
   }

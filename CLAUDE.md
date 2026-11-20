@@ -48,7 +48,7 @@ The `.dockerignore` has an exception (`!**/.env.production`) so the file is avai
 | `REGENOS_BASE_URL` | Web (runtime) | regenOS AppView base URL, no trailing slash. Unset = events fall back to the Luma embed and one-login stays off. |
 | `REGENOS_COLLECTIVE_DID` | Web (runtime) | The RegenHub collective's `did:plc:…`. Required alongside the base URL for the events swap. |
 | `REGENOS_WEB_URL` | Web (runtime) | **No longer read** (T-482): the calendar feed is regenhub.xyz's own `/events.ics`. Safe to remove from Coolify. |
-| `TECHNE_SIGNIN_ENABLED` | Web (runtime) | **Default off.** `true` turns on "Sign in with Techne", the site's one door: `/auth/login` and `/apply` lead with it (email link as a quiet fallback), it opens the portal for a member whose `members.did` matches, RSVP on event pages, the Techne `/portal/events` (the old page moves to `/portal/events/old`), `/techne/*` and `/api/auth/techne/*`. Off = Manage Events exactly as before (old regenOS-lane page). Needs the events vars above and `TECHNE_OAUTH_PRIVATE_JWK`. (Was `TECHNE_RSVP_ENABLED`.) |
+| `TECHNE_SIGNIN_ENABLED` | Web (runtime) | **Default off.** `true` turns on "Sign in with Techne", the site's one door: `/auth/login` and `/apply` lead with it (email link as a quiet fallback), it opens the portal for a member whose `members.did` matches, RSVP on event pages, the Techne `/admin/events` (`/portal/events` redirects there; the old page moves to `/portal/events/old`), `/techne/*` and `/api/auth/techne/*`. Off = Manage Events exactly as before (old regenOS-lane page). Needs the events vars above and `TECHNE_OAUTH_PRIVATE_JWK`. (Was `TECHNE_RSVP_ENABLED`.) |
 | `TECHNE_OAUTH_PRIVATE_JWK` | Web (runtime) | **Secret.** The Techne OAuth client's ES256 private key, a JWK with a `kid` (`node scripts/techne-oauth-key.mjs`; Coolify only, never committed). Signs the `private_key_jwt` client assertion; its public half is `/techne/jwks.json`. Unset = the door stays off even with the flag on. **Production has the flag on already: set this key and apply migration 064 BEFORE deploying** (docs/TECHNE-SIGN-IN.md "Deploy order"). |
 | `TECHNE_PDS_URL` / `TECHNE_PLC_URL` / `TECHNE_HANDLE_DOMAIN` / `TECHNE_PLATFORM_DID` | Web (runtime) | Test deployments only; production leaves them unset (techne-sdk defaults). |
 | `TECHNE_STAGING_STANDIN` / `TECHNE_STANDIN_URL` | Web (runtime) | **Staging only**, never production: the sign-in stand-in. Refused for the regenhub.xyz origin. |
@@ -273,7 +273,7 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   `community.lexicon.calendar.event` records plus the `pub.techne.draft.event.listing` records that
   curate others' events onto its calendar, and `getRecords` for one event. **Anonymous**, so private events
   are structurally absent. A query leaf takes ONE operator (a date range is two `start` leaves). Returns
-  `[]`/null on any failure, never throws. `/portal/events` reads the same way; the old lane's
+  `[]`/null on any failure, never throws. `/admin/events` reads the same way; the old lane's
   `fetchCollectiveEventsForManagement` (`social.scenius.*` with the regenOS cookie) is unused, kept until the
   lane is removed.
 - `lib/events.ts` — the seam `lib/luma.ts:10-11` promised. One `UpcomingEvent` shape, two sources,
@@ -291,7 +291,7 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   lexicon declares; old `ev-…` keys still read. Every create/edit sends `timezone: "America/Denver"`.
   `/events/<slug>` is the series page (next posted night, posted nights after it, past nights; with none upcoming
   it says "Next date coming soon"), built from `lib/seriesEvents.ts`. `/` (right under the hero) and `/events`
-  lead with the series cards. `/portal/events` → **Add the next nights** offers the next 3 rule dates not yet posted
+  lead with the series cards. `/admin/events` → **Add the next nights** offers the next 3 rule dates not yet posted
   (a posted date is skipped, a cancelled one isn't re-offered) plus a date picker for any later night (`lib/seriesNights.ts`), posts them as the collective (below) and shows
   "N going" per event.
 - **Feeds:** `/events.ics` (everything) and `/events/<slug>.ics` (a rewrite to `/events/<slug>/calendar.ics`),
@@ -304,7 +304,7 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   lists, and `notFound()`s anything else — one honest 404. Card/date rendering is shared in
   `components/events/EventList.tsx`.
 - **"Sign in with Techne"** (`TECHNE_SIGNIN_ENABLED` + `TECHNE_OAUTH_PRIVATE_JWK`, default OFF; T-482): one door,
-  one session, for the portal, RSVP and the stewards' `/portal/events`. **The server is the OAuth client** (PR #122
+  one session, for the portal, RSVP and the stewards' `/admin/events`. **The server is the OAuth client** (PR #122
   review, H1): a confidential atproto client (`@atproto/oauth-client-node`, `lib/techne/oauth/client.ts`; PAR, PKCE,
   DPoP, `private_key_jwt` signed with `TECHNE_OAUTH_PRIVATE_JWK`, made by `node scripts/techne-oauth-key.mjs`, Coolify
   only, never committed; no key = door off). Metadata `/techne/client-metadata.json`, public key `/techne/jwks.json`,
@@ -339,6 +339,7 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   handle), change and end roles (`pub.techne.draft.membership` written as the collective via writeAsCollective,
   `lib/techne/roster.ts`, `POST /api/techne/stewards`). Authority is the Techne role (>= 30), never `is_admin`; the
   `is_admin` admin pages live in `app/admin/(staff)/`. Ending sets `validUntil`; nobody-left-at-30 is refused.
+  `/admin/events` (Manage Events) uses the same check (`stewardCheck`).
   Details: docs/TECHNE-SIGN-IN.md "Managing RegenHub's roles".
 - Deliberately NOT changed: the newsletter still reads Luma directly (`lib/newsletter.ts:142`). Its
   copy is Luma-branded end to end; switching it is a product decision, not a plumbing one.
@@ -399,14 +400,16 @@ Both doors land the AppView's session cookie on this origin then call the one sh
   `verified === true` and ignore every other channel.
 - `members.did` (migration `042`) is **server-written only** and deliberately absent from the profile
   self-edit whitelist (`api/portal/profile/route.ts:63-65`).
-- `/portal/events` — **Manage Events**, the stewards' in-portal calendar. **`TECHNE_SIGNIN_ENABLED` off: the old
-  lane's page, unchanged** (`components/portal/legacy/`, described below; nav link, card and revalidate ride
-  `isStewardEventsEnabled()` = Techne door OR `REGENOS_LOGIN_ENABLED`). **On:** the Techne door. Signed out, it sends to
-  `/auth/login?next=/portal/events`, whose one sign-in gives both sessions; the old page is still served at
-  `/portal/events/old` while the regenOS lane is on, but nothing links to it. The calendar is the documented public read (`fetchCollectiveEvents`).
-  **Everyone signed in gets the form**; the collective's public `pub.techne.draft.membership` claims only word a hint
-  (role, or "posting works if you manage RegenHub on Techne"; `lib/techne/standing.ts`,
-  `GET /api/portal/events/standing`, portal session required, 1-minute cache). Techne decides on the write.
+- `/portal/events` — **Manage Events**. **`TECHNE_SIGNIN_ENABLED` off: the old lane's page, unchanged**
+  (`components/portal/legacy/`, described below; nav link, card and revalidate ride `isStewardEventsEnabled()` =
+  Techne door OR `REGENOS_LOGIN_ENABLED`). **On:** it redirects (portal layout, before the member gate) to
+  **`/admin/events`**, beside `/admin/stewards` and gated the same way (`stewardCheck`, `lib/techne/roster.ts`): a
+  Techne sign-in at facilitator (30) or above in RegenHub's public membership claims, read fresh. A site membership
+  is neither needed nor enough, so a Techne steward who isn't a member can post; anyone else gets an explainer
+  naming the managers and no form. `POST /api/portal/events/write` checks the same (no portal session read; per-IP
+  limit) and expires the cached Techne reads and `/` after a write that lands. The old page is still served at
+  `/portal/events/old` while the regenOS lane is on, but nothing links to it. The calendar is the documented public
+  read (`fetchCollectiveEvents`).
   **Writes as the collective** (`lib/techne/collectiveEvents.ts` builds, `collectiveWrite.ts` sends): the event
   (TID key), its `pub.techne.draft.event.config` `{rkey}-cfg` (timezone America/Denver) and the collective's
   `pub.techne.draft.event.listing` `{rkey}-ctx`, all public, in RegenHub's repo, in ONE standard

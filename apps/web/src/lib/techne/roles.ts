@@ -4,6 +4,9 @@
  * leg), facilitator 30 and manager 40 (the manage leg, which writes as the collective). Those are the words here.
  */
 
+/** RegenHub's role claims about people: authored only by the collective, public by default. */
+export const MEMBERSHIP_NSID = "pub.techne.draft.membership";
+
 /** The roles /admin/stewards offers, lowest first. */
 export const ROLES = [
   { role: 20, name: "member" },

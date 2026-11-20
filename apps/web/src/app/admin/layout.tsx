@@ -15,17 +15,21 @@ const staffLinks: NavLink[] = [
   { href: "/admin/communications", label: "Comms" },
   { href: "/admin/newsletter", label: "Newsletter" },
 ];
-const stewardsLink: NavLink = { href: "/admin/stewards", label: "Stewards" };
+// The stewards' pages: they answer to the Techne role in RegenHub, so they show with the door on for anyone.
+const stewardLinks: NavLink[] = [
+  { href: "/admin/events", label: "Events" },
+  { href: "/admin/stewards", label: "Stewards" },
+];
 const portalLink: NavLink = { href: "/portal", label: "Portal", accent: true };
 
 /**
  * The admin area's frame. Who may see what is decided below it: the portal admin pages by `members.is_admin`
- * ((staff)/layout.tsx), /admin/stewards by the Techne role in RegenHub. This only chooses which links to show:
- * a RegenHub admin sees them all, anyone else just Stewards (while the Techne door is on).
+ * ((staff)/layout.tsx), /admin/events and /admin/stewards by the Techne role in RegenHub. This only chooses which
+ * links to show: a RegenHub admin sees them all, anyone else just Events and Stewards (while the Techne door is on).
  */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, isAdmin } = await portalViewer();
-  const stewards = techneConfig() && regenosCollectiveDid() ? [stewardsLink] : [];
+  const stewards = techneConfig() && regenosCollectiveDid() ? stewardLinks : [];
   const links = [...(isAdmin ? staffLinks : []), ...stewards, ...(user ? [portalLink] : [])];
 
   return (
