@@ -7,8 +7,9 @@ import { verifyUnsubscribeToken } from "@/lib/newsletter";
  * One-click unsubscribe from the newsletter. Token is an HMAC of the email
  * so links can't be forged to unsubscribe other people. Idempotent.
  *
- * Affects newsletter sends only — transactional email (door codes,
- * approvals, billing) is unaffected.
+ * Stops the newsletter and the notes after nights (night follow-ups, migration
+ * 066: decide_night_followups holds anyone in email_unsubscribes). Transactional
+ * email (door codes, approvals, billing) is unaffected.
  */
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -48,7 +49,7 @@ export async function GET(req: Request) {
 
   return page(
     "You're unsubscribed",
-    "You won't get the RegenHub newsletter anymore. Anything transactional (door codes, receipts) still works normally. Change your mind any time — just reply to an old issue.",
+    "You won't get the RegenHub newsletter or our notes after nights anymore. Anything transactional (door codes, receipts) still works normally. Change your mind any time — just reply to an old issue.",
     true,
   );
 }
