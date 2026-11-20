@@ -158,7 +158,8 @@ $$;
 -- follow-up this week. Answers the rows it changed (sending = claimed, held); the caller sends each claimed one and
 -- records the outcome only against its own attempt number.
 create function retry_night_followups(p_event_uri text, p_actor_did text)
-  returns table (id bigint, member_id integer, email text, variant text, status text, held_reason text, attempts integer)
+  returns table (id bigint, member_id integer, email text, variant text, status text, held_reason text, attempts integer,
+                 subject text, html text, body_text text)
 language plpgsql security definer set search_path = public as $$
 #variable_conflict use_column
 declare
@@ -201,7 +202,7 @@ begin
                                'sending', (select count(*) from night_followups f where f.id = any(v_claimed) and f.status = 'sending'),
                                'held', (select count(*) from night_followups f where f.id = any(v_claimed) and f.status = 'held')));
   return query
-    select f.id, f.member_id, f.email, f.variant, f.status, f.held_reason, f.attempts
+    select f.id, f.member_id, f.email, f.variant, f.status, f.held_reason, f.attempts, f.subject, f.html, f.body_text
       from night_followups f where f.id = any(v_claimed) order by f.id;
 end;
 $$;

@@ -32,7 +32,7 @@ export function NightFollowups({ nights }: { nights: NightFollowupView[] }) {
       </div>
       {nights.map((n) => (
         // Keyed by state too: after a click, the refreshed night starts fresh (its new buttons, no stale message).
-        <Night key={`${n.eventUri}:${n.state}:${n.attempts}`} night={n} />
+        <Night key={`${n.eventUri}:${n.state}:${n.attempts}:${n.outcomes.map((o) => o.status).join()}`} night={n} />
       ))}
     </section>
   );

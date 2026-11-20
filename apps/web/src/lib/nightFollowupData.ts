@@ -193,13 +193,16 @@ async function sendRows(
   for (const r of rows) {
     let update: Record<string, unknown>;
     try {
-      let note = r.subject && r.html && r.body_text ? { subject: r.subject, html: r.html, text: r.body_text } : null;
+      // subject, html and body_text are saved together, so html stands for all three.
+      let note = r.html != null ? { subject: r.subject ?? "", html: r.html, text: r.body_text ?? "" } : null;
       if (!note) {
         const who = people.get(r.email) ?? { name: "", askForPage: false };
         note = renderFollowup(r.variant, personValues(who, await night(), siteBase()), footerFor(r.email));
-        const { error } = await admin.from("night_followups")
-          .update({ subject: note.subject, html: note.html, body_text: note.text }).eq("id", r.id).eq("attempts", r.attempts);
+        const { data: kept, error } = await admin.from("night_followups")
+          .update({ subject: note.subject, html: note.html, body_text: note.text })
+          .eq("id", r.id).eq("attempts", r.attempts).eq("status", "sending").select("id");
         if (error) throw new Error(`couldn't save the note before sending: ${error.message}`);
+        if (!kept?.length) continue; // another click moved this row on: its outcome is theirs to write
       }
       const mail = { to: r.email, ...note, idempotencyKey: `night-followup-${r.id}` };
       let res = await sendEmailDetailed(mail);
@@ -297,16 +300,14 @@ export async function retryNightFollowups(admin: Admin, eventUri: string, stewar
   const claimed = touched.filter((r) => r.status === "sending");
   const held = touched.length - claimed.length;
   if (claimed.length === 0) return { ok: true, sent: 0, failed: 0, held };
-  // The notes as first rendered; a note never saved (its first render failed) is rendered now.
-  const { data: saved, error: sErr } = await admin.from("night_followups").select("id, subject, html, body_text").in("id", claimed.map((r) => r.id));
-  if (sErr) return { ok: false, status: 500, error: "Couldn't read the notes. Try again." };
-  const notes = new Map((saved ?? []).map((n) => [n.id as number, n]));
-  const rows = claimed.map((r) => ({ ...r, ...notes.get(r.id) }));
-  const unsaved = rows.filter((r) => !r.html).flatMap((r) => (r.member_id ? [r.member_id] : []));
+  // The notes as first rendered come back with the claim; a note never saved (its first render failed) is rendered
+  // now, for which the member's name is read. A failed read leaves the greeting plain rather than strand the claim.
+  const rows = claimed;
+  const unsaved = rows.filter((r) => r.html == null).flatMap((r) => (r.member_id ? [r.member_id] : []));
   const people = new Map<string, { name: string; askForPage: boolean }>();
   if (unsaved.length) {
     const { data: members, error: mErr } = await admin.from("members").select("id, name, show_in_directory").in("id", unsaved);
-    if (mErr) return { ok: false, status: 500, error: "Couldn't read the members. Try again." };
+    if (mErr) console.error("[night followups] retry: members read failed, sending with a plain greeting:", mErr);
     const byId = new Map((members ?? []).map((m) => [m.id as number, m as { name: string; show_in_directory: boolean | null }]));
     for (const r of rows) {
       const m = r.member_id ? byId.get(r.member_id) : undefined;
