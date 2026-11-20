@@ -140,7 +140,7 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
                 price: "from $250/mo",
                 color: "var(--forest-light)",
                 desc: "Full access with a permanent door code",
-                items: ["Hot desk $250/mo \u00b7 cold desk $500/mo", "24/7 access", "Co-op ownership pathway"],
+                items: ["Hot desk $250/mo \u00b7 cold desk $500/mo", "24/7 access", "Member demos and Studio Night"],
               },
             ].map(({ icon: Icon, tier, price, color, desc, items }) => (
               <Card key={tier} className="glass-panel hover-lift" style={{ borderLeft: `4px solid ${color}` }}>

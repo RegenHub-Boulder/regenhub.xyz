@@ -153,8 +153,8 @@ export function MembershipStatusCard({
         <div className="flex-1">
           <h3 className="font-semibold mb-1">Ready to become a member?</h3>
           <p className="text-sm text-muted mb-3">
-            You&apos;re on day passes right now. Members get day passes at the member rate, member-only events,
-            and a path to co-op ownership — with Full Access tiers ($250 Hot Desk / $500 Cold Desk) adding a
+            You&apos;re on day passes right now. Members get Studio Night and the Friday member demos, coworking
+            days each month and day passes at the member rate. Full Access ($250 Hot Desk / $500 Cold Desk) adds a
             permanent door code and 24/7 access. Apply to join and we&apos;ll get you set up.
           </p>
           <div className="flex gap-2 flex-wrap">

@@ -49,7 +49,7 @@ export const PLANS = {
     grantsMemberType: "cold_desk" as MemberType,
     productIdEnvKey: "STRIPE_PRODUCT_COLD_DESK",
     selfServe: true,
-    description: "Your own reserved desk + permanent door code + 24/7 access. Full cooperative path.",
+    description: "Your own reserved desk + permanent door code + 24/7 access.",
   },
   hot_desk: {
     label: "Hot Desk",
@@ -66,7 +66,7 @@ export const PLANS = {
     productIdEnvKey: "STRIPE_PRODUCT_MEMBER_5DAY",
     monthlyDayPasses: 5,
     selfServe: true,
-    description: "Everything in Contributing Member, plus 5 day passes credited each month.",
+    description: "The member nights and demos, and five coworking days each month.",
   },
   member_2day: {
     label: "Member + 2 days/mo",
@@ -75,7 +75,7 @@ export const PLANS = {
     productIdEnvKey: "STRIPE_PRODUCT_MEMBER_2DAY",
     monthlyDayPasses: 2,
     selfServe: true,
-    description: "Everything in Contributing Member, plus 2 day passes credited each month.",
+    description: "The member nights and demos, and two coworking days each month.",
   },
   member_basic: {
     label: "Member + 1 day/mo",
@@ -84,7 +84,7 @@ export const PLANS = {
     productIdEnvKey: "STRIPE_PRODUCT_MEMBER_BASIC",
     monthlyDayPasses: 1,
     selfServe: true,
-    description: "Step into the cooperative — includes 1 coworking day per month (passes accumulate), member rate on additional day passes ($25 vs $30), and access to members-only events.",
+    description: "The member nights and demos, and a coworking day each month.",
   },
 } as const satisfies Record<
   string,

@@ -60,10 +60,19 @@ function setEnv(on: boolean) {
 }
 
 beforeAll(async () => {
-  // A stand-in AppView: answers the documented query with no records of its own.
+  // A stand-in AppView: answers the documented query with the one event (the RSVP route reads it back to
+  // check it's the collective's and whether it's members only) and no other records of its own.
+  const eventRecord = {
+    ...EVENT,
+    author: HUB,
+    collection: "community.lexicon.calendar.event",
+    value: { $type: "community.lexicon.calendar.event", name: "Civic Tech Night", startsAt: "2099-01-01T01:00:00.000Z" },
+  };
   appview = createServer((req, res) => {
+    const url = new URL(req.url ?? "/", "http://x");
+    const asked = url.pathname.endsWith("getRecords") && url.searchParams.getAll("uris").includes(EVENT.uri);
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ records: [] }));
+    res.end(JSON.stringify({ records: asked ? [eventRecord] : [] }));
   }).listen(0, "127.0.0.1");
   await new Promise((r) => appview.once("listening", r));
   const state = mkdtempSync(join(tmpdir(), "t482-standin-"));

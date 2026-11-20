@@ -2,14 +2,15 @@ import type { Metadata } from "next";
 import { eventDetailsLinkText } from "@/lib/techne/rsvpCopy";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, CalendarDays, CalendarPlus, MapPin } from "lucide-react";
+import { ArrowLeft, CalendarDays, CalendarPlus, Lock, MapPin } from "lucide-react";
 import { getSeries, isSeriesName, rhythmOf, topicOf } from "@/lib/series";
 import { fetchCollectiveEvents, formatEventLocation, pastWindowStart } from "@/lib/regenos/events";
 import { NO_NEXT_NIGHT, overviewFor } from "@/lib/seriesEvents";
 import { formatEventRange, formatEventWhen } from "@/components/events/EventList";
 
 /**
- * A series page: `/events/agents-night`, `/events/boulder-blockchain`, `/events/civic-tech-night`, `/events/happy-hour`.
+ * A series page: `/events/agents-night`, `/events/boulder-blockchain`, `/events/civic-tech-night`,
+ * `/events/studio-night` (members only), `/events/happy-hour` (with its members-only demos).
  * What the night is, the next posted night (or "Next date coming soon"), the
  * posted nights after it, past nights, and the series' calendar feed. RSVP lives
  * on each night's own page.
@@ -57,6 +58,14 @@ export default async function SeriesPage({ params }: PageProps) {
 
         <header className="space-y-2">
           <h1 className="text-3xl md:text-4xl font-bold text-forest leading-tight">{series.name}</h1>
+          {series.membersOnly && (
+            <p className="flex items-center gap-2 font-medium" data-testid="series-members-only">
+              <Lock className="w-4 h-4 text-sage" /> Members only.{" "}
+              <Link href="/membership" className="text-sage underline font-normal">
+                See membership
+              </Link>
+            </p>
+          )}
           <p className="text-lg text-muted">{series.about}</p>
           {series.hosts && (
             <p className="text-sm text-muted" data-testid="series-hosts">Hosted by {series.hosts}</p>
@@ -74,6 +83,20 @@ export default async function SeriesPage({ params }: PageProps) {
           </p>
         </header>
 
+        {series.memberPart && (
+          <section className="glass-panel-subtle rounded-lg p-5 space-y-1" data-testid="series-member-part">
+            <h2 className="font-semibold flex items-center gap-2">
+              <Lock className="w-4 h-4 text-sage" /> {series.memberPart.title}
+            </h2>
+            <p className="text-sm text-muted">
+              {series.memberPart.about}{" "}
+              <Link href="/membership" className="text-sage underline">
+                See membership
+              </Link>
+            </p>
+          </section>
+        )}
+
         <section className="glass-panel-strong p-6 md:p-8 space-y-3" data-testid="series-next">
           <h2 className="text-sm uppercase tracking-wide text-muted">Next night</h2>
           <p className="text-2xl font-semibold flex items-start gap-2">
@@ -85,7 +108,9 @@ export default async function SeriesPage({ params }: PageProps) {
               {eventDetailsLinkText()}
             </Link>
           ) : (
-            <p className="text-sm text-muted">Open to anyone. The calendar feed below keeps you up to date.</p>
+            <p className="text-sm text-muted">
+              {series.membersOnly ? "For members." : "Open to anyone."} The calendar feed below keeps you up to date.
+            </p>
           )}
         </section>
 

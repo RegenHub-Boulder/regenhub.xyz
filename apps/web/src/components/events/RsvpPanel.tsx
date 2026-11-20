@@ -7,10 +7,15 @@
  * browser is signed in and what the person said before, and "I'm going" / "Can't make it" POST there; the server
  * writes the person's own `community.lexicon.calendar.rsvp` on their PDS and hints the platform. Signed out: the
  * shared "Sign in with Techne" button, which comes back to this page.
+ *
+ * A members-only night (`membersOnly`, Studio Night) says so up top. Signed out, members sign in as usual;
+ * signed in but not a member, the server's gate says `not-member` and the panel shows "Members only" with a link
+ * to /membership instead of the button. The server enforces it on the write too (lib/techne/rsvpGate.ts).
  */
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Check, Loader2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { goingLine, type RsvpStatus } from "@/lib/techne/rsvp";
@@ -21,12 +26,21 @@ interface Props {
   going: number;
   /** This page's path: where sign-in comes back to. */
   path: string;
+  /** A members-only night: RSVP takes a member in standing. */
+  membersOnly?: boolean;
 }
 
-type Mine = { rkey: string; status: RsvpStatus | null } | null;
-type State = { phase: "loading" } | { phase: "signed-out" } | { phase: "unavailable" } | { phase: "signed-in"; own: Mine };
+type Gate = "open" | "members" | "not-member" | "unknown";
 
-export function RsvpPanel({ event, going, path }: Props) {
+type Mine = { rkey: string; status: RsvpStatus | null } | null;
+type State =
+  | { phase: "loading" }
+  | { phase: "signed-out" }
+  | { phase: "unavailable" }
+  | { phase: "not-member" }
+  | { phase: "signed-in"; own: Mine };
+
+export function RsvpPanel({ event, going, path, membersOnly = false }: Props) {
   const router = useRouter();
   const [state, setState] = useState<State>({ phase: "loading" });
   const [saving, setSaving] = useState(false);
@@ -34,14 +48,20 @@ export function RsvpPanel({ event, going, path }: Props) {
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/techne/rsvp?event=${encodeURIComponent(event.uri)}`, { cache: "no-store" });
-    const out = (await res.json().catch(() => ({}))) as { signedIn?: boolean; own?: Mine; error?: string };
+    const out = (await res.json().catch(() => ({}))) as { signedIn?: boolean; own?: Mine; gate?: Gate; error?: string };
     if (!res.ok) {
       // Still signed in (the server kept it); Techne just didn't answer. No sign-in button: it would fail too.
       setError(res.status === 503 ? "Couldn't reach Techne just now. Reload in a moment." : (out.error ?? "Couldn't load your RSVP."));
       setState({ phase: "unavailable" });
       return;
     }
-    setState(out.signedIn ? { phase: "signed-in", own: out.own ?? null } : { phase: "signed-out" });
+    if (!out.signedIn) return setState({ phase: "signed-out" });
+    if (out.gate === "not-member") return setState({ phase: "not-member" });
+    if (out.gate === "unknown") {
+      setError("Couldn't reach Techne just now. Reload in a moment.");
+      return setState({ phase: "unavailable" });
+    }
+    setState({ phase: "signed-in", own: out.own ?? null });
   }, [event.uri]);
 
   useEffect(() => {
@@ -64,6 +84,10 @@ export function RsvpPanel({ event, going, path }: Props) {
       if (res.status === 401) {
         setState({ phase: "signed-out" });
         throw new Error(out.error ?? "Sign in with Techne again.");
+      }
+      if (res.status === 403) {
+        setState({ phase: "not-member" });
+        return;
       }
       if (!res.ok || !out.rkey) throw new Error(out.error ?? "Couldn't save your RSVP.");
       setState({ phase: "signed-in", own: { rkey: out.rkey, status } });
@@ -88,7 +112,25 @@ export function RsvpPanel({ event, going, path }: Props) {
 
       {state.phase === "loading" && <Loader2 className="w-5 h-5 animate-spin mx-auto text-muted" aria-label="Loading" />}
 
+      {membersOnly && state.phase !== "not-member" && (
+        <p className="text-sm" data-testid="rsvp-members-only">
+          Members only.{state.phase === "signed-out" ? " Members, sign in to RSVP." : ""}
+        </p>
+      )}
+
       {state.phase === "signed-out" && <SignInWithTechne next={path} />}
+
+      {state.phase === "not-member" && (
+        <div className="space-y-3" data-testid="rsvp-not-member">
+          <p className="text-sm">
+            Members only:{" "}
+            <Link href="/membership" className="text-sage underline">
+              see membership
+            </Link>
+          </p>
+          <SignOutOfTechne next={path} />
+        </div>
+      )}
 
       {state.phase === "signed-in" && (
         <div className="space-y-3">

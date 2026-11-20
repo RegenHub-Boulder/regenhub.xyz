@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, CalendarDays, CalendarPlus, MapPin, Layers } from "lucide-react";
+import { ArrowLeft, CalendarDays, CalendarPlus, MapPin, Layers, Lock } from "lucide-react";
 import { fetchAttendance, fetchPublicRegenosEvent, formatEventLocation } from "@/lib/regenos/events";
 import { formatEventRange } from "@/components/events/EventList";
 import { RsvpPanel } from "@/components/events/RsvpPanel";
@@ -18,6 +18,8 @@ import { hasEnded, isCancelled } from "@/lib/seriesEvents";
  *
  * RSVP (behind TECHNE_SIGNIN_ENABLED) is the attendee's own Techne record; see
  * components/events/RsvpPanel.tsx. With RSVP off the page says "just come".
+ * A night of a members-only series (Studio Night) says "Members only" and RSVP takes a member;
+ * a Happy Hour night names its members-only demos.
  */
 
 export const dynamic = "force-dynamic";
@@ -54,6 +56,8 @@ export default async function EventDetailPage({ params }: PageProps) {
   const when = formatEventRange(event.startAt, event.endAt);
   const recordType = "https://techne.pub/community.lexicon.calendar.event/";
   const location = event.location ? formatEventLocation(event.location) : "";
+  const membersOnly = !!event.series?.membersOnly;
+  const memberPart = event.series?.memberPart;
 
   return (
     <div className="px-6 py-12">
@@ -85,6 +89,17 @@ export default async function EventDetailPage({ params }: PageProps) {
                 <span>{location}</span>
               </p>
             )}
+            {membersOnly && (
+              <p className="flex items-start gap-2 font-medium" data-testid="event-members-only">
+                <Lock className="w-5 h-5 text-sage shrink-0 mt-0.5" />
+                <span>
+                  Members only.{" "}
+                  <Link href="/membership" className="text-sage underline font-normal">
+                    See membership
+                  </Link>
+                </span>
+              </p>
+            )}
             {event.series && (
               <p className="flex items-start gap-2 text-muted">
                 <Layers className="w-5 h-5 text-sage shrink-0 mt-0.5" />
@@ -101,6 +116,15 @@ export default async function EventDetailPage({ params }: PageProps) {
               <p className="whitespace-pre-line leading-relaxed">{event.description}</p>
             </div>
           )}
+
+          {memberPart && (
+            <div className="border-t border-white/10 pt-6 space-y-1" data-testid="event-member-part">
+              <h2 className="font-semibold flex items-center gap-2">
+                <Lock className="w-4 h-4 text-sage" /> {memberPart.title}
+              </h2>
+              <p className="text-sm text-muted">{memberPart.about}</p>
+            </div>
+          )}
         </article>
 
         {cancelled ? (
@@ -113,12 +137,27 @@ export default async function EventDetailPage({ params }: PageProps) {
               event={{ uri: event.uri, cid: event.cid }}
               going={attendance?.going ?? 0}
               path={`/events/${encodeURIComponent(event.did)}/${event.rkey}`}
+              membersOnly={membersOnly}
             />
           )
         ) : (
           <div className="glass-panel p-6 text-center space-y-2">
-            <h2 className="text-xl font-semibold">Open to everyone</h2>
-            <p className="text-muted text-sm">No RSVP needed: just come.</p>
+            {membersOnly ? (
+              <>
+                <h2 className="text-xl font-semibold">For members</h2>
+                <p className="text-muted text-sm">
+                  Members, just come.{" "}
+                  <Link href="/membership" className="text-sage underline">
+                    See membership
+                  </Link>
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 className="text-xl font-semibold">Open to everyone</h2>
+                <p className="text-muted text-sm">No RSVP needed: just come.</p>
+              </>
+            )}
           </div>
         )}
 
