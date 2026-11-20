@@ -6,6 +6,7 @@ import { getStripe, isStripeConfigured } from "@/lib/stripe";
 import { getPlan, isDeskPlan, planLabel } from "@/lib/plans";
 import { AuditAction, logAction } from "@/lib/auditLog";
 import { membershipInvoices } from "@/lib/onchain/invoiceKind";
+import { LIVE_STATUSES, isLive, membershipRevenue, type RevenueRow } from "@/lib/membershipRevenue";
 import { withLockWriter } from "@regenhub/shared";
 import { CancelMembershipError, cancelMembership, type CancelMode } from "@/lib/membershipCancel";
 import {
@@ -45,7 +46,7 @@ const day = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : "—")
 const unixDay = (unix: number | null | undefined) => (unix ? new Date(unix * 1000).toISOString().slice(0, 10) : "—");
 const errorText = (e: unknown) => (e instanceof Error ? e.message : typeof e === "object" && e && "message" in e ? String((e as { message: unknown }).message) : String(e));
 
-export const LIVE_STATUSES = ["active", "trialing", "past_due"] as const;
+export { LIVE_STATUSES };
 export const AUDIT_ACTION = AuditAction.MCP_BILLING_WRITE;
 
 // ── gates ────────────────────────────────────────────────────
@@ -130,7 +131,6 @@ const SUB_COLUMNS = "id, member_id, payment_rail, plan_key, status, monthly_cent
   "stripe_subscription_id, stripe_customer_id, past_due_since, admin_cancel_mode, admin_cancel_ends_at, pending_plan_key, pending_plan_at, " +
   "pending_plan_from, pending_plan_schedule_id, discount_cents, discount_note";
 
-const isLive = (status: string) => (LIVE_STATUSES as readonly string[]).includes(status);
 
 /** The subscription that matters for a member: live first, then newest. */
 function mainSubscription(subs: SubRow[]): SubRow | undefined {
@@ -413,7 +413,7 @@ export async function billingSummaryHandler(admin: ServiceClient, auth: McpAuthI
   const denied = scopeDenied(auth, "billing_summary", "read");
   if (denied) return denied;
   const [subs, overdue, balances, pools] = await Promise.all([
-    admin.from("subscriptions").select("id, plan_key, payment_rail, status, monthly_cents, net_cents, cancel_at_period_end, admin_cancel_mode").in("status", [...LIVE_STATUSES]),
+    admin.from("subscriptions").select("id, member_id, plan_key, payment_rail, status, monthly_cents, net_cents, cancel_at_period_end, admin_cancel_mode").in("status", [...LIVE_STATUSES]),
     membershipInvoices((kindColumn) => {
       const query = admin.from("onchain_invoices").select("id, amount_cents, due_at").in("status", ["open", "submitted", "detected"]).lt("due_at", new Date().toISOString());
       return kindColumn ? query.eq("kind", "membership") : query;
@@ -424,32 +424,33 @@ export async function billingSummaryHandler(admin: ServiceClient, auth: McpAuthI
   for (const [name, r] of Object.entries({ subscriptions: subs, onchain_invoices: overdue, members: balances, day_passes: pools })) {
     if (r.error) return fail(`${name} query failed: ${r.error.message}`);
   }
-  type S = { plan_key: string; payment_rail: string; status: string; monthly_cents: number; net_cents: number | null; cancel_at_period_end: boolean; admin_cancel_mode: string | null };
+  type S = RevenueRow & { payment_rail: string; cancel_at_period_end: boolean; admin_cancel_mode: string | null };
   const rows = (subs.data ?? []) as S[];
-  // Card net_cents is the discounted recurring price; crypto net_cents is the last amount paid, stale after a plan change.
-  const netOf = (s: S) => (s.payment_rail === "onchain" ? s.monthly_cents : s.net_cents ?? s.monthly_cents);
-  const byPlan = new Map<string, { count: number; list: number; net: number; card: number; crypto: number; pastDue: number; ending: number }>();
+  // MRR is the shared definition (lib/membershipRevenue.ts), the same the admin pages and the scoreboard show.
+  const revenue = membershipRevenue(rows);
+  const byPlan = new Map<string, { count: number; card: number; crypto: number; pastDue: number; ending: number }>();
   for (const s of rows) {
-    const p = byPlan.get(s.plan_key) ?? { count: 0, list: 0, net: 0, card: 0, crypto: 0, pastDue: 0, ending: 0 };
-    p.count += 1; p.list += s.monthly_cents; p.net += netOf(s);
+    const p = byPlan.get(s.plan_key) ?? { count: 0, card: 0, crypto: 0, pastDue: 0, ending: 0 };
+    p.count += 1;
     if (s.payment_rail === "onchain") p.crypto += 1; else p.card += 1;
     if (s.status === "past_due") p.pastDue += 1;
     if (s.cancel_at_period_end || s.admin_cancel_mode) p.ending += 1;
     byPlan.set(s.plan_key, p);
   }
-  const totalList = rows.reduce((n, s) => n + s.monthly_cents, 0);
-  const totalNet = rows.reduce((n, s) => n + netOf(s), 0);
+  const planMrr = (key: string) => revenue.byPlan[key] ?? { netCents: 0, listCents: 0 };
   const lines = [
     "## Billing summary",
     `Live subscriptions: ${rows.length} (${rows.filter((s) => s.payment_rail !== "onchain").length} card, ${rows.filter((s) => s.payment_rail === "onchain").length} crypto)`,
-    `MRR: ${usd(totalNet)} net of discounts (${usd(totalList)} at list prices). Past-due rows are included; rows set to end are counted until they do. ` +
-      "Crypto rows count at plan price (their discount codes aren't netted out).",
+    `Paying members: ${revenue.members} (active or trialing, either rail, once each).`,
+    `MRR: ${usd(revenue.netCents)} net of discounts (${usd(revenue.listCents)} at list prices), from active and trialing rows; rows set to end ` +
+      `are counted until they do. Past due, not in MRR: ${revenue.pastDue.subscriptions} (${usd(revenue.pastDue.netCents)}). ` +
+      "Crypto rows count at their last payment, never above plan price.",
     "",
     "| plan | live | card | crypto | past due | ending | MRR net | MRR list |",
     "|---|---|---|---|---|---|---|---|",
   ];
-  for (const [key, p] of [...byPlan.entries()].sort((a, b) => b[1].net - a[1].net)) {
-    lines.push(`| ${planLabel(key)} | ${p.count} | ${p.card} | ${p.crypto} | ${p.pastDue} | ${p.ending} | ${usd(p.net)} | ${usd(p.list)} |`);
+  for (const [key, p] of [...byPlan.entries()].sort((a, b) => planMrr(b[0]).netCents - planMrr(a[0]).netCents)) {
+    lines.push(`| ${planLabel(key)} | ${p.count} | ${p.card} | ${p.crypto} | ${p.pastDue} | ${p.ending} | ${usd(planMrr(key).netCents)} | ${usd(planMrr(key).listCents)} |`);
   }
   const overdueRows = (overdue.data ?? []) as { amount_cents: number }[];
   const pastDue = rows.filter((s) => s.status === "past_due").length;

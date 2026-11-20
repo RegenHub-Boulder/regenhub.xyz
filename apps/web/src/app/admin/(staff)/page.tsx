@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Users, Key, Zap, UserPlus, AlertTriangle, ClipboardList, Calendar, DollarSign, Inbox, Link2 } from "lucide-react";
 import { FunnelCard } from "@/components/admin/FunnelCard";
-import { effectiveMonthlyCents } from "@/lib/stripeNet";
+import { LIVE_STATUSES, REVENUE_COLUMNS, membershipRevenue, type RevenueRow } from "@/lib/membershipRevenue";
 
 export default async function AdminPage() {
   if (!await requireAdmin()) redirect("/portal");
@@ -66,7 +66,7 @@ export default async function AdminPage() {
     admin.from("free_day_claims").select("*", { count: "exact", head: true }).eq("status", "pending"),
     admin.from("free_day_claims").select("*", { count: "exact", head: true }).eq("status", "reserved"),
     // Subscriptions — only the billable rows (active/trialing/past_due)
-    supabase.from("subscriptions").select("monthly_cents, net_cents, status").in("status", ["active", "trialing", "past_due"]),
+    supabase.from("subscriptions").select(REVENUE_COLUMNS).in("status", [...LIVE_STATUSES]).returns<RevenueRow[]>(),
     // Funnel stages — all-time totals
     supabase.from("interests").select("*", { count: "exact", head: true }),
     admin.from("free_day_claims").select("*", { count: "exact", head: true }),
@@ -85,12 +85,11 @@ export default async function AdminPage() {
   const subbedSet = new Set((subbedMemberIds ?? []).map((s) => s.member_id));
   const unbilledDeskCount = (deskMembers ?? []).filter((m) => !subbedSet.has(m.id)).length;
 
-  const subs = billingSubs ?? [];
-  const payingCount = subs.length;
-  const mrrCents = subs
-    .filter((s) => s.status !== "past_due")
-    .reduce((sum, s) => sum + effectiveMonthlyCents(s), 0);
-  const pastDueCount = subs.filter((s) => s.status === "past_due").length;
+  // One definition of paying + MRR, shared with Billing, the scoreboard and the MCP (lib/membershipRevenue.ts).
+  const revenue = membershipRevenue(billingSubs ?? []);
+  const payingCount = revenue.members;
+  const mrrCents = revenue.netCents;
+  const pastDueCount = revenue.pastDue.subscriptions;
 
   const typeBreakdown = [
     { label: "Cold Desk", count: coldDeskCount ?? 0, color: "text-green-400" },

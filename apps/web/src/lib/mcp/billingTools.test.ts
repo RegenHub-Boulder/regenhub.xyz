@@ -210,6 +210,20 @@ describe("read tools", () => {
     expect(out).toMatch(/MRR: \$90\.00 net of discounts \(\$100\.00 at list prices\)/);
     expect(out).toMatch(/\| Member \+ 2 days\/mo \| 2 \| 1 \| 1 \| 0 \| 0 \| \$90\.00 \| \$100\.00 \|/);
     expect(out).toMatch(/Prepaid days outstanding: 5 day passes across 2 members' balances, plus 3 unused uses/);
+
+    // Past due is live but not paying: listed, kept out of MRR (the one definition, lib/membershipRevenue.ts).
+    await db.sql(`insert into subscriptions (id, member_id, payment_rail, stripe_subscription_id, stripe_customer_id, stripe_price_id, plan_key, monthly_cents, net_cents, status, current_period_end)
+      values (61, 8, 'stripe', 'sub_brent_2', 'cus_brent', 'price_hd', 'hot_desk', 25000, 25000, 'past_due', $1)`, [iso(3 * DAY)]);
+    try {
+      const late = body(await billingSummaryHandler(db as never, ada()));
+      expect(late).toMatch(/Live subscriptions: 3 \(2 card, 1 crypto\)/);
+      expect(late).toMatch(/Paying members: 2 /);
+      expect(late).toMatch(/MRR: \$90\.00 net of discounts \(\$100\.00 at list prices\)/);
+      expect(late).toMatch(/Past due, not in MRR: 1 \(\$250\.00\)/);
+      expect(late).toMatch(/\| Hot Desk \| 1 \| 1 \| 0 \| 1 \| 0 \| \$0\.00 \| \$0\.00 \|/);
+    } finally {
+      await db.sql("delete from subscriptions where id = 61");
+    }
   });
 
   it("reads need the read scope", async () => {

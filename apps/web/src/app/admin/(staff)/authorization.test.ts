@@ -9,6 +9,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createServiceClient: vi.fn() }));
 const pages = [
   { name: "dashboard", render: async () => (await import("./page")).default() },
   { name: "pipeline", render: async () => (await import("./pipeline/page")).default({ searchParams: Promise.resolve({}) }) },
+  { name: "scoreboard", render: async () => (await import("./scoreboard/page")).default() },
   { name: "newsletter", render: async () => (await import("./newsletter/page")).default() },
   { name: "member detail", render: async () => (await import("./members/[id]/page")).default({ params: Promise.resolve({ id: "1" }) }) },
 ];

@@ -20,6 +20,7 @@ import { CouponsSection } from "@/components/admin/CouponsSection";
 import { RateLabel } from "@/components/admin/RateLabel";
 import { RefreshNetsButton } from "@/components/admin/RefreshNetsButton";
 import { effectiveMonthlyCents } from "@/lib/stripeNet";
+import { isLive, membershipRevenue } from "@/lib/membershipRevenue";
 
 export const metadata = { title: "Billing — Admin" };
 
@@ -109,24 +110,16 @@ export default async function BillingPage() {
   ]);
 
   const allSubs = subs ?? [];
-  const billingSubs = allSubs.filter((s) =>
-    ["active", "trialing", "past_due"].includes(s.status),
-  );
-  const activeSubs = billingSubs.filter((s) => s.status !== "past_due");
+  const billingSubs = allSubs.filter((s) => isLive(s.status));
   const pastDueSubs = billingSubs.filter((s) => s.status === "past_due");
   const cancelingSubs = billingSubs.filter((s) => s.cancel_at_period_end);
 
-  const mrrCents = activeSubs.reduce((sum, s) => sum + effectiveMonthlyCents(s), 0);
-  const cancelingCents = cancelingSubs.reduce((sum, s) => sum + effectiveMonthlyCents(s), 0);
-  const mrrByPlan = activeSubs.reduce<Record<string, { count: number; cents: number }>>(
-    (acc, s) => {
-      const k = s.plan_key;
-      if (!acc[k]) acc[k] = { count: 0, cents: 0 };
-      acc[k].count += 1;
-      acc[k].cents += effectiveMonthlyCents(s);
-      return acc;
-    },
-    {},
+  // One definition of paying + MRR, shared with the dashboard, the scoreboard and the MCP (lib/membershipRevenue.ts).
+  const revenue = membershipRevenue(allSubs);
+  const mrrCents = revenue.netCents;
+  const cancelingCents = cancelingSubs.filter((s) => s.status !== "past_due").reduce((sum, s) => sum + effectiveMonthlyCents(s), 0);
+  const mrrByPlan = Object.fromEntries(
+    Object.entries(revenue.byPlan).map(([k, p]) => [k, { count: p.subscriptions, cents: p.netCents }]),
   );
 
   const dayPassRevenueThisMonth = (thisMonthPurchases ?? []).reduce(
@@ -161,7 +154,7 @@ export default async function BillingPage() {
             <p className="text-xs text-muted mb-1">MRR</p>
             <p className="text-3xl font-bold text-foreground">{fmtMoney(mrrCents)}</p>
             <p className="text-xs text-muted mt-1">
-              from {activeSubs.length} active sub{activeSubs.length === 1 ? "" : "s"}
+              from {revenue.subscriptions} paying sub{revenue.subscriptions === 1 ? "" : "s"}
               {cancelingCents > 0 && (
                 <span className="text-amber-400"> · −{fmtMoney(cancelingCents)} pending cancel</span>
               )}
@@ -173,9 +166,9 @@ export default async function BillingPage() {
           <CardContent className="p-5">
             <Users className="w-6 h-6 text-sage mb-2" />
             <p className="text-xs text-muted mb-1">Paying members</p>
-            <p className="text-3xl font-bold text-foreground">{billingSubs.length}</p>
+            <p className="text-3xl font-bold text-foreground">{revenue.members}</p>
             <p className="text-xs text-muted mt-1">
-              {activeSubs.length} active · {pastDueSubs.length} past due
+              active or trialing, card and USDC · {revenue.pastDue.members} more past due
             </p>
           </CardContent>
         </Card>

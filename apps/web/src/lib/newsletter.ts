@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { fetchUpcomingLumaEvents, type LumaEvent } from "@/lib/luma";
 import type { HubDigestStats } from "@/lib/email";
-import { effectiveMonthlyCents } from "@/lib/stripeNet";
+import { GOOD_STANDING_STATUSES, REVENUE_COLUMNS, membershipRevenue, type RevenueRow } from "@/lib/membershipRevenue";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -104,7 +104,7 @@ export async function compileFortnightStats(admin: ServiceClient): Promise<HubDi
     { count: dayCodesIssued },
     { count: freeDaySignups },
   ] = await Promise.all([
-    admin.from("subscriptions").select("monthly_cents, net_cents, status").in("status", ["active", "trialing"]),
+    admin.from("subscriptions").select(REVENUE_COLUMNS).in("status", [...GOOD_STANDING_STATUSES]).returns<RevenueRow[]>(),
     admin.from("members").select("*", { count: "exact", head: true }).eq("disabled", false).eq("member_type", "cold_desk"),
     admin.from("members").select("*", { count: "exact", head: true }).eq("disabled", false).eq("member_type", "hot_desk"),
     admin.from("members").select("*", { count: "exact", head: true }).eq("disabled", false).eq("member_type", "hub_friend"),
@@ -117,8 +117,9 @@ export async function compileFortnightStats(admin: ServiceClient): Promise<HubDi
 
   return {
     monthLabel: windowLabel,
-    mrrCents: (billingSubs ?? []).reduce((s, r) => s + effectiveMonthlyCents(r), 0),
-    payingMembers: (billingSubs ?? []).length,
+    // The shared definition (lib/membershipRevenue.ts): the same numbers the admin pages show.
+    mrrCents: membershipRevenue(billingSubs ?? []).netCents,
+    payingMembers: membershipRevenue(billingSubs ?? []).members,
     tierCounts: [
       { label: "Cold Desk", count: coldDesk ?? 0 },
       { label: "Hot Desk", count: hotDesk ?? 0 },
