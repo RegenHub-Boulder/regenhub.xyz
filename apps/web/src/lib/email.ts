@@ -18,6 +18,7 @@ function getResend(): Resend | null {
   return resendClient;
 }
 
+import { outboxProvider } from "@/lib/staging/outbox";
 import { defaultEmailFrom as defaultFrom, defaultEmailReplyTo as defaultReplyTo } from "@regenhub/shared";
 
 export interface SendEmailInput {
@@ -51,7 +52,7 @@ export interface SendResult {
 // ============================================================
 // The provider seam: every email this app sends goes through deliver(), and only the provider below talks to a
 // mail service. Which provider is a setting (EMAIL_PROVIDER, default "resend"); moving to Amazon SES later is a new
-// entry in PROVIDERS, not a change to any caller. test/email-seam.test.ts fails if another file reaches a provider.
+// entry in providers(), not a change to any caller. test/email-seam.test.ts fails if another file reaches a provider.
 // ============================================================
 
 /** One message, everything filled in, as a provider takes it. */
@@ -112,12 +113,14 @@ const resendProvider: EmailProvider = {
   },
 };
 
-const PROVIDERS: Record<string, EmailProvider> = { resend: resendProvider };
+/** `outbox` is the staging preview's stand-in (lib/staging/outbox.ts): it works only with the Techne stand-in on. */
+// Read at call time, not module load: lib/staging/outbox.ts imports this module too.
+const providers = (): Record<string, EmailProvider> => ({ resend: resendProvider, outbox: outboxProvider });
 
 /** The provider EMAIL_PROVIDER names (default "resend"), or null for a name this build doesn't know. */
 export function emailProvider(): EmailProvider | null {
   const name = (process.env.EMAIL_PROVIDER || "resend").trim().toLowerCase();
-  return PROVIDERS[name] ?? null;
+  return providers()[name] ?? null;
 }
 
 export function isEmailConfigured(): boolean {

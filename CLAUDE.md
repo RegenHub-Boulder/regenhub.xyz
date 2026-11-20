@@ -54,7 +54,8 @@ The `.dockerignore` has an exception (`!**/.env.production`) so the file is avai
 | `TECHNE_STAGING_STANDIN` / `TECHNE_STANDIN_URL` | Web (runtime) | **Staging only**, never production: the sign-in stand-in. Refused for the regenhub.xyz origin. |
 | `REGENOS_LOGIN_ENABLED` | Web (runtime) | **Default off.** `true`/`1`/`yes` turns on the regenOS login lane + the `/xrpc` proxy. |
 | `CRON_SECRET` | Web (runtime) | Bearer token required by every `/api/cron/*` route. |
-| `NEWSLETTER_UNSUBSCRIBE_SECRET` | Web (runtime) | Signs newsletter unsubscribe links. Give it its own value — those links sit in inboxes forever and shouldn't share the cron bearer token. Falls back to `CRON_SECRET` if unset (already-mailed links keep verifying); in production, with neither set, signing throws instead of using a default. |
+| `EMAIL_PROVIDER` | Web (runtime) | Which mail service every web send goes through (`lib/email.ts` `deliver`, the one send function). Default `resend` (needs `RESEND_API_KEY` + `EMAIL_FROM`). `outbox` is the staging preview's stand-in (works only with the Techne stand-in on). Amazon SES later = a new entry in `providers()`, then flip this. The bot (`apps/bot/src/email.ts`) still calls Resend itself. |
+| `NEWSLETTER_UNSUBSCRIBE_SECRET` | Web (runtime) | Signs newsletter unsubscribe links, and (scoped apart) the "no more notes after nights" links. Give it its own value — those links sit in inboxes forever and shouldn't share the cron bearer token. Falls back to `CRON_SECRET` if unset (already-mailed links keep verifying); in production, with neither set, signing throws instead of using a default. |
 
 ## Project Structure
 ```
@@ -79,7 +80,9 @@ supabase/
     ├── 008_membership_model.sql      # cold_desk/hot_desk/day_pass types
     ├── 009_day_passes_balance.sql
     ├── 010_fix_member_types.sql      # day_pass slot range fix
-    └── 011_hub_friend.sql            # hub_friend member type
+    ├── 011_hub_friend.sql            # hub_friend member type
+    ├── …
+    └── 066_night_followups.sql       # night follow-ups: decisions, sends, opt-outs
 DEPLOYMENT.md               # Full infra guide for agents + humans
 ```
 
@@ -192,6 +195,32 @@ and a fingerprint of its facts; "Done" / "Not now" (14 days) are `admin_actions`
 target = action id, via `POST /api/admin/scoreboard/actions`), and a dismissal holds only while the fingerprint
 matches. "Copy as text" ends with the top 5 (names only). The MCP reads the same: `scoreboard_summary`,
 `recommended_actions`. Staging: `scripts/staging/next-actions-shots.mjs` drives the list (Done, reload, Bring back).
+The funnel ends with **Followed up after a night → joined within 30 days** (`followupFunnel`: guest notes sent, by
+month, and how many of those people started their first subscription within 30 days); a dash until migration 066 runs.
+
+### Night follow-ups (/admin/events, T-497)
+The day after a night, the people who RSVP'd going get one short note: guests (not members in standing) are thanked,
+told the next night of that series, invited to a Friday member demo as a guest and to Studio Night by joining, and
+pointed at `/membership`; members are thanked, told the next Studio Night, and (if their member page is unasked,
+`show_in_directory` null) asked to fill it in. Copy is data: `lib/nightFollowupCopy.ts`. Rules are pure in
+`lib/nightFollowups.ts`; reads and the send in `lib/nightFollowupData.ts`.
+- **Who:** RSVP'd going (Techne, `fetchAttendance`) AND linked to a members row with an email (`members.did`). That is
+  the only email the site holds for an RSVP; Techne-only attendees are counted on the page ("no email to write to"),
+  never mailed. Held, with the reason shown: unsubscribed (`email_unsubscribes`), opted out
+  (`night_followup_optouts`, the "No more notes after nights" link, `/api/followups/optout`), a follow-up in the last
+  7 days (across nights), or a disabled account.
+- **Steward approval:** `/admin/events` lists each night that ended in the last 3 days: who gets which note (names
+  only, no emails: a steward needn't be a site admin), who is held, a preview of each note, **Send** / **Skip**.
+  Nothing sends without the click; there is no cron. `POST /api/portal/events/followups` is gated like the events
+  write route (Techne steward, `stewardCheck`), re-reads the night and the RSVPs, and sends only to the people the
+  steward left ticked who still qualify. A night is decided once.
+- **Migration 066:** `night_followup_batches` (one decision per night), `night_followups` (who, event, variant,
+  sent/failed/held + reason), `night_followup_optouts`; `decide_night_followups` records the decision, each person
+  (checked under a per-email lock, so two nights sent at once can't both reach someone the same week) and the
+  `admin_actions` row (`night_followups_decided`) in one transaction. Each send has idempotency key
+  `night-followup-<id>`. A failed send is recorded and shown; there is no retry button yet.
+- Staging: `T497_FOLLOWUPS=1 scripts/staging/preview.sh` seeds a night that just ended with sample RSVPs and sends to
+  the staging outbox; `scripts/staging/followups-shots.mjs` drives review, previews and Send.
 
 ### Membership application flow (approve + notify)
 `/apply` (sign-in required) → `/api/portal/application` upserts the application, emails the

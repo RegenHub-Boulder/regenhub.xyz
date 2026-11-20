@@ -14,6 +14,8 @@
 #           SUPABASE_SERVICE_ROLE_KEY=staging pnpm --filter web build
 #   regenhub.xyz (this worktree's build) 127.0.0.1:B, served on the tailnet by Uni
 # No production database, no production Techne, no production Supabase.
+# T497_FOLLOWUPS=1 seeds a night that just ended with sample RSVPs (followups-seed.mjs) for the follow-ups on
+# /admin/events, and sends mail to the staging outbox (EMAIL_PROVIDER=outbox; /staging/outbox shows the latest).
 # T482_SCOREBOARD=1 also seeds the fictional rows /admin/scoreboard reads (scoreboard-seed.mjs); sign in as the steward.
 # Env: T482_STATE (state dir, default ~/.cache/t482), T482_BUILD (where pgenv/, target/ and appview.env live;
 # default T482_STATE), T482_PORT_BASE.
@@ -44,9 +46,13 @@ export DATABASE_URL="postgres://postgres@127.0.0.1:$P_PG/t482" BIND_ADDR="127.0.
 for _ in $(seq 60); do curl -sf "http://127.0.0.1:$P_APPVIEW/health" >/dev/null && break; sleep 1; done
 node "$ROOT/scripts/staging/seed.mjs" --appview "http://127.0.0.1:$P_APPVIEW" --out "$STATE" > "$S/seed.log"
 node "$ROOT/scripts/staging/techne-standin.mjs" --port "$P_STANDIN" --appview "http://127.0.0.1:$P_APPVIEW" --state "$STATE" > "$S/standin.log" 2>&1 & pids+=($!)
-node "$ROOT/scripts/staging/supabase-standin.mjs" --port "$P_SUPA" --state "$STATE" ${T482_SCOREBOARD:+--scoreboard} > "$S/supabase-standin.log" 2>&1 & pids+=($!)
+node "$ROOT/scripts/staging/supabase-standin.mjs" --port "$P_SUPA" --state "$STATE" ${T482_SCOREBOARD:+--scoreboard} ${T497_FOLLOWUPS:+--followups} > "$S/supabase-standin.log" 2>&1 & pids+=($!)
 for _ in $(seq 20); do curl -sf -o /dev/null "http://127.0.0.1:$P_STANDIN/signin" && break; sleep 0.5; done
 node "$ROOT/scripts/staging/seed-rsvps.mjs" --standin "http://127.0.0.1:$P_STANDIN" --state "$STATE" >> "$S/seed.log"
+if [ -n "${T497_FOLLOWUPS:-}" ]; then
+  node "$ROOT/scripts/staging/followups-seed.mjs" --standin "http://127.0.0.1:$P_STANDIN" --state "$STATE" >> "$S/seed.log"
+  export EMAIL_PROVIDER=outbox EMAIL_FROM="RegenHub (staging) <hello@regenhub.test>" NEWSLETTER_UNSUBSCRIBE_SECRET=staging-only
+fi
 
 COLLECTIVE="$(node -e 'console.log(require(process.argv[1]).collective)' "$STATE/seed.json")"
 cd "$ROOT/apps/web"

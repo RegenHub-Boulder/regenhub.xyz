@@ -46,3 +46,16 @@ it("the provider is a setting: an unknown one sends nothing, through either send
   expect(await sendEmail(mail)).toBe(true);
   expect(net).toHaveBeenCalledTimes(1);
 });
+
+it("the staging outbox provider works only with the Techne stand-in on, never on regenhub.xyz", async () => {
+  vi.stubEnv("EMAIL_PROVIDER", "outbox");
+  vi.stubEnv("EMAIL_FROM", "RegenHub <hello@regenhub.test>");
+  const mail = { to: "a@example.test", subject: "staged", html: "<p>h</p>" };
+  vi.stubEnv("TECHNE_STAGING_STANDIN", "1");
+  vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://regenhub.xyz");
+  expect(await deliver(mail)).toMatchObject({ ok: false, error: "email not configured" });
+  vi.stubEnv("NEXT_PUBLIC_SITE_URL", "http://127.0.0.1:18700");
+  expect(await deliver(mail)).toMatchObject({ ok: true });
+  const { stagingOutboxMails } = await import("@/lib/staging/outbox");
+  expect(stagingOutboxMails()[0]).toMatchObject({ to: "a@example.test", subject: "staged" });
+});
