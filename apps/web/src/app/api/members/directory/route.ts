@@ -11,9 +11,12 @@ export type DirectoryMember = PublicMember;
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+/** `?limit=N` (1–100) reads only the first N members (the landing page shows six). */
+export async function GET(request?: Request) {
+  const raw = request ? Number(new URL(request.url).searchParams.get("limit")) : NaN;
+  const limit = Number.isInteger(raw) && raw >= 1 && raw <= 100 ? raw : undefined;
   try {
-    const members = await publicDirectory(createServiceClient());
+    const members = await publicDirectory(createServiceClient(), limit);
     return NextResponse.json({ members });
   } catch (error) {
     console.error("[Directory] read failed:", error);

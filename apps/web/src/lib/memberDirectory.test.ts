@@ -12,6 +12,12 @@ describe("normalizeLinks", () => {
   it.each([["javascript:alert(1)"], ["data:text/html,hi"], ["ftp://x.example"], ["localhost"], ["https://"]])("refuses %s", (bad) => {
     expect(normalizeLinks([bad]).ok).toBe(false);
   });
+  it("keeps commas inside a URL and adds https to host:port", () => {
+    expect(normalizeLinks("https://maps.example/@40.01,-105.27,15z\nsite.example:8080/work")).toEqual({
+      ok: true,
+      links: ["https://maps.example/@40.01,-105.27,15z", "https://site.example:8080/work"],
+    });
+  });
   it("refuses more than five", () => {
     expect(normalizeLinks(["a.example", "b.example", "c.example", "d.example", "e.example", "f.example"]).ok).toBe(false);
   });

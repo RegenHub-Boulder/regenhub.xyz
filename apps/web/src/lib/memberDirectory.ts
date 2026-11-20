@@ -86,9 +86,10 @@ export async function listedMembers(client: SupabaseClient): Promise<DirectoryRo
 export const MAX_LINKS = 5;
 export const WORKING_ON_MAX = 140;
 
-/** Pure: a link list as typed (array or newline/comma text) → clean http(s) URLs, or an error to show. */
+/** Pure: a link list as typed (array, or text one per line) → clean http(s) URLs, or an error to show. A URL may
+ *  hold commas, so text splits on newlines only. */
 export function normalizeLinks(input: unknown): { ok: true; links: string[] } | { ok: false; error: string } {
-  const raw = Array.isArray(input) ? input : typeof input === "string" ? input.split(/[\n,]/) : input == null ? [] : null;
+  const raw = Array.isArray(input) ? input : typeof input === "string" ? input.split(/\r?\n/) : input == null ? [] : null;
   if (raw === null) return { ok: false, error: "Links must be a list of URLs." };
   const links: string[] = [];
   for (const item of raw) {
@@ -96,7 +97,8 @@ export function normalizeLinks(input: unknown): { ok: true; links: string[] } | 
     if (!s) continue;
     let url: URL;
     try {
-      url = new URL(/^[a-z][a-z0-9+.-]*:/i.test(s) ? s : `https://${s}`);
+      // A scheme is letters then ":" not followed by a digit, so "site.example:8080" gets https:// added.
+      url = new URL(/^[a-z][a-z0-9+.-]*:(?!\d)/i.test(s) ? s : `https://${s}`);
     } catch {
       return { ok: false, error: `"${s.slice(0, 60)}" isn't a link.` };
     }
@@ -146,9 +148,9 @@ async function techneOf(row: DirectoryRow): Promise<{ handle: string | null; pro
   return { handle, profile };
 }
 
-/** The public directory: every listed member, as the public sees them. */
-export async function publicDirectory(client: SupabaseClient): Promise<PublicMember[]> {
-  const rows = await listedMembers(client);
+/** The public directory: listed members (the first `limit`, if given), as the public sees them. */
+export async function publicDirectory(client: SupabaseClient, limit?: number): Promise<PublicMember[]> {
+  const rows = (await listedMembers(client)).slice(0, limit);
   const techne = await Promise.all(rows.map(techneOf));
   return rows.map((row, i) => toPublicMember(row, techne[i].handle, techne[i].profile));
 }

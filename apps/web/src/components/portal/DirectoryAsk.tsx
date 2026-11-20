@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -15,7 +14,6 @@ export function DirectoryAsk() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [said, setSaid] = useState<boolean | null>(null);
-  const router = useRouter();
 
   async function answer(yes: boolean) {
     setBusy(true);
@@ -27,8 +25,8 @@ export function DirectoryAsk() {
         body: JSON.stringify({ show_in_directory: yes }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "Couldn't save");
+      // No refresh: the server would drop this card before the member reads the confirmation.
       setSaid(yes);
-      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't save");
     } finally {
@@ -68,7 +66,7 @@ export function DirectoryAsk() {
           Yes, list me
         </Button>
         <Button type="button" disabled={busy} onClick={() => answer(false)} className="btn-glass">
-          Not now
+          No thanks
         </Button>
       </div>
     </div>

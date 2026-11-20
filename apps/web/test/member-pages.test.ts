@@ -56,7 +56,18 @@ const rsvp = (rkey: string, night: number, status: string, at: number) => ({
   collection: RSVP,
   value: { $type: RSVP, subject: { uri: nights[night].uri, cid: nights[night].cid }, status: `${RSVP}#${status}`, createdAt: iso(at) },
 });
-const rsvps = [rsvp("r1", 0, "notgoing", -25), rsvp("r2", 0, "going", -21), rsvp("r3", 1, "going", -11), rsvp("r4", 2, "going", -1)];
+// Another calendar's event the hub lists; Ana went, but it isn't a hub night.
+const OTHER = "did:plc:othercalendar";
+const listedElsewhere = {
+  uri: `at://${OTHER}/${EV}/3n2elsewhere2`, cid: "bafyelsewhere", author: OTHER, collection: EV,
+  value: { $type: EV, name: "Someone else's meetup", startsAt: iso(-5), endsAt: iso(-4.9) },
+};
+const listing = {
+  uri: `at://${HUB}/pub.techne.draft.event.listing/l1`, cid: "bafylisting", author: HUB, collection: "pub.techne.draft.event.listing",
+  value: { event: { uri: listedElsewhere.uri } },
+};
+const rsvps = [rsvp("r1", 0, "notgoing", -25), rsvp("r2", 0, "going", -21), rsvp("r3", 1, "going", -11), rsvp("r4", 2, "going", -1),
+  { ...rsvp("r5", 0, "going", -6), value: { $type: RSVP, subject: { uri: listedElsewhere.uri, cid: listedElsewhere.cid }, status: `${RSVP}#going`, createdAt: iso(-6) } }];
 
 const techneCalls: string[] = [];
 function fakeTechne(input: RequestInfo | URL): Promise<Response> {
@@ -84,8 +95,13 @@ function fakeTechne(input: RequestInfo | URL): Promise<Response> {
   if (url.pathname === "/xrpc/pub.techne.draft.query.listRecords") {
     const where = JSON.stringify(JSON.parse(url.searchParams.get("query") ?? "{}").where);
     if (where.includes(RSVP)) return json({ records: rsvps.filter((r) => where.includes(r.author)) });
+    if (where.includes("event.listing")) return json({ records: [listing] });
     if (where.includes(EV)) return json({ records: nights });
     return json({ records: [] });
+  }
+  if (url.pathname === "/xrpc/pub.techne.draft.query.getRecords") {
+    const uris = url.searchParams.getAll("uris");
+    return json({ records: [...nights, listedElsewhere].filter((r) => uris.includes(r.uri)) });
   }
   return json({ error: "NotFound" }, 404);
 }
@@ -238,6 +254,8 @@ describe("member pages", () => {
     // Never an upcoming night, never one older than 90 days.
     expect(html).not.toContain("Studio Night");
     expect(html).not.toContain("A night long ago");
+    // Not a hub night, though the hub lists it and she went.
+    expect(html).not.toContain("Someone else");
     expect(html).not.toContain("ana@example.test");
 
     await db.exec("update members set show_rsvps = false where id = 1");
@@ -250,7 +268,7 @@ describe("member pages", () => {
   it("shows a member without a Techne link by id, and sends a linked member's id to their handle", async () => {
     const gus = renderToStaticMarkup((await page("7")) as React.ReactElement);
     expect(gus).toContain("Gus Sample");
-    expect(await digestOf(page("1"))).toMatch(/NEXT_REDIRECT;.*\/members\/ana-sample\.techne\.town;308/);
+    expect(await digestOf(page("1"))).toMatch(/NEXT_REDIRECT;.*\/members\/ana-sample\.techne\.town;307/);
   });
 
   it.each([
@@ -294,6 +312,12 @@ describe("editing your own page", () => {
     });
     expect(await row(2)).toMatchObject({ working_on: null, links: [], show_in_directory: null, bio: "Not listed." });
     expect((await directory()).members.map((m) => m.name)).not.toContain("Ana Sample");
+  });
+
+  it("keeps the working-on line to one line", async () => {
+    signIn(USER_ANA);
+    expect((await patch({ working_on: "Seeds\n\n  and   soil" })).status).toBe(200);
+    expect((await row(1)).working_on).toBe("Seeds and soil");
   });
 
   it("refuses a signed-out caller and bad page fields", async () => {

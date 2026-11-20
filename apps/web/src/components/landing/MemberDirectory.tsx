@@ -15,7 +15,7 @@ export function MemberDirectory() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    fetch("/api/members/directory")
+    fetch(`/api/members/directory?limit=${LANDING_COUNT}`)
       .then((r) => r.json())
       .then((d) => {
         setMembers(d.members ?? []);
@@ -58,7 +58,7 @@ export function MemberDirectory() {
   return (
     <div className="space-y-6">
       <ul className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {members.slice(0, LANDING_COUNT).map((m) => (
+        {members.map((m) => (
           <li key={m.slug}>
             <MemberCard member={m} />
           </li>

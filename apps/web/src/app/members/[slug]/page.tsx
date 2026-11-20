@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, permanentRedirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 import { ArrowLeft, CalendarDays, Link2 } from "lucide-react";
 import { createServiceClient } from "@/lib/supabase/admin";
@@ -10,7 +10,7 @@ import { MemberPhoto } from "@/components/members/MemberCard";
 
 /**
  * A member's page: /members/<techne-handle>, or /members/<id> for a member without a Techne link (a linked member
- * reached by id is sent to their handle). Only listed members have one; for anyone else this is the same plain 404.
+ * reached by id is sent to their handle, with a temporary redirect: handles change). Only listed members have one; for anyone else this is the same plain 404.
  */
 
 export const dynamic = "force-dynamic";
@@ -40,7 +40,7 @@ const nightDate = (iso: string) =>
 
 export default async function MemberPage({ params }: PageProps) {
   const found = await lookup((await params).slug);
-  if (found.kind === "redirect") permanentRedirect(`/members/${encodeURIComponent(found.slug)}`);
+  if (found.kind === "redirect") redirect(`/members/${encodeURIComponent(found.slug)}`);
   if (found.kind !== "found") notFound();
   const m = found.member;
   const nights = found.showRsvps && found.did ? await fetchRecentNights(found.did) : null;

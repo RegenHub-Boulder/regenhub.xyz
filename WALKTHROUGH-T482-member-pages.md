@@ -20,6 +20,7 @@ What's judged: who shows up, what a member page says, and how a member opts in.
    "Ana edits all of this on her profile. One box puts her in the directory; one shows her nights. Email, plan and
    door code are never on the page."
 4. **Asked once, at the end of joining** (`04-portal-ask-desktop.png`, `05-portal-ask-yes-desktop.png`)
-   "Robin hasn't decided yet, so the portal asks once. Yes, and Robin is listed."
+   "Robin hasn't decided yet. Saving the profile for something else doesn't count as a no, so the portal asks.
+   Yes, and Robin is listed."
 5. **/membership** (`06-membership-desktop.png`, `04-membership-phone.png`)
    "On the membership page, the member page isn't coming soon any more. It links to the directory."

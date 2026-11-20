@@ -7,6 +7,7 @@
  */
 
 import { fetchCollectiveEvents, type CollectiveEvent } from "@/lib/regenos/events";
+import { regenosCollectiveDid } from "@/lib/regenos/config";
 import { listRecords } from "@/lib/techne/query";
 import { RSVP_NSID, statusOf } from "@/lib/techne/rsvp";
 import { hasEnded, isCancelled } from "@/lib/series";
@@ -36,21 +37,24 @@ export function goingUris(rows: { author?: string; uri: string; value: RsvpValue
   return new Set([...latest].filter(([, v]) => statusOf(v.status) === "going").map(([uri]) => uri));
 }
 
-/** Pure: the past, not-cancelled nights among `events` this person was going to, latest first. */
-export function recentNightsFrom(events: CollectiveEvent[], going: Set<string>, now = new Date()): RecentNight[] {
+/** Pure: the collective's own past, not-cancelled nights among `events` this person was going to, latest first.
+ *  (`fetchCollectiveEvents` also returns other calendars' events the collective lists; those are left out.) */
+export function recentNightsFrom(events: CollectiveEvent[], going: Set<string>, collective: string, now = new Date()): RecentNight[] {
   return events
-    .filter((e) => going.has(e.uri) && e.startAt && hasEnded(e, now) && !isCancelled(e))
+    .filter((e) => e.did === collective && going.has(e.uri) && e.startAt && hasEnded(e, now) && !isCancelled(e))
     .sort((a, b) => (b.startAt as string).localeCompare(a.startAt as string))
     .slice(0, RECENT_NIGHTS_MAX)
     .map((e) => ({ name: e.name, startAt: e.startAt as string, url: e.url }));
 }
 
 export async function fetchRecentNights(did: string, now = new Date()): Promise<RecentNight[] | null> {
+  const collective = regenosCollectiveDid();
+  if (!collective) return null;
   const after = new Date(now.getTime() - RECENT_NIGHTS_DAYS * 86_400_000).toISOString();
   const [rsvps, events] = await Promise.all([
     listRecords<RsvpValue>({ where: { all: [{ type: { is: RSVP_NSID } }, { author: { is: did } }] } }, { revalidate: 300 }),
     fetchCollectiveEvents({ after, before: now.toISOString() }),
   ]);
   if (!rsvps || !events) return null;
-  return recentNightsFrom(events, goingUris(rsvps, did), now);
+  return recentNightsFrom(events, goingUris(rsvps, did), collective, now);
 }

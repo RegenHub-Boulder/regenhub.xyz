@@ -93,7 +93,8 @@ export function ProfileForm({ member, extras }: { member: Member; extras: Profil
           profile_photo_url: form.profile_photo_url || null,
           working_on: form.working_on.trim() || null,
           links: form.links,
-          show_in_directory: form.show_in_directory,
+          // Unasked (null) stays unasked unless they tick it: an unrelated save isn't a "no".
+          ...(member.show_in_directory !== null || form.show_in_directory ? { show_in_directory: form.show_in_directory } : {}),
           show_rsvps: form.show_rsvps,
         }),
       });

@@ -71,7 +71,12 @@ for (const [label, viewport] of Object.entries(sizes)) {
   // 5. Robin (the steward, a desk member) hasn't been asked: the portal asks once. Yes → listed.
   //    (Desktop only: the answer is saved, so the phone pass shows Robin already listed.)
   if (label === "desktop") {
-    await signInAs("Robin Steward (sample)", "/portal");
+    // Saving the profile for something else isn't a "no": the portal still asks.
+    await signInAs("Robin Steward (sample)", "/portal/profile");
+    await see("[data-testid=member-page-settings]");
+    await page.click("button:has-text('Save changes')");
+    await see("text=Saved!");
+    await page.goto(BASE + "/portal", { waitUntil: "networkidle" });
     await see("[data-testid=directory-ask]");
     await page.locator("[data-testid=directory-ask]").scrollIntoViewIfNeeded();
     await shot("portal-ask");
@@ -82,6 +87,10 @@ for (const [label, viewport] of Object.entries(sizes)) {
     await see("text=Robin Steward (sample)");
     await page.context().clearCookies();
   }
+
+  // The landing page asks the API for six at most.
+  const limited = await (await page.request.get(BASE + "/api/members/directory?limit=2")).json();
+  if (limited.members.length !== 2) fail(`limit=2 returned ${limited.members.length}`);
 
   // 6. /membership: the member page is no longer "coming soon"; it links the directory.
   await page.goto(BASE + "/membership", { waitUntil: "networkidle" });

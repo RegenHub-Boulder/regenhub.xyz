@@ -24,7 +24,7 @@ export async function PATCH(request: Request) {
   if (!body || typeof body !== "object") return NextResponse.json({ error: "Expected a JSON object" }, { status: 400 });
   const { name, bio, skills, telegram_username, ethereum_address, profile_photo_url, working_on, show_in_directory, show_rsvps } = body;
 
-  if (working_on !== undefined && working_on !== null && (typeof working_on !== "string" || working_on.trim().length > WORKING_ON_MAX)) {
+  if (working_on !== undefined && working_on !== null && (typeof working_on !== "string" || working_on.replace(/\s+/g, " ").trim().length > WORKING_ON_MAX)) {
     return NextResponse.json({ error: `"Working on" is one line, up to ${WORKING_ON_MAX} characters.` }, { status: 400 });
   }
   for (const [key, value] of [["show_in_directory", show_in_directory], ["show_rsvps", show_rsvps]] as const) {
@@ -92,7 +92,7 @@ export async function PATCH(request: Request) {
       ...(normalizedTelegram !== undefined && { telegram_username: normalizedTelegram }),
       ...(ethereum_address !== undefined && { ethereum_address }),
       ...(profile_photo_url !== undefined && { profile_photo_url }),
-      ...(working_on !== undefined && { working_on: working_on?.trim() || null }),
+      ...(working_on !== undefined && { working_on: working_on?.replace(/\s+/g, " ").trim() || null }),
       ...(links !== undefined && { links }),
       ...(show_in_directory !== undefined && { show_in_directory }),
       ...(show_rsvps !== undefined && { show_rsvps }),
