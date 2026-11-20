@@ -73,8 +73,9 @@ async function batchFacts(admin: Admin, dids: string[]) {
     admin.from("techne_people").select("did, handle, name, email, email_confirmed, member_id").in("did", dids),
   ]);
   if (byDid.error) throw byDid.error;
-  if (known.error) throw known.error;
-  const people = (known.data ?? []) as FollowupTechnePerson[];
+  // Deployed before migration 067 ran (deploy first, then migrate): follow-ups work as before, members only.
+  if (known.error) console.error("[night followups] techne_people read failed; members only:", known.error.message);
+  const people = (known.error ? [] : (known.data ?? [])) as FollowupTechnePerson[];
   const rows = [...((byDid.data ?? []) as FollowupMember[])];
   const extra = [...new Set(people.flatMap((p) => (p.member_id != null && !rows.some((m) => m.id === p.member_id) ? [p.member_id] : [])))];
   if (extra.length) {

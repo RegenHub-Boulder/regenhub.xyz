@@ -9,7 +9,7 @@ anything goes?). Look at the wording in the previews and the "Left out" line.
 # build against the staging stand-in (NEXT_PUBLIC_* are build-time)
 NEXT_PUBLIC_SITE_URL=http://127.0.0.1:18700 NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:18704 \
   SUPABASE_SERVICE_ROLE_KEY=staging pnpm --filter web build
-T482_STATE=$TMPDIR/t497fu T482_BUILD=$HOME/.cache/t482-u04 T482_PORT_BASE=18700 T497_FOLLOWUPS=1 \
+T482_STATE=$TMPDIR/t497fu T482_BUILD=$HOME/.cache/t482 T482_PORT_BASE=18700 T497_FOLLOWUPS=1 \
   scripts/staging/preview.sh
 # open http://127.0.0.1:18700/admin/events, Sign in with Techne, pick "RegenHub steward (sample)"
 # or drive it and check everything automatically:
@@ -20,7 +20,7 @@ Everyone is a sample person. Mail goes to the staging outbox (`/staging/outbox`)
 ## Steps
 1. **The review** (`walkthrough/night-followup/01-batch-review-desktop.png`). "The day after a night, Manage Events
    shows who RSVP'd and which note each would get. Ana is a member, Sam isn't. Lee unsubscribed, so Lee is left out,
-   and one person RSVP'd with a Techne account we have no email for."
+   and two people RSVP'd with Techne accounts that haven't signed in here since we started asking for an email."
 2. **The guest note** (`02-guest-note-preview.png`). "Sam gets a thank-you, the next Civic Tech Night, an invitation
    to a Friday demo as our guest, Studio Night for members, and the membership page."
 3. **The member note** (`03-member-note-preview.png`). "Ana gets the next Studio Night, and since her member page

@@ -144,12 +144,15 @@ const PEOPLE = [
   ["jo-sample", "Jo (sample)"],
   ["sam-sample", "Sam (sample)"],
   ["lee-sample", "Lee (sample)"],
+  // T-497: a Techne account with no membership, signing in to RSVP.
+  ["kim-sample", "Kim (sample, Techne only)"],
 ];
 // The collective's steward signs in through the stand-in too (the steward page), listed first.
 const people = [{ did: steward.did, handle: steward.handle, name: "RegenHub steward (sample)", cookie: steward.cookie }];
 for (const [h, name] of PEOPLE) {
   const a = await new Account(h).signUp(`${h}@example.test`, h);
-  people.push({ did: a.did, handle: a.handle, name, cookie: a.cookie });
+  // The email the stand-in PDS answers getSession with (transition:email), confirmed, as techne.town's sign-up makes it.
+  people.push({ did: a.did, handle: a.handle, name, cookie: a.cookie, email: `${h}@example.test`, emailConfirmed: true });
   console.log("person", a.handle, a.did);
 }
 writeFileSync(join(OUT, "seed.json"), JSON.stringify({ collective, steward: steward.did, events, site: SITE }, null, 2));

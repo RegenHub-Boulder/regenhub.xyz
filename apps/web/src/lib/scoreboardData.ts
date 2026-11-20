@@ -97,8 +97,8 @@ async function newsletterNumbers(admin: Admin) {
  *  show "—" and nothing else breaks. */
 async function followupsSent(admin: Admin, since: string) {
   try {
-    return await readAll<{ member_id: number | null; sent_at: string | null }>("night_followups", (f, t) =>
-      admin.from("night_followups").select("id, member_id, sent_at").eq("status", "sent").eq("variant", "guest")
+    return await readAll<{ member_id: number | null; email: string; sent_at: string | null }>("night_followups", (f, t) =>
+      admin.from("night_followups").select("id, member_id, email, sent_at").eq("status", "sent").eq("variant", "guest")
         .gte("sent_at", since).order("id", { ascending: true }).range(f, t));
   } catch (e) {
     console.error("[scoreboard] night follow-ups read failed", e);
@@ -180,7 +180,12 @@ export async function readScoreboard(admin: Admin, now = new Date()) {
   const goal = goalProgress(subs);
   const flow = subscriptionFlow(subs, months);
   const funnel = funnelByMonth({ interests, applications, purchases, subs }, months);
-  const followUps = followups ? followupFunnel(followups, subs, months) : null;
+  // A note to someone known only by their Techne sign-in (T-497) has no member_id: it counts as the member with that
+  // email if they have joined since, so "followed up → joined" sees them.
+  const memberByEmail = new Map(members.flatMap((m) => (m.email ? [[m.email.trim().toLowerCase(), m.id] as const] : [])));
+  const followUps = followups
+    ? followupFunnel(followups.map((f) => (f.member_id == null ? { ...f, member_id: memberByEmail.get(f.email) ?? null } : f)), subs, months)
+    : null;
   const pool = dayPassPool(members, subs);
   const today = dateIn(now.toISOString(), SCOREBOARD_TZ);
 
