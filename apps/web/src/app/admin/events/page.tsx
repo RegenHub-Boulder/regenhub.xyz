@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CalendarDays } from "lucide-react";
 import { regenosCollectiveDid } from "@/lib/regenos/config";
@@ -113,9 +114,12 @@ export default async function ManageEventsPage() {
                   <code className="text-foreground" title={m.did}>{m.label ? `@${m.label}` : shortDid(m.did)}</code>
                 </span>
               ))}
-              . The calendar is at <a href="/events" className="text-sage hover:underline">/events</a>.
+              .
             </p>
           )}
+          <p>
+            The calendar is at <Link href="/events" className="text-sage hover:underline">/events</Link>.
+          </p>
         </Panel>
       </div>
     );

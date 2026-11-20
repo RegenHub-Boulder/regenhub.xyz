@@ -1,7 +1,7 @@
 /**
  * The one switch for "Sign in with Techne" on regenhub.xyz. The server is the OAuth client (a confidential
  * client, lib/techne/oauth/): one sign-in opens the portal for a linked member, and RSVP and the stewards'
- * /portal/events use the same server-held session. OFF unless `TECHNE_SIGNIN_ENABLED` is truthy, the
+ * /admin/events use the same server-held session. OFF unless `TECHNE_SIGNIN_ENABLED` is truthy, the
  * collective's events are configured, and the client's private key is set (`TECHNE_OAUTH_PRIVATE_JWK`, or the
  * staging stand-in). Read at request time (not NEXT_PUBLIC_*): turning it on is an env change and a restart.
  *

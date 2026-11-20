@@ -102,6 +102,14 @@ function NotLinked({ did, handle, mode, next }: { did: string; handle: string | 
               .
             </p>
           </section>
+          {/* RegenHub's stewards on Techne need no membership here (/admin/events decides by the Techne role). */}
+          <p className="text-xs text-muted" data-testid="steward-door">
+            A facilitator or manager of RegenHub on Techne?{" "}
+            <Link href="/admin/events" className="text-sage hover:underline">
+              Manage events
+            </Link>
+            .
+          </p>
         </>
       )}
       <div className="text-center">

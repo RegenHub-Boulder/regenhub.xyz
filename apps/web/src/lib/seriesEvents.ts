@@ -4,7 +4,7 @@
  *
  * Only posted nights show. A series' rhythm is only words, so when no night is
  * posted ahead the cards and the series page say "Next date coming soon".
- * Stewards post nights from /portal/events ("Add the next nights").
+ * Stewards post nights from /admin/events ("Add the next nights").
  */
 
 import { pastWindowStart, fetchCollectiveEvents, formatEventLocation, type CollectiveEvent } from "@/lib/regenos/events";
