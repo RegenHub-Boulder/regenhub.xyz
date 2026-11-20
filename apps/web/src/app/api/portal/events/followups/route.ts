@@ -8,7 +8,7 @@ import { stewardCheck } from "@/lib/techne/roster";
 import { decideNightFollowups } from "@/lib/nightFollowupData";
 
 /**
- * POST /api/admin/events/followups { event: <at-uri>, decision: "send" | "skip", keep: [memberId, …] } — a steward's
+ * POST /api/portal/events/followups { event: <at-uri>, decision: "send" | "skip", keep: [memberId, …] } — a steward's
  * click on a night's follow-ups on /admin/events. The only way a follow-up is sent: nothing else calls
  * decideNightFollowups. Gated like the events write route: signed in with Techne here and facilitator or above in
  * RegenHub's roster, read fresh (lib/techne/roster.ts stewardCheck). A night is decided once.

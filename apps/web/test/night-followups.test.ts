@@ -1,6 +1,6 @@
 /**
  * The note after a night (T-497), end to end through what this repo owns: /admin/events (the page a steward sees),
- * POST /api/admin/events/followups (the click), migration 066's SQL on PGlite (decide_night_followups: the weekly
+ * POST /api/portal/events/followups (the click), migration 066's SQL on PGlite (decide_night_followups: the weekly
  * cap, unsubscribes, opt-outs), the opt-out link route, and lib/email.ts's provider seam with the real Resend SDK.
  * Faked only at the network edge: Techne (the staging stand-in, spawned, over a tiny AppView answering no records),
  * Supabase's HTTP layer (PGlite) and Resend's API (edge.mails). Nights and RSVPs are real records in the stand-in.
@@ -28,7 +28,7 @@ vi.mock("next/cache", () => ({ revalidateTag: () => {}, revalidatePath: () => {}
 
 import { POST as signinPOST } from "@/app/techne/signin/route";
 import { GET as callbackGET } from "@/app/techne/callback/route";
-import { POST as followupsPOST } from "@/app/api/admin/events/followups/route";
+import { POST as followupsPOST } from "@/app/api/portal/events/followups/route";
 import { GET as optoutGET } from "@/app/api/followups/optout/route";
 import EventsPage from "@/app/admin/events/page";
 import { NightFollowups } from "@/components/portal/NightFollowups";
@@ -181,7 +181,7 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
 
   const click = async (event: string, decision: "send" | "skip", keep: number[]) => {
     const res = await followupsPOST(
-      new Request(`${SITE}/api/admin/events/followups`, {
+      new Request(`${SITE}/api/portal/events/followups`, {
         method: "POST",
         headers: { origin: SITE, "content-type": "application/json" },
         body: JSON.stringify({ event, decision, keep }),

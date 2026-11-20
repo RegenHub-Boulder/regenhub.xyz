@@ -13,7 +13,7 @@ import { PAYING_STATUSES } from "@/lib/memberStanding";
 import { fetchAttendance, fetchCollectiveEvents, fetchPublicRegenosEvent, type CollectiveEvent } from "@/lib/regenos/events";
 import {
   FOLLOWUP_CAP_DAYS, followupBatch, nightValues, nightsForFollowup, personValues, renderFollowup,
-  type FollowupBatch, type FollowupMember, type FollowupVariant, type HeldReason, type RenderedNote,
+  type FollowupMember, type FollowupVariant, type HeldReason, type RenderedNote,
 } from "@/lib/nightFollowups";
 
 type Admin = ReturnType<typeof createServiceClient>;

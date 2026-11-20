@@ -282,6 +282,46 @@ export function funnelByMonth(
   return [...rows.values()];
 }
 
+// ── Night follow-ups → joined ────────────────────────────────────────────────
+
+/** Days after a night follow-up within which a first subscription counts as "joined after it". */
+export const FOLLOWUP_JOIN_DAYS = 30;
+
+export interface FollowupMonth {
+  month: string;
+  /** People sent a guest note after a night this month (lib/nightFollowups.ts), each once. */
+  followedUp: number;
+  /** Of them, those whose first-ever subscription started within 30 days after that note. */
+  joined: number;
+}
+
+/** Guest notes sent (`night_followups`, status sent) → first subscriptions within 30 days, by the month of the note. */
+export function followupFunnel(
+  followups: readonly { member_id: number | null; sent_at: string | null }[],
+  subs: readonly SubRow[],
+  months: readonly string[],
+): FollowupMonth[] {
+  const first = new Map<number, number>();
+  for (const s of subs) {
+    if (!started(s)) continue;
+    const t = Date.parse(s.created_at);
+    const prev = first.get(s.member_id);
+    if (prev === undefined || t < prev) first.set(s.member_id, t);
+  }
+  const rows = new Map(months.map((m) => [m, { month: m, followedUp: 0, joined: 0, seen: new Set<number>() }]));
+  for (const f of [...followups].sort((a, b) => (a.sent_at ?? "").localeCompare(b.sent_at ?? ""))) {
+    if (f.member_id == null || !f.sent_at) continue;
+    const row = rows.get(monthOf(f.sent_at));
+    if (!row || row.seen.has(f.member_id)) continue;
+    row.seen.add(f.member_id);
+    row.followedUp += 1;
+    const sent = Date.parse(f.sent_at);
+    const joinedAt = first.get(f.member_id);
+    if (joinedAt !== undefined && joinedAt > sent && joinedAt <= sent + FOLLOWUP_JOIN_DAYS * 86_400_000) row.joined += 1;
+  }
+  return [...rows.values()].map(({ month, followedUp, joined }) => ({ month, followedUp, joined }));
+}
+
 // ── People to follow up ──────────────────────────────────────────────────────
 
 export interface CanceledFollowUp {
@@ -452,6 +492,8 @@ export function headlineText(input: {
   flow: readonly MonthFlow[];
   funnel: readonly FunnelMonth[];
   pool: number;
+  /** Night follow-ups per month; null when they couldn't be read (migration 066 not applied yet). */
+  followUps?: readonly FollowupMonth[] | null;
   newsletter: { listSize: number | null; lastIssue: { subject: string; sent: number; total: number } | null };
   /** Open recommended actions, ranked: the first few go after the numbers. Names only, never contact details. */
   actions?: readonly { who: string; step: string }[];
@@ -476,6 +518,8 @@ export function headlineText(input: {
       `Funnel this month: ${funnel.signups} stay-in-touch, ${funnel.applications} applications, ${funnel.passesBought} day passes, ${funnel.firstSubscriptions} first subscriptions`,
     );
   }
+  const fu = input.followUps?.[input.followUps.length - 1];
+  if (fu && fu.followedUp > 0) lines.push(`Night follow-ups this month: ${fu.followedUp} guests, ${fu.joined} joined within ${FOLLOWUP_JOIN_DAYS} days`);
   lines.push(`Day-pass members who never subscribed: ${input.pool}`);
   if (input.newsletter.listSize != null) {
     const last = input.newsletter.lastIssue;

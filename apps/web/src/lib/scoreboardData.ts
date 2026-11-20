@@ -12,7 +12,7 @@ import { readAll } from "@/lib/supabase/readAll";
 import { handleFor } from "@/lib/techne/did";
 import { AuditAction } from "@/lib/auditLog";
 import {
-  SCOREBOARD_GOALS, SCOREBOARD_TZ, canceledSince, dayPassPool, funnelByMonth, goalPace, goalProgress, headlineText, lastMonths,
+  SCOREBOARD_GOALS, SCOREBOARD_TZ, canceledSince, dayPassPool, followupFunnel, funnelByMonth, goalPace, goalProgress, headlineText, lastMonths,
   lastVisits, passBuyersNeverSubscribed, subscriptionFlow, turnoutBySeries,
   type MemberRow, type PurchaseRow, type SubRow, type TurnoutEvent,
 } from "@/lib/scoreboard";
@@ -93,6 +93,19 @@ async function newsletterNumbers(admin: Admin) {
   }
 }
 
+/** Guest notes sent after nights (migration 066), from `since`. Null when unreadable (066 not applied yet): the rows
+ *  show "—" and nothing else breaks. */
+async function followupsSent(admin: Admin, since: string) {
+  try {
+    return await readAll<{ member_id: number | null; sent_at: string | null }>("night_followups", (f, t) =>
+      admin.from("night_followups").select("id, member_id, sent_at").eq("status", "sent").eq("variant", "guest")
+        .gte("sent_at", since).order("id", { ascending: true }).range(f, t));
+  } catch (e) {
+    console.error("[scoreboard] night follow-ups read failed", e);
+    return null;
+  }
+}
+
 /** The collective's events from 60 days back on, each with its going count (the same read /admin/events does). */
 async function turnout(now: Date): Promise<TurnoutEvent[] | null> {
   const events = await fetchCollectiveEvents({ after: new Date(now.getTime() - TURNOUT_PAST_DAYS * 86_400_000).toISOString() });
@@ -128,7 +141,7 @@ export async function readScoreboard(admin: Admin, now = new Date()) {
   // A day before the first month in UTC, so no Denver-local row of that month is cut; months outside are ignored.
   const since = new Date(Date.parse(`${months[0]}-01T00:00:00Z`) - 86_400_000).toISOString();
 
-  const [rawSubs, members, interests, applications, purchases, newsletter, events] = await Promise.all([
+  const [rawSubs, members, interests, applications, purchases, newsletter, events, followups] = await Promise.all([
     readAll<SubRow>("subscriptions", (f, t) => admin.from("subscriptions")
       .select("id, member_id, plan_key, status, monthly_cents, net_cents, payment_rail, created_at, canceled_at, updated_at, " +
         "cancel_at_period_end, admin_canceled_at, admin_cancel_mode, past_due_since, current_period_end")
@@ -146,6 +159,7 @@ export async function readScoreboard(admin: Admin, now = new Date()) {
       console.error("[scoreboard] events read failed", e);
       return null;
     }),
+    followupsSent(admin, since),
   ]);
 
   const canceledOnchain = rawSubs.filter((s) => s.payment_rail === "onchain" && s.status === "canceled").map((s) => s.id);
@@ -166,6 +180,7 @@ export async function readScoreboard(admin: Admin, now = new Date()) {
   const goal = goalProgress(subs);
   const flow = subscriptionFlow(subs, months);
   const funnel = funnelByMonth({ interests, applications, purchases, subs }, months);
+  const followUps = followups ? followupFunnel(followups, subs, months) : null;
   const pool = dayPassPool(members, subs);
   const today = dateIn(now.toISOString(), SCOREBOARD_TZ);
 
@@ -189,13 +204,14 @@ export async function readScoreboard(admin: Admin, now = new Date()) {
     pace: goalPace(goal, now),
     flow,
     funnel,
+    followUps,
     pool,
     actions,
     canceled,
     passBuyers,
     turnout: events ? turnoutBySeries(events, now, TURNOUT_PAST_DAYS) : null,
     newsletter,
-    text: headlineText({ today, goal, flow, funnel, pool, newsletter, actions: actions.open }),
+    text: headlineText({ today, goal, flow, funnel, followUps, pool, newsletter, actions: actions.open }),
   };
 }
 

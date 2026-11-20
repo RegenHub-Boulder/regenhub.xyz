@@ -3,7 +3,7 @@
 /**
  * "Follow-ups after nights" on /admin/events (T-497): for each night that ended in the last few days, who would get a
  * short note and which one, a preview of each note, and Send / Skip. Nothing goes out without the click; the route
- * (POST /api/admin/events/followups) checks the steward again and re-checks each person. Names only, no emails: a
+ * (POST /api/portal/events/followups) checks the steward again and re-checks each person. Names only, no emails: a
  * steward needn't be a site admin.
  */
 
@@ -49,7 +49,7 @@ function Night({ night }: { night: NightFollowupView }) {
     setBusy(decision);
     setError(null);
     try {
-      const res = await fetch("/api/admin/events/followups", {
+      const res = await fetch("/api/portal/events/followups", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ event: night.eventUri, decision, keep: [...keep] }),
