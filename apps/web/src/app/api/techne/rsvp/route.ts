@@ -90,7 +90,10 @@ export async function POST(req: Request) {
   } catch {
     return unreachable();
   }
-  if (gate === "not-member") return NextResponse.json({ error: MEMBERS_ONLY_REFUSAL }, { status: 403 });
+  // A non-member may still say they can't make it (a lapsed member's earlier "going" shouldn't stay counted).
+  if (gate === "not-member" && status !== "notgoing") {
+    return NextResponse.json({ error: MEMBERS_ONLY_REFUSAL }, { status: 403 });
+  }
   if (gate === "unknown") {
     return NextResponse.json({ error: "Couldn't find that event just now. Reload and try again." }, { status: 404 });
   }

@@ -18,7 +18,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Check, Loader2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { goingLine, type RsvpStatus } from "@/lib/techne/rsvp";
+import { MEMBERS_ONLY_REFUSAL, goingLine, type RsvpStatus } from "@/lib/techne/rsvp";
 import { SignInWithTechne, SignOutOfTechne } from "@/components/techne/SignInWithTechne";
 
 interface Props {
@@ -56,7 +56,8 @@ export function RsvpPanel({ event, going, path, membersOnly = false }: Props) {
       return;
     }
     if (!out.signedIn) return setState({ phase: "signed-out" });
-    if (out.gate === "not-member") return setState({ phase: "not-member" });
+    // Not a member: no RSVP, unless they said "going" earlier (as a member): then they can still withdraw it.
+    if (out.gate === "not-member" && out.own?.status !== "going") return setState({ phase: "not-member" });
     if (out.gate === "unknown") {
       setError("Couldn't reach Techne just now. Reload in a moment.");
       return setState({ phase: "unavailable" });
@@ -85,7 +86,7 @@ export function RsvpPanel({ event, going, path, membersOnly = false }: Props) {
         setState({ phase: "signed-out" });
         throw new Error(out.error ?? "Sign in with Techne again.");
       }
-      if (res.status === 403) {
+      if (res.status === 403 && out.error === MEMBERS_ONLY_REFUSAL) {
         setState({ phase: "not-member" });
         return;
       }

@@ -134,12 +134,12 @@ async function signIn() {
 
 const read = async (e: { uri: string }) =>
   (await rsvpGET(new NextRequest(`${SITE}/api/techne/rsvp?event=${encodeURIComponent(e.uri)}`))).json();
-const post = (e: { uri: string; cid: string }) =>
+const post = (e: { uri: string; cid: string }, status = "going") =>
   rsvpPOST(
     new Request(`${SITE}/api/techne/rsvp`, {
       method: "POST",
       headers: { origin: SITE, "content-type": "application/json" },
-      body: JSON.stringify({ event: e, status: "going" }),
+      body: JSON.stringify({ event: e, status }),
     }),
   );
 
@@ -202,6 +202,17 @@ describe("Studio Night RSVP is for members", () => {
     await sub(id, "trialing", 3000);
     expect((await post(STUDIO)).status).toBe(200);
     await pg.query("update members set disabled = true where id = $1", [id]);
+    expect((await post(STUDIO)).status).toBe(403);
+  });
+
+  it("a member who lapses can still withdraw their RSVP, but not say going again", async () => {
+    const id = await memberRow();
+    await sub(id, "active");
+    await signIn();
+    expect((await post(STUDIO)).status).toBe(200);
+    await pg.query("update subscriptions set status = 'canceled' where member_id = $1", [id]);
+    expect(await read(STUDIO)).toMatchObject({ gate: "not-member", own: { status: "going" } });
+    expect((await post(STUDIO, "notgoing")).status).toBe(200);
     expect((await post(STUDIO)).status).toBe(403);
   });
 

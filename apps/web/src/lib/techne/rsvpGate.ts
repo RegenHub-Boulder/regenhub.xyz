@@ -10,7 +10,8 @@ import { EVENT_NSID } from "./query";
  *
  *   "open"         anyone signed in may answer
  *   "members"      members-only, and this person is a member
- *   "not-member"   members-only, and this person isn't one
+ *   "not-member"   members-only, and this person isn't one (they may still withdraw an RSVP: a lapsed member
+ *                  shouldn't stay counted as going)
  *   "unknown"      not one of the collective's events, or Techne couldn't be read: refuse, don't guess
  *
  * Techne itself has no members-only flag for a public event (placement is the only visibility: a permissioned
@@ -28,4 +29,4 @@ export async function rsvpGate(client: SupabaseClient, eventUri: string, did: st
   return (await isMemberDid(client, did)) ? "members" : "not-member";
 }
 
-export const MEMBERS_ONLY_REFUSAL = "This night is for members.";
+export { MEMBERS_ONLY_REFUSAL } from "./rsvp";
