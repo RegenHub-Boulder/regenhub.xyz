@@ -19,6 +19,7 @@ import {
 } from "./billingTools";
 import { sendApplicationCheckoutEmail } from "@/lib/applicationCheckout";
 import { siteOrigin } from "./metadata";
+import { SCOREBOARD_DESCRIPTIONS, recommendedActionsHandler, scoreboardSummaryHandler } from "./scoreboardTools";
 import {
   listMigrationsHandler,
   runMigrationHandler,
@@ -27,7 +28,7 @@ import {
 } from "./migrationTools";
 
 const SERVER_NAME = "regenhub";
-const SERVER_VERSION = "0.6.0";
+const SERVER_VERSION = "0.7.0";
 
 /**
  * Build the MCP tool surface. Phase 1 = `ping`. Future tools gate on the caller's
@@ -259,6 +260,19 @@ function buildServer(auth: McpAuthInfo): McpServer {
 
   server.registerTool("billing_summary", { description: DESCRIPTIONS.billing_summary, annotations: READ },
     async (extra) => billingSummaryHandler(sb(), callerAuth(extra)));
+
+  // ── scoreboard (T-497): read-only, `read` scope, the numbers and actions /admin/scoreboard shows ──
+  server.registerTool("scoreboard_summary", { description: SCOREBOARD_DESCRIPTIONS.scoreboard_summary, annotations: READ },
+    async (extra) => scoreboardSummaryHandler(sb(), callerAuth(extra)));
+
+  server.registerTool("recommended_actions", {
+    description: SCOREBOARD_DESCRIPTIONS.recommended_actions,
+    annotations: READ,
+    inputSchema: {
+      limit: z.number().int().min(1).max(100).optional().describe("How many open actions to list. Default 20"),
+      include_dismissed: z.boolean().optional().describe("Also list the ones an admin marked Done or Not now"),
+    },
+  }, async (args, extra) => recommendedActionsHandler(sb(), callerAuth(extra), args));
 
   server.registerTool("void_stripe_invoice", {
     description: DESCRIPTIONS.void_stripe_invoice,

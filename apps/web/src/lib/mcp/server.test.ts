@@ -27,13 +27,13 @@ async function open(memberId: number): Promise<string> {
   return session;
 }
 
-it("lists the billing tools, with write tools marked destructive and taking confirm", async () => {
+it("lists the billing and scoreboard tools, with write tools marked destructive and taking confirm", async () => {
   const session = await open(1);
   const list = { jsonrpc: "2.0", id: 2, method: "tools/list" };
   const res = await handleMcpRequest(rpc(list, session), as(1), list);
   const { result } = await res.json() as { result: { tools: { name: string; annotations?: { destructiveHint?: boolean; readOnlyHint?: boolean }; inputSchema: { properties?: Record<string, unknown> } }[] } };
   const tools = new Map(result.tools.map((t) => [t.name, t]));
-  for (const name of ["list_members", "get_member_billing", "list_open_invoices", "billing_summary"]) {
+  for (const name of ["list_members", "get_member_billing", "list_open_invoices", "billing_summary", "scoreboard_summary", "recommended_actions"]) {
     expect(tools.get(name)?.annotations?.readOnlyHint).toBe(true);
   }
   for (const name of ["void_stripe_invoice", "cancel_subscription", "change_member_plan"]) {

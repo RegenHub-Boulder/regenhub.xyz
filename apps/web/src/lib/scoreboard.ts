@@ -38,7 +38,8 @@ export const SCOREBOARD_GOALS = {
   followUpSince: "2026-07-01",
 } as const;
 
-export type ScoreboardGoals = typeof SCOREBOARD_GOALS;
+/** The goals' shape (numbers and dates, not the literals above), so tests and what-ifs can pass others. */
+export type ScoreboardGoals = { readonly [K in keyof typeof SCOREBOARD_GOALS]: (typeof SCOREBOARD_GOALS)[K] extends number ? number : string };
 
 export interface SubRow extends RevenueRow {
   id: number;
@@ -50,6 +51,8 @@ export interface SubRow extends RevenueRow {
   admin_cancel_mode?: string | null;
   /** USDC rows: whether a membership invoice was ever paid. Unset = not known (card rows). */
   paid?: boolean;
+  past_due_since?: string | null;
+  current_period_end?: string | null;
 }
 
 export interface MemberRow {
@@ -58,6 +61,8 @@ export interface MemberRow {
   email: string | null;
   member_type: string;
   disabled: boolean;
+  /** The member's Techne account, when linked (matches RSVP authors). */
+  did?: string | null;
 }
 
 export interface PurchaseRow {
@@ -161,6 +166,45 @@ export function goalProgress(subs: readonly SubRow[], goals: ScoreboardGoals = S
   };
 }
 
+// ── Goal pace ────────────────────────────────────────────────────────────────
+
+export interface GoalPace {
+  /** Share of the way from the baseline date to the goal date, 0–1. */
+  elapsed: number;
+  /** Where the straight line from baseline to goal says we'd be today. */
+  expectedMembers: number;
+  expectedNetCents: number;
+  /** expected − actual; positive = behind. */
+  membersBehind: number;
+  netBehindCents: number;
+  /** What the line asks for two weeks from today, minus where we are now (0 if already there). */
+  membersNeededFortnight: number;
+  netNeededFortnightCents: number;
+}
+
+const DAY_MS = 86_400_000;
+const denverNoon = (date: string) => Date.parse(`${date}T19:00:00Z`);
+
+/** Progress against the straight line from the baseline (date, members, net) to the goals on the goal date. */
+export function goalPace(goal: GoalProgress, now: Date, goals: ScoreboardGoals = SCOREBOARD_GOALS): GoalPace {
+  const from = denverNoon(goals.baselineDate);
+  const to = denverNoon(goals.goalDate);
+  const at = (t: number) => Math.min(1, Math.max(0, (t - from) / (to - from)));
+  const members = (f: number) => goals.baselineMembers + goals.memberGain * f;
+  const net = (f: number) => goals.baselineNetCents + (goals.revenueGoalCents - goals.baselineNetCents) * f;
+  const elapsed = at(now.getTime());
+  const later = at(now.getTime() + 14 * DAY_MS);
+  return {
+    elapsed,
+    expectedMembers: members(elapsed),
+    expectedNetCents: Math.round(net(elapsed)),
+    membersBehind: members(elapsed) - goal.payingMembers,
+    netBehindCents: Math.round(net(elapsed)) - goal.revenue.netCents,
+    membersNeededFortnight: Math.max(0, Math.ceil(members(later) - goal.payingMembers - 1e-9)),
+    netNeededFortnightCents: Math.max(0, Math.round(net(later)) - goal.revenue.netCents),
+  };
+}
+
 // ── Subscriptions per month ──────────────────────────────────────────────────
 
 export interface MonthFlow {
@@ -249,6 +293,8 @@ export interface CanceledFollowUp {
   canceledAt: string;
   /** Asked, but the paid period is still running. */
   ending: boolean;
+  /** The cancelled subscription's monthly net. */
+  netCents: number;
   lastVisit: string | null;
 }
 
@@ -257,6 +303,8 @@ export interface PassBuyerFollowUp {
   name: string | null;
   email: string | null;
   purchases: number;
+  /** Passes over those purchases (a five-pack is 5). */
+  passes: number;
   lastPurchase: string;
   lastVisit: string | null;
 }
@@ -297,6 +345,7 @@ export function canceledSince(
       planKey: s.plan_key,
       canceledAt: at,
       ending: s.status !== "canceled",
+      netCents: effectiveMonthlyCents(s),
       lastVisit: visits.get(s.member_id) ?? null,
     });
   }
@@ -324,10 +373,11 @@ export function passBuyersNeverSubscribed(
     const key = memberId != null ? `m${memberId}` : p.email ? `e${p.email.toLowerCase()}` : null;
     if (!key) continue;
     const row = buyers.get(key) ?? {
-      memberId, name: m?.name ?? null, email: m?.email ?? p.email ?? null, purchases: 0, lastPurchase: p.created_at,
+      memberId, name: m?.name ?? null, email: m?.email ?? p.email ?? null, purchases: 0, passes: 0, lastPurchase: p.created_at,
       lastVisit: memberId != null ? visits.get(memberId) ?? null : null,
     };
     row.purchases += 1;
+    row.passes += p.passes_granted ?? 1;
     if (p.created_at > row.lastPurchase) row.lastPurchase = p.created_at;
     buyers.set(key, row);
   }
@@ -351,6 +401,8 @@ export interface TurnoutEvent {
   seriesName: string | null;
   /** Null when Techne couldn't be read for this event. */
   going: number | null;
+  /** Who is going (Techne DIDs), when read. */
+  goingDids?: string[];
 }
 
 export interface SeriesTurnout {
@@ -390,6 +442,9 @@ export const usd = (cents: number) => `$${Math.round(cents / 100).toLocaleString
 const monthName = (key: string) =>
   new Date(`${key}-15T12:00:00Z`).toLocaleDateString("en-US", { month: "long", timeZone: "UTC" });
 
+/** How many open actions "Copy as text" carries after the numbers. */
+export const HEADLINE_ACTIONS = 5;
+
 /** The headline numbers in a few plain lines, for the meeting doc. */
 export function headlineText(input: {
   today: string;
@@ -398,6 +453,8 @@ export function headlineText(input: {
   funnel: readonly FunnelMonth[];
   pool: number;
   newsletter: { listSize: number | null; lastIssue: { subject: string; sent: number; total: number } | null };
+  /** Open recommended actions, ranked: the first few go after the numbers. Names only, never contact details. */
+  actions?: readonly { who: string; step: string }[];
 }): string {
   const { goal } = input;
   const r = goal.revenue;
@@ -423,6 +480,11 @@ export function headlineText(input: {
   if (input.newsletter.listSize != null) {
     const last = input.newsletter.lastIssue;
     lines.push(`Newsletter: ${input.newsletter.listSize} on the list` + (last ? `; last issue sent to ${last.sent} of ${last.total}` : ""));
+  }
+  const top = (input.actions ?? []).slice(0, HEADLINE_ACTIONS);
+  if (top.length > 0) {
+    lines.push("", "What to do next:");
+    for (const a of top) lines.push(`- ${a.who}: ${a.step}`);
   }
   return lines.join("\n");
 }

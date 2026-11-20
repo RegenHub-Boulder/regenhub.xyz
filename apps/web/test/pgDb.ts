@@ -186,6 +186,7 @@ export async function makePgDb({ before = "\uffff" }: { before?: string } = {}) 
     let projection: Projection | null = null;
     const orders: string[] = [];
     let limit: number | null = null;
+    let offset = 0;
     let countMode = false;
     let headOnly = false;
 
@@ -197,7 +198,7 @@ export async function makePgDb({ before = "\uffff" }: { before?: string } = {}) 
       let sql: string;
       let args = params;
       if (op === "select") {
-        sql = `select * from ${ident(table)}${clause}${orders.length ? ` order by ${orders.join(", ")}` : ""}${limit != null ? ` limit ${limit}` : ""}`;
+        sql = `select * from ${ident(table)}${clause}${orders.length ? ` order by ${orders.join(", ")}` : ""}${limit != null ? ` limit ${limit}` : ""}${offset ? ` offset ${offset}` : ""}`;
       } else if (op === "delete") {
         sql = `delete from ${ident(table)}${clause} returning *`;
       } else if (op === "update") {
@@ -275,6 +276,7 @@ export async function makePgDb({ before = "\uffff" }: { before?: string } = {}) 
         return b;
       },
       limit: (n: number) => { limit = n; return b; },
+      range: (from: number, to: number) => { offset = from; limit = to - from + 1; return b; },
       returns: () => b,
       single: () => settle("single"),
       maybeSingle: () => settle("maybe"),

@@ -182,6 +182,16 @@ membership invoice never started. `compileAudience` (newsletter list) pages past
 read; shared pager: `lib/supabase/readAll.ts`. Staging: `T482_SCOREBOARD=1
 scripts/staging/preview.sh` seeds fictional rows; `scripts/staging/scoreboard-shots.mjs` checks the page against
 the hand-worked numbers.
+**What to do next** (top of the page): recommended actions from `lib/scoreboardActions.ts` (pure, tested), fed by
+the same rows and counts: past due (one-click payment reminder), set to end, left in the last 90 days (names what's
+new since: `MEMBER_NEWS`), new in the last 30 days (welcome, next Studio Night), day-pass buyers with 2+ passes or a
+visit in 60 days, non-members going to 2+ nights in 60 days, a night this week under half its series' average, and
+goal pace (behind the straight line from baseline to goal). Thresholds are `ACTION_RULES`, impact weights
+`ACTION_WEIGHTS`; ranked by impact then urgency, one action per person, top 8 then "Show all". Each has a stable id
+and a fingerprint of its facts; "Done" / "Not now" (14 days) are `admin_actions` rows (`scoreboard_action_marked`,
+target = action id, via `POST /api/admin/scoreboard/actions`), and a dismissal holds only while the fingerprint
+matches. "Copy as text" ends with the top 5 (names only). The MCP reads the same: `scoreboard_summary`,
+`recommended_actions`. Staging: `scripts/staging/next-actions-shots.mjs` drives the list (Done, reload, Bring back).
 
 ### Membership application flow (approve + notify)
 `/apply` (sign-in required) → `/api/portal/application` upserts the application, emails the
@@ -526,7 +536,9 @@ MCP changes, just redeploy the web app.
   the caller is an enabled `is_admin` + `is_ops_admin`, write an `admin_actions` row
   (`mcp_billing_write`) before acting and its outcome after (no row, no action), and call the same
   code as the admin page and portal (`cancelMembership`, `scheduleDeskToDaily`,
-  `changeCardPlanNow`, `changeOnchainPlan`). To add a tool: register it in `server.ts`
+  `changeCardPlanNow`, `changeOnchainPlan`); scoreboard reads `scoreboard_summary` and `recommended_actions`
+  (`lib/mcp/scoreboardTools.ts`, scope `read`, the numbers and actions /admin/scoreboard shows; names and member ids,
+  never emails). To add a tool: register it in `server.ts`
   (zod input shape), redeploy web; the client auto-reconnects and picks up the new tool (bump
   `SERVER_VERSION` to confirm the rollout).
 - **Migrations over MCP** (`lib/migrations.ts` + `lib/mcp/migrationTools.ts`): `list_migrations` is

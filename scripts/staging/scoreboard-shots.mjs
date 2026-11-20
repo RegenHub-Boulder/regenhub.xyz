@@ -15,7 +15,7 @@ mkdirSync(OUT, { recursive: true });
 
 const HEADLINE = [
   "RegenHub scoreboard, 2026-11-20",
-  "Paying members ($30+/mo): 7 (-7 since 2026-11-19; goal 24 by 2027-01-20, 17 to go); 1 more past due; 1 set to end",
+  "Paying members ($30+/mo): 7 (-5 since 2026-11-19; goal 22 by 2027-01-20, 15 to go); 1 more past due; 1 set to end",
   "Membership revenue: $1,265/mo net, $1,440 at list (goal $2,750, rent $2,250, $985 short of rent)",
   "October: 1 new, 1 cancelled (0)",
   "November so far: 3 new, 1 cancelled (+2)",
@@ -43,12 +43,12 @@ await page.click("text=RegenHub steward (sample)");
 await page.waitForURL(/\/admin\/scoreboard$/, { timeout: 20000 });
 await page.waitForSelector("[data-testid=paying-members]");
 
-assert.match(await page.innerText("[data-testid=paying-members]"), /^7\s+of 24$/);
+assert.match(await page.innerText("[data-testid=paying-members]"), /^7\s+of 22$/);
 assert.match(await page.innerText("[data-testid=revenue-net]"), /^\$1,265\s+of \$2,750$/);
 const body = await page.innerText("main");
 for (const s of [
   "Paying members ($30+/mo plans)",
-  "-7 since 2026-11-19 (started at 14) · 17 to go",
+  "-5 since 2026-11-19 (started at 12) · 15 to go",
   "8 in good standing at any rate (6 card, 2 USDC subscriptions) · 1 past due, not counted",
   "1 set to end with their paid period ($250/mo), still counted",
   "$1,440 at list · $985 short of rent ($2,250) · $1,485 to the goal",
@@ -81,10 +81,12 @@ assert.ok(follow.includes("2 passes · last bought Nov 12, 2026"), "Sample 12 bo
 assert.ok(body.includes("Agents Building Night"), "turnout lists Agents Building Night");
 assert.match(body, /Agents Building Night[\s\S]*?2 going/);
 // Copy as text.
-assert.equal(await page.innerText("pre"), HEADLINE);
+// The numbers; "What to do next" follows them (checked by next-actions-shots.mjs).
+const numbers = (t) => t.split("\n\nWhat to do next:")[0];
+assert.equal(numbers(await page.innerText("pre")), HEADLINE);
 await page.click("button:has-text('Copy as text')");
 await page.waitForSelector("button:has-text('Copied')");
-assert.equal(await page.evaluate(() => navigator.clipboard.readText()), HEADLINE);
+assert.equal(numbers(await page.evaluate(() => navigator.clipboard.readText())), HEADLINE);
 console.log("all scoreboard numbers match the hand-worked expectation");
 
 await shot(page, "scoreboard-desktop");
