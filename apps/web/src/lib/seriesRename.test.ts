@@ -85,5 +85,9 @@ describe("a renamed Happy Hour still counts as that Friday's Happy Hour", () => 
     const edited = putEventBatch(HUB, { rkey: "3maaaaaaaab2a", name: "Renamed", uris: [{ uri: "http://insecure.test" }] },
       { rkey: "3maaaaaaaab2a", value: kept, config: null, hasListing: true }, NOW).input.writes[0] as unknown as { value: CalendarEventBody };
     expect(seriesOf(edited.value)?.slug).toBe("happy-hour");
+    // An explicit empty list clears them.
+    const cleared = putEventBatch(HUB, { rkey: "3maaaaaaaab2a", name: "Renamed", uris: [] },
+      { rkey: "3maaaaaaaab2a", value: kept, config: null, hasListing: true }, NOW).input.writes[0] as unknown as { value: CalendarEventBody };
+    expect((cleared.value as { uris?: unknown }).uris).toEqual([]);
   });
 });

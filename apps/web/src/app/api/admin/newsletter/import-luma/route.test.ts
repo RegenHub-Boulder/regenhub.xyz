@@ -92,10 +92,11 @@ describe("POST /api/admin/newsletter/import-luma (Luma CSV)", () => {
     expect((await lumaRows()).map((r) => r.email)).toEqual(["taylor@example.test", "kim@example.test", "waitlist@example.test"]);
   });
 
-  it("a disabled member isn't in the audience, so a Luma subscriber who is one is added", async () => {
+  it("a disabled member is left out of the audience on purpose: a Luma import doesn't add them back", async () => {
     await db.sql("insert into members (name, email, disabled) values ('Former', 'former@example.test', true)");
     const csv = "email,subscription_status\nformer@example.test,subscribed\n";
-    expect((await post({ csv, commit: true })).body).toMatchObject({ add: 1, alreadyHave: 0, imported: 1 });
+    expect((await post({ csv, commit: true })).body).toMatchObject({ add: 0, alreadyHave: 1, imported: 0 });
+    expect(await lumaRows()).toEqual([]);
   });
 
   it("a file with no email column, or no file, is refused with a plain reason", async () => {

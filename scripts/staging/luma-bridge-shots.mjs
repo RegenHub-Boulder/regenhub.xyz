@@ -59,14 +59,14 @@ await shot("renamed-night", renamedCard);
 await shot("next-nights-after-rename", page.locator("[data-testid=add-series-nights] fieldset:has(legend:text-is('420 Happy Hour'))"));
 
 // 3. "Add here" on the Luma-only night opens the new-event form, filled in.
-await page.click("[data-testid=luma-only] a:has-text('Add here')");
+await page.click("[data-testid=luma-only]:has-text('Sample Saturday Workshop') a:has-text('Add here')");
 await page.waitForFunction(() => document.querySelector("#ev-name")?.value);
 await settle();
 console.log("prefilled:", await page.inputValue("#ev-name"), await page.inputValue("#ev-starts"), "url now", page.url());
 await shot("add-here-prefilled", page.locator("form:has(#ev-name)"));
 // Cancel, then Add here again: the same night opens again.
 await page.click("form:has(#ev-name) button:has-text('Cancel')");
-await page.click("[data-testid=luma-only] a:has-text('Add here')");
+await page.click("[data-testid=luma-only]:has-text('Sample Saturday Workshop') a:has-text('Add here')");
 await page.waitForFunction(() => document.querySelector("#ev-name")?.value === "Sample Saturday Workshop");
 console.log("reopened after cancel:", await page.inputValue("#ev-name"));
 // Create it: the form closes and stays closed, and the night is now on Luma too.

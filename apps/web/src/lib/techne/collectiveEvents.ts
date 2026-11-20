@@ -84,6 +84,8 @@ function urisOf(raw: unknown): { $type: string; uri: string; name?: string }[] |
     const name = str(u?.name);
     return [{ $type: `${EVENT_NSID}#uri`, uri, ...(name ? { name: name.slice(0, 200) } : {}) }];
   });
+  // `[]` clears the links; a list whose every link is refused changes nothing (the series key isn't wiped).
+  if (raw.length === 0) return [];
   return out.length ? out.slice(0, 10) : undefined;
 }
 

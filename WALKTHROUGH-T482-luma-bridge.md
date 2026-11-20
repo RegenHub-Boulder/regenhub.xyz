@@ -23,20 +23,20 @@ Hours and the next Agents Building Night from "Add the next nights".
    "Under the calendar, each night shows whether it's also on Luma. Two Happy Hours are; Agents Building Night isn't
    yet. One Saturday workshop is only on Luma." Point at the orange "Not on Luma" and the "Only on Luma" list.
 
-2. **Renaming a night** (`02-renamed-night.png`, `03-next-nights-after-rename.png`)
-   "Next Friday's Happy Hour is renamed Ugly Sweater Party. 'Add the next nights' still knows that Friday is taken.
-   It offers December 4, 11 and 18, not November 27." This was the prod bug: before the fix, a renamed night's date
+2. **Renaming a night** (`walkthrough/luma-bridge/02-renamed-night.png`, `walkthrough/luma-bridge/03-next-nights-after-rename.png`)
+   "A posted Happy Hour is renamed Ugly Sweater Party. 'Add the next nights' still knows that Friday is taken: it
+   offers December 4, 11 and 18, and not the renamed night's date." This was the prod bug: before the fix, a renamed night's date
    was offered again.
 
-3. **Add here** (`04-add-here-prefilled.png`)
+3. **Add here** (`walkthrough/luma-bridge/04-add-here-prefilled.png`)
    "Add here on the Luma-only workshop opens the new-event form with its name, times and place filled in. Create it,
    and the check shows it on both."
 
-4. **Luma CSV into the newsletter** (`05-csv-dry-run.png`)
+4. **Luma CSV into the newsletter** (`walkthrough/luma-bridge/05-csv-dry-run.png`)
    "On Newsletter, Audience: export People from Luma as a CSV and import it. First you see what it would do: 3 new,
    2 we already have, and what's skipped: unsubscribed on Luma, unsubscribed from our newsletter, a bad email, a
    repeat."
 
-5. **Import** (`06-csv-imported.png`)
+5. **Import** (`walkthrough/luma-bridge/06-csv-imported.png`)
    "Import adds the 3 new people to the interests list. They get the newsletter with one-click unsubscribe, like
    everyone else."

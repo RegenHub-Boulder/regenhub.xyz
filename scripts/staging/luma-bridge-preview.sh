@@ -31,7 +31,7 @@ const http = require("node:http");
 // Fridays 4:20pm Denver (MST, UTC-7) from today: the next two on Luma, the second renamed; a Saturday only on Luma.
 const day = 86400000, now = Date.now();
 let fri = new Date(now); fri.setUTCHours(23, 20, 0, 0);
-while (fri.getUTCDay() !== 5 || fri.getTime() < now) fri = new Date(fri.getTime() + day);
+while (fri.getUTCDay() !== 5 || fri.getTime() + 2 * 3600000 < now) fri = new Date(fri.getTime() + day); // until it ends
 const z = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 const ev = (id, start, hours, name, extra = []) => ["BEGIN:VEVENT", "DTSTART:" + z(start), "DTEND:" + z(new Date(start.getTime() + hours * 3600000)),
   "UID:" + id + "@events.lu.ma", "SUMMARY:" + name, "DESCRIPTION:Get up-to-date information at: https://luma.com/" + id.slice(4).toLowerCase(), ...extra, "END:VEVENT"];

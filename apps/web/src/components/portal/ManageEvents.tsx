@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -101,8 +101,16 @@ export function ManageEvents({
   // After mount, so the times fill in the browser's own zone, as the form reads them. Each "Add here" is a
   // navigation that sends a new draft object, so the same night can be opened again after a Cancel. The address
   // then loses its `?fromLuma=`, so a refresh after posting (or a reload) doesn't open the form again.
+  // A refresh that lands before the replace still carries the same draft: opened once until the address drops it.
+  const openedDraft = useRef<string | null>(null);
   useEffect(() => {
-    if (!draft) return;
+    if (!draft) {
+      openedDraft.current = null;
+      return;
+    }
+    const key = `${draft.url}|${draft.startAt}`;
+    if (openedDraft.current === key) return;
+    openedDraft.current = key;
     setForm(lumaEventToFormValues(draft));
     setError(null);
     setEditing("");

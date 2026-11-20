@@ -407,7 +407,7 @@ two independently-switchable things. Both degrade to today's behaviour when unco
 - **Luma without the API** (the API needs Luma Plus): `/admin/newsletter` → Audience → **Import Luma CSV…** takes a
   Luma people export or an event's guests export (`lib/lumaCsv.ts`, `POST /api/admin/newsletter/import-luma`), shows
   new / already have / skipped (unsubscribed on Luma, guests only invited or declined, unsubscribed from our
-  newsletter, invalid, repeats; "already have" = enabled members + interests, the audience's own sources), then
+  newsletter, invalid, repeats; "already have" = any member, disabled ones too, + interests), then
   inserts the new ones into `interests` (`source_path 'luma'`). The old API contact pull is gone.
 - Deliberately NOT changed: the newsletter still reads Luma directly (`lib/newsletter.ts:142`). Its
   copy is Luma-branded end to end; switching it is a product decision, not a plumbing one.

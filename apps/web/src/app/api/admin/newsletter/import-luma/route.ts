@@ -13,8 +13,8 @@ const MAX_CSV_CHARS = 5_000_000;
  * uploads the export.
  *
  * Skipped: rows Luma marks unsubscribed, guests only invited or declined, invalid emails, repeats in the file,
- * anyone already in the audience (an enabled member, or on the interests list; compileAudience's sources), and
- * anyone who unsubscribed from our newsletter. Without `commit` it's a dry run: the same
+ * anyone already a member (a disabled one too: they were left out of the audience on purpose, and an interests
+ * row would mail them anyway) or on the interests list, and anyone who unsubscribed from our newsletter. Without `commit` it's a dry run: the same
  * counts, nothing written. With it, the counts are worked out again from the lists as they are now, then the
  * new rows are inserted.
  *   → { rows, add, alreadyHave, unsubscribedHere, unsubscribedOnLuma, notRegistered, invalid, duplicate, imported? }
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
       readAll<{ email: string | null }>("interests", (f, t) =>
         admin.from("interests").select("id, email").order("id", { ascending: true }).range(f, t)),
       readAll<{ email: string | null }>("members", (f, t) =>
-        admin.from("members").select("id, email").eq("disabled", false).not("email", "is", null).order("id", { ascending: true }).range(f, t)),
+        admin.from("members").select("id, email").not("email", "is", null).order("id", { ascending: true }).range(f, t)),
       readAll<{ email: string }>("email_unsubscribes", (f, t) =>
         admin.from("email_unsubscribes").select("email").order("email", { ascending: true }).range(f, t)),
     ]);
