@@ -32,7 +32,7 @@ export function NightFollowups({ nights }: { nights: NightFollowupView[] }) {
       </div>
       {nights.map((n) => (
         // Keyed by state too: after a click, the refreshed night starts fresh (its new buttons, no stale message).
-        <Night key={`${n.eventUri}:${n.state}:${n.retryable}`} night={n} />
+        <Night key={`${n.eventUri}:${n.state}:${n.attempts}`} night={n} />
       ))}
     </section>
   );
@@ -91,7 +91,7 @@ function Night({ night }: { night: NightFollowupView }) {
             {other.length > 0 &&
               " " +
                 other
-                  .map((o) => `${o.name}: ${o.status === "held" && o.held ? HELD_TEXT[o.held] : o.status === "failed" ? "didn't go" : "sending"}`)
+                  .map((o) => `${o.name}: ${o.status === "held" && o.held ? HELD_TEXT[o.held] : o.status === "failed" ? "didn't go" : "not confirmed"}`)
                   .join("; ") +
                 "."}
           </p>

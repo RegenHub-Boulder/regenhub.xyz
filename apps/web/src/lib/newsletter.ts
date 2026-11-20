@@ -44,6 +44,15 @@ function unsubscribeSecrets(): string[] {
   return secrets;
 }
 
+/** Whether this server has a key to sign unsubscribe and opt-out links (false only in production with none set). */
+export function canSignEmailLinks(): boolean {
+  try {
+    return unsubscribeSecrets().length > 0;
+  } catch {
+    return false;
+  }
+}
+
 function sign(email: string, secret: string): string {
   return createHmac("sha256", secret).update(`unsub:${email.toLowerCase()}`).digest("hex").slice(0, 32);
 }

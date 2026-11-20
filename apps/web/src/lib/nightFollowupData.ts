@@ -8,7 +8,7 @@
 
 import type { createServiceClient } from "@/lib/supabase/admin";
 import { sendEmailDetailed } from "@/lib/email";
-import { followupOptoutUrl, unsubscribeUrl } from "@/lib/newsletter";
+import { canSignEmailLinks, followupOptoutUrl, unsubscribeUrl } from "@/lib/newsletter";
 import { PAYING_STATUSES } from "@/lib/memberStanding";
 import { fetchAttendance, fetchCollectiveEvents, fetchPublicRegenosEvent, type CollectiveEvent } from "@/lib/regenos/events";
 import {
@@ -21,11 +21,9 @@ type Admin = ReturnType<typeof createServiceClient>;
 const MEMBER_COLUMNS = "id, name, email, did, member_type, disabled, show_in_directory";
 
 /**
- * A row still `sending` this long after it was written is stuck (the request died mid-batch); a `failed` or stuck row
- * may be sent again while the provider's idempotency key still holds (Resend: 24 hours), so a note the provider did
- * take is never sent twice.
+ * A failed note may be retried while the provider's idempotency key still holds (Resend: 24 hours), so a note the
+ * provider did take is never delivered twice. Same window as retry_night_followups (migration 066).
  */
-const STUCK_AFTER_MS = 5 * 60_000;
 const RETRY_WITHIN_MS = 23 * 3600_000;
 
 /** One person on the page: names only (a steward needn't be a site admin, so no emails). */
@@ -52,8 +50,10 @@ export interface NightFollowupView {
   noEmail: number;
   /** Decided (sent): each person's outcome. */
   outcomes: { name: string; variant: FollowupVariant; status: OutcomeStatus; held: HeldReason | null }[];
-  /** Sent: how many notes didn't go (failed, or stuck) and can be tried again now. */
+  /** Sent: how many notes failed and can be tried again now. */
   retryable: number;
+  /** Sent: send attempts so far (changes with every click, so the card starts fresh after one). */
+  attempts: number;
   /** Open: one rendered note per variant someone would get (footer links inert). */
   previews: Partial<Record<FollowupVariant, RenderedNote & { name: string }>>;
   /** RSVPs couldn't be read from Techne: nothing can be sent until a reload reads them. */
@@ -90,15 +90,14 @@ const row = (p: { memberId: number; name: string; variant: FollowupVariant; held
 
 type SentRow = {
   id: number; batch_id: number; member_id: number | null; email: string; variant: FollowupVariant; status: OutcomeStatus;
-  held_reason: string | null; created_at: string; permanent: boolean; attempted_at: string | null; attempts: number;
+  held_reason: string | null; created_at: string; attempts: number;
+  subject?: string | null; html?: string | null; body_text?: string | null;
 };
-const SENT_COLUMNS = "id, batch_id, member_id, email, variant, status, held_reason, created_at, permanent, attempted_at, attempts";
+const SENT_COLUMNS = "id, batch_id, member_id, email, variant, status, held_reason, created_at, attempts";
 
 /** Mirrors retry_night_followups' choice (migration 066), to show the button; the SQL decides. */
-const retryableRow = (r: Pick<SentRow, "status" | "created_at" | "permanent" | "attempted_at">, now: Date) =>
-  now.getTime() - Date.parse(r.created_at) < RETRY_WITHIN_MS &&
-  ((r.status === "failed" && !r.permanent) ||
-    (r.status === "sending" && !!r.attempted_at && now.getTime() - Date.parse(r.attempted_at) > STUCK_AFTER_MS));
+const retryableRow = (r: Pick<SentRow, "status" | "created_at">, now: Date) =>
+  r.status === "failed" && now.getTime() - Date.parse(r.created_at) < RETRY_WITHIN_MS;
 
 /**
  * What /admin/events shows: each night of `events` (the page's own calendar read) that ended in the last few days,
@@ -136,7 +135,7 @@ export async function readNightFollowups(admin: Admin, events: readonly Collecti
       eventUri: n.uri, name: n.name, startAt: n.startAt!, url: n.url,
       state: b ? (b.decision === "send" ? "sent" : "skipped") : "open",
       decidedAt: b?.decided_at ?? null,
-      send: [], held: [], noEmail: 0, outcomes: [], retryable: 0, previews: {}, rsvpsUnread: false,
+      send: [], held: [], noEmail: 0, outcomes: [], retryable: 0, attempts: 0, previews: {}, rsvpsUnread: false,
     };
     if (b) {
       const mine = outcomeRows.filter((o) => o.batch_id === b.id);
@@ -147,6 +146,7 @@ export async function readNightFollowups(admin: Admin, events: readonly Collecti
         held: (o.held_reason as HeldReason | null) ?? null,
       }));
       base.retryable = mine.filter((o) => retryableRow(o, now)).length;
+      base.attempts = mine.reduce((n, o) => n + o.attempts, 0);
       return base;
     }
     const a = going[i];
@@ -174,27 +174,33 @@ async function readNight(eventUri: string): Promise<CollectiveEvent | null> {
   return m ? fetchPublicRegenosEvent(m[1], m[2]) : null;
 }
 
-/** The footer links for `email`. Throws when there is no key to sign them (checked before anything is recorded). */
 const footerFor = (email: string) => ({ optOutUrl: followupOptoutUrl(email, siteBase()), unsubscribeUrl: unsubscribeUrl(email, siteBase()) });
+const NO_SIGNING_KEY = "Email links can't be signed on this server (no unsubscribe key). Nothing was sent.";
 
 /**
  * Send each row through the one send function and record the outcome. Never throws: a row that couldn't be sent is
- * `failed` with the reason (an outcome the provider can't confirm says so; a refusal for good is `permanent`), and
- * Retry may send it again under the same idempotency key. An outcome is written only against the attempt that made
- * it, so a slow request can't overwrite a newer one. A rate limit is waited out once, as the provider asks.
+ * `failed` with the reason (an outcome the provider can't confirm says so). The note is saved on its row before the
+ * first send, and a retry sends the saved note, so a retry is the same message under the same idempotency key. An
+ * outcome is written only against the attempt that made it. A rate limit is waited out once, as the provider asks.
  */
 async function sendRows(
   admin: Admin,
-  rows: readonly Pick<SentRow, "id" | "email" | "variant" | "attempts">[],
+  rows: readonly SentRow[],
   people: ReadonlyMap<string, { name: string; askForPage: boolean }>,
-  night: ReturnType<typeof nightValues>,
+  night: () => Promise<ReturnType<typeof nightValues>>,
 ): Promise<number> {
   let sent = 0;
   for (const r of rows) {
-    const who = people.get(r.email) ?? { name: "", askForPage: false };
     let update: Record<string, unknown>;
     try {
-      const note = renderFollowup(r.variant, personValues(who, night, siteBase()), footerFor(r.email));
+      let note = r.subject && r.html && r.body_text ? { subject: r.subject, html: r.html, text: r.body_text } : null;
+      if (!note) {
+        const who = people.get(r.email) ?? { name: "", askForPage: false };
+        note = renderFollowup(r.variant, personValues(who, await night(), siteBase()), footerFor(r.email));
+        const { error } = await admin.from("night_followups")
+          .update({ subject: note.subject, html: note.html, body_text: note.text }).eq("id", r.id).eq("attempts", r.attempts);
+        if (error) throw new Error(`couldn't save the note before sending: ${error.message}`);
+      }
       const mail = { to: r.email, ...note, idempotencyKey: `night-followup-${r.id}` };
       let res = await sendEmailDetailed(mail);
       if (!res.ok && res.rateLimited) {
@@ -203,11 +209,7 @@ async function sendRows(
       }
       update = res.ok
         ? { status: "sent", provider_id: res.id ?? null, sent_at: new Date().toISOString(), error: null }
-        : {
-            status: "failed",
-            permanent: !res.ambiguous && !res.rateLimited && !res.quotaExceeded && res.error !== "email not configured",
-            error: res.ambiguous ? `not confirmed by the provider: ${res.error ?? ""}` : (res.error ?? "send failed"),
-          };
+        : { status: "failed", error: res.ambiguous ? `not confirmed by the provider: ${res.error ?? ""}` : (res.error ?? "send failed") };
     } catch (err) {
       update = { status: "failed", error: err instanceof Error ? err.message : String(err) };
     }
@@ -251,12 +253,7 @@ export async function decideNightFollowups(
     const keep = new Set(input.keep);
     const chosen = batch.send.filter((p) => keep.has(p.memberId));
     if (chosen.length === 0) return { ok: false, status: 400, error: "No one to send to. Skip the night instead." };
-    try {
-      footerFor(chosen[0].email);
-    } catch (err) {
-      console.error("[night followups] can't sign the footer links:", err);
-      return { ok: false, status: 500, error: "Email links can't be signed on this server (no unsubscribe key). Nothing was sent." };
-    }
+    if (!canSignEmailLinks()) return { ok: false, status: 500, error: NO_SIGNING_KEY };
     people = chosen.map((p) => ({ member_id: p.memberId, email: p.email, variant: p.variant }));
     for (const p of chosen) byEmail.set(p.email, { name: p.name, askForPage: p.askForPage });
   }
@@ -276,39 +273,52 @@ export async function decideNightFollowups(
   const rows = (data ?? []) as SentRow[];
   const toSend = rows.filter((r) => r.status === "sending");
   if (toSend.length === 0) return { ok: true, sent: 0, failed: 0, held: rows.length };
-  const sent = await sendRows(admin, toSend, byEmail, await noteNight(event, now));
+  const sent = await sendRows(admin, toSend, byEmail, once(() => noteNight(event, now)));
   return { ok: true, sent, failed: toSend.length - sent, held: rows.length - toSend.length };
 }
 
 /**
- * Retry a sent night's notes that didn't go: failed (not refused for good), or stuck at sending after a crash, within
- * the provider's idempotency window, under each row's own key. migration 066 retry_night_followups claims them under
- * the per-email lock, re-asks the hold rule (an unsubscribe or another note this week since holds them), and audits
- * the click; two clicks can't claim the same attempt.
+ * Retry a sent night's failed notes, within the provider's idempotency window, each as first rendered and under its own
+ * key. migration 066 retry_night_followups claims them under the per-email lock, re-asks the hold rule (an
+ * unsubscribe or another note this week since holds them) and audits the click; two clicks can't claim the same
+ * attempt. A note left at sending (the request died mid-send) may have gone, so it is never sent again.
  */
 export async function retryNightFollowups(admin: Admin, eventUri: string, stewardDid: string, now = new Date()): Promise<DecideResult> {
   const event = await readNight(eventUri);
   if (!event || !event.startAt) return { ok: false, status: 404, error: "Couldn't find that night just now. Reload and try again." };
-  try {
-    footerFor("check@regenhub.invalid");
-  } catch {
-    return { ok: false, status: 500, error: "Email links can't be signed on this server (no unsubscribe key). Nothing was sent." };
-  }
+  if (!canSignEmailLinks()) return { ok: false, status: 500, error: NO_SIGNING_KEY };
   const { data, error } = await admin.rpc("retry_night_followups", { p_event_uri: event.uri, p_actor_did: stewardDid });
   if (error) {
     if (/night_followups_not_sent/.test(error.message ?? "")) return { ok: false, status: 409, error: "Nothing was sent for that night." };
     console.error("[night followups] retry failed:", error);
     return { ok: false, status: 500, error: "Couldn't start the retry. Try again." };
   }
-  const claimed = (data ?? []) as SentRow[];
-  if (claimed.length === 0) return { ok: true, sent: 0, failed: 0, held: 0 };
-  const ids = claimed.flatMap((r) => (r.member_id ? [r.member_id] : []));
-  const { data: members } = ids.length ? await admin.from("members").select("id, name, show_in_directory").in("id", ids) : { data: [] };
-  const byId = new Map((members ?? []).map((m) => [m.id as number, m as { name: string; show_in_directory: boolean | null }]));
-  const people = new Map(claimed.map((r) => {
-    const m = r.member_id ? byId.get(r.member_id) : undefined;
-    return [r.email, { name: m?.name ?? "", askForPage: r.variant === "member" && m?.show_in_directory == null }] as const;
-  }));
-  const sent = await sendRows(admin, claimed, people, await noteNight(event, now));
-  return { ok: true, sent, failed: claimed.length - sent, held: 0 };
+  const touched = (data ?? []) as SentRow[];
+  const claimed = touched.filter((r) => r.status === "sending");
+  const held = touched.length - claimed.length;
+  if (claimed.length === 0) return { ok: true, sent: 0, failed: 0, held };
+  // The notes as first rendered; a note never saved (its first render failed) is rendered now.
+  const { data: saved, error: sErr } = await admin.from("night_followups").select("id, subject, html, body_text").in("id", claimed.map((r) => r.id));
+  if (sErr) return { ok: false, status: 500, error: "Couldn't read the notes. Try again." };
+  const notes = new Map((saved ?? []).map((n) => [n.id as number, n]));
+  const rows = claimed.map((r) => ({ ...r, ...notes.get(r.id) }));
+  const unsaved = rows.filter((r) => !r.html).flatMap((r) => (r.member_id ? [r.member_id] : []));
+  const people = new Map<string, { name: string; askForPage: boolean }>();
+  if (unsaved.length) {
+    const { data: members, error: mErr } = await admin.from("members").select("id, name, show_in_directory").in("id", unsaved);
+    if (mErr) return { ok: false, status: 500, error: "Couldn't read the members. Try again." };
+    const byId = new Map((members ?? []).map((m) => [m.id as number, m as { name: string; show_in_directory: boolean | null }]));
+    for (const r of rows) {
+      const m = r.member_id ? byId.get(r.member_id) : undefined;
+      if (m) people.set(r.email, { name: m.name, askForPage: r.variant === "member" && m.show_in_directory == null });
+    }
+  }
+  const sent = await sendRows(admin, rows, people, once(() => noteNight(event, now)));
+  return { ok: true, sent, failed: claimed.length - sent, held };
+}
+
+/** `fn` called at most once, on first use. */
+function once<T>(fn: () => Promise<T>): () => Promise<T> {
+  let p: Promise<T> | null = null;
+  return () => (p ??= fn());
 }

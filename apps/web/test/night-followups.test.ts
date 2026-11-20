@@ -318,9 +318,20 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
     const after = (await nightOnPage(uri))!;
     expect(after.outcomes.map((o) => o.status)).toEqual(["sent"]);
     expect(after.retryable).toBe(0);
+    // The retry sent the note saved before the first attempt, byte for byte (same key, same message).
+    const saved = await pg.query<{ html: string }>("select html from night_followups");
+    expect(edge.mails[0].html).toBe(saved.rows[0].html);
     expect(await click(uri, "retry", [])).toMatchObject({ status: 200, sent: 0 });
     expect(edge.mails).toHaveLength(1);
     expect((await pg.query("select action from admin_actions where action = 'night_followups_retried'")).rows.length).toBeGreaterThan(0);
+
+    // A note left at sending (the request died mid-send) may have gone: never sent again, shown as not confirmed.
+    await pg.query("update night_followups set status = 'sending', attempts = attempts + 1");
+    expect(await click(uri, "retry", [])).toMatchObject({ status: 200, sent: 0 });
+    expect(edge.mails).toHaveLength(1);
+    const stuck = (await nightOnPage(uri))!;
+    expect(stuck.outcomes.map((o) => o.status)).toEqual(["sending"]);
+    expect(stuck.retryable).toBe(0);
   });
 
   it("Retry asks the hold rule again: someone who opted out after a failed send isn't retried", async () => {
