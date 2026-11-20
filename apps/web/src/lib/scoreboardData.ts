@@ -181,7 +181,7 @@ export async function readScoreboard(admin: Admin, now = new Date()) {
     }),
   ]);
   const all = recommendedActions({ now, subs, members, visits, passBuyers, events, goal, handles });
-  const actions = { all, ...visibleActions(all, states, now) };
+  const actions = visibleActions(all, states, now);
   return {
     today,
     months,

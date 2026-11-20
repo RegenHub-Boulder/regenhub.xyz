@@ -183,8 +183,9 @@ function paceActions(goal: GoalProgress, now: Date, goals: ScoreboardGoals, rule
       step: `${usd(need)}/mo more in the next two weeks closes it: ${plural(Math.ceil(need / BASIC_CENTS), `more ${usd(BASIC_CENTS)} member`)}, ` +
         `or ${plural(Math.ceil(need / HOT_DESK_CENTS), "hot desk")}.`,
       stakeCents: need, dueInDays: 14,
-      // Subscriptions in good standing: one starting or ending brings it back; the line rising or fee drift doesn't.
-      fingerprint: `${goal.revenue.subscriptions}`,
+      // The plan mix in good standing: a start, an end or a plan change brings it back; the line rising or fee
+      // drift doesn't.
+      fingerprint: Object.entries(goal.revenue.byPlan).map(([k, p]) => `${k}=${p.subscriptions}`).sort().join(","),
     });
   }
   return out;
@@ -284,7 +285,8 @@ function passBuyerActions(buyers: readonly PassBuyerFollowUp[], byId: ReadonlyMa
   return buyers.flatMap((b) => {
     if (b.memberId != null && byId.get(b.memberId)?.disabled) return [];
     const recent = b.lastVisit != null && daysBetween(b.lastVisit, now) <= rules.passBuyerVisitDays;
-    if (b.passes < rules.passBuyerMinPasses && !recent) return [];
+    const byPasses = b.passes >= rules.passBuyerMinPasses;
+    if (!byPasses && !recent) return [];
     const lastSeen = b.lastVisit && b.lastVisit > b.lastPurchase ? b.lastVisit : b.lastPurchase;
     if (daysBetween(lastSeen, now) > rules.passBuyerMaxAgeDays) return [];
     const key = b.memberId != null ? `m${b.memberId}` : b.email ? `e${emailKey(b.email)}` : null;
@@ -298,9 +300,9 @@ function passBuyerActions(buyers: readonly PassBuyerFollowUp[], byId: ReadonlyMa
         (b.lastVisit ? `; last visit ${day(b.lastVisit)}` : "") + "; never subscribed.",
       step: "Invite them to join, or to the member demos before Friday 4:20 Happy Hour.",
       // Until it stops being a lead: 180 days from last seen on 2+ passes, else 60 days from the visit.
-      stakeCents: BASIC_CENTS, dueInDays: Math.max(0, b.passes >= rules.passBuyerMinPasses
+      stakeCents: BASIC_CENTS, dueInDays: Math.max(0, byPasses
         ? rules.passBuyerMaxAgeDays - daysBetween(lastSeen, now)
-        : rules.passBuyerVisitDays - daysBetween(b.lastVisit!, now)),
+        : rules.passBuyerVisitDays - daysBetween(b.lastVisit ?? lastSeen, now)), // a lead by its visit only
       // A new purchase is a new fact; a visit alone doesn't bring a dismissed invite back.
       fingerprint: `${b.passes}:${b.lastPurchase}`,
     }];

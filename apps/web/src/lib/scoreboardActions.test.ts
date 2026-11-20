@@ -73,6 +73,21 @@ describe("goal pace", () => {
     expect(isHidden(joined, done.get(a.id), week)).toBe(false);
   });
 
+  it("revenue pace comes back on a plan change, not on fee drift", () => {
+    const subs = [sub(1, 1, "hot_desk", "active", 25000, ago(100)), sub(2, 2, "member_basic", "active", 3000, ago(100))];
+    const pace = (rows: SubRow[]) => {
+      const g = goalProgress(rows);
+      return recommendedActions(input({ goal: { ...onPace(15, 100_000), revenue: { ...g.revenue, netCents: 100_000 } } }))
+        .find((x) => x.kind === "goal_pace_revenue")!;
+    };
+    const a = pace(subs);
+    const done = latestStates([{ actionId: a.id, state: "done", fingerprint: a.fingerprint, at: NOW.toISOString() }]);
+    const drift = pace([{ ...subs[0], net_cents: 24_990 }, subs[1]]);
+    expect(isHidden(drift, done.get(a.id), NOW)).toBe(true);
+    const switched = pace([{ ...subs[0], plan_key: "member_basic", monthly_cents: 3000, net_cents: 3000 }, subs[1]]);
+    expect(isHidden(switched, done.get(a.id), NOW)).toBe(false);
+  });
+
   it("stays quiet on pace and just short of the slack", () => {
     expect(recommendedActions(input())).toEqual([]);
     // 0.5 members and $29 behind: under the slack of 1 member and $30.

@@ -105,36 +105,32 @@ export function NextActions({ open, hidden, top }: { open: NextAction[]; hidden:
   const [pending, startTransition] = useTransition();
   // The last mark made here per action, so the lists move at once (before the refresh lands, and after it too).
   const [marked, setMarked] = useState<Map<string, Mark>>(new Map());
-  // Reminders sent from this list: the row stays in place, saying so, though it's marked Done.
+  // Reminders sent from this list (the action is then marked Done): named in a notice and in the dismissed list.
   const [sent, setSent] = useState<Set<string>>(new Set());
+  const [notice, setNotice] = useState<string | null>(null);
   const [all, setAll] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const onMark = async (a: NextAction, state: Mark) => {
     setError(null);
-    // Remember what this mark replaces, read from the latest state (not this render's), to undo it on failure.
-    let before: Mark | undefined;
-    setMarked((m) => {
-      before = m.get(a.id);
-      return new Map(m).set(a.id, state);
-    });
+    setMarked((m) => new Map(m).set(a.id, state));
     try {
       await mark(a, state);
       startTransition(() => router.refresh());
     } catch (e) {
+      // Undo only this mark (a newer one stands); the server's lists then say where it is.
       setMarked((m) => {
+        if (m.get(a.id) !== state) return m;
         const next = new Map(m);
-        if (before) next.set(a.id, before);
-        else next.delete(a.id);
+        next.delete(a.id);
         return next;
       });
       setError(e instanceof Error ? e.message : "Couldn't save that");
     }
   };
 
-  const isOpen = (id: string, fallback: boolean) =>
-    sent.has(id) && marked.get(id) === "done" ? true : marked.has(id) ? marked.get(id) === "open" : fallback;
+  const isOpen = (id: string, fallback: boolean) => (marked.has(id) ? marked.get(id) === "open" : fallback);
   const list = [...open, ...hidden].filter((a) => isOpen(a.id, open.includes(a))).sort((x, y) => x.rank - y.rank);
   const shown = all ? list : list.slice(0, top);
   const back = hidden.filter((a) => !isOpen(a.id, false)).concat(
@@ -144,13 +140,17 @@ export function NextActions({ open, hidden, top }: { open: NextAction[]; hidden:
   return (
     <div>
       {error && <p className="text-xs text-red-400 mb-2">{error}</p>}
+      {notice && !error && <p className="text-xs text-sage mb-2">{notice}</p>}
       {list.length === 0 ? (
         <p className="text-sm text-muted">Nothing needs doing right now.</p>
       ) : (
         <ul className="divide-y divide-white/5">
           {shown.map((a) => (
-            <Row key={a.id} a={a} onMark={onMark} dismissed={sent.has(a.id) && marked.get(a.id) === "done" ? "Reminder sent · done" : undefined}
-              onSent={() => { setSent((x) => new Set(x).add(a.id)); onMark(a, "done"); }} />
+            <Row key={a.id} a={a} onMark={onMark} onSent={() => {
+              setSent((x) => new Set(x).add(a.id));
+              setNotice(`Reminder sent to ${a.who}; marked done.`);
+              onMark(a, "done");
+            }} />
           ))}
         </ul>
       )}
@@ -169,7 +169,7 @@ export function NextActions({ open, hidden, top }: { open: NextAction[]; hidden:
       </div>
       {showHidden && back.length > 0 && (
         <ul className="divide-y divide-white/5 mt-2 opacity-70">
-          {back.map((a) => <Row key={a.id} a={a} onMark={onMark} dismissed={a.mark === "done" ? "Done" : "Not now"} />)}
+          {back.map((a) => <Row key={a.id} a={a} onMark={onMark} dismissed={sent.has(a.id) ? "Reminder sent" : a.mark === "done" ? "Done" : "Not now"} />)}
         </ul>
       )}
     </div>
