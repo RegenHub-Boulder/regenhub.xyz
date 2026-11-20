@@ -5,14 +5,16 @@
  * Definitions (stated on the page too):
  * - Paying members and revenue come from `membershipRevenue` (lib/membershipRevenue.ts), the one definition the
  *   other admin pages and the MCP share. The goal counts members paying $30/month or more, net.
- * - A subscription that never started (`incomplete`, `incomplete_expired`) is not a subscription here.
- * - A cancellation is a row now `canceled`, dated by `canceled_at` (for a card that's when the cancel was asked,
- *   which can be before the paid period ends), else `updated_at`.
+ * - A subscription that never started is not a subscription here: `incomplete`/`incomplete_expired`, or a USDC
+ *   row with no paid membership invoice (an unpaid checkout an admin cancelled turns `canceled`).
+ * - A cancellation counts in the month it was asked for, whether it has taken effect yet (a period-end cancel
+ *   still running counts too), so a month's number doesn't change after the meeting. Asked = `admin_canceled_at`
+ *   (an admin cancel, either rail), else `canceled_at` (Stripe stamps it when the member asks), else `updated_at`.
  * - Months are calendar months in America/Denver.
  */
 import { dateIn } from "./series";
 import { effectiveMonthlyCents } from "./stripeNet";
-import { isGoodStanding, isLive, membershipRevenue, type MembershipRevenue, type RevenueRow } from "./membershipRevenue";
+import { isBilled, isGoodStanding, membershipRevenue, type MembershipRevenue, type RevenueRow } from "./membershipRevenue";
 
 export const SCOREBOARD_TZ = "America/Denver";
 
@@ -40,6 +42,11 @@ export interface SubRow extends RevenueRow {
   created_at: string;
   canceled_at: string | null;
   updated_at?: string | null;
+  cancel_at_period_end?: boolean | null;
+  admin_canceled_at?: string | null;
+  admin_cancel_mode?: string | null;
+  /** USDC rows: whether a membership invoice was ever paid. Unset = not known (card rows). */
+  paid?: boolean;
 }
 
 export interface MemberRow {
@@ -62,7 +69,7 @@ export interface VisitRow {
 }
 
 const NEVER_STARTED = new Set(["incomplete", "incomplete_expired"]);
-export const started = (s: { status: string }) => !NEVER_STARTED.has(s.status);
+export const started = (s: Pick<SubRow, "status" | "paid">) => !NEVER_STARTED.has(s.status) && s.paid !== false;
 
 export const monthOf = (iso: string, tz: string = SCOREBOARD_TZ) => dateIn(iso, tz).slice(0, 7);
 
@@ -77,8 +84,12 @@ export function lastMonths(now: Date, n = 6, tz: string = SCOREBOARD_TZ): string
   return out;
 }
 
+/** Still billed, but set to end (period-end cancel, or an admin cancel still running). */
+export const isEnding = (s: SubRow) => isBilled(s.status) && !!(s.cancel_at_period_end || s.admin_cancel_mode);
+
+/** When the cancellation was asked for, or null if the row isn't cancelled or ending. */
 export const canceledOn = (s: SubRow): string | null =>
-  s.status === "canceled" ? s.canceled_at ?? s.updated_at ?? null : null;
+  s.status === "canceled" || isEnding(s) ? s.admin_canceled_at ?? s.canceled_at ?? s.updated_at ?? null : null;
 
 // ── Goal progress ────────────────────────────────────────────────────────────
 
@@ -209,7 +220,10 @@ export interface CanceledFollowUp {
   name: string;
   email: string | null;
   planKey: string;
+  /** When it was asked for. */
   canceledAt: string;
+  /** Asked, but the paid period is still running. */
+  ending: boolean;
   lastVisit: string | null;
 }
 
@@ -233,8 +247,8 @@ export function lastVisits(visits: readonly VisitRow[]): Map<number, string> {
 }
 
 /**
- * Members whose subscription was cancelled since `since` and who hold no live subscription now (a plan change or
- * a return isn't a loss), latest cancellation each, most recent first.
+ * Members who asked to cancel since `since` (ended or still ending) and hold no other billed subscription that
+ * carries on (a plan change or a return isn't a loss), latest cancellation each, most recent first.
  */
 export function canceledSince(
   subs: readonly SubRow[],
@@ -242,7 +256,7 @@ export function canceledSince(
   visits: ReadonlyMap<number, string>,
   since: string = SCOREBOARD_GOALS.followUpSince,
 ): CanceledFollowUp[] {
-  const live = new Set(subs.filter((s) => isLive(s.status)).map((s) => s.member_id));
+  const live = new Set(subs.filter((s) => isBilled(s.status) && !isEnding(s)).map((s) => s.member_id));
   const byId = new Map(members.map((m) => [m.id, m]));
   const latest = new Map<number, CanceledFollowUp>();
   for (const s of subs) {
@@ -257,6 +271,7 @@ export function canceledSince(
       email: m?.email ?? null,
       planKey: s.plan_key,
       canceledAt: at,
+      ending: s.status !== "canceled",
       lastVisit: visits.get(s.member_id) ?? null,
     });
   }

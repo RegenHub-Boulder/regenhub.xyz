@@ -12,10 +12,13 @@
  */
 import { effectiveMonthlyCents } from "./stripeNet";
 
-/** Statuses that still hold access: billed now or in the grace period. */
-export const LIVE_STATUSES = ["active", "trialing", "past_due"] as const;
 /** Statuses that count as paying. */
 export const GOOD_STANDING_STATUSES = ["active", "trialing"] as const;
+/**
+ * Billed now or in the grace period (past due). Unlike `LIVE_SUBSCRIPTION_STATUSES` (lib/subscriptionStatus.ts) it
+ * leaves out `incomplete`: an unpaid checkout isn't a member yet.
+ */
+export const BILLED_STATUSES = [...GOOD_STANDING_STATUSES, "past_due"] as const;
 
 export interface RevenueRow {
   member_id: number;
@@ -48,7 +51,7 @@ export interface MembershipRevenue {
 }
 
 export const isGoodStanding = (status: string) => (GOOD_STANDING_STATUSES as readonly string[]).includes(status);
-export const isLive = (status: string) => (LIVE_STATUSES as readonly string[]).includes(status);
+export const isBilled = (status: string) => (BILLED_STATUSES as readonly string[]).includes(status);
 
 /** Rows of any status in; the counted ones are picked here, so callers can't disagree on which. */
 export function membershipRevenue(rows: readonly RevenueRow[]): MembershipRevenue {

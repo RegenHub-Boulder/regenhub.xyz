@@ -83,11 +83,12 @@ export async function POST(req: Request) {
     admin.from("members").select("id, name, email").eq("disabled", false).not("email", "is", null),
   ]);
 
+  const revenue = membershipRevenue(billingSubs ?? []);
   const stats: HubDigestStats = {
     monthLabel,
     // The shared definition (lib/membershipRevenue.ts): the same numbers the admin pages show.
-    mrrCents: membershipRevenue(billingSubs ?? []).netCents,
-    payingMembers: membershipRevenue(billingSubs ?? []).members,
+    mrrCents: revenue.netCents,
+    payingMembers: revenue.members,
     tierCounts: [
       { label: "Cold Desk", count: coldDesk ?? 0 },
       { label: "Hot Desk", count: hotDesk ?? 0 },

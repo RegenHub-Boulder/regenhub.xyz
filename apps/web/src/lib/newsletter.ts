@@ -115,11 +115,12 @@ export async function compileFortnightStats(admin: ServiceClient): Promise<HubDi
     admin.from("free_day_claims").select("*", { count: "exact", head: true }).gte("created_at", startIso).lt("created_at", endIso),
   ]);
 
+  const revenue = membershipRevenue(billingSubs ?? []);
   return {
     monthLabel: windowLabel,
     // The shared definition (lib/membershipRevenue.ts): the same numbers the admin pages show.
-    mrrCents: membershipRevenue(billingSubs ?? []).netCents,
-    payingMembers: membershipRevenue(billingSubs ?? []).members,
+    mrrCents: revenue.netCents,
+    payingMembers: revenue.members,
     tierCounts: [
       { label: "Cold Desk", count: coldDesk ?? 0 },
       { label: "Hot Desk", count: hotDesk ?? 0 },

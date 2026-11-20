@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Users, Key, Zap, UserPlus, AlertTriangle, ClipboardList, Calendar, DollarSign, Inbox, Link2 } from "lucide-react";
 import { FunnelCard } from "@/components/admin/FunnelCard";
-import { LIVE_STATUSES, REVENUE_COLUMNS, membershipRevenue, type RevenueRow } from "@/lib/membershipRevenue";
+import { BILLED_STATUSES, REVENUE_COLUMNS, membershipRevenue, type RevenueRow } from "@/lib/membershipRevenue";
 
 export default async function AdminPage() {
   if (!await requireAdmin()) redirect("/portal");
@@ -66,7 +66,7 @@ export default async function AdminPage() {
     admin.from("free_day_claims").select("*", { count: "exact", head: true }).eq("status", "pending"),
     admin.from("free_day_claims").select("*", { count: "exact", head: true }).eq("status", "reserved"),
     // Subscriptions — only the billable rows (active/trialing/past_due)
-    supabase.from("subscriptions").select(REVENUE_COLUMNS).in("status", [...LIVE_STATUSES]).returns<RevenueRow[]>(),
+    supabase.from("subscriptions").select(REVENUE_COLUMNS).in("status", [...BILLED_STATUSES]).returns<RevenueRow[]>(),
     // Funnel stages — all-time totals
     supabase.from("interests").select("*", { count: "exact", head: true }),
     admin.from("free_day_claims").select("*", { count: "exact", head: true }),

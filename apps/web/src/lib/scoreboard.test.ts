@@ -27,15 +27,15 @@ const sub = (id: number, member_id: number, plan_key: string, status: string, mo
 const SUBS: SubRow[] = [
   sub(1, 1, "hot_desk", "active", 25000, 25000, "2026-06-10T16:00:00Z"),
   sub(2, 2, "cold_desk", "active", 50000, 37500, "2026-08-03T16:00:00Z"), // 25% coupon
-  sub(3, 3, "member_5day", "active", 10000, 9500, "2026-10-05T16:00:00Z", { payment_rail: "onchain" }), // USDC rail discount
+  sub(3, 3, "member_5day", "active", 10000, 9500, "2026-10-05T16:00:00Z", { payment_rail: "onchain", paid: true }), // USDC rail discount
   sub(4, 4, "member_basic", "trialing", 3000, null, "2026-11-02T16:00:00Z"), // not synced yet: list
   sub(5, 5, "hot_desk", "past_due", 25000, 25000, "2026-07-01T16:00:00Z"),
   sub(6, 6, "member_basic", "active", 3000, 1500, "2026-09-12T16:00:00Z"), // 50% off: under $30
   sub(7, 7, "member_2day", "canceled", 5000, 5000, "2026-06-20T16:00:00Z", { canceled_at: "2026-11-01T03:00:00Z" }), // Oct 31 in Denver
-  sub(8, 8, "hot_desk", "canceled", 25000, 23750, "2026-07-07T16:00:00Z", { payment_rail: "onchain", updated_at: "2026-11-03T16:00:00Z" }),
+  sub(8, 8, "hot_desk", "canceled", 25000, 23750, "2026-07-07T16:00:00Z", { payment_rail: "onchain", paid: true, updated_at: "2026-11-03T16:00:00Z" }),
   sub(9, 9, "cold_desk", "incomplete", 50000, 50000, "2026-11-10T16:00:00Z"), // never started
   sub(10, 1, "member_basic", "canceled", 3000, 3000, "2026-05-01T16:00:00Z", { canceled_at: "2026-06-09T16:00:00Z" }), // m1 moved up
-  sub(11, 10, "hot_desk", "active", 25000, 30000, "2026-11-15T16:00:00Z", { payment_rail: "onchain" }), // stale net after downgrade
+  sub(11, 10, "hot_desk", "active", 25000, 30000, "2026-11-15T16:00:00Z", { payment_rail: "onchain", paid: true }), // stale net after downgrade
   sub(12, 11, "member_2day", "canceled", 5000, 5000, "2026-03-01T16:00:00Z", { canceled_at: "2026-06-20T16:00:00Z" }),
 ];
 const member = (id: number, member_type = "hot_desk", disabled = false): MemberRow => ({
@@ -117,6 +117,46 @@ describe("subscriptionFlow", () => {
   });
 });
 
+describe("cancellations count when asked for", () => {
+  // Card: Stripe stamps canceled_at when a period-end cancel is asked; the row stays active until the period ends.
+  const cardEnding = sub(20, 12, "member_basic", "active", 3000, 3000, "2026-09-20T16:00:00Z",
+    { cancel_at_period_end: true, canceled_at: "2026-11-05T16:00:00Z" });
+  // USDC: an admin period-end cancel is stamped admin_canceled_at at once; canceled_at only when the period ends.
+  const onchainEnded = sub(21, 13, "hot_desk", "canceled", 25000, 25000, "2026-08-20T16:00:00Z",
+    { payment_rail: "onchain", paid: true, admin_canceled_at: "2026-10-25T16:00:00Z", admin_cancel_mode: "period_end", canceled_at: "2026-11-18T16:00:00Z" });
+
+  it("in the month asked: a card cancel still running and a USDC cancel that ended later", () => {
+    const f = subscriptionFlow([cardEnding, onchainEnded], MONTHS);
+    expect(f.map((m) => m.canceled)).toEqual([0, 0, 0, 0, 1, 1]); // USDC in Oct (asked), card in Nov (still active)
+  });
+
+  it("an ending member still counts as paying until the period ends, and is on the follow-up list", () => {
+    expect(goalProgress([cardEnding]).payingMembers).toBe(1);
+    const list = canceledSince([cardEnding, onchainEnded], MEMBERS, new Map());
+    expect(list.map((c) => [c.memberId, c.canceledAt, c.ending])).toEqual([
+      [12, "2026-11-05T16:00:00Z", true],
+      [13, "2026-10-25T16:00:00Z", false],
+    ]);
+  });
+});
+
+describe("a USDC checkout that was never paid never started", () => {
+  // An admin cancelling an unpaid USDC checkout turns it `canceled` with canceled_at (059_admin_cancel.sql).
+  const unpaid = sub(22, 12, "hot_desk", "canceled", 25000, 23750, "2026-10-10T16:00:00Z",
+    { payment_rail: "onchain", paid: false, canceled_at: "2026-10-12T16:00:00Z" });
+  const all = [...SUBS, unpaid];
+  it("is no new subscription, no cancellation, no first subscription and no follow-up", () => {
+    expect(subscriptionFlow(all, MONTHS)).toEqual(subscriptionFlow(SUBS, MONTHS));
+    expect(funnelByMonth({ interests: [], applications: [], purchases: [], subs: all }, MONTHS))
+      .toEqual(funnelByMonth({ interests: [], applications: [], purchases: [], subs: SUBS }, MONTHS));
+    expect(canceledSince(all, MEMBERS, VISITS).map((c) => c.memberId)).toEqual([8, 7]);
+  });
+  it("leaves the buyer among those who never subscribed, and in the pool", () => {
+    expect(passBuyersNeverSubscribed(PURCHASES, all, MEMBERS, VISITS).map((b) => b.memberId)).toEqual([12, 9, null, 13]);
+    expect(dayPassPool(MEMBERS, all)).toBe(4);
+  });
+});
+
 describe("funnelByMonth", () => {
   it("signups, applications, passes (both rails) and first subscriptions per month", () => {
     const f = funnelByMonth({
@@ -139,8 +179,8 @@ describe("funnelByMonth", () => {
 describe("people to follow up", () => {
   it("cancelled since July 1 with no live subscription, latest first", () => {
     expect(canceledSince(SUBS, MEMBERS, VISITS)).toEqual([
-      { memberId: 8, name: "Sample 8", email: "sample8@example.test", planKey: "hot_desk", canceledAt: "2026-11-03T16:00:00Z", lastVisit: null },
-      { memberId: 7, name: "Sample 7", email: "sample7@example.test", planKey: "member_2day", canceledAt: "2026-11-01T03:00:00Z", lastVisit: "2026-10-20T16:00:00Z" },
+      { memberId: 8, name: "Sample 8", email: "sample8@example.test", planKey: "hot_desk", canceledAt: "2026-11-03T16:00:00Z", ending: false, lastVisit: null },
+      { memberId: 7, name: "Sample 7", email: "sample7@example.test", planKey: "member_2day", canceledAt: "2026-11-01T03:00:00Z", ending: false, lastVisit: "2026-10-20T16:00:00Z" },
     ]);
   });
 

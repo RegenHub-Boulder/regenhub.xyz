@@ -6,7 +6,7 @@ import { getStripe, isStripeConfigured } from "@/lib/stripe";
 import { getPlan, isDeskPlan, planLabel } from "@/lib/plans";
 import { AuditAction, logAction } from "@/lib/auditLog";
 import { membershipInvoices } from "@/lib/onchain/invoiceKind";
-import { LIVE_STATUSES, isLive, membershipRevenue, type RevenueRow } from "@/lib/membershipRevenue";
+import { BILLED_STATUSES, isBilled, membershipRevenue, type RevenueRow } from "@/lib/membershipRevenue";
 import { withLockWriter } from "@regenhub/shared";
 import { CancelMembershipError, cancelMembership, type CancelMode } from "@/lib/membershipCancel";
 import {
@@ -46,7 +46,6 @@ const day = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : "—")
 const unixDay = (unix: number | null | undefined) => (unix ? new Date(unix * 1000).toISOString().slice(0, 10) : "—");
 const errorText = (e: unknown) => (e instanceof Error ? e.message : typeof e === "object" && e && "message" in e ? String((e as { message: unknown }).message) : String(e));
 
-export { LIVE_STATUSES };
 export const AUDIT_ACTION = AuditAction.MCP_BILLING_WRITE;
 
 // ── gates ────────────────────────────────────────────────────
@@ -134,7 +133,7 @@ const SUB_COLUMNS = "id, member_id, payment_rail, plan_key, status, monthly_cent
 
 /** The subscription that matters for a member: live first, then newest. */
 function mainSubscription(subs: SubRow[]): SubRow | undefined {
-  return subs.find((s) => isLive(s.status)) ?? subs.find((s) => s.status === "incomplete") ?? subs[0];
+  return subs.find((s) => isBilled(s.status)) ?? subs.find((s) => s.status === "incomplete") ?? subs[0];
 }
 
 function subLine(s: SubRow): string {
@@ -178,7 +177,7 @@ export async function listMembersHandler(admin: ServiceClient, auth: McpAuthInfo
   const matched = rows
     .map((m) => ({ m, s: mainSubscription(subsByMember.get(m.id) ?? []) }))
     .filter(({ s }) => !args.plan_key || s?.plan_key === args.plan_key)
-    .filter(({ s }) => !args.status || (args.status === "none" ? !s || !isLive(s.status) : s?.status === args.status))
+    .filter(({ s }) => !args.status || (args.status === "none" ? !s || !isBilled(s.status) : s?.status === args.status))
     .filter(({ s }) => !args.rail || s?.payment_rail === args.rail);
   const shown = matched.slice(0, limit);
   const lines = [`## Members: ${matched.length} match${matched.length === 1 ? "" : "es"}${matched.length > shown.length ? ` (first ${shown.length})` : ""}`];
@@ -382,7 +381,7 @@ export async function listOpenInvoicesHandler(admin: ServiceClient, auth: McpAut
         const m = cust ? byCustomer.get(cust) : undefined;
         const subId = stripeInvoiceSubscription(inv);
         const local = subId ? bySub.get(subId) : undefined;
-        const note = local && !isLive(local.status) ? ` · ⚠️ its subscription (#${local.id}) is ${local.status}: likely voidable` : "";
+        const note = local && !isBilled(local.status) ? ` · ⚠️ its subscription (#${local.id}) is ${local.status}: likely voidable` : "";
         lines.push(`- ${stripeInvoiceLine(inv)} · ${m ? `${m.name} (member ${m.id})` : inv.customer_email ?? cust ?? "unknown customer"}` +
           `${local ? ` · ${planLabel(local.plan_key)}` : ""}${note}`);
       }
@@ -413,7 +412,7 @@ export async function billingSummaryHandler(admin: ServiceClient, auth: McpAuthI
   const denied = scopeDenied(auth, "billing_summary", "read");
   if (denied) return denied;
   const [subs, overdue, balances, pools] = await Promise.all([
-    admin.from("subscriptions").select("id, member_id, plan_key, payment_rail, status, monthly_cents, net_cents, cancel_at_period_end, admin_cancel_mode").in("status", [...LIVE_STATUSES]),
+    admin.from("subscriptions").select("id, member_id, plan_key, payment_rail, status, monthly_cents, net_cents, cancel_at_period_end, admin_cancel_mode").in("status", [...BILLED_STATUSES]),
     membershipInvoices((kindColumn) => {
       const query = admin.from("onchain_invoices").select("id, amount_cents, due_at").in("status", ["open", "submitted", "detected"]).lt("due_at", new Date().toISOString());
       return kindColumn ? query.eq("kind", "membership") : query;
@@ -620,7 +619,7 @@ export async function changeMemberPlanHandler(admin: ServiceClient, auth: McpAut
   if (!target) return fail(`Unknown plan "${args.plan_key}".`);
   const loadSub = async () => {
     const { data, error } = await admin.from("subscriptions").select(SUB_COLUMNS).eq("member_id", args.member_id)
-      .in("status", [...LIVE_STATUSES]).order("created_at", { ascending: false }).limit(1).maybeSingle();
+      .in("status", [...BILLED_STATUSES]).order("created_at", { ascending: false }).limit(1).maybeSingle();
     if (error) throw error;
     return data as unknown as SubRow | null;
   };

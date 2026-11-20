@@ -17,6 +17,8 @@ const subs = [
   [10, 101, "member_basic", "canceled", 3000, 3000, "stripe", "2026-05-01T16:00:00Z", "2026-06-09T16:00:00Z"],
   [11, 110, "hot_desk", "active", 25000, 30000, "onchain", "2026-11-15T16:00:00Z"],
   [12, 111, "member_2day", "canceled", 5000, 5000, "stripe", "2026-03-01T16:00:00Z", "2026-06-20T16:00:00Z"],
+  // A USDC checkout Sample 12 never paid, then cancelled by an admin: it must count nowhere.
+  [13, 112, "hot_desk", "canceled", 25000, 23750, "onchain", "2026-10-10T16:00:00Z", "2026-10-12T16:00:00Z"],
 ];
 const types = { 101: "hot_desk", 102: "cold_desk", 105: "hot_desk", 108: "hot_desk", 110: "hot_desk" };
 const members = Array.from({ length: 15 }, (_, i) => {
@@ -46,7 +48,7 @@ export async function seedScoreboard(pg) {
     create table subscriptions (
       id serial primary key, member_id integer not null, payment_rail text not null default 'stripe', plan_key text not null,
       monthly_cents integer not null, net_cents integer, status text not null, canceled_at timestamptz,
-      cancel_at_period_end boolean not null default false,
+      cancel_at_period_end boolean not null default false, admin_canceled_at timestamptz, admin_cancel_mode text,
       created_at timestamptz not null default now(), updated_at timestamptz not null default now());
     create table interests (id serial primary key, email text not null, name text, created_at timestamptz not null default now());
     create table applications (id serial primary key, email text not null, name text not null, created_at timestamptz not null default now());
@@ -54,6 +56,8 @@ export async function seedScoreboard(pg) {
       amount_cents integer not null default 3000, created_at timestamptz not null default now());
     create table access_logs (id serial primary key, member_id integer, result text not null default 'granted',
       created_at timestamptz not null default now());
+    create table onchain_invoices (id serial primary key, subscription_id integer not null, status text not null,
+      kind text not null default 'membership');
     create table email_unsubscribes (email text primary key, created_at timestamptz not null default now());
     create table newsletter_issues (id serial primary key, issue_key text not null unique, subject text not null,
       status text not null default 'sent', created_at timestamptz not null default now());
@@ -70,6 +74,8 @@ export async function seedScoreboard(pg) {
       [id, member, plan, status, monthly, net, rail, created, canceledAt ?? null, updatedAt ?? created],
     );
   }
+  // The USDC subscriptions (3, 8, 11) were paid: a paid membership invoice each.
+  for (const id of [3, 8, 11]) await pg.query("insert into onchain_invoices(subscription_id, status) values ($1, 'paid')", [id]);
   for (const [member, email, at, invoice] of purchases) {
     await pg.query("insert into purchases(member_id, email, created_at, onchain_invoice_id) values ($1, $2, $3, $4)", [member, email, at, invoice]);
   }

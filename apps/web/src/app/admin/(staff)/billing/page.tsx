@@ -20,7 +20,7 @@ import { CouponsSection } from "@/components/admin/CouponsSection";
 import { RateLabel } from "@/components/admin/RateLabel";
 import { RefreshNetsButton } from "@/components/admin/RefreshNetsButton";
 import { effectiveMonthlyCents } from "@/lib/stripeNet";
-import { isLive, membershipRevenue } from "@/lib/membershipRevenue";
+import { isBilled, membershipRevenue } from "@/lib/membershipRevenue";
 
 export const metadata = { title: "Billing — Admin" };
 
@@ -110,7 +110,7 @@ export default async function BillingPage() {
   ]);
 
   const allSubs = subs ?? [];
-  const billingSubs = allSubs.filter((s) => isLive(s.status));
+  const billingSubs = allSubs.filter((s) => isBilled(s.status));
   const pastDueSubs = billingSubs.filter((s) => s.status === "past_due");
   const cancelingSubs = billingSubs.filter((s) => s.cancel_at_period_end);
 

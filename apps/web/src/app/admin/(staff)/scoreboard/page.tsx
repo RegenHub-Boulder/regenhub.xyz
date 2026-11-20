@@ -157,7 +157,7 @@ export default async function ScoreboardPage() {
         <CopyTextBlock text={s.text} />
       </Section>
 
-      <Section title="Subscriptions per month" note="New and cancelled, card and USDC. A cancellation is dated when it was asked for.">
+      <Section title="Subscriptions per month" note="Card and USDC. A cancellation counts in the month it was asked for, ended or still running to the end of its paid period.">
         <MonthTable
           months={s.months}
           rows={[
@@ -240,7 +240,7 @@ export default async function ScoreboardPage() {
             <FollowUpTable
               rows={s.canceled.map((c) => ({
                 key: `c${c.memberId}`, href: `/admin/members/${c.memberId}`, name: c.name, email: c.email,
-                detail: `${planLabel(c.planKey)} · cancelled ${day(c.canceledAt)}`, last: c.lastVisit ? `visited ${day(c.lastVisit)}` : "no visit logged",
+                detail: `${planLabel(c.planKey)} · ${c.ending ? "ending, asked" : "cancelled"} ${day(c.canceledAt)}`, last: c.lastVisit ? `visited ${day(c.lastVisit)}` : "no visit logged",
               }))}
               empty="No cancellations since then."
             />

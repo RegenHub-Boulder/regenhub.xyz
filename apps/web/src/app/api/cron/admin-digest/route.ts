@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { sendEmail, adminDigestEmail, type DigestData } from "@/lib/email";
 import { hasBearerSecret } from "@/lib/secretAuth";
+import { GOOD_STANDING_STATUSES, REVENUE_COLUMNS, membershipRevenue, type RevenueRow } from "@/lib/membershipRevenue";
 
 /**
  * POST /api/cron/admin-digest
@@ -41,7 +42,7 @@ export async function POST(req: Request) {
     { count: pastDueSubs },
     { count: newApplicationsYesterday },
     { count: newSignupsYesterday },
-    { count: newMembersYesterday },
+    { data: newSubsYesterday },
     { data: yesterdayCodeRows },
     { data: lastSyncRun },
     { data: admins },
@@ -53,9 +54,9 @@ export async function POST(req: Request) {
       .gte("created_at", yStartIso).lt("created_at", tStartIso),
     admin.from("interests").select("*", { count: "exact", head: true })
       .gte("created_at", yStartIso).lt("created_at", tStartIso),
-    admin.from("subscriptions").select("*", { count: "exact", head: true })
+    admin.from("subscriptions").select(REVENUE_COLUMNS)
       .gte("created_at", yStartIso).lt("created_at", tStartIso)
-      .in("status", ["active", "trialing"]),
+      .in("status", [...GOOD_STANDING_STATUSES]).returns<RevenueRow[]>(),
     admin.from("day_codes")
       .select("code, created_at, members(name)")
       .gte("created_at", yStartIso).lt("created_at", tStartIso)
@@ -80,7 +81,8 @@ export async function POST(req: Request) {
     pastDueSubs: pastDueSubs ?? 0,
     newApplicationsYesterday: newApplicationsYesterday ?? 0,
     newSignupsYesterday: newSignupsYesterday ?? 0,
-    newMembersYesterday: newMembersYesterday ?? 0,
+    // New paying members: the shared definition, so a second subscription isn't a second member.
+    newMembersYesterday: membershipRevenue(newSubsYesterday ?? []).members,
     yesterdayVisits,
     lockSyncFailed,
     siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz",
