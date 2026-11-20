@@ -1,14 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { SERIES, getSeries, plannedNight, seriesOf, topicOf, zonedTimeToUtc } from "./series";
+import { SERIES, getSeries, ordinalShort, plannedNight, seriesOf, techneTuesdays, topicOf, zonedTimeToUtc } from "./series";
 
 const agents = getSeries("agents-night")!;
 const civic = getSeries("civic-tech-night")!;
 
 describe("series keys", () => {
-  it("knows both series by slug and nothing else", () => {
+  it("knows the four series by slug and nothing else", () => {
     expect(agents.name).toBe("Agents Building Night");
     expect(civic.name).toBe("Civic Tech Night");
-    expect(getSeries("happy-hour")).toBeNull();
+    expect(getSeries("boulder-blockchain")?.name).toBe("Boulder Blockchain Meetup");
+    expect(getSeries("happy-hour")?.name).toBe("420 Happy Hour");
+    expect(getSeries("hack-night")).toBeNull();
+  });
+
+  it("puts the already-posted 420 Happy Hour events in the Happy Hour series by name", () => {
+    expect(seriesOf({ name: "420 Happy Hour" })?.slug).toBe("happy-hour");
+    expect(seriesOf({ name: "420 happy hour: on the roof" })?.slug).toBe("happy-hour");
+    expect(seriesOf({ name: "Boulder Blockchain Meetup — Dec" })?.slug).toBe("boulder-blockchain");
+    expect(seriesOf({ name: "Happy Hour" })).toBeNull();
+  });
+
+  it("names the Techne Tuesdays in month order: 1st Agents Building, 2nd Blockchain, 3rd Civic Tech", () => {
+    expect(techneTuesdays().map(({ series, nth }) => `${ordinalShort(nth)} ${series.slug}`)).toEqual([
+      "1st agents-night",
+      "2nd boulder-blockchain",
+      "3rd civic-tech-night",
+    ]);
   });
 
   it("puts a night in a series by name, alone or with a topic after a separator", () => {
@@ -26,14 +43,15 @@ describe("series keys", () => {
     expect(seriesOf({ name: "Agents Nightly" })).toBeNull();
   });
 
-  it("names AG and Benjamin as hosts of both series", () => {
-    for (const s of SERIES) expect(s.hosts).toBe("AG and Benjamin");
+  it("names AG and Benjamin as hosts of Agents Building and Civic Tech Night, and no one else's", () => {
+    expect([agents.hosts, civic.hosts]).toEqual(["AG and Benjamin", "AG and Benjamin"]);
+    expect(getSeries("boulder-blockchain")?.hosts).toBeUndefined();
+    expect(getSeries("boulder-blockchain")?.elsewhere?.url).toBe("https://meetup.com/boulder-blockchain");
   });
 
   it("does not claim near-misses", () => {
     expect(seriesOf({ name: "Agents Building Nightly" })).toBeNull();
     expect(seriesOf({ name: "Not Agents Building Night" })).toBeNull();
-    expect(seriesOf({ name: "420 Happy Hour" })).toBeNull();
     expect(seriesOf({ name: "" })).toBeNull();
   });
 
@@ -59,7 +77,7 @@ describe("series keys", () => {
 describe("series copy", () => {
   it("says the rhythm only through rhythmOf, not in the blurb or about", () => {
     for (const s of SERIES) {
-      expect(`${s.name} ${s.blurb} ${s.about}`).not.toMatch(/monthly|weekly|every|alternate|second thursday|biweekly/i);
+      expect(`${s.name} ${s.blurb} ${s.about}`).not.toMatch(/monthly|weekly|every (week|month|tuesday|friday)|alternate|(first|second|third) tuesday|biweekly/i);
     }
   });
 });
@@ -71,11 +89,13 @@ describe("times", () => {
     expect(zonedTimeToUtc("2027-03-14", "18:30", "America/Denver").toISOString()).toBe("2027-03-15T00:30:00.000Z");
   });
 
-  it("puts a night on its date at the series' 6:30–9pm", () => {
-    expect(plannedNight(agents, "2026-12-01")).toMatchObject({
-      date: "2026-12-01",
-      startsAt: "2026-12-02T01:30:00.000Z",
-      endsAt: "2026-12-02T04:00:00.000Z",
-    });
+  it("puts a Tuesday night on its date at 6–8pm, as the Blockchain meetup always has", () => {
+    for (const slug of ["agents-night", "boulder-blockchain", "civic-tech-night"]) {
+      expect(plannedNight(getSeries(slug)!, "2026-12-01")).toMatchObject({
+        date: "2026-12-01",
+        startsAt: "2026-12-02T01:00:00.000Z",
+        endsAt: "2026-12-02T03:00:00.000Z",
+      });
+    }
   });
 });

@@ -18,7 +18,10 @@ export function SeriesCard({ overview }: { overview: SeriesOverview }) {
       <div className="glass-panel-subtle rounded-lg p-5 h-full flex flex-col gap-2 hover-lift">
         <p className="font-semibold text-xl leading-snug">{series.name}</p>
         <p className="text-sm text-muted">{series.blurb}</p>
-        <p className="text-sm text-muted">{rhythmOf(series)} · Hosted by {series.hosts}</p>
+        <p className="text-sm text-muted">
+          {rhythmOf(series)}
+          {series.hosts ? ` · Hosted by ${series.hosts}` : ""}
+        </p>
         <p className="mt-auto pt-2 flex items-center gap-2 text-sm">
           <CalendarDays className="w-4 h-4 text-sage shrink-0" />
           <span>{nextNightLabel(overview, formatEventWhen)}</span>

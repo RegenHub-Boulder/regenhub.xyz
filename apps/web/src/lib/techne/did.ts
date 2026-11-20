@@ -65,32 +65,71 @@ export function handleOf(doc: unknown): string | null {
 
 const HANDLE_SYNTAX = /^(?=.{3,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
-/** Does `handle` resolve to `did`? The atproto way, both lookups: `https://<handle>/.well-known/atproto-did`
- *  (https only, no redirects, 5 s), else the `_atproto.<handle>` DNS TXT record `did=…`. Any failure is "no". */
-export async function handleResolvesTo(handle: string, did: string, fetchImpl: typeof fetch = (...a) => fetch(...a)): Promise<boolean> {
-  const h = handle.toLowerCase();
-  if (!HANDLE_SYNTAX.test(h)) return false;
-  try {
-    const res = await fetchImpl(`https://${h}/.well-known/atproto-did`, {
+/** Any DID by syntax (a did:plc check is `isPlcDid`). */
+export const isDid = (v: unknown): v is string => typeof v === "string" && /^did:[a-z]+:[A-Za-z0-9._:%-]{1,256}$/.test(v);
+
+/** The DIDs a handle's two atproto lookups name: `https://<handle>/.well-known/atproto-did` (https only, no
+ *  redirects, 5 s) and every `_atproto.<handle>` DNS TXT record `did=…`. On staging, only the stand-in's resolveHandle
+ *  (its sample handles have no domain). Empty when nothing answers. */
+async function handleDids(h: string, fetchImpl: typeof fetch): Promise<string[]> {
+  const standIn = process.env.TECHNE_STANDIN_URL?.trim();
+  if (isStandInEnabled() && standIn) {
+    const res = await fetchImpl(`${standIn.replace(/\/+$/, "")}/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(h)}`, {
+      cache: "no-store",
+    }).catch(() => null);
+    const did = res?.ok ? ((await res.json().catch(() => null)) as { did?: unknown } | null)?.did : null;
+    return isDid(did) ? [did] : [];
+  }
+  // Both lookups at once: a sign-in waits for the slower, not the sum.
+  const [wellKnown, dns] = await Promise.all([
+    fetchImpl(`https://${h}/.well-known/atproto-did`, {
       headers: { accept: "text/plain" },
       signal: AbortSignal.timeout(5000),
       cache: "no-store",
       redirect: "error",
-    });
-    if (res.ok && (await res.text()).trim() === did) return true;
-  } catch {
-    /* fall through to DNS */
+    })
+      .then(async (res) => (res.ok ? (await res.text()).trim() : null))
+      .catch(() => null),
+    import("node:dns/promises")
+      .then(({ resolveTxt }) =>
+        Promise.race([
+          resolveTxt(`_atproto.${h}`),
+          new Promise<string[][]>((_, no) => setTimeout(() => no(new Error("dns timeout")), 5000).unref?.()),
+        ]),
+      )
+      .then((records) => records.map((r) => r.join("")).filter((t) => t.startsWith("did=")).map((t) => t.slice(4)))
+      .catch(() => [] as string[]),
+  ]);
+  return [...new Set([wellKnown, ...dns].filter(isDid))];
+}
+
+const normalHandle = (handle: string) => handle.trim().replace(/^@/, "").toLowerCase();
+
+/** The DID a handle names (the well-known answer first, else DNS), or null. */
+export async function resolveHandle(handle: string, fetchImpl: typeof fetch = (...a) => fetch(...a)): Promise<string | null> {
+  const h = normalHandle(handle);
+  if (!HANDLE_SYNTAX.test(h)) return null;
+  return (await handleDids(h, fetchImpl))[0] ?? null;
+}
+
+/** Does `handle` resolve to `did` by either lookup? Any failure is "no". */
+export async function handleResolvesTo(handle: string, did: string, fetchImpl: typeof fetch = (...a) => fetch(...a)): Promise<boolean> {
+  const h = normalHandle(handle);
+  if (!HANDLE_SYNTAX.test(h)) return false;
+  return (await handleDids(h, fetchImpl)).includes(did);
+}
+
+/** A handle typed by a person → the DID it names, verified both ways: the handle resolves to the DID, and that DID's
+ *  own document claims the handle back. Only did:plc (Techne accounts). Null when either side doesn't hold. */
+export async function didForHandle(handle: string, resolve: DidResolver = resolver()): Promise<{ did: string; handle: string } | null> {
+  const h = normalHandle(handle);
+  if (!HANDLE_SYNTAX.test(h)) return null;
+  // Whichever lookup names a did:plc whose own document claims the handle back.
+  for (const did of (await handleDids(h, (...a) => fetch(...a))).filter(isPlcDid)) {
+    const doc = await resolve(did).catch(() => null);
+    if (doc && handleOf(doc)?.toLowerCase() === h) return { did, handle: h };
   }
-  try {
-    const { resolveTxt } = await import("node:dns/promises");
-    const records = await Promise.race([
-      resolveTxt(`_atproto.${h}`),
-      new Promise<string[][]>((_, no) => setTimeout(() => no(new Error("dns timeout")), 5000).unref?.()),
-    ]);
-    return records.some((r) => r.join("") === `did=${did}`);
-  } catch {
-    return false;
-  }
+  return null;
 }
 
 /** The handle a DID document claims, only when that handle resolves back to the same DID; else null (the caller

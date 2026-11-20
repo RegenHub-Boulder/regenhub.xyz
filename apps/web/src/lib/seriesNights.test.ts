@@ -1,22 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { getSeries, nthWeekdayOfMonth, plannedNight, rhythmOf, ruleDatesFrom } from "./series";
+import { getSeries, nthWeekdayOfMonth, plannedNight, rhythmOf, ruleDatesFrom, type MonthlyRule } from "./series";
 import { pickedNight, seriesNightInput, unpostedNights } from "./seriesNights";
 
 const agents = getSeries("agents-night")!;
 const civic = getSeries("civic-tech-night")!;
+const blockchain = getSeries("boulder-blockchain")!;
+const happy = getSeries("happy-hour")!;
 const NOW = new Date("2026-11-18T12:00:00Z");
 const dates = (ns: { date: string }[]) => ns.map((n) => n.date);
 
 describe("the monthly rule", () => {
   it("1st Tuesday: months where the 1st is itself a Tuesday (Dec 2026 → Feb 2027)", () => {
-    const r = agents.rule;
+    const r = agents.rule as MonthlyRule;
     expect(nthWeekdayOfMonth(2026, 12, r)).toBe("2026-12-01");
     expect(nthWeekdayOfMonth(2027, 1, r)).toBe("2027-01-05");
     expect(nthWeekdayOfMonth(2027, 2, r)).toBe("2027-02-02");
     expect(nthWeekdayOfMonth(2027, 3, r)).toBe("2027-03-02");
   });
   it("3rd Tuesday", () => {
-    const r = civic.rule;
+    const r = civic.rule as MonthlyRule;
     expect([[2026, 12], [2027, 1], [2027, 2]].map(([y, m]) => nthWeekdayOfMonth(y, m, r))).toEqual([
       "2026-12-15", "2027-01-19", "2027-02-16",
     ]);
@@ -25,50 +27,77 @@ describe("the monthly rule", () => {
     expect(ruleDatesFrom(civic.rule, "2026-12-15", 3)).toEqual(["2026-12-15", "2027-01-19", "2027-02-16"]);
     expect(ruleDatesFrom(civic.rule, "2026-12-16", 2)).toEqual(["2027-01-19", "2027-02-16"]);
   });
+  it("2nd Tuesday (Boulder Blockchain)", () => {
+    expect(ruleDatesFrom(blockchain.rule, "2026-11-18", 3)).toEqual(["2026-12-08", "2027-01-12", "2027-02-09"]);
+  });
   it("words the rhythm", () => {
+    expect(rhythmOf(blockchain)).toBe("Second Tuesday of each month");
     expect(rhythmOf(agents)).toBe("First Tuesday of each month");
     expect(rhythmOf(civic)).toBe("Third Tuesday of each month");
   });
 });
 
+describe("the weekly rule", () => {
+  it("every Friday, starting on `from` when it is a Friday, across a month and year end", () => {
+    expect(ruleDatesFrom(happy.rule, "2026-12-25", 3)).toEqual(["2026-12-25", "2027-01-01", "2027-01-08"]);
+    expect(ruleDatesFrom(happy.rule, "2026-11-18", 3)).toEqual(["2026-11-20", "2026-11-27", "2026-12-04"]);
+    expect(ruleDatesFrom(happy.rule, "2026-11-21", 1)).toEqual(["2026-11-27"]);
+  });
+  it("holds the wall clock across daylight saving (4:20pm before and after 14 March 2027)", () => {
+    expect(plannedNight(happy, "2027-03-05").startsAt).toBe("2027-03-05T23:20:00.000Z");
+    expect(plannedNight(happy, "2027-03-19").startsAt).toBe("2027-03-19T22:20:00.000Z");
+    expect(plannedNight(happy, "2027-03-19").endsAt).toBe("2027-03-20T00:20:00.000Z");
+  });
+  it("words the rhythm", () => {
+    expect(rhythmOf(happy)).toBe("Every Friday");
+  });
+  it("suggests the next three Fridays, skipping one already posted and tonight's once it's over", () => {
+    expect(dates(unpostedNights(happy, [], NOW))).toEqual(["2026-11-20", "2026-11-27", "2026-12-04"]);
+    const posted = [{ seriesSlug: "happy-hour", startAt: "2026-11-20T23:20:00.000Z" }];
+    expect(dates(unpostedNights(happy, posted, NOW))).toEqual(["2026-11-27", "2026-12-04", "2026-12-11"]);
+    // 6:30pm Denver on Friday 20 Nov: that one ended at 6:20.
+    expect(dates(unpostedNights(happy, [], new Date("2026-11-21T01:30:00Z")))[0]).toBe("2026-11-27");
+  });
+});
+
 describe("Add the next nights", () => {
-  it("suggests the next three rule dates per series, at 6:30pm Denver", () => {
+  it("suggests the next three rule dates per series, at 6pm Denver", () => {
     expect(dates(unpostedNights(agents, [], NOW))).toEqual(["2026-12-01", "2027-01-05", "2027-02-02"]);
     expect(dates(unpostedNights(civic, [], NOW))).toEqual(["2026-12-15", "2027-01-19", "2027-02-16"]);
-    expect(unpostedNights(civic, [], NOW)[0].startsAt).toBe("2026-12-16T01:30:00.000Z");
+    expect(unpostedNights(civic, [], NOW)[0].startsAt).toBe("2026-12-16T01:00:00.000Z");
   });
 
   it("skips a posted date and offers the next one instead", () => {
-    const posted = [{ seriesSlug: "agents-night", startAt: "2026-12-02T01:30:00.000Z" }];
+    const posted = [{ seriesSlug: "agents-night", startAt: "2026-12-02T01:00:00.000Z" }];
     expect(dates(unpostedNights(agents, posted, NOW))).toEqual(["2027-01-05", "2027-02-02", "2027-03-02"]);
   });
 
   it("doesn't suggest a cancelled night again, but lets a steward pick its date by hand", () => {
-    const cancelled = [{ seriesSlug: "agents-night", startAt: "2026-12-02T01:30:00.000Z", cancelled: true }];
+    const cancelled = [{ seriesSlug: "agents-night", startAt: "2026-12-02T01:00:00.000Z", cancelled: true }];
     expect(unpostedNights(agents, cancelled, NOW).map((n) => n.date)).toEqual(["2027-01-05", "2027-02-02", "2027-03-02"]);
     expect(pickedNight(agents, "2026-12-01", cancelled, NOW)).toMatchObject({ night: { date: "2026-12-01" } });
   });
 
   it("drops a posted or over night once it's posted or over", () => {
-    const posted = [{ seriesSlug: "agents-night", startAt: "2026-12-02T01:30:00.000Z" }];
+    const posted = [{ seriesSlug: "agents-night", startAt: "2026-12-02T01:00:00.000Z" }];
     expect(unpostedNights(agents, posted, NOW).map((n) => n.date)).toEqual(["2027-01-05", "2027-02-02", "2027-03-02"]);
     // Another series posted that date: Agents Night is still offered.
-    expect(unpostedNights(agents, [{ seriesSlug: "civic-tech-night", startAt: "2026-12-02T01:30:00.000Z" }], NOW)).toHaveLength(3);
-    // 9pm Denver on 1 Dec: that night is over; the 5th of January is next.
-    expect(dates(unpostedNights(agents, [], new Date("2026-12-02T04:00:00Z")))).toEqual(["2027-01-05", "2027-02-02", "2027-03-02"]);
+    expect(unpostedNights(agents, [{ seriesSlug: "civic-tech-night", startAt: "2026-12-02T01:00:00.000Z" }], NOW)).toHaveLength(3);
+    // 8:30pm Denver on 1 Dec: that night (6–8pm) is over; the 5th of January is next.
+    expect(dates(unpostedNights(agents, [], new Date("2026-12-02T03:30:00Z")))).toEqual(["2027-01-05", "2027-02-02", "2027-03-02"]);
     // Earlier that evening it is still running and still offered.
-    expect(dates(unpostedNights(agents, [], new Date("2026-12-02T03:00:00Z")))[0]).toBe("2026-12-01");
+    expect(dates(unpostedNights(agents, [], new Date("2026-12-02T02:00:00Z")))[0]).toBe("2026-12-01");
   });
 
   it("adds a night picked by hand at the series' times, and refuses a bad, past or posted date", () => {
     expect(pickedNight(agents, "2027-01-19", [], NOW)).toMatchObject({
-      night: { date: "2027-01-19", startsAt: "2027-01-20T01:30:00.000Z", endsAt: "2027-01-20T04:00:00.000Z" },
+      night: { date: "2027-01-19", startsAt: "2027-01-20T01:00:00.000Z", endsAt: "2027-01-20T03:00:00.000Z" },
     });
     expect(pickedNight(agents, "", [], NOW)).toEqual({ error: "Pick a date" });
     expect(pickedNight(agents, "2027-02-31", [], NOW)).toEqual({ error: "Pick a date" });
     expect(pickedNight(agents, "2026-11-10", [], NOW)).toEqual({ error: "That night is already over" });
     expect(
-      pickedNight(agents, "2027-01-19", [{ seriesSlug: "agents-night", startAt: "2027-01-20T01:30:00.000Z" }], NOW),
+      pickedNight(agents, "2027-01-19", [{ seriesSlug: "agents-night", startAt: "2027-01-20T01:00:00.000Z" }], NOW),
     ).toEqual({ error: "Agents Building Night is already posted for that date" });
   });
 
@@ -79,8 +108,8 @@ describe("Add the next nights", () => {
       rkey: "3n2aaaaaaaaa2",
       visibility: "public",
       name: "Agents Building Night",
-      startsAt: "2026-12-02T01:30:00.000Z",
-      endsAt: "2026-12-02T04:00:00.000Z",
+      startsAt: "2026-12-02T01:00:00.000Z",
+      endsAt: "2026-12-02T03:00:00.000Z",
       timezone: "America/Denver",
       street: "1515 Walnut St, Suite 200",
       postalCode: "80302",

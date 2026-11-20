@@ -1,13 +1,12 @@
-import { redirect } from "next/navigation";
-import { headers } from "next/headers";
-import { loginUrlFor } from "@/lib/safeNext";
-import { createClient } from "@/lib/supabase/server";
+import { portalViewer } from "@/lib/admin";
 import Link from "next/link";
 import { MobileNav, type NavLink } from "@/components/nav/MobileNav";
+import { techneConfig } from "@/lib/techne/config";
+import { regenosCollectiveDid } from "@/lib/regenos/config";
 
 export const metadata = { title: "Admin — RegenHub" };
 
-const links: NavLink[] = [
+const staffLinks: NavLink[] = [
   { href: "/admin", label: "Overview" },
   { href: "/admin/pipeline", label: "Pipeline" },
   { href: "/admin/members", label: "Members" },
@@ -15,23 +14,19 @@ const links: NavLink[] = [
   { href: "/admin/access", label: "Access" },
   { href: "/admin/communications", label: "Comms" },
   { href: "/admin/newsletter", label: "Newsletter" },
-  { href: "/portal", label: "Portal", accent: true },
 ];
+const stewardsLink: NavLink = { href: "/admin/stewards", label: "Stewards" };
+const portalLink: NavLink = { href: "/portal", label: "Portal", accent: true };
 
+/**
+ * The admin area's frame. Who may see what is decided below it: the portal admin pages by `members.is_admin`
+ * ((staff)/layout.tsx), /admin/stewards by the Techne role in RegenHub. This only chooses which links to show:
+ * a RegenHub admin sees them all, anyone else just Stewards (while the Techne door is on).
+ */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) redirect(loginUrlFor((await headers()).get("x-pathname")));
-
-  const { data: member } = await supabase
-    .from("members")
-    .select("is_admin, disabled")
-    .eq("supabase_user_id", user.id)
-    .single();
-
-  // A disabled member is not an admin, whatever their is_admin flag says.
-  if (!member?.is_admin || member.disabled) redirect("/portal");
+  const { user, isAdmin } = await portalViewer();
+  const stewards = techneConfig() && regenosCollectiveDid() ? [stewardsLink] : [];
+  const links = [...(isAdmin ? staffLinks : []), ...stewards, ...(user ? [portalLink] : [])];
 
   return (
     <div className="min-h-screen">
@@ -55,9 +50,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 ))}
             </div>
           </div>
-          <Link href="/portal" className="text-sm text-muted hover:text-foreground transition-colors">
-            Portal →
-          </Link>
+          {user && (
+            <Link href="/portal" className="text-sm text-muted hover:text-foreground transition-colors">
+              Portal →
+            </Link>
+          )}
         </nav>
       </header>
       <main className="max-w-7xl mx-auto px-6 py-8">{children}</main>

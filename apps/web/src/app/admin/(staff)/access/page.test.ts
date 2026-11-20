@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { makeSupabaseMock } from "../../../../test/mockSupabase";
+import { makeSupabaseMock } from "../../../../../test/mockSupabase";
 import AccessPage from "./page";
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));

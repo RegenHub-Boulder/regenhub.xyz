@@ -6,7 +6,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { EVENT_STEWARD_ROLE, MEMBERSHIP_NSID, standingFrom } from "@/lib/techne/standing";
+import { MEMBERSHIP_NSID, standingFrom } from "@/lib/techne/standing";
+import { MANAGE_ROLE } from "@/lib/techne/roles";
 import { safeReturn } from "@/lib/techne/session";
 import { GET as standingGET } from "@/app/api/portal/events/standing/route";
 import { fakeTechne, type FakeRecord } from "./support/fakeTechne";
@@ -29,11 +30,11 @@ const claim = (repo: string, subject: string, role: number, extra: Record<string
 });
 
 describe("standingFrom", () => {
-  it("a facilitator-or-higher claim by the collective makes a steward; a builder isn't one", () => {
-    expect(standingFrom([claim(HUB, ME, 20)], HUB, ME, NOW)).toEqual({ role: 20, roleName: "builder", canManageEvents: false });
+  it("a facilitator-or-higher claim by the collective makes a steward; a member (20) isn't one", () => {
+    expect(standingFrom([claim(HUB, ME, 20)], HUB, ME, NOW)).toEqual({ role: 20, roleName: "member", canManageEvents: false });
     const s = standingFrom([claim(HUB, ME, 40)], HUB, ME, NOW);
-    expect(s).toEqual({ role: 40, roleName: "steward", canManageEvents: true });
-    expect(standingFrom([claim(HUB, ME, EVENT_STEWARD_ROLE)], HUB, ME, NOW).canManageEvents).toBe(true);
+    expect(s).toEqual({ role: 40, roleName: "manager", canManageEvents: true });
+    expect(standingFrom([claim(HUB, ME, MANAGE_ROLE)], HUB, ME, NOW).canManageEvents).toBe(true);
   });
 
   it("a member is not a steward", () => {

@@ -1,6 +1,6 @@
 /**
  * "Add the next nights" for a series (/portal/events): which nights to suggest
- * (the next dates of the series' monthly rule, lib/series.ts, not posted or over yet), the check
+ * (the next dates of the series' rule, lib/series.ts, not posted or over yet), the check
  * on a night a steward picks by hand, and the createEvent body that posts one as
  * an ordinary Techne event of the collective. Pure, so it's tested in node.
  */

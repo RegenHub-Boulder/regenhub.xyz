@@ -85,7 +85,8 @@ const collective = c.sceneDid ?? c.collectiveDid ?? c.did;
 console.log("collective", collective);
 
 // Agents Building Night's first night is posted; Civic Tech Night's is left for the steward page to list as
-// "confirmed but not posted yet". Times are the placeholder 6:30-9pm America/Denver (MST, -07:00).
+// "confirmed but not posted yet". A 420 Happy Hour is posted under that plain name, as the real ones were, to show
+// it lands in the Happy Hour series. Times are the series defaults in America/Denver (MST, -07:00).
 const ALL_NIGHTS = [
   {
     slug: "agents-night",
@@ -101,8 +102,16 @@ const ALL_NIGHTS = [
     description:
       "Building for what Boulder needs. Bring a question about how this city works, a tool you think our community needs, or just your curiosity, and build with your neighbors. (Sample event on staging.)",
   },
+  {
+    slug: "happy-hour",
+    name: "420 Happy Hour",
+    date: "2026-12-04",
+    start: "16:20",
+    end: "18:20",
+    description: "Wind down the week with the hub. (Sample event on staging.)",
+  },
 ];
-const NIGHTS = ALL_NIGHTS.filter((n) => n.slug === "agents-night");
+const NIGHTS = ALL_NIGHTS.filter((n) => n.slug !== "civic-tech-night");
 const events = {};
 for (const n of NIGHTS) {
   const rkey = tid();
@@ -113,8 +122,8 @@ for (const n of NIGHTS) {
     attendance: "open",
     name: n.name,
     description: n.description,
-    startsAt: `${n.date}T18:30:00-07:00`,
-    endsAt: `${n.date}T21:00:00-07:00`,
+    startsAt: `${n.date}T${n.start ?? "18:00"}:00-07:00`,
+    endsAt: `${n.date}T${n.end ?? "20:00"}:00-07:00`,
     timezone: "America/Denver",
     placeName: "RegenHub",
     street: "1515 Walnut St, Suite 200",

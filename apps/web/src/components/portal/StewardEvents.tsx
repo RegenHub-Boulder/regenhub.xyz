@@ -89,12 +89,17 @@ export function StewardEvents({
           {role ? ` · RegenHub ${role}` : ""}
         </span>
         <SignOutOfTechne />
+        {check?.state === "done" && check.standing.canManageEvents && (
+          <a href="/admin/stewards" className="text-sage hover:underline" data-testid="stewards-link">
+            RegenHub&apos;s roles →
+          </a>
+        )}
       </div>
       {/* Only a hint: claims may be private, and Techne decides on the write. */}
       {check && !(check.state === "done" && check.standing.canManageEvents) && (
         <p data-testid="steward-hint">
           {role
-            ? "Posting as RegenHub needs facilitator or steward on Techne; Techne will say if it won't take a post from you."
+            ? "Posting as RegenHub needs facilitator or manager on Techne; Techne will say if it won't take a post from you."
             : "Posting works if you manage RegenHub on Techne; Techne will say if it won't take a post from you."}
         </p>
       )}

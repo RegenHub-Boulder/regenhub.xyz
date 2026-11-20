@@ -9,7 +9,7 @@ import { NO_NEXT_NIGHT, overviewFor } from "@/lib/seriesEvents";
 import { formatEventRange, formatEventWhen } from "@/components/events/EventList";
 
 /**
- * A series page: `/events/agents-night`, `/events/civic-tech-night`.
+ * A series page: `/events/agents-night`, `/events/boulder-blockchain`, `/events/civic-tech-night`, `/events/happy-hour`.
  * What the night is, the next posted night (or "Next date coming soon"), the
  * posted nights after it, past nights, and the series' calendar feed. RSVP lives
  * on each night's own page.
@@ -58,7 +58,16 @@ export default async function SeriesPage({ params }: PageProps) {
         <header className="space-y-2">
           <h1 className="text-3xl md:text-4xl font-bold text-forest leading-tight">{series.name}</h1>
           <p className="text-lg text-muted">{series.about}</p>
-          <p className="text-sm text-muted" data-testid="series-hosts">Hosted by {series.hosts}</p>
+          {series.hosts && (
+            <p className="text-sm text-muted" data-testid="series-hosts">Hosted by {series.hosts}</p>
+          )}
+          {series.elsewhere && (
+            <p className="text-sm" data-testid="series-elsewhere">
+              <a href={series.elsewhere.url} className="underline hover:text-sage" target="_blank" rel="noopener noreferrer">
+                {series.elsewhere.label}
+              </a>
+            </p>
+          )}
           <p className="font-medium text-forest" data-testid="series-rhythm">{rhythmOf(series)}</p>
           <p className="flex items-start gap-2 text-muted">
             <MapPin className="w-5 h-5 text-sage shrink-0 mt-0.5" /> {place}

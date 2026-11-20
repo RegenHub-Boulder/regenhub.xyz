@@ -1,5 +1,6 @@
 /**
- * RegenHub's event series: Agents Building Night and Civic Tech Night.
+ * RegenHub's event series: the three Techne Tuesdays (Agents Building Night, Boulder Blockchain Meetup,
+ * Civic Tech Night) and the Friday 420 Happy Hour.
  *
  * Techne has no series record (techne.pub lists none), so a series is data in
  * this file, and a night belongs to a series by what its own event record says:
@@ -13,13 +14,15 @@
  * wherever Techne events show. Record keys stay TIDs, as the lexicon declares
  * (`"key": "tid"`); the series is never encoded in the key.
  *
- * A series meets on a monthly rule (Agents Building Night: 1st Tuesday; Civic Tech Night: 3rd Tuesday; Aaron, 11-18).
+ * A series meets on a rule: the nth weekday of each month (Agents Building Night 1st Tuesday, Boulder Blockchain
+ * 2nd Tuesday, Civic Tech Night 3rd Tuesday), or a weekday every week (420 Happy Hour, Fridays).
  * The rule invents no events: a visitor sees a night only once a steward has posted it. The rule is used
- * to say the rhythm in public copy and to suggest the next nights in /portal/events. The rule and the
- * times below are EDITABLE DATA; 6:30–9pm is a placeholder until the hosts confirm.
+ * to say the rhythm in public copy and to suggest the next nights in /portal/events. The rules and the
+ * times below are EDITABLE DATA: the Tuesdays 6–8pm Denver, as the Blockchain meetup always has been;
+ * Happy Hour 4:20–6:20pm (Aaron, 11-19).
  */
 
-export type SeriesSlug = "agents-night" | "civic-tech-night";
+export type SeriesSlug = "agents-night" | "boulder-blockchain" | "civic-tech-night" | "happy-hour";
 
 export interface SeriesPlace {
   name: string;
@@ -32,23 +35,34 @@ export interface SeriesPlace {
 
 /** "The nth `weekday` of every month" (`weekday` 0 = Sunday … 6 = Saturday; `nth` 1–4). */
 export interface MonthlyRule {
+  every: "month";
   nth: 1 | 2 | 3 | 4;
   weekday: number;
 }
+
+/** "Every `weekday`" (0 = Sunday … 6 = Saturday). */
+export interface WeeklyRule {
+  every: "week";
+  weekday: number;
+}
+
+export type SeriesRule = MonthlyRule | WeeklyRule;
 
 export interface Series {
   slug: SeriesSlug;
   name: string;
   /** Earlier display names; nights posted under them still belong to the series. */
   formerNames?: readonly string[];
-  /** Who runs the night, as shown in public copy. */
-  hosts: string;
+  /** Who runs the night, as shown in public copy; unset when no one is named. */
+  hosts?: string;
+  /** Where the series also lives off this site (its own meetup page), linked from its page and card. */
+  elsewhere?: { label: string; url: string };
   /** One line, for cards. */
   blurb: string;
   /** A short paragraph for the series page. */
   about: string;
-  /** The monthly rhythm. Suggests nights in /portal/events and words `rhythm`; posts nothing by itself. */
-  rule: MonthlyRule;
+  /** The rhythm. Suggests nights in /portal/events and words `rhythmOf`; posts nothing by itself. */
+  rule: SeriesRule;
   /** Default local wall-clock `HH:mm` in `timezone` for a new night. */
   startTime: string;
   endTime: string;
@@ -78,9 +92,22 @@ export const SERIES: readonly Series[] = [
       "Show us how you build with your agents. Hermes, OpenClaw, Instinct, Duet, Dots, Muse, GrokBot or whatever " +
       "you use: bring your setup, demo it, and build alongside others. AG and Benjamin demo their own personal " +
       "agent setups and share tips on how to build your own, and own it. Bring a laptop. All levels welcome.",
-    rule: { nth: 1, weekday: 2 },
-    startTime: "18:30",
-    endTime: "21:00",
+    rule: { every: "month", nth: 1, weekday: 2 },
+    startTime: "18:00",
+    endTime: "20:00",
+    timezone: "America/Denver",
+    place: REGENHUB_PLACE,
+    capacity: null,
+  },
+  {
+    slug: "boulder-blockchain",
+    name: "Boulder Blockchain Meetup",
+    blurb: "Our longtime meetup on all things web3, crypto and blockchain. Every knowledge level welcome.",
+    about: "Our longtime meetup on all things web3, crypto and blockchain. Every knowledge level welcome.",
+    elsewhere: { label: "Boulder Blockchain on Meetup", url: "https://meetup.com/boulder-blockchain" },
+    rule: { every: "month", nth: 2, weekday: 2 },
+    startTime: "18:00",
+    endTime: "20:00",
     timezone: "America/Denver",
     place: REGENHUB_PLACE,
     capacity: null,
@@ -94,9 +121,21 @@ export const SERIES: readonly Series[] = [
       "Building for what Boulder needs. Bring a question about how this city works, a tool you think our " +
       "community needs, or just your curiosity, and build with your neighbors. Rooted in Boulder, with an eye " +
       "on Colorado. No background in politics or code required.",
-    rule: { nth: 3, weekday: 2 },
-    startTime: "18:30",
-    endTime: "21:00",
+    rule: { every: "month", nth: 3, weekday: 2 },
+    startTime: "18:00",
+    endTime: "20:00",
+    timezone: "America/Denver",
+    place: REGENHUB_PLACE,
+    capacity: null,
+  },
+  {
+    slug: "happy-hour",
+    name: "420 Happy Hour",
+    blurb: "Wind down the week with the hub, on the roof when it's warm.",
+    about: "Wind down the week with the hub, on the roof when it's warm. Members, neighbors and friends all welcome.",
+    rule: { every: "week", weekday: 5 },
+    startTime: "16:20",
+    endTime: "18:20",
     timezone: "America/Denver",
     place: REGENHUB_PLACE,
     capacity: null,
@@ -106,20 +145,36 @@ export const SERIES: readonly Series[] = [
 const ORDINALS = ["", "First", "Second", "Third", "Fourth"];
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-/** The rhythm in words: "Third Tuesday of each month". */
+/** The rhythm in words: "Third Tuesday of each month", "Every Friday". */
 export function rhythmOf(series: Pick<Series, "rule">): string {
-  return `${ORDINALS[series.rule.nth]} ${WEEKDAYS[series.rule.weekday]} of each month`;
+  const { rule } = series;
+  return rule.every === "week" ? `Every ${WEEKDAYS[rule.weekday]}` : `${ORDINALS[rule.nth]} ${WEEKDAYS[rule.weekday]} of each month`;
 }
 
+/** The monthly Tuesday series in month order: together they're "Techne Tuesdays". */
+export function techneTuesdays(): { series: Series; nth: number }[] {
+  return SERIES.flatMap((s) => (s.rule.every === "month" && s.rule.weekday === 2 ? [{ series: s, nth: s.rule.nth }] : [])).sort(
+    (a, b) => a.nth - b.nth,
+  );
+}
+
+/** "1st", "2nd", "3rd", "4th". */
+export const ordinalShort = (n: number): string => `${n}${["th", "st", "nd", "rd"][n] ?? "th"}`;
+
 /** The date of the nth `weekday` in a month (`month` 1–12), `YYYY-MM-DD`. A calendar date, so no zone. */
-export function nthWeekdayOfMonth(year: number, month: number, rule: MonthlyRule): string {
+export function nthWeekdayOfMonth(year: number, month: number, rule: Pick<MonthlyRule, "nth" | "weekday">): string {
   const firstDow = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
   const day = 1 + ((rule.weekday - firstDow + 7) % 7) + (rule.nth - 1) * 7;
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 /** The first `count` dates of the rule on or after `fromDate` (`YYYY-MM-DD`), in order. */
-export function ruleDatesFrom(rule: MonthlyRule, fromDate: string, count: number): string[] {
+export function ruleDatesFrom(rule: SeriesRule, fromDate: string, count: number): string[] {
+  if (rule.every === "week") {
+    const from = new Date(`${fromDate}T00:00:00Z`);
+    const first = from.getTime() + ((rule.weekday - from.getUTCDay() + 7) % 7) * 86400_000;
+    return Array.from({ length: count }, (_, i) => new Date(first + i * 7 * 86400_000).toISOString().slice(0, 10));
+  }
   let y = +fromDate.slice(0, 4);
   let m = +fromDate.slice(5, 7);
   const out: string[] = [];

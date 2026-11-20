@@ -17,6 +17,8 @@
 //   - POST /xrpc/com.atproto.repo.applyWrites   answered by the PDS itself: the person's own repo only
 //          (a collective's repo is not theirs: 401 AuthenticationRequired, as a stock PDS answers).
 //   - GET  /xrpc/pub.techne.draft.query.getRecords   the AppView's answer with the stand-in's writes applied
+//   - GET  /xrpc/com.atproto.identity.resolveHandle   a sample person's handle → their DID (a typed handle on
+//          /admin/stewards; the sample handles have no domain to resolve)
 //   - GET  /plc/<did>                    that person's DID document, for their handle (the app reads DIDs here on
 //          staging: TECHNE_STANDIN_URL/plc, lib/techne/did.ts)
 //   - everything else under /xrpc is passed to the AppView unchanged.
@@ -149,6 +151,11 @@ li a:hover{background:#eef4f0}span{color:#666;font-size:.9rem}</style>
         alsoKnownAs: handle ? [`at://${handle.replace(/^@/, "")}`] : [],
         verificationMethod: [],
       });
+    }
+    if (path === "/xrpc/com.atproto.identity.resolveHandle") {
+      const h = (url.searchParams.get("handle") ?? "").toLowerCase();
+      const p = people().find((x) => x.handle && x.handle.replace(/^@/, "").toLowerCase() === h);
+      return p ? json(res, 200, { did: p.did }) : json(res, 400, { error: "InvalidRequest", message: "Unable to resolve handle" });
     }
     // Like a stock PDS: repo methods are the PDS's own; the atproto-proxy header changes nothing for them.
     if (req.headers["x-standin-expired"] && req.method === "POST") return json(res, 401, { error: "ExpiredToken", message: "Token has expired" });

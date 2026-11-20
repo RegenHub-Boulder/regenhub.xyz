@@ -278,14 +278,16 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   lane is removed.
 - `lib/events.ts` — the seam `lib/luma.ts:10-11` promised. One `UpcomingEvent` shape, two sources,
   chosen by config: regenOS first, Luma second.
-- **Series** (`lib/series.ts`, T-482): Agents Building Night and Civic Tech Night. **Monthly rule** (Aaron, 11-18: Agents Building Night
-  on the 1st Tuesday, Civic Tech Night on the 3rd Tuesday; Civic moved from Thu 10 Dec to Tue 15 Dec). Each series
-  has `rule: {nth, weekday}` (`nthWeekdayOfMonth`, `ruleDatesFrom`) and `rhythmOf` words it ("First Tuesday of
-  each month"), shown on the series page and cards. The rule invents no events: a visitor sees a night only once
+- **Series** (`lib/series.ts`, T-482): four. The **Techne Tuesdays** (one line on `/events`, `techneTuesdays()`):
+  Agents Building Night 1st Tuesday, Boulder Blockchain Meetup (`boulder-blockchain`, links out to its Meetup page,
+  `elsewhere`) 2nd Tuesday, Civic Tech Night 3rd Tuesday, all 6–8pm; and **420 Happy Hour** (`happy-hour`) every
+  Friday 4:20–6:20pm (Aaron, 11-19). A rule is `{every: "month", nth, weekday}` or `{every: "week", weekday}`
+  (`ruleDatesFrom`, `nthWeekdayOfMonth`); `rhythmOf` words it ("First Tuesday of each month", "Every Friday"),
+  shown on the series page and cards. The rule invents no events: a visitor sees a night only once
   a steward posts it, feeds are built from posted records, and with none posted ahead the page still says "Next
-  date coming soon". The rule and the 6:30–9pm America/Denver placeholder times are EDITABLE DATA, used for the
+  date coming soon". The rules and times (America/Denver) are EDITABLE DATA, used for the
   rhythm line and as suggestions in the portal. Techne has no series type: a night is an ordinary event named after the series ("Agents Building Night", or
-  "Agents Building Night: topic"), or with a `uris` entry ending `/events/<slug>`. Nights posted as "Agents Night" (the series' former name, `formerNames`) still match. Each series has `hosts` ("AG and Benjamin"), shown on the series page and cards. Event keys are TIDs (`mintRkey`), as the
+  "Agents Building Night: topic"), or with a `uris` entry ending `/events/<slug>`. Nights posted as "Agents Night" (the series' former name, `formerNames`) still match. A series may name `hosts` (Agents Building and Civic Tech: "AG and Benjamin"), shown on the series page and cards. Event keys are TIDs (`mintRkey`), as the
   lexicon declares; old `ev-…` keys still read. Every create/edit sends `timezone: "America/Denver"`.
   `/events/<slug>` is the series page (next posted night, posted nights after it, past nights; with none upcoming
   it says "Next date coming soon"), built from `lib/seriesEvents.ts`. `/` (right under the hero) and `/events`
@@ -333,6 +335,11 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   `TECHNE_PLC_URL`, `TECHNE_HANDLE_DOMAIN`, `TECHNE_PLATFORM_DID`. **Staging only:** `TECHNE_STAGING_STANDIN=1` +
   `TECHNE_STANDIN_URL` swap the OAuth for a server-side stand-in (`lib/techne/standIn.ts`, `app/staging/techne`,
   `scripts/staging/`); refused for the regenhub.xyz origin. Staging recipe: `scripts/staging/preview.sh`.
+- **RegenHub stewards** (`/admin/stewards`, T-482): RegenHub's facilitators and managers on Techne list, add (by
+  handle), change and end roles (`pub.techne.draft.membership` written as the collective via writeAsCollective,
+  `lib/techne/roster.ts`, `POST /api/techne/stewards`). Authority is the Techne role (>= 30), never `is_admin`; the
+  `is_admin` admin pages live in `app/admin/(staff)/`. Ending sets `validUntil`; nobody-left-at-30 is refused.
+  Details: docs/TECHNE-SIGN-IN.md "Managing RegenHub's roles".
 - Deliberately NOT changed: the newsletter still reads Luma directly (`lib/newsletter.ts:142`). Its
   copy is Luma-branded end to end; switching it is a product decision, not a plumbing one.
 
