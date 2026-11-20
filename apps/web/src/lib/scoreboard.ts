@@ -4,16 +4,18 @@
  *
  * Definitions (stated on the page too):
  * - Paying members and revenue come from `membershipRevenue` (lib/membershipRevenue.ts), the one definition the
- *   other admin pages and the MCP share. The goal counts members paying $30/month or more, net.
+ *   other admin pages and the MCP share. The goal counts members whose plans come to $30/month or more at list
+ *   price: a promo code or the USDC rail discount doesn't take a $30 member off the count. Revenue is net.
  * - A subscription that never started is not a subscription here: `incomplete`/`incomplete_expired`, or a USDC
- *   row with no paid membership invoice (an unpaid checkout an admin cancelled turns `canceled`).
+ *   row with no paid membership invoice (an unpaid checkout an admin cancelled turns `canceled`). Card rows are
+ *   made by Stripe Checkout only once the first payment went through, so a card row has always started.
  * - A cancellation counts in the month it was asked for, whether it has taken effect yet (a period-end cancel
  *   still running counts too), so a month's number doesn't change after the meeting. Asked = `admin_canceled_at`
- *   (an admin cancel, either rail), else `canceled_at` (Stripe stamps it when the member asks), else `updated_at`.
+ *   (an admin cancel, either rail), else `canceled_at` (Stripe's: when the member asked). A row with neither isn't
+ *   dated, so it isn't counted (`updated_at` moves with every later write).
  * - Months are calendar months in America/Denver.
  */
 import { dateIn } from "./series";
-import { effectiveMonthlyCents } from "./stripeNet";
 import { isBilled, isGoodStanding, membershipRevenue, type MembershipRevenue, type RevenueRow } from "./membershipRevenue";
 
 export const SCOREBOARD_TZ = "America/Denver";
@@ -61,6 +63,8 @@ export interface PurchaseRow {
   member_id: number | null;
   email: string | null;
   created_at: string;
+  /** Passes in the purchase (a deprecated five-pack is 5). Unset = 1. */
+  passes_granted?: number;
 }
 
 export interface VisitRow {
@@ -89,13 +93,13 @@ export const isEnding = (s: SubRow) => isBilled(s.status) && !!(s.cancel_at_peri
 
 /** When the cancellation was asked for, or null if the row isn't cancelled or ending. */
 export const canceledOn = (s: SubRow): string | null =>
-  s.status === "canceled" || isEnding(s) ? s.admin_canceled_at ?? s.canceled_at ?? s.updated_at ?? null : null;
+  s.status === "canceled" || isEnding(s) ? s.admin_canceled_at ?? s.canceled_at ?? null : null;
 
 // ── Goal progress ────────────────────────────────────────────────────────────
 
 export interface GoalProgress {
   revenue: MembershipRevenue;
-  /** Distinct members in good standing paying `minMemberCents`+ net a month, summed over their subscriptions. */
+  /** Distinct members in good standing whose plans come to `minMemberCents`+ a month at list price. */
   payingMembers: number;
   baselineMembers: number;
   targetMembers: number;
@@ -117,7 +121,7 @@ export function goalProgress(subs: readonly SubRow[], goals: ScoreboardGoals = S
   const perMember = new Map<number, number>();
   for (const s of subs) {
     if (!isGoodStanding(s.status)) continue;
-    perMember.set(s.member_id, (perMember.get(s.member_id) ?? 0) + effectiveMonthlyCents(s));
+    perMember.set(s.member_id, (perMember.get(s.member_id) ?? 0) + s.monthly_cents);
   }
   const payingMembers = [...perMember.values()].filter((c) => c >= goals.minMemberCents).length;
   const targetMembers = goals.baselineMembers + goals.memberGain;
@@ -175,7 +179,7 @@ export interface FunnelMonth {
   /** Stay-in-touch signups (`interests`). */
   signups: number;
   applications: number;
-  /** Day-pass purchases, card and USDC. */
+  /** Day passes bought, card and USDC (a five-pack is 5). */
   passesBought: number;
   /** Members whose first-ever subscription started this month. */
   firstSubscriptions: number;
@@ -185,16 +189,16 @@ export function funnelByMonth(
   input: {
     interests: readonly { created_at: string }[];
     applications: readonly { created_at: string }[];
-    purchases: readonly { created_at: string }[];
+    purchases: readonly { created_at: string; passes_granted?: number }[];
     subs: readonly SubRow[];
   },
   months: readonly string[],
 ): FunnelMonth[] {
   const rows = new Map(months.map((m) => [m, { month: m, signups: 0, applications: 0, passesBought: 0, firstSubscriptions: 0 }]));
-  const tally = (list: readonly { created_at: string }[], key: "signups" | "applications" | "passesBought") => {
+  const tally = (list: readonly { created_at: string; passes_granted?: number }[], key: "signups" | "applications" | "passesBought") => {
     for (const r of list) {
       const row = rows.get(monthOf(r.created_at));
-      if (row) row[key] += 1;
+      if (row) row[key] += key === "passesBought" ? r.passes_granted ?? 1 : 1;
     }
   };
   tally(input.interests, "signups");
@@ -382,7 +386,7 @@ export function headlineText(input: {
   const funnel = input.funnel[input.funnel.length - 1];
   const lines = [
     `RegenHub scoreboard, ${input.today}`,
-    `Paying members ($30+/mo): ${goal.payingMembers} (${sign(goal.gained)} since ${SCOREBOARD_GOALS.baselineDate}; goal ${goal.targetMembers} by ${SCOREBOARD_GOALS.goalDate}, ${goal.membersToGo} to go)` +
+    `Paying members (${usd(SCOREBOARD_GOALS.minMemberCents)}+/mo): ${goal.payingMembers} (${sign(goal.gained)} since ${SCOREBOARD_GOALS.baselineDate}; goal ${goal.targetMembers} by ${SCOREBOARD_GOALS.goalDate}, ${goal.membersToGo} to go)` +
       (r.pastDue.members > 0 ? `; ${r.pastDue.members} more past due` : ""),
     `Membership revenue: ${usd(r.netCents)}/mo net, ${usd(r.listCents)} at list (goal ${usd(goal.revenueGoalCents)}, rent ${usd(goal.rentCents)}${goal.rentGapCents > 0 ? `, ${usd(goal.rentGapCents)} short of rent` : ", rent covered"})`,
   ];

@@ -17,8 +17,8 @@ PLAYWRIGHT_DIR=<dir with node_modules/playwright> node scripts/staging/scoreboar
 All people and amounts are made up (scripts/staging/scoreboard-seed.mjs). The numbers are for 2026-11-20.
 
 ## Steps
-1. **Goal cards** (`walkthrough/scoreboard/01-scoreboard-desktop.png`, top). "Five members pay thirty dollars or
-   more a month; the goal is twenty-four. Revenue is about a thousand a month against a goal of twenty-seven fifty;
+1. **Goal cards** (`walkthrough/scoreboard/01-scoreboard-desktop.png`, top). "Six members are on plans of thirty
+   dollars or more a month; the goal is twenty-four. Revenue is about a thousand a month against a goal of twenty-seven fifty;
    the gold tick is rent." Point at the past-due line: shown, not counted.
 2. **Headline.** "One click copies these lines for the meeting doc." Click Copy as text; it turns to Copied.
 3. **Subscriptions per month.** "New, cancelled and the net, six months, split by plan. A cancellation counts in

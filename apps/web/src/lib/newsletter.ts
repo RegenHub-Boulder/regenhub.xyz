@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { readAll } from "@/lib/supabase/readAll";
 import { fetchUpcomingLumaEvents, type LumaEvent } from "@/lib/luma";
 import type { HubDigestStats } from "@/lib/email";
 import { GOOD_STANDING_STATUSES, REVENUE_COLUMNS, membershipRevenue, type RevenueRow } from "@/lib/membershipRevenue";
@@ -142,23 +143,30 @@ export interface Recipient {
   name: string | null;
 }
 
-/** Members + interests, deduped, minus unsubscribes. */
+/**
+ * Members + interests, deduped, minus unsubscribes. Every row is read (paged past PostgREST's cap) and a failed read
+ * throws: a missing unsubscribe list must never mean mailing people who left, nor a short list a full one.
+ */
 export async function compileAudience(admin: ServiceClient): Promise<Recipient[]> {
-  const [{ data: members }, { data: interests }, { data: unsubs }] = await Promise.all([
-    admin.from("members").select("name, email").eq("disabled", false).not("email", "is", null),
-    admin.from("interests").select("name, email").not("email", "is", null),
-    admin.from("email_unsubscribes").select("email"),
+  type Row = { name: string | null; email: string | null };
+  const [members, interests, unsubs] = await Promise.all([
+    readAll<Row>("members", (f, t) => admin.from("members").select("id, name, email").eq("disabled", false)
+      .not("email", "is", null).order("id", { ascending: true }).range(f, t)),
+    readAll<Row>("interests", (f, t) => admin.from("interests").select("id, name, email").not("email", "is", null)
+      .order("id", { ascending: true }).range(f, t)),
+    readAll<{ email: string }>("email_unsubscribes", (f, t) => admin.from("email_unsubscribes").select("email")
+      .order("email", { ascending: true }).range(f, t)),
   ]);
 
-  const blocked = new Set((unsubs ?? []).map((u) => u.email.toLowerCase()));
+  const blocked = new Set(unsubs.map((u) => u.email.toLowerCase()));
   const seen = new Map<string, Recipient>();
-  for (const m of members ?? []) {
+  for (const m of members) {
     if (!m.email) continue;
     const key = m.email.toLowerCase();
     if (blocked.has(key)) continue;
     seen.set(key, { email: m.email, name: m.name });
   }
-  for (const i of interests ?? []) {
+  for (const i of interests) {
     if (!i.email) continue;
     const key = i.email.toLowerCase();
     if (blocked.has(key) || seen.has(key)) continue;

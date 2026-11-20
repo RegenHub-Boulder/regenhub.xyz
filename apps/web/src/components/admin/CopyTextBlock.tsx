@@ -10,9 +10,11 @@ export function CopyTextBlock({ text, label = "Copy as text" }: { text: string; 
     <div className="space-y-2">
       <button
         type="button"
-        onClick={() =>
-          navigator.clipboard.writeText(text).then(() => setState("copied"), () => setState("failed"))
-        }
+        onClick={() => {
+          // No clipboard API outside a secure context (a plain-http preview): say so instead of failing silently.
+          if (!navigator.clipboard) return setState("failed");
+          navigator.clipboard.writeText(text).then(() => setState("copied"), () => setState("failed"));
+        }}
         className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded btn-glass"
       >
         {state === "copied" ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}

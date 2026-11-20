@@ -82,7 +82,7 @@ function fakeStripe() {
 let periodEnd = "";
 function stripeSub(id: string, status: string, cancelAtPeriodEnd = false) {
   return {
-    id, customer: "cus_test_7", status, cancel_at_period_end: cancelAtPeriodEnd, canceled_at: null,
+    id, customer: "cus_test_7", status, cancel_at_period_end: cancelAtPeriodEnd, canceled_at: null as number | null,
     metadata: { plan_key: "hot_desk" },
     items: { data: [{ price: { id: "price_test", unit_amount: 25000 }, current_period_end: Math.floor(Date.parse(periodEnd) / 1000) }] },
   };
@@ -224,6 +224,22 @@ describe("card (Stripe)", () => {
     expect((await sendStripeEvent("evt_2", "customer.subscription.deleted", stripeSub("sub_test_50", "canceled"))).status).toBe(200);
     expect((await sub()).status).toBe("canceled");
     expect(await member()).toMatchObject({ member_type: "day_pass", pin_code_slot: null });
+  });
+
+  it("a member's own period-end cancel keeps Stripe's canceled_at (when it was asked) once the period ends", async () => {
+    await seed({ rail: "stripe" });
+    const asked = Math.floor(Date.parse(iso(-10 * DAY)) / 1000);
+    const ending = { ...stripeSub("sub_test_50", "active", true), canceled_at: asked };
+    stripe.subscriptions.retrieve.mockResolvedValue(ending);
+    expect((await sendStripeEvent("evt_ask", "customer.subscription.updated", ending)).status).toBe(200);
+    expect(new Date((await sub()).canceled_at as string).getTime()).toBe(asked * 1000);
+
+    const ended = { ...stripeSub("sub_test_50", "canceled", true), canceled_at: asked };
+    stripe.subscriptions.retrieve.mockResolvedValue(ended);
+    expect((await sendStripeEvent("evt_end", "customer.subscription.deleted", ended)).status).toBe(200);
+    expect((await sub()).status).toBe("canceled");
+    // The scoreboard counts a cancellation in the month it was asked; the end mustn't re-date it.
+    expect(new Date((await sub()).canceled_at as string).getTime()).toBe(asked * 1000);
   });
 
   it("a delayed pre-cancel 'active' event cannot bring back the subscription or the door code", async () => {

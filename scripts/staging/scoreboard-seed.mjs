@@ -12,7 +12,7 @@ const subs = [
   [5, 105, "hot_desk", "past_due", 25000, 25000, "stripe", "2026-07-01T16:00:00Z"],
   [6, 106, "member_basic", "active", 3000, 1500, "stripe", "2026-09-12T16:00:00Z"],
   [7, 107, "member_2day", "canceled", 5000, 5000, "stripe", "2026-06-20T16:00:00Z", "2026-11-01T03:00:00Z"],
-  [8, 108, "hot_desk", "canceled", 25000, 23750, "onchain", "2026-07-07T16:00:00Z", null, "2026-11-03T16:00:00Z"],
+  [8, 108, "hot_desk", "canceled", 25000, 23750, "onchain", "2026-07-07T16:00:00Z"], // admin cancel, dated below
   [9, 109, "cold_desk", "incomplete", 50000, 50000, "stripe", "2026-11-10T16:00:00Z"],
   [10, 101, "member_basic", "canceled", 3000, 3000, "stripe", "2026-05-01T16:00:00Z", "2026-06-09T16:00:00Z"],
   [11, 110, "hot_desk", "active", 25000, 30000, "onchain", "2026-11-15T16:00:00Z"],
@@ -53,7 +53,7 @@ export async function seedScoreboard(pg) {
     create table interests (id serial primary key, email text not null, name text, created_at timestamptz not null default now());
     create table applications (id serial primary key, email text not null, name text not null, created_at timestamptz not null default now());
     create table purchases (id serial primary key, member_id integer, email text, onchain_invoice_id integer,
-      amount_cents integer not null default 3000, created_at timestamptz not null default now());
+      amount_cents integer not null default 3000, passes_granted integer not null default 1, created_at timestamptz not null default now());
     create table access_logs (id serial primary key, member_id integer, result text not null default 'granted',
       created_at timestamptz not null default now());
     create table onchain_invoices (id serial primary key, subscription_id integer not null, status text not null,
@@ -74,6 +74,7 @@ export async function seedScoreboard(pg) {
       [id, member, plan, status, monthly, net, rail, created, canceledAt ?? null, updatedAt ?? created],
     );
   }
+  await pg.query("update subscriptions set admin_canceled_at = '2026-11-03T16:00:00Z', admin_cancel_mode = 'now' where id = 8");
   // The USDC subscriptions (3, 8, 11) were paid: a paid membership invoice each.
   for (const id of [3, 8, 11]) await pg.query("insert into onchain_invoices(subscription_id, status) values ($1, 'paid')", [id]);
   for (const [member, email, at, invoice] of purchases) {

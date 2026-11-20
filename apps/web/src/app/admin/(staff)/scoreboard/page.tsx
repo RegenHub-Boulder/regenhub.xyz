@@ -113,7 +113,7 @@ export default async function ScoreboardPage() {
       <div className="grid md:grid-cols-2 gap-4">
         <Card className="glass-panel">
           <CardContent className="p-5">
-            <p className="text-xs text-muted">Paying members ($30+/mo)</p>
+            <p className="text-xs text-muted">Paying members ({usd(SCOREBOARD_GOALS.minMemberCents)}+/mo plans)</p>
             <p className="text-3xl font-bold" data-testid="paying-members">
               {goal.payingMembers} <span className="text-base font-normal text-muted">of {goal.targetMembers}</span>
             </p>
@@ -240,7 +240,7 @@ export default async function ScoreboardPage() {
             <FollowUpTable
               rows={s.canceled.map((c) => ({
                 key: `c${c.memberId}`, href: `/admin/members/${c.memberId}`, name: c.name, email: c.email,
-                detail: `${planLabel(c.planKey)} · ${c.ending ? "ending, asked" : "cancelled"} ${day(c.canceledAt)}`, last: c.lastVisit ? `visited ${day(c.lastVisit)}` : "no visit logged",
+                detail: `${planLabel(c.planKey)} · ${c.ending ? "ending, asked" : "cancelled"} ${day(c.canceledAt)}`, last: c.lastVisit ? `visited ${day(c.lastVisit)}` : "no visit this year",
               }))}
               empty="No cancellations since then."
             />
@@ -253,7 +253,7 @@ export default async function ScoreboardPage() {
                 href: b.memberId != null ? `/admin/members/${b.memberId}` : null,
                 name: b.name ?? "(no member record)", email: b.email,
                 detail: `${b.purchases} pass${b.purchases === 1 ? "" : "es"} · last bought ${day(b.lastPurchase)}`,
-                last: b.lastVisit ? `visited ${day(b.lastVisit)}` : "no visit logged",
+                last: b.lastVisit ? `visited ${day(b.lastVisit)}` : "no visit this year",
               }))}
               empty="No one yet."
             />
@@ -262,9 +262,10 @@ export default async function ScoreboardPage() {
       </Section>
 
       <p className="text-xs text-muted">
-        Paying = an active or trialing subscription, either rail, counted once per member; the goal counts members paying $30
-        or more a month after discounts. Revenue is net of discounts (list price until Stripe has synced it, never above
-        list). Past due is shown apart. The Billing page and the MCP billing summary use the same definition.
+        Paying = an active or trialing subscription, either rail, counted once per member; the goal counts members whose
+        plans come to {usd(SCOREBOARD_GOALS.minMemberCents)} or more a month at list price (a promo code or the USDC
+        discount doesn&apos;t take them off). Revenue is net of discounts (list until Stripe has synced it, never above
+        list). Past due is shown apart. The dashboard, Billing and the MCP billing summary use the same definition.
       </p>
     </div>
   );

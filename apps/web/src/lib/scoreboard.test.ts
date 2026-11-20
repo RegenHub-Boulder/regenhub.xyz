@@ -30,9 +30,9 @@ const SUBS: SubRow[] = [
   sub(3, 3, "member_5day", "active", 10000, 9500, "2026-10-05T16:00:00Z", { payment_rail: "onchain", paid: true }), // USDC rail discount
   sub(4, 4, "member_basic", "trialing", 3000, null, "2026-11-02T16:00:00Z"), // not synced yet: list
   sub(5, 5, "hot_desk", "past_due", 25000, 25000, "2026-07-01T16:00:00Z"),
-  sub(6, 6, "member_basic", "active", 3000, 1500, "2026-09-12T16:00:00Z"), // 50% off: under $30
+  sub(6, 6, "member_basic", "active", 3000, 1500, "2026-09-12T16:00:00Z"), // 50% off: a $30 plan, $15 net
   sub(7, 7, "member_2day", "canceled", 5000, 5000, "2026-06-20T16:00:00Z", { canceled_at: "2026-11-01T03:00:00Z" }), // Oct 31 in Denver
-  sub(8, 8, "hot_desk", "canceled", 25000, 23750, "2026-07-07T16:00:00Z", { payment_rail: "onchain", paid: true, updated_at: "2026-11-03T16:00:00Z" }),
+  sub(8, 8, "hot_desk", "canceled", 25000, 23750, "2026-07-07T16:00:00Z", { payment_rail: "onchain", paid: true, admin_canceled_at: "2026-11-03T16:00:00Z" }), // admin cancel, USDC
   sub(9, 9, "cold_desk", "incomplete", 50000, 50000, "2026-11-10T16:00:00Z"), // never started
   sub(10, 1, "member_basic", "canceled", 3000, 3000, "2026-05-01T16:00:00Z", { canceled_at: "2026-06-09T16:00:00Z" }), // m1 moved up
   sub(11, 10, "hot_desk", "active", 25000, 30000, "2026-11-15T16:00:00Z", { payment_rail: "onchain", paid: true }), // stale net after downgrade
@@ -79,17 +79,21 @@ describe("membershipRevenue (the one definition)", () => {
 });
 
 describe("goalProgress", () => {
-  it("counts members at $30+/mo net against the baseline and the money against goal and rent", () => {
+  it("counts members on $30+/mo plans against the baseline and the money against goal and rent", () => {
     const g = goalProgress(SUBS);
-    expect(g.payingMembers).toBe(5); // m1, m2, m3 ($95), m4 ($30 trialing), m10; not m6 ($15) nor m5 (past due)
-    expect(g).toMatchObject({ baselineMembers: 14, targetMembers: 24, gained: -9, membersToGo: 19 });
+    expect(g.payingMembers).toBe(6); // m1, m2, m3, m4 ($30 trialing), m6 ($30 plan at 50% off), m10; not m5 (past due)
+    expect(g).toMatchObject({ baselineMembers: 14, targetMembers: 24, gained: -8, membersToGo: 18 });
     expect(g.revenueChangeCents).toBe(101_500 - 171_000);
     expect(g).toMatchObject({ revenueGoalCents: 275_000, rentCents: 225_000, revenueToGoCents: 173_500, rentGapCents: 123_500 });
   });
 
-  it("sums a member's subscriptions before applying the $30 floor", () => {
-    const g = goalProgress([...SUBS, sub(98, 6, "member_basic", "active", 3000, 1500, "2026-11-01T16:00:00Z")]);
-    expect(g.payingMembers).toBe(6);
+  it("applies the $30 floor to list price, summed over a member's subscriptions", () => {
+    const usdcBasic = sub(98, 30, "member_basic", "active", 3000, 2850, "2026-11-01T16:00:00Z", { payment_rail: "onchain", paid: true });
+    const twoSmall = [sub(96, 31, "legacy_10", "active", 2000, 2000, "2026-11-01T16:00:00Z"), sub(95, 31, "legacy_10b", "active", 1000, 1000, "2026-11-01T16:00:00Z")];
+    const oneSmall = sub(94, 32, "legacy_20", "active", 2000, 2000, "2026-11-01T16:00:00Z");
+    expect(goalProgress([usdcBasic]).payingMembers).toBe(1); // the USDC rail discount doesn't drop a $30 member
+    expect(goalProgress(twoSmall).payingMembers).toBe(1);
+    expect(goalProgress([oneSmall]).payingMembers).toBe(0);
   });
 });
 
@@ -124,6 +128,11 @@ describe("cancellations count when asked for", () => {
   // USDC: an admin period-end cancel is stamped admin_canceled_at at once; canceled_at only when the period ends.
   const onchainEnded = sub(21, 13, "hot_desk", "canceled", 25000, 25000, "2026-08-20T16:00:00Z",
     { payment_rail: "onchain", paid: true, admin_canceled_at: "2026-10-25T16:00:00Z", admin_cancel_mode: "period_end", canceled_at: "2026-11-18T16:00:00Z" });
+
+  it("doesn't count a cancelled row with no date (updated_at moves with every write)", () => {
+    const undated = sub(23, 14, "hot_desk", "canceled", 25000, 25000, "2026-08-01T16:00:00Z", { updated_at: "2026-11-19T16:00:00Z" });
+    expect(subscriptionFlow([undated], MONTHS).map((m) => m.canceled)).toEqual([0, 0, 0, 0, 0, 0]);
+  });
 
   it("in the month asked: a card cancel still running and a USDC cancel that ended later", () => {
     const f = subscriptionFlow([cardEnding, onchainEnded], MONTHS);
@@ -173,6 +182,12 @@ describe("funnelByMonth", () => {
       ["2026-10", 1, 0, 1, 1], // the Nov 1 05:00Z signup is Oct 31 in Denver
       ["2026-11", 1, 1, 2, 2],
     ]);
+  });
+
+  it("counts the passes in a purchase (a five-pack is 5)", () => {
+    const f = funnelByMonth({ interests: [], applications: [], subs: [],
+      purchases: [{ created_at: "2026-10-02T16:00:00Z", passes_granted: 5 }, { created_at: "2026-10-03T16:00:00Z", passes_granted: 1 }] }, MONTHS);
+    expect(f[4].passesBought).toBe(6);
   });
 });
 
@@ -235,7 +250,7 @@ describe("headlineText", () => {
     });
     expect(text).toBe([
       "RegenHub scoreboard, 2026-11-20",
-      `Paying members ($30+/mo): 5 (-9 since ${SCOREBOARD_GOALS.baselineDate}; goal 24 by 2027-01-20, 19 to go); 1 more past due`,
+      `Paying members ($30+/mo): 6 (-8 since ${SCOREBOARD_GOALS.baselineDate}; goal 24 by 2027-01-20, 18 to go); 1 more past due`,
       "Membership revenue: $1,015/mo net, $1,160 at list (goal $2,750, rent $2,250, $1,235 short of rent)",
       "October: 1 new, 1 cancelled (0)",
       "November so far: 2 new, 1 cancelled (+1)",

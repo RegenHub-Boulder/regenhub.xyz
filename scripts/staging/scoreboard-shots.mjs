@@ -15,7 +15,7 @@ mkdirSync(OUT, { recursive: true });
 
 const HEADLINE = [
   "RegenHub scoreboard, 2026-11-20",
-  "Paying members ($30+/mo): 5 (-9 since 2026-11-19; goal 24 by 2027-01-20, 19 to go); 1 more past due",
+  "Paying members ($30+/mo): 6 (-8 since 2026-11-19; goal 24 by 2027-01-20, 18 to go); 1 more past due",
   "Membership revenue: $1,015/mo net, $1,160 at list (goal $2,750, rent $2,250, $1,235 short of rent)",
   "October: 1 new, 1 cancelled (0)",
   "November so far: 2 new, 1 cancelled (+1)",
@@ -43,11 +43,12 @@ await page.click("text=RegenHub steward (sample)");
 await page.waitForURL(/\/admin\/scoreboard$/, { timeout: 20000 });
 await page.waitForSelector("[data-testid=paying-members]");
 
-assert.match(await page.innerText("[data-testid=paying-members]"), /^5\s+of 24$/);
+assert.match(await page.innerText("[data-testid=paying-members]"), /^6\s+of 24$/);
 assert.match(await page.innerText("[data-testid=revenue-net]"), /^\$1,015\s+of \$2,750$/);
 const body = await page.innerText("main");
 for (const s of [
-  "-9 since 2026-11-19 (started at 14) · 19 to go",
+  "Paying members ($30+/mo plans)",
+  "-8 since 2026-11-19 (started at 14) · 18 to go",
   "6 in good standing at any rate (4 card, 2 USDC subscriptions) · 1 past due, not counted",
   "$1,160 at list · $1,235 short of rent ($2,250) · $1,735 to the goal",
   "$250/mo more is past due, not counted",
