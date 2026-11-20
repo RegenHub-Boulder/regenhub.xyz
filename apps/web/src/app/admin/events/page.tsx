@@ -16,6 +16,8 @@ import { stewardCheck } from "@/lib/techne/roster";
 import { MANAGE_ROLE, roleName } from "@/lib/techne/roles";
 import { handleFor, shortDid } from "@/lib/techne/did";
 import { SignInWithTechne, SignOutOfTechne } from "@/components/techne/SignInWithTechne";
+import { fetchLumaCalendar, lumaDraft, matchLuma } from "@/lib/lumaCalendar";
+import { LumaSyncSection } from "@/components/admin/LumaSyncSection";
 
 export const metadata = { title: "Manage Events — RegenHub" };
 
@@ -39,7 +41,12 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
  * sends anything, and Techne checks again on the write (writeAsCollective).
  * /portal/events redirects here while the Techne door is on.
  */
-export default async function ManageEventsPage() {
+export default async function ManageEventsPage({
+  searchParams,
+}: {
+  /** `fromLuma=<evt-id>`: "Add here" from the Luma check opens the new-event form with that Luma night. */
+  searchParams?: Promise<{ fromLuma?: string | string[] }>;
+} = {}) {
   const config = techneConfig();
   const collective = regenosCollectiveDid();
   if (!config || !collective) notFound();
@@ -127,7 +134,11 @@ export default async function ManageEventsPage() {
 
   // Strict: a list cut short would make posted nights look unposted, and they'd be offered again.
   const now = new Date();
-  const read = await fetchCollectiveEvents({ after: pastWindowStart(now), revalidate: 0, strict: true });
+  const [read, luma, params] = await Promise.all([
+    fetchCollectiveEvents({ after: pastWindowStart(now), revalidate: 0, strict: true }),
+    fetchLumaCalendar(),
+    searchParams ?? Promise.resolve({} as { fromLuma?: string | string[] }),
+  ]);
   const events = read ?? [];
   const goingCountsRead = Promise.all(
     events.map((e) =>
@@ -175,6 +186,20 @@ export default async function ManageEventsPage() {
   }));
   // With the calendar unreadable, every rule night would look unposted: suggest none.
   const nights = read ? SERIES.flatMap((s) => unpostedNights(s, posted, now)) : [];
+  // Our calendar unread would make every Luma night look missing here: no check until it reads.
+  const lumaSync =
+    read && luma
+      ? matchLuma(
+          events.flatMap((e) =>
+            e.startAt
+              ? [{ uri: e.uri, name: e.name, startAt: e.startAt, endAt: e.endAt, seriesSlug: e.series?.slug ?? null, cancelled: isCancelled(e) }]
+              : [],
+          ),
+          luma,
+          now,
+        )
+      : null;
+  const fromLuma = typeof params.fromLuma === "string" ? luma?.find((e) => e.id === params.fromLuma) : undefined;
 
   return (
     <div className="space-y-8">
@@ -188,7 +213,9 @@ export default async function ManageEventsPage() {
         posted={posted}
         readFailed={read === null}
         editingOff={read !== null && !siblingsKnown}
+        draft={fromLuma ? lumaDraft(fromLuma) : undefined}
       />
+      {read && <LumaSyncSection sync={lumaSync} now={now} />}
     </div>
   );
 }

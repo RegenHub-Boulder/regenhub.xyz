@@ -5,16 +5,22 @@
  * an ordinary Techne event of the collective. Pure, so it's tested in node.
  */
 
-import { dateIn, plannedNight, ruleDatesFrom, type PlannedNight, type Series } from "@/lib/series";
+import { dateIn, inSeriesSlot, plannedNight, ruleDatesFrom, seriesPageUrl, type PlannedNight, type Series } from "@/lib/series";
 import { HUB_TIMEZONE, mintRkey } from "@/lib/regenos/eventForm";
 
 export type PostedNight = { seriesSlug: string | null; startAt: string | null; cancelled?: boolean };
 
-/** The dates (in the series' timezone) that have a posted night of the series; cancelled ones only if asked. */
+/**
+ * The dates (in the series' timezone) that have a posted night of the series; cancelled ones only if asked.
+ * A night in no series that sits in this series' slot (its weekday, within 30 min of its start) takes the date
+ * too: a night renamed beyond recognition ("Ugly Sweater Party") is still that Friday's Happy Hour, and offering
+ * the date again would post a second night on top of it.
+ */
 function takenDates(series: Series, posted: PostedNight[], withCancelled: boolean): Set<string> {
   return new Set(
     posted
-      .filter((e) => e.seriesSlug === series.slug && e.startAt && (withCancelled || !e.cancelled))
+      .filter((e) => (e.seriesSlug === series.slug || (!e.seriesSlug && inSeriesSlot(series, e.startAt))) && e.startAt)
+      .filter((e) => withCancelled || !e.cancelled)
       .map((e) => dateIn(e.startAt!, series.timezone)),
   );
 }
@@ -66,7 +72,10 @@ export function pickedNight(
   return { night };
 }
 
-/** The createEvent body for one night: named after the series, so lib/series.ts `seriesOf` finds it. */
+/**
+ * The createEvent body for one night: named after the series, and carrying the series page in `uris`, the
+ * stable key lib/series.ts `seriesOf` reads first, so the night stays in its series if a steward renames it.
+ */
 export function seriesNightInput(night: PlannedNight, authority: string, rkey = mintRkey()): Record<string, unknown> {
   const { series } = night;
   return {
@@ -76,6 +85,7 @@ export function seriesNightInput(night: PlannedNight, authority: string, rkey = 
     attendance: "open",
     ...(series.capacity ? { maxAttendees: series.capacity } : {}),
     name: series.name,
+    uris: [{ uri: seriesPageUrl(series), name: series.name }],
     description: series.about,
     startsAt: night.startsAt,
     endsAt: night.endsAt,

@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, Save, Eye, Users, Send, RotateCcw, DownloadCloud, Square } from "lucide-react";
+import { Loader2, Save, Eye, Users, Send, RotateCcw, Square } from "lucide-react";
 import { markdownToEmailHtml } from "@/lib/newsletterMarkdown";
+import { LumaCsvImport } from "@/components/admin/LumaCsvImport";
 
 interface Draft {
   id: number | null;
@@ -87,15 +88,6 @@ export function NewsletterStudio({
     try {
       const r = await api<{ ok: boolean; sent_to: string }>("/api/admin/newsletter/preview", { subject, markdown, issue_key: issueKey });
       setMsg(r.ok ? `Preview sent to ${r.sent_to}.` : "Preview failed to send (check email config).");
-    } catch (e) { setErr(errMessage(e)); }
-    finally { setBusy(null); }
-  }
-
-  async function importLuma() {
-    setBusy("luma"); setErr(null); setMsg(null);
-    try {
-      const r = await api<{ fetched: number; imported: number; skipped: number; note?: string }>("/api/admin/newsletter/import-luma");
-      setMsg(r.note ?? `Luma: ${r.imported} new contacts added, ${r.skipped} already on the list (of ${r.fetched}).`);
     } catch (e) { setErr(errMessage(e)); }
     finally { setBusy(null); }
   }
@@ -218,12 +210,11 @@ export function NewsletterStudio({
           <div className="flex items-center gap-2"><Users className="w-4 h-4 text-sage" /><h3 className="text-sm font-semibold">Audience</h3></div>
           <p className="text-xs text-muted">
             Recipients = members + the interests list (incl. imported Luma contacts) − unsubscribes.
-            Importing Luma adds new calendar people to the interests list with one-click unsubscribe.
+            To add Luma people, export a CSV from Luma (the calendar&apos;s People, or an event&apos;s Guests) and import it:
+            you see what it would add before anything is written.
           </p>
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" disabled={!!busy || sent} onClick={importLuma} className="btn-glass text-xs gap-1 h-7">
-              {busy === "luma" ? <Loader2 className="w-3 h-3 animate-spin" /> : <DownloadCloud className="w-3 h-3" />} Import Luma contacts
-            </Button>
+          <div className="flex flex-wrap items-start gap-2">
+            <LumaCsvImport disabled={!!busy} />
             <Button size="sm" disabled={!!busy || sent} onClick={prepare} className="btn-glass text-xs gap-1 h-7">
               {busy === "prepare" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Users className="w-3 h-3" />} Prepare audience
             </Button>

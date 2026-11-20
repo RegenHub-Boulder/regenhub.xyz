@@ -53,6 +53,7 @@ The `.dockerignore` has an exception (`!**/.env.production`) so the file is avai
 | `TECHNE_PDS_URL` / `TECHNE_PLC_URL` / `TECHNE_HANDLE_DOMAIN` / `TECHNE_PLATFORM_DID` | Web (runtime) | Test deployments only; production leaves them unset (techne-sdk defaults). |
 | `TECHNE_STAGING_STANDIN` / `TECHNE_STANDIN_URL` | Web (runtime) | **Staging only**, never production: the sign-in stand-in. Refused for the regenhub.xyz origin. |
 | `REGENOS_LOGIN_ENABLED` | Web (runtime) | **Default off.** `true`/`1`/`yes` turns on the regenOS login lane + the `/xrpc` proxy. |
+| `LUMA_ICS_URL` | Web (runtime) | Optional. The iCal feed `/admin/events` checks nights against. Unset = RegenHub's public Luma feed (`api.lu.ma/ics/get?entity=calendar&id=cal-ZCWMKx1NMCXGd7v`, no key). |
 | `CRON_SECRET` | Web (runtime) | Bearer token required by every `/api/cron/*` route. |
 | `NEWSLETTER_UNSUBSCRIBE_SECRET` | Web (runtime) | Signs newsletter unsubscribe links. Give it its own value — those links sit in inboxes forever and shouldn't share the cron bearer token. Falls back to `CRON_SECRET` if unset (already-mailed links keep verifying); in production, with neither set, signing throws instead of using a default. |
 
@@ -341,13 +342,20 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   a steward posts it, feeds are built from posted records, and with none posted ahead the page still says "Next
   date coming soon". The rules and times (America/Denver) are EDITABLE DATA, used for the
   rhythm line and as suggestions in the portal. Techne has no series type: a night is an ordinary event named after the series ("Agents Building Night", or
-  "Agents Building Night: topic"), or with a `uris` entry ending `/events/<slug>`. Nights posted as "Agents Night" (the series' former name, `formerNames`) still match. A series may name `hosts` (Agents Building and Civic Tech: "AG and Benjamin"), shown on the series page and cards. Event keys are TIDs (`mintRkey`), as the
+  "Agents Building Night: topic"), or with a `uris` entry ending `/events/<slug>`. **Add the next nights writes that
+  `uris` entry** (the stable key; the edit form keeps it), so a renamed night stays in its series. A night posted
+  before the key still matches if the series name appears in it as whole words and it starts in the series' slot
+  (rule date, within 30 min of the start: "Ugly Sweater Party 420 Happy Hour" on a Friday at 4:20); for suggestions,
+  any night in no series that sits in a series' slot takes that date (`lib/series.ts` `inSeriesSlot`). Nights posted as "Agents Night" (the series' former name, `formerNames`) still match. A series may name `hosts` (Agents Building and Civic Tech: "AG and Benjamin"), shown on the series page and cards. Event keys are TIDs (`mintRkey`), as the
   lexicon declares; old `ev-…` keys still read. Every create/edit sends `timezone: "America/Denver"`.
   `/events/<slug>` is the series page (next posted night, posted nights after it, past nights; with none upcoming
   it says "Next date coming soon"), built from `lib/seriesEvents.ts`. `/` (right under the hero) and `/events`
   lead with the series cards. `/admin/events` → **Add the next nights** offers the next 3 rule dates not yet posted
   (a posted date is skipped, a cancelled one isn't re-offered) plus a date picker for any later night (`lib/seriesNights.ts`), posts them as the collective (below) and shows
-  "N going" per event.
+  "N going" per event. Below it, **Also on Luma?** (`components/admin/LumaSyncSection.tsx`, `lib/lumaCalendar.ts`)
+  checks the next 60 days against Luma's public iCal feed (no API key; Next-cached 15 min; fails soft): each night
+  "On Luma" (link) or "Not on Luma" (same Denver date, start within 30 min, not two different series), plus the
+  Luma-only nights with **Add here** (`?fromLuma=<evt-id>` opens the new-event form prefilled). Read-only toward Luma.
 - **Feeds:** `/events.ics` (everything) and `/events/<slug>.ics` (a rewrite to `/events/<slug>/calendar.ics`),
   built by `lib/ics.ts`; UID = the event's AT-URI. `REGENOS_WEB_URL` is no longer read.
 - `components/landing/UpcomingEvents.tsx` — async server component. **Zero events for any reason
@@ -395,6 +403,10 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   `is_admin` admin pages live in `app/admin/(staff)/`. Ending sets `validUntil`; nobody-left-at-30 is refused.
   `/admin/events` (Manage Events) uses the same check (`stewardCheck`).
   Details: docs/TECHNE-SIGN-IN.md "Managing RegenHub's roles".
+- **Luma without the API** (the API needs Luma Plus): `/admin/newsletter` → Audience → **Import Luma CSV…** takes a
+  Luma people export or an event's guests export (`lib/lumaCsv.ts`, `POST /api/admin/newsletter/import-luma`), shows
+  new / already have / skipped (unsubscribed on Luma, unsubscribed from our newsletter, invalid, repeats), then
+  inserts the new ones into `interests` (`source_path 'luma'`). The old API contact pull is gone.
 - Deliberately NOT changed: the newsletter still reads Luma directly (`lib/newsletter.ts:142`). Its
   copy is Luma-branded end to end; switching it is a product decision, not a plumbing one.
 

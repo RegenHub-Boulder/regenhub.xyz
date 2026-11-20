@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import {
 import { AddSeriesNights } from "@/components/portal/AddSeriesNights";
 import type { PlannedNight } from "@/lib/series";
 import type { PostedNight } from "@/lib/seriesNights";
+import { lumaEventToFormValues, type ParsedLumaEvent } from "@/lib/lumaImport";
 
 export interface ManageableEvent {
   uri: string;
@@ -77,6 +78,7 @@ export function ManageEvents({
   nights = [],
   posted = [],
   write,
+  draft,
 }: {
   authority: string;
   events: ManageableEvent[];
@@ -85,6 +87,8 @@ export function ManageEvents({
   nights?: PlannedNight[];
   /** Each posted event's series and start, so a hand-picked night isn't posted twice. */
   posted?: PostedNight[];
+  /** Open the new-event form with this filled in (a Luma night, from the Luma check's "Add here"). */
+  draft?: ParsedLumaEvent;
 }) {
   // `null` = no form open; a string = the rkey being edited; "" = the new-event form.
   const [editing, setEditing] = useState<string | null>(null);
@@ -93,6 +97,20 @@ export function ManageEvents({
   const [error, setError] = useState<string | null>(null);
   const [busyRkey, setBusyRkey] = useState<string | null>(null);
   const router = useRouter();
+
+  // After mount, so the times fill in the browser's own zone, as the form reads them. Once: the address loses
+  // its `?fromLuma=` so a refresh after posting (or a reload) doesn't open the form again.
+  const draftKey = draft ? `${draft.url}|${draft.startAt}` : null;
+  useEffect(() => {
+    if (!draft) return;
+    setForm(lumaEventToFormValues(draft));
+    setError(null);
+    setEditing("");
+    const url = new URL(window.location.href);
+    url.searchParams.delete("fromLuma");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the draft's identity, not the object
+  }, [draftKey]);
 
   function set<K extends keyof EventFormValues>(key: K) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
