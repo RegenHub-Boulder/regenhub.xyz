@@ -50,8 +50,9 @@ function transform(src) {
       // a hover fill is a step darker than the resting one, so hover still shows
       if (k === "bg") return `${v}bg-${t}${v.includes("hover:") ? "/20" : o || Number(shade) <= 100 ? "/10" : ""}`;
       if (k.startsWith("border") || k === "divide") return `${v}${k}-${t}/40`;
-      // text (and placeholder text) carries no opacity, for AA; a translucent ring, shadow, stroke or gradient keeps it
-      return `${v}${k}-${t}${k === "text" || k === "placeholder" ? "" : o ?? ""}`;
+      // what draws a glyph (text, placeholder, icon fill/stroke, checkbox, caret) carries no opacity, for AA;
+      // a translucent ring, outline, shadow, underline or gradient keeps it
+      return `${v}${k}-${t}${["ring", "outline", "shadow", "decoration", "from", "to", "via"].includes(k) ? o ?? "" : ""}`;
     });
   // faded text: the muted ink is already the quietest tone that reads (AA), so text colours carry no opacity
   s = s.replace(new RegExp(`${B}${V}text-(muted|sage|gold|forest|ok|warn|danger|note)\\/\\[?[\\d.]+\\]?(?![\\w/-])`, "g"),

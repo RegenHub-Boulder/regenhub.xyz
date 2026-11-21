@@ -71,7 +71,7 @@ export function InstallPrompt({ eligible = true }: InstallPromptProps = {}) {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 left-4 sm:left-auto sm:max-w-sm z-50 glass-panel-strong panel-tone border border-sage/30 p-4 shadow-lg">
+    <div className="fixed bottom-4 right-4 left-4 sm:left-auto sm:max-w-sm z-50 glass-panel-strong border border-sage/30 p-4 shadow-lg">
       <div className="flex items-start gap-3">
         <Download className="w-5 h-5 text-sage shrink-0 mt-0.5" />
         <div className="flex-1">

@@ -10,16 +10,10 @@
   "theme_color": "#ebe6d9",
   "icons": [
     {
-      "src": "/regenhub-logo.svg",
+      "src": "/regenhub-icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any"
-    },
-    {
-      "src": "/regenhub-icon-maskable.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "maskable"
+      "purpose": "any maskable"
     }
   ],
   "shortcuts": [
