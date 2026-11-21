@@ -284,12 +284,15 @@ export default async function ScoreboardPage() {
         </div>
       </Section>
 
-      <p className="text-xs text-muted">
-        Paying = an active or trialing subscription, either rail, counted once per member; the goal counts members whose
-        plans come to {usd(SCOREBOARD_GOALS.minMemberCents)} or more a month at list price and who pay something (a promo
-        code or the USDC discount doesn&apos;t take them off; a full comp isn&apos;t paying). Revenue is net of discounts (list until Stripe has synced it, never above
-        list). Past due is shown apart. The dashboard, Billing and the MCP billing summary use the same definition.
-      </p>
+      <details data-testid="how-we-count">
+        <summary className="text-xs text-muted cursor-pointer hover:text-foreground">How we count</summary>
+        <p className="text-xs text-muted mt-2">
+          Paying = an active or trialing subscription, either rail, counted once per member; the goal counts members whose
+          plans come to {usd(SCOREBOARD_GOALS.minMemberCents)} or more a month at list price and who pay something (a promo
+          code or the USDC discount doesn&apos;t take them off; a full comp isn&apos;t paying). Revenue is net of discounts (list until Stripe has synced it, never above
+          list). Past due is shown apart. The dashboard, Billing and the MCP billing summary use the same definition.
+        </p>
+      </details>
     </div>
   );
 }

@@ -6,13 +6,14 @@ import { createClient } from "@/lib/supabase/server";
 import { AdminTabs, type TabDef } from "@/components/admin/AdminTabs";
 import { LiveCodesSection, type CodeWithMember } from "@/components/admin/LiveCodesSection";
 import { LockSyncSection, type LastRun } from "@/components/admin/LockSyncSection";
+import { fmtBoulderDateTime } from "@/lib/boulderTime";
 
-export const metadata = { title: "Access — Admin" };
+export const metadata = { title: "Door — Admin" };
 
 type AccessTab = "codes" | "sync";
 
 const TABS: TabDef<AccessTab>[] = [
-  { key: "codes", label: "Live Codes" },
+  { key: "codes", label: "Guest codes" },
   { key: "sync",  label: "Lock Sync" },
 ];
 
@@ -76,12 +77,12 @@ export default async function AccessPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-forest">Access</h1>
+          <h1 className="text-2xl font-bold text-forest">Door</h1>
           <p className="text-muted text-sm mt-1">
             Door codes + lock sync — everything door-and-key related.
           </p>
         </div>
-        <p className="text-sm text-muted">{codeRows.length} active codes</p>
+        <p className="text-sm text-muted">{codeRows.length} guest {codeRows.length === 1 ? "code" : "codes"} live</p>
       </div>
 
       <AdminTabs<AccessTab> tabs={TABS}>
@@ -98,7 +99,7 @@ export default async function AccessPage() {
             <div className="space-y-6">
               {writer && (
                 <div className={`text-sm ${nowMs - Date.parse(writer.acquired_at) > 120_000 ? "text-red-600" : "text-amber-500"}`}>
-                  <p>Door-code writer held by {writer.holder_label} for {Math.max(0, Math.floor((nowMs - Date.parse(writer.acquired_at)) / 1000))} seconds (since {writer.acquired_at}).</p>
+                  <p>Door-code writer held by {writer.holder_label} for {Math.max(0, Math.floor((nowMs - Date.parse(writer.acquired_at)) / 1000))} seconds (since {fmtBoulderDateTime(writer.acquired_at)}).</p>
                   {nowMs - Date.parse(writer.acquired_at) > 120_000 && <p role="alert">Warning: reservation held for over 2 minutes; operator attention required.</p>}
                   <p>See “Stuck reservation recovery” under “Door-code writer reservation” in DEPLOYMENT.md.</p>
                 </div>

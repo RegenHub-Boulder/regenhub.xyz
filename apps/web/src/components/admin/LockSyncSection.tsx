@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { LockSyncButton } from "@/components/admin/LockSyncButton";
 import { Lock, CheckCircle2, XCircle, History, AlertTriangle } from "lucide-react";
 import type { LockSyncResultRow } from "@/lib/supabase/types";
+import { memberTypeLabel } from "@/lib/memberTypeLabel";
 
 const TOTAL_SLOTS = 124;
 
@@ -109,7 +110,7 @@ export function LockSyncSection({ members, lastRun, nowMs }: Props) {
         <Card className="glass-panel">
           <CardContent className="p-5">
             <CheckCircle2 className="w-5 h-5 text-green-400 mb-2" />
-            <p className="text-sm text-muted">Active codes</p>
+            <p className="text-sm text-muted">Member codes</p>
             <p className="text-2xl font-bold text-green-400">{active.length}</p>
           </CardContent>
         </Card>
@@ -142,8 +143,8 @@ export function LockSyncSection({ members, lastRun, nowMs }: Props) {
                   {m.pin_code ?? <span className="text-muted">—</span>}
                 </td>
                 <td className="px-4 py-3">
-                  <Badge variant="outline" className="text-xs capitalize border-white/20">
-                    {m.member_type}
+                  <Badge variant="outline" className="text-xs border-white/20">
+                    {memberTypeLabel(m.member_type)}
                   </Badge>
                 </td>
                 <td className="px-4 py-3">

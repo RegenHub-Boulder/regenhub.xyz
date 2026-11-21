@@ -5,8 +5,7 @@
  * and the network edge (Techne is unconfigured, so the scoreboard's event turnout is empty).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { renderToStaticMarkup, renderToReadableStream } from "react-dom/server";
-import { createElement } from "react";
+import { renderToReadableStream } from "react-dom/server";
 import { makePgDb, type PgDb } from "./pgDb";
 import { startOfDayIn } from "@/lib/series";
 import { SCOREBOARD_TZ } from "@/lib/scoreboard";
@@ -159,7 +158,7 @@ describe("admin home (/admin, Today)", () => {
     const desk = at(h, "1 desk member not billed");
     expect(app).toBeLessThan(desk);
     expect(h).toContain('href="/admin/access?tab=sync"');
-    expect(h).toContain('href="/admin/pipeline?tab=applications"');
+    expect(h).toContain('href="/admin/people?tab=applications"');
     expect(h).toContain('href="/admin/members?status=no_subscription"');
     // What to do next moved here from the scoreboard: Theo is past due, with the one-click reminder.
     const next = at(h, 'data-testid="admin-next"');
@@ -207,7 +206,8 @@ describe("admin home (/admin, Today)", () => {
   });
 
   it("Stale auth links, once a quick action on the old home, is on the members page", async () => {
-    const h = renderToStaticMarkup(createElement(MembersPage));
+    signIn(ADMIN, "robin@example.test");
+    const h = await html(() => MembersPage());
     expect(h).toMatch(/href="\/admin\/members\/stale-links"[^>]*>Stale auth links/);
   });
 });
