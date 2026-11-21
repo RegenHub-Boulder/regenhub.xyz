@@ -1,393 +1,99 @@
 import { redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/admin";
-import { createClient } from "@/lib/supabase/server";
-import { createServiceClient } from "@/lib/supabase/admin";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Users, Key, Zap, UserPlus, AlertTriangle, ClipboardList, Calendar, DollarSign, Inbox, Link2 } from "lucide-react";
-import { FunnelCard } from "@/components/admin/FunnelCard";
-import { BILLED_STATUSES, REVENUE_COLUMNS, membershipRevenue, type RevenueRow } from "@/lib/membershipRevenue";
+import { requireAdmin } from "@/lib/admin";
+import { createServiceClient } from "@/lib/supabase/admin";
+import { NextActions, type NextAction } from "@/components/admin/NextActions";
+import { readScoreboard } from "@/lib/scoreboardData";
+import { ACTION_RULES, type RecommendedAction } from "@/lib/scoreboardActions";
+import { SCOREBOARD_TZ, usd } from "@/lib/scoreboard";
+import { adminQueue } from "@/lib/adminQueue";
 
-export default async function AdminPage() {
+export const metadata = { title: "Today — Admin" };
+export const dynamic = "force-dynamic";
+
+const forList = (a: RecommendedAction & { rank: number }): NextAction => ({
+  id: a.id, rank: a.rank, kind: a.kind, who: a.who, href: a.href, reason: a.reason, step: a.step, quick: a.quick, contact: a.contact ?? null,
+  priority: a.priority, fingerprint: a.fingerprint,
+});
+
+/**
+ * The admin home (T-482): what an admin came for, in order. What's waiting on them (queues to clear), then the people
+ * to talk to ("What to do next", the scoreboard's recommended actions), with the two goal numbers in one line above.
+ * The numbers in full are on /admin/scoreboard; members, billing and the door each have their own page.
+ */
+export default async function AdminHome() {
   if (!await requireAdmin()) redirect("/portal");
-  const supabase = await createClient();
   const admin = createServiceClient();
 
-  // eslint-disable-next-line react-hooks/purity -- server component, renders once
-  const oneHourFromNow = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-
-  const [
-    { count: memberCount },
-    { count: activeCodeCount },
-    { count: expiringSoonCount },
-    { count: disabledCount },
-    { count: pendingAppCount },
-    // Member type breakdown
-    { count: coldDeskCount },
-    { count: hotDeskCount },
-    { count: hubFriendCount },
-    { count: dayPassCount },
-    // Free day stats
-    { count: pendingClaimCount },
-    { count: reservedClaimCount },
-    // Subscriptions snapshot for the MRR card
-    { data: billingSubs },
-    // Funnel counts
-    { count: interestsCount },
-    { count: freedaysCount },
-    { count: applicationsCount },
-    { count: subscribersCount },
-    // Recent activity
-    { data: recentMembers },
-    { data: recentApps },
-    { data: recentCodes },
-    // Lock-sync failures from the last run (for needs-attention)
-    { data: lastSyncRun },
-    // Desk members (for "paid type, no Stripe sub" callout)
-    { data: deskMembers },
-    // member_ids that have an active/trialing/past_due subscription
-    { data: subbedMemberIds },
-  ] = await Promise.all([
-    supabase.from("members").select("*", { count: "exact", head: true }).eq("disabled", false),
-    supabase.from("day_codes").select("*", { count: "exact", head: true }).eq("is_active", true),
-    supabase.from("day_codes").select("*", { count: "exact", head: true })
-      .eq("is_active", true)
-      .lt("expires_at", oneHourFromNow)
-      .gt("expires_at", new Date().toISOString()),
-    supabase.from("members").select("*", { count: "exact", head: true }).eq("disabled", true),
-    supabase.from("applications").select("*", { count: "exact", head: true }).eq("status", "pending"),
-    // Type breakdown
-    supabase.from("members").select("*", { count: "exact", head: true }).eq("disabled", false).eq("member_type", "cold_desk"),
-    supabase.from("members").select("*", { count: "exact", head: true }).eq("disabled", false).eq("member_type", "hot_desk"),
-    supabase.from("members").select("*", { count: "exact", head: true }).eq("disabled", false).eq("member_type", "hub_friend"),
-    supabase.from("members").select("*", { count: "exact", head: true }).eq("disabled", false).eq("member_type", "day_pass"),
-    // Free day claims
-    admin.from("free_day_claims").select("*", { count: "exact", head: true }).eq("status", "pending"),
-    admin.from("free_day_claims").select("*", { count: "exact", head: true }).eq("status", "reserved"),
-    // Subscriptions — only the billable rows (active/trialing/past_due)
-    supabase.from("subscriptions").select(REVENUE_COLUMNS).in("status", [...BILLED_STATUSES]).returns<RevenueRow[]>(),
-    // Funnel stages — all-time totals
-    supabase.from("interests").select("*", { count: "exact", head: true }),
-    admin.from("free_day_claims").select("*", { count: "exact", head: true }),
-    supabase.from("applications").select("*", { count: "exact", head: true }),
-    supabase.from("subscriptions").select("*", { count: "exact", head: true })
-      .in("status", ["active", "trialing", "past_due", "canceled"]),
-    // Recent activity
-    supabase.from("members").select("id, name, member_type, created_at").eq("disabled", false).order("created_at", { ascending: false }).limit(5),
-    supabase.from("applications").select("id, name, email, status, created_at").order("created_at", { ascending: false }).limit(5),
-    supabase.from("day_codes").select("id, code, label, pin_slot, is_active, created_at, members(name)").order("created_at", { ascending: false }).limit(5),
-    supabase.from("lock_sync_runs").select("failed, created_at").order("created_at", { ascending: false }).limit(1).maybeSingle(),
-    supabase.from("members").select("id, name").eq("disabled", false).in("member_type", ["cold_desk", "hot_desk"]),
-    supabase.from("subscriptions").select("member_id").in("status", ["active", "trialing", "past_due"]),
+  const [s, apps, freeDays, desks, live, lastSync, quarantine] = await Promise.all([
+    readScoreboard(admin),
+    admin.from("applications").select("id", { count: "exact", head: true }).eq("status", "pending"),
+    admin.from("free_day_claims").select("id", { count: "exact", head: true }).eq("status", "pending"),
+    admin.from("members").select("id").eq("disabled", false).in("member_type", ["cold_desk", "hot_desk"]),
+    admin.from("subscriptions").select("member_id").in("status", ["active", "trialing", "past_due"]),
+    admin.from("lock_sync_runs").select("failed").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    admin.from("lock_slot_quarantine").select("slot", { count: "exact", head: true }),
   ]);
-
-  const subbedSet = new Set((subbedMemberIds ?? []).map((s) => s.member_id));
-  const unbilledDeskCount = (deskMembers ?? []).filter((m) => !subbedSet.has(m.id)).length;
-
-  // One definition of paying + MRR, shared with Billing, the scoreboard and the MCP (lib/membershipRevenue.ts).
-  const revenue = membershipRevenue(billingSubs ?? []);
-  const payingCount = revenue.members;
-  const mrrCents = revenue.netCents;
-  const pastDueCount = revenue.pastDue.subscriptions;
-
-  const typeBreakdown = [
-    { label: "Cold Desk", count: coldDeskCount ?? 0, color: "text-green-400" },
-    { label: "Hot Desk", count: hotDeskCount ?? 0, color: "text-emerald-400" },
-    { label: "Hub Friend", count: hubFriendCount ?? 0, color: "text-purple-400" },
-    { label: "Day Pass", count: dayPassCount ?? 0, color: "text-blue-400" },
-  ];
-
-  // Needs-attention items — surfaces actionable issues at the top of the page.
-  // Each item links to the page where the admin can act on it.
-  const attentionItems: { label: string; href: string; color: "amber" | "red" }[] = [];
-  if ((pendingAppCount ?? 0) > 0) {
-    attentionItems.push({
-      label: `${pendingAppCount} membership application${pendingAppCount === 1 ? "" : "s"} pending review`,
-      href: "/admin/pipeline?tab=applications",
-      color: "amber",
-    });
-  }
-  if ((pendingClaimCount ?? 0) > 0) {
-    attentionItems.push({
-      label: `${pendingClaimCount} free-day claim${pendingClaimCount === 1 ? "" : "s"} pending review`,
-      href: "/admin/pipeline?tab=freedays",
-      color: "amber",
-    });
-  }
-  if (pastDueCount > 0) {
-    attentionItems.push({
-      label: `${pastDueCount} subscription${pastDueCount === 1 ? "" : "s"} past due`,
-      href: "/admin/billing",
-      color: "red",
-    });
-  }
-  if (unbilledDeskCount > 0) {
-    attentionItems.push({
-      label: `${unbilledDeskCount} desk member${unbilledDeskCount === 1 ? "" : "s"} not on Stripe — send a checkout link`,
-      href: "/admin/members?status=no_subscription",
-      color: "amber",
-    });
-  }
-  if ((lastSyncRun as { failed: number; created_at: string } | null)?.failed) {
-    attentionItems.push({
-      label: `Last lock sync had ${(lastSyncRun as { failed: number }).failed} failure${(lastSyncRun as { failed: number }).failed === 1 ? "" : "s"}`,
-      href: "/admin/access?tab=sync",
-      color: "red",
-    });
-  }
-
-  // Funnel stages — all-time
-  const funnelStages = [
-    { key: "interests",    label: "Interest signups",    count: interestsCount ?? 0 },
-    { key: "freedays",     label: "Free-day claims",     count: freedaysCount ?? 0 },
-    { key: "applications", label: "Applications",        count: applicationsCount ?? 0 },
-    { key: "subscribers",  label: "Subscribed (any)",    count: subscribersCount ?? 0 },
-  ];
+  const billed = new Set((live.data ?? []).map((r) => r.member_id));
+  const queue = adminQueue({
+    pendingApplications: apps.count ?? 0,
+    pendingFreeDays: freeDays.count ?? 0,
+    unbilledDesks: (desks.data ?? []).filter((m) => !billed.has(m.id)).length,
+    lastSyncFailures: (lastSync.data as { failed: number | null } | null)?.failed ?? 0,
+    quarantinedSlots: quarantine.count ?? 0,
+  });
+  const { goal } = s;
+  const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: SCOREBOARD_TZ });
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-forest">Admin Dashboard</h1>
-        <p className="text-muted mt-1">RegenHub cooperative management</p>
-      </div>
+    <div className="max-w-3xl space-y-10">
+      <header>
+        <h1 className="text-3xl font-bold text-forest">Today</h1>
+        <p className="text-sm text-muted mt-2" data-testid="admin-goals">
+          {today} · <span className="text-foreground">{goal.payingMembers} of {goal.targetMembers}</span> paying members ·{" "}
+          <span className="text-foreground">{usd(goal.revenue.netCents)} of {usd(goal.revenueGoalCents)}</span> a month ·{" "}
+          <Link href="/admin/scoreboard" className="text-sage hover:underline">Scoreboard →</Link>
+        </p>
+      </header>
 
-      {/* Needs attention */}
-      {attentionItems.length > 0 && (
-        <Card className="glass-panel border border-amber-500/30">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <Inbox className="w-4 h-4 text-amber-400" />
-              <h3 className="text-sm font-semibold text-amber-400">Needs attention</h3>
-            </div>
-            <ul className="space-y-1.5">
-              {attentionItems.map((item) => (
-                <li key={item.label}>
-                  <Link
-                    href={item.href}
-                    className={`text-sm flex items-center gap-2 hover:underline ${
-                      item.color === "red" ? "text-red-400" : "text-amber-400"
-                    }`}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${item.color === "red" ? "bg-red-400" : "bg-amber-400"}`} />
-                    {item.label} →
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
+      <section aria-labelledby="waiting" data-testid="admin-waiting">
+        <h2 id="waiting" className="text-sm font-semibold mb-3">Waiting on you</h2>
+        {queue.length === 0 ? (
+          <p className="text-sm text-muted">Nothing waiting.</p>
+        ) : (
+          <ul className="divide-y divide-white/5 border-y border-white/5">
+            {queue.map((q) => (
+              <li key={q.key}>
+                <Link href={q.href} className="flex items-center gap-3 py-2.5 text-sm hover:text-sage">
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${q.urgent ? "bg-red-400" : "bg-amber-400"}`} />
+                  <span className="flex-1">{q.label}</span>
+                  <span className="text-muted">→</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        <Link href="/admin/billing">
-          <Card className="glass-panel hover-lift cursor-pointer">
-            <CardContent className="p-5">
-              <DollarSign className="w-6 h-6 text-sage mb-2" />
-              <p className="text-xs text-muted mb-1">MRR</p>
-              <p className="text-3xl font-bold text-foreground">${(mrrCents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}</p>
-              <p className="text-xs text-muted mt-1">
-                {payingCount} paying{pastDueCount > 0 ? <span className="text-red-400"> · {pastDueCount} past due</span> : ""}
-              </p>
-            </CardContent>
-          </Card>
-        </Link>
+      <section aria-labelledby="next" data-testid="admin-next">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-3">
+          <h2 id="next" className="text-sm font-semibold">What to do next</h2>
+          <p className="text-xs text-muted">
+            People to talk to, ranked by what it does for the goals. Done hides one until its facts change; Not now, {ACTION_RULES.notNowDays} days.
+          </p>
+        </div>
+        <NextActions
+          open={s.actions.open.map(forList)}
+          hidden={s.actions.hidden.map((a) => ({ ...forList(a), mark: a.mark.state }))}
+          top={ACTION_RULES.showTop}
+        />
+      </section>
 
-        <Link href="/admin/members">
-          <Card className="glass-panel hover-lift cursor-pointer">
-            <CardContent className="p-5">
-              <Users className="w-6 h-6 text-sage mb-2" />
-              <p className="text-xs text-muted mb-1">Active Members</p>
-              <p className="text-3xl font-bold text-foreground">{memberCount ?? 0}</p>
-              <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-2">
-                {typeBreakdown.map((t) => (
-                  <span key={t.label} className={`text-xs ${t.color}`}>
-                    {t.count} {t.label.split(" ")[0]}
-                  </span>
-                ))}
-              </div>
-              {(disabledCount ?? 0) > 0 && (
-                <p className="text-xs text-muted mt-1">{disabledCount} disabled</p>
-              )}
-            </CardContent>
-          </Card>
-        </Link>
-
-        <Link href="/admin/access?tab=codes">
-          <Card className="glass-panel hover-lift cursor-pointer">
-            <CardContent className="p-5">
-              <Key className="w-6 h-6 text-sage mb-2" />
-              <p className="text-xs text-muted mb-1">Live Door Codes</p>
-              <p className="text-3xl font-bold text-foreground">{activeCodeCount ?? 0}</p>
-              {(expiringSoonCount ?? 0) > 0 && (
-                <p className="text-xs text-amber-400 mt-1 flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3" />
-                  {expiringSoonCount} expiring within 1hr
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </Link>
-
-        <Link href="/admin/pipeline?tab=applications">
-          <Card className="glass-panel hover-lift cursor-pointer">
-            <CardContent className="p-5">
-              <ClipboardList className="w-6 h-6 text-sage mb-2" />
-              <p className="text-xs text-muted mb-1">Applications</p>
-              <p className="text-3xl font-bold text-foreground">{pendingAppCount ?? 0}</p>
-              {(pendingAppCount ?? 0) > 0 && (
-                <p className="text-xs text-amber-400 mt-1">pending review</p>
-              )}
-            </CardContent>
-          </Card>
-        </Link>
-
-        <Link href="/admin/pipeline?tab=freedays">
-          <Card className="glass-panel hover-lift cursor-pointer">
-            <CardContent className="p-5">
-              <Calendar className="w-6 h-6 text-sage mb-2" />
-              <p className="text-xs text-muted mb-1">Free Days</p>
-              <p className="text-3xl font-bold text-foreground">{(pendingClaimCount ?? 0) + (reservedClaimCount ?? 0)}</p>
-              <div className="flex gap-2 mt-1 text-xs">
-                {(pendingClaimCount ?? 0) > 0 && (
-                  <span className="text-amber-400">{pendingClaimCount} pending</span>
-                )}
-                {(reservedClaimCount ?? 0) > 0 && (
-                  <span className="text-sage">{reservedClaimCount} reserved</span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-
-        <Card className="glass-panel">
-          <CardContent className="p-5">
-            <p className="text-xs text-muted mb-3">Quick Actions</p>
-            <div className="flex flex-col gap-2">
-              <Link href="/admin/access?tab=codes">
-                <Button size="sm" className="btn-primary-glass w-full gap-2 text-xs">
-                  <Zap className="w-3.5 h-3.5" /> Quick Code
-                </Button>
-              </Link>
-              <Link href="/admin/members/new">
-                <Button size="sm" className="btn-glass w-full gap-2 text-xs">
-                  <UserPlus className="w-3.5 h-3.5" /> Add Member
-                </Button>
-              </Link>
-              <Link href="/admin/members/stale-links">
-                <Button size="sm" className="btn-glass w-full gap-2 text-xs">
-                  <Link2 className="w-3.5 h-3.5" /> Stale Auth Links
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Funnel — interest → freeday → application → subscriber */}
-      <FunnelCard stages={funnelStages} />
-
-      {/* Recent activity */}
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Recent members */}
-        <Card className="glass-panel">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <Users className="w-4 h-4 text-sage" /> Recent Members
-              </h3>
-              <Link href="/admin/members" className="text-xs text-muted hover:text-foreground">View all</Link>
-            </div>
-            <div className="space-y-3">
-              {(recentMembers ?? []).length === 0 ? (
-                <p className="text-xs text-muted">
-                  No members yet. <Link href="/admin/members/new" className="text-sage hover:underline">Add one →</Link>
-                </p>
-              ) : (
-                recentMembers!.map((m) => (
-                  <Link key={m.id} href={`/admin/members/${m.id}`} className="flex items-center justify-between gap-2 group">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate group-hover:text-sage transition-colors">{m.name}</p>
-                      <p className="text-xs text-muted capitalize">{m.member_type.replace(/_/g, " ")}</p>
-                    </div>
-                    <span className="text-xs text-muted shrink-0">
-                      {new Date(m.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    </span>
-                  </Link>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Recent applications */}
-        <Card className="glass-panel">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <ClipboardList className="w-4 h-4 text-sage" /> Recent Applications
-              </h3>
-              <Link href="/admin/pipeline?tab=applications" className="text-xs text-muted hover:text-foreground">View all</Link>
-            </div>
-            <div className="space-y-3">
-              {(recentApps ?? []).length === 0 ? (
-                <p className="text-xs text-muted">
-                  No applications yet. They come in via <Link href="/freeday" className="text-sage hover:underline">/freeday</Link>.
-                </p>
-              ) : (
-                recentApps!.map((a) => (
-                  <div key={a.id} className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{a.name}</p>
-                      <p className="text-xs text-muted">{a.email}</p>
-                    </div>
-                    <span className={`text-xs shrink-0 ${
-                      a.status === "pending" ? "text-amber-400" :
-                      a.status === "approved" ? "text-emerald-400" : "text-red-400"
-                    }`}>
-                      {a.status}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Recent codes */}
-        <Card className="glass-panel">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <Key className="w-4 h-4 text-sage" /> Recent Codes
-              </h3>
-              <Link href="/admin/access?tab=codes" className="text-xs text-muted hover:text-foreground">View all</Link>
-            </div>
-            <div className="space-y-3">
-              {(recentCodes ?? []).length === 0 ? (
-                <p className="text-xs text-muted">
-                  No codes yet. <Link href="/admin/access?tab=codes" className="text-sage hover:underline">Issue one →</Link>
-                </p>
-              ) : (
-                recentCodes!.map((c: Record<string, unknown>) => (
-                  <div key={c.id as number} className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-sm font-mono text-gold">{c.code as string}</p>
-                      <p className="text-xs text-muted">
-                        {(c.label as string) ?? (c.members as { name: string } | null)?.name ?? `Slot ${c.pin_slot}`}
-                      </p>
-                    </div>
-                    <span className={`text-xs shrink-0 ${c.is_active ? "text-sage" : "text-muted"}`}>
-                      {c.is_active ? "active" : "revoked"}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <nav aria-label="Shortcuts" className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted border-t border-white/5 pt-4">
+        <Link href="/admin/access?tab=codes" className="hover:text-foreground">Quick door code</Link>
+        <Link href="/admin/members" className="hover:text-foreground">Find a member</Link>
+        <Link href="/admin/members/new" className="hover:text-foreground">Add a member</Link>
+      </nav>
     </div>
   );
 }

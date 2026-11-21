@@ -67,7 +67,7 @@ export async function seedScoreboard(pg) {
       created_at timestamptz not null default now());
     create table onchain_invoices (id serial primary key, subscription_id integer not null, status text not null,
       kind text not null default 'membership');
-    create table email_unsubscribes (email text primary key, created_at timestamptz not null default now());
+    create table if not exists email_unsubscribes (email text primary key, created_at timestamptz not null default now());
     create table newsletter_issues (id serial primary key, issue_key text not null unique, subject text not null,
       status text not null default 'sent', created_at timestamptz not null default now());
     create table newsletter_sends (id bigserial primary key, issue_id integer not null, email text not null,

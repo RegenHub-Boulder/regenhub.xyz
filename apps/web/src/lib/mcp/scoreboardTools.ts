@@ -94,7 +94,7 @@ export async function recommendedActionsHandler(
   const lines = [
     `## What to do next, ${s.today}`,
     `${open.length} open${hidden.length > 0 ? `, ${hidden.length} dismissed (Done, or Not now for two weeks)` : ""}. ` +
-      "Ranked by goal impact, then urgency. Mark them Done or Not now on /admin/scoreboard.",
+      "Ranked by goal impact, then urgency. Mark them Done or Not now on /admin (Today, the admin home).",
     "",
   ];
   if (open.length === 0) lines.push("Nothing needs doing right now.");
