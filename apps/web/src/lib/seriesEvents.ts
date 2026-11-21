@@ -7,7 +7,7 @@
  * Stewards post nights from /admin/events ("Add the next nights").
  */
 
-import { pastWindowStart, fetchCollectiveEvents, formatEventLocation, type CollectiveEvent } from "@/lib/regenos/events";
+import { byStart, pastWindowStart, fetchCollectiveEvents, formatEventLocation, type CollectiveEvent } from "@/lib/regenos/events";
 import { SERIES, hasEnded, isCancelled, topicOf, type Series } from "@/lib/series";
 import { HUB_TIMEZONE } from "@/lib/regenos/eventForm";
 import { siteOrigin } from "@/lib/techne/config";
@@ -33,8 +33,8 @@ export { hasEnded, isCancelled };
 /** Pure: one series' overview from the collective's events. Cancelled nights are left out. */
 export function overviewFor(series: Series, events: CollectiveEvent[], now: Date): SeriesOverview {
   const mine = events.filter((e) => e.series?.slug === series.slug && e.startAt && !isCancelled(e));
-  const upcoming = mine.filter((e) => !hasEnded(e, now)).sort((a, b) => a.startAt!.localeCompare(b.startAt!));
-  const past = mine.filter((e) => hasEnded(e, now)).sort((a, b) => b.startAt!.localeCompare(a.startAt!));
+  const upcoming = mine.filter((e) => !hasEnded(e, now)).sort(byStart);
+  const past = mine.filter((e) => hasEnded(e, now)).sort((a, b) => byStart(b, a));
   return { series, next: upcoming[0] ?? null, upcoming, past };
 }
 
@@ -59,7 +59,7 @@ export function nextNights(events: CollectiveEvent[], now: Date, days = HOME_NIG
   const until = now.getTime() + days * 86_400_000;
   return events
     .filter((e) => e.startAt && !isCancelled(e) && !hasEnded(e, now) && Date.parse(e.startAt) < until)
-    .sort((a, b) => Date.parse(a.startAt!) - Date.parse(b.startAt!))
+    .sort(byStart)
     .slice(0, limit);
 }
 

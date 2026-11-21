@@ -292,10 +292,12 @@ export async function fetchCollectiveEvents(opts: CollectiveEventsOptions = {}):
     .sort(byStart);
 }
 
-function byStart(a: { startAt: string | null }, b: { startAt: string | null }): number {
+/** Soonest first by the real instant (a "Z" time and a "-07:00" one compare correctly); no start sorts last. */
+export function byStart(a: { startAt: string | null }, b: { startAt: string | null }): number {
   if (!a.startAt) return b.startAt ? 1 : 0;
   if (!b.startAt) return -1;
-  return a.startAt.localeCompare(b.startAt);
+  const d = Date.parse(a.startAt) - Date.parse(b.startAt);
+  return Number.isNaN(d) ? a.startAt.localeCompare(b.startAt) : d;
 }
 
 /** The shape lib/events.ts maps into its `UpcomingEvent`. */

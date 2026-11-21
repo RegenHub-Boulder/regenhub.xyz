@@ -87,6 +87,8 @@ describe("the home page's nights", () => {
       "Tue, Dec 1, 1:00 PM Lunch talk",
       "Tue, Dec 1, 6:00 PM Agents Building Night",
     ]);
+    // /events reads the same order.
+    expect((await fetchUpcomingRegenosEvents(45)).map((e) => e.name)).toEqual(["Lunch talk", "Agents Building Night"]);
   });
 
   it("shows at most five nights when the calendar is full", async () => {
