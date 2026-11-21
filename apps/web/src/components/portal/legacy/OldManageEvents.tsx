@@ -4,8 +4,8 @@
  * OLD STEWARD LANE (regenOS login, `social.scenius.*` through /xrpc): the Manage Events form, as on main before T-482.
  * Kept unchanged so production with TECHNE_SIGNIN_ENABLED off is exactly as before, and reachable as
  * "Old steward page" (/portal/events/old) with it on, until Aaron retires it. Delete this folder, the
- * /portal/events/old route and the old-lane branches in portal/events/page.tsx, portal/layout.tsx,
- * portal/page.tsx and api/portal/events/revalidate together (docs/TECHNE-SIGN-IN.md "Old steward page").
+ * /portal/events/old route and the old-lane branches in portal/events/page.tsx, portal/layout.tsx
+ * and api/portal/events/revalidate together (docs/TECHNE-SIGN-IN.md "Old steward page").
  */
 
 import { useState } from "react";

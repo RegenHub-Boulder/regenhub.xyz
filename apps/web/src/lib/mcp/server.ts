@@ -261,7 +261,7 @@ function buildServer(auth: McpAuthInfo): McpServer {
   server.registerTool("billing_summary", { description: DESCRIPTIONS.billing_summary, annotations: READ },
     async (extra) => billingSummaryHandler(sb(), callerAuth(extra)));
 
-  // ── scoreboard (T-497): read-only, `read` scope, the numbers and actions /admin/scoreboard shows ──
+  // ── scoreboard (T-497): read-only, `read` scope, the numbers /admin/scoreboard shows and the actions on /admin ──
   server.registerTool("scoreboard_summary", { description: SCOREBOARD_DESCRIPTIONS.scoreboard_summary, annotations: READ },
     async (extra) => scoreboardSummaryHandler(sb(), callerAuth(extra)));
 

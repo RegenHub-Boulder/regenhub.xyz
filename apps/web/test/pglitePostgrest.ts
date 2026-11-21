@@ -91,7 +91,8 @@ function selectList(select: string | null, table?: string, fks: ForeignKey[] = [
       if (c.includes("(")) throw new Unsupported(`nested embed ${c}`);
       return `e.${ident(c)}`;
     }).join(", ");
-    const name = alias ?? (byColumn.length === 1 ? fk.ref : rel);
+    // PostgREST names the key after what the select wrote: the alias, else the table or column named.
+    const name = alias ?? rel;
     return `(select to_jsonb(x) from (select ${cols} from ${ident(fk.ref)} e where e.${ident(fk.refColumn)} = ` +
       `${ident(table)}.${ident(fk.column)}) x) as ${ident(name)}`;
   }).join(", ");

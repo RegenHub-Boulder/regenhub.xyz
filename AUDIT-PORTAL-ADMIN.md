@@ -141,7 +141,7 @@ note and auto-send · the all-time funnel (done) · the stats card (done).
 ## What's built (PR)
 
 **Member home (`/portal`).** The door comes first: your code (masked, with show and copy), "Change" (to
-`/portal/my-code`), "Guest code (3 passes left) →" and "5 members in today →" (co-op members can open who came in).
+`/portal/my-code`), "Guest code (3 passes left) →" and "5 members in today →" (since midnight in Boulder) (co-op members can open who came in).
 Day-pass members get the free-day and day-pass cards in the same spot. Then anything that needs you: past due,
 membership next step, directory ask, first-week checklist. Then your plan (unchanged controls: Change plan, Manage
 subscription, USDC billing). Then "Your profile · Who came in", invite (co-op members) and Hub Essentials.
@@ -149,10 +149,14 @@ Removed: the stats card, the cards that repeated the nav (Day Passes, Profile, M
 queries only the stats card used. The "thanks for joining our list" line now shows in the first week only.
 
 **Admin home (`/admin`, "Today").** It opens with one line: date · 6 of 22 paying members · $1,280 of $2,750 a
-month · Scoreboard →. Then **Waiting on you** (`lib/adminQueue.ts`): lock-sync failures and quarantined slots
-first, then applications, free-day requests and unbilled desk members, each linking to where it's done. Then **What
+month · Scoreboard →. Then **Waiting on you** (`lib/adminQueue.ts`): lock-sync failures, quarantined slots and
+past-due subscriptions first, then applications, free-day requests and unbilled desk members, each linking to where
+it's done. A read that fails shows as "Couldn't check …", never as "Nothing waiting", and the queue still shows if
+the scoreboard can't be read. Then **What
 to do next**, the scoreboard's recommended actions, moved here with the same component, data and Done / Not now /
-Send reminder. Then shortcuts: quick door code, find a member, add a member. The Scoreboard keeps the numbers and the
+Send reminder. Then shortcuts: quick door code, find a member, add a member. Left off on purpose: the old
+home's "codes expiring within the hour", "free days reserved" and "N disabled" (shown on Access, Pipeline and Members
+where they're acted on). Past due shows in both lists, deliberately: an action can be dismissed, a missed payment can't. The Scoreboard keeps the numbers and the
 copyable headline and points to Today for the actions. The nav says "Today" instead of "Overview".
 
 ### Clutter, before → after (desktop / phone, same sample data)
@@ -161,12 +165,12 @@ copyable headline and points to Today for the actions. The nav says "Today" inst
 |---|---|---|---|---|
 | Member home, Ana (established) | 9 → 5 | 9 → 5 | 100 → 58 | 1129 → 993 / 1843 → 1171 |
 | Member home, Sam (first day) | 9 → 6 | 8 → 5 | 378 → 357 | 2128 → 1967 / 3062 → 2621 |
-| Admin home | 6 → 3 | 11 → 0 | 200 → 220 | 1320 → 984 / 2372 → 1322 |
+| Admin home | 6 → 3 | 11 → 0 | 200 → 225 | 1320 → 1025 / 2372 → 1363 |
 | Scoreboard | 10 → 9 | 9 → 8 | 772 → 630 | 2356 → 1971 / 4011 → 3350 |
 
 Two of these numbers went up, and that is the point. The admin home now holds the actions themselves, so it has 9
-buttons where it had 3 and 220 words where it had 200; the old home only linked away to them. Old home plus Scoreboard
-came to 20 boxes and 3,676 px of desktop scroll; Today plus Scoreboard now come to 8 boxes and 2,955 px. Ana's buttons
+buttons where it had 3 and 225 words where it had 200; the old home only linked away to them. Old home plus Scoreboard
+came to 20 boxes and 3,676 px of desktop scroll; Today plus Scoreboard now come to 8 boxes and 2,996 px. Ana's buttons
 went 4 → 6 because the code's show and copy buttons are on the home now. Sam's first-day page stays long on purpose:
 the first-week checklist and Hub Essentials (Wi-Fi, keypad) are opened for new members. The next cut there is to show
 Hub Essentials closed except on the day of the visit.

@@ -182,11 +182,12 @@ the column is missing, the passes page hides "Pay with USDC", the purchase route
 
 ### The two home pages (T-482 audit, `AUDIT-PORTAL-ADMIN.md`)
 - **`/admin` "Today"** (admins): the goals in one line (→ Scoreboard), **Waiting on you** (`lib/adminQueue.ts`, pure +
-  tested: lock-sync failures, quarantined slots, applications, free-day requests, unbilled desks, each a link), then
+  tested: lock-sync failures, quarantined slots, past due, applications, free-day requests, unbilled desks, each a
+  link; a failed read says "Couldn't check", and the queue renders even if the scoreboard read fails), then
   **What to do next** (the scoreboard's recommended actions), then shortcuts (quick door code, find/add a member).
   The old stat cards, all-time funnel and recent lists are gone; "Stale auth links" sits on `/admin/members`.
 - **`/portal`** (members): the door first (their code via `RevealPin`, a guest code with the passes left, "N members
-  in today", → who came in for co-op members); day-pass members get the free-day / day-pass cards there instead.
+  in today" since Denver midnight, → who came in for co-op members); day-pass members get the free-day / day-pass cards there instead.
   Then anything that needs them (past due, next step, directory ask, first-week checklist), their plan, then profile,
   invite and Hub Essentials. Test: `test/portal-admin-homes.test.ts`.
 - Staging for every portal/admin screen: `T482_AUDIT=1 scripts/staging/preview.sh` (the stand-in on the real schema,

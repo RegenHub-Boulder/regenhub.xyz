@@ -165,17 +165,14 @@ export default async function PortalPage() {
     idleWallet = data;
   }
 
-  // "Here today" on the door panel: distinct members who unlocked in the last 6 hours (service client: access_logs
-  // RLS hides other members from the signed-in one).
-  /* eslint-disable react-hooks/purity -- server component, renders once per request */
-  const sixHoursAgoIso = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
-  /* eslint-enable react-hooks/purity */
+  // "In today" on the door panel: distinct members who unlocked since midnight at the hub (service client:
+  // access_logs RLS hides other members from the signed-in one).
   const adminClient = createServiceClient();
   const { data: hereNowRows } = await adminClient
     .from("access_logs")
     .select("member_id")
     .eq("result", "granted")
-    .gte("created_at", sixHoursAgoIso)
+    .gte("created_at", hubMidnightIso())
     .not("member_id", "is", null);
   const hereNowCount = new Set((hereNowRows ?? []).map((r) => r.member_id)).size;
 
@@ -565,4 +562,14 @@ function HereToday({ count, canSee }: { count: number; canSee: boolean }) {
   return canSee
     ? <Link href="/portal/access-log" className="text-muted hover:text-foreground" data-testid="here-today">{text} →</Link>
     : <span className="text-muted" data-testid="here-today">{text}</span>;
+}
+
+/** Midnight today in Boulder (America/Denver), as an instant. */
+function hubMidnightIso(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Denver", hourCycle: "h23", hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).formatToParts(now);
+  const part = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  const sinceMidnightMs = ((part("hour") * 60 + part("minute")) * 60 + part("second")) * 1000 + now.getMilliseconds();
+  return new Date(now.getTime() - sinceMidnightMs).toISOString();
 }

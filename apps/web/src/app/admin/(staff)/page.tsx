@@ -7,6 +7,7 @@ import { readScoreboard } from "@/lib/scoreboardData";
 import { ACTION_RULES, type RecommendedAction } from "@/lib/scoreboardActions";
 import { SCOREBOARD_TZ, usd } from "@/lib/scoreboard";
 import { adminQueue } from "@/lib/adminQueue";
+import { readAll } from "@/lib/supabase/readAll";
 
 export const metadata = { title: "Today — Admin" };
 export const dynamic = "force-dynamic";
@@ -25,24 +26,29 @@ export default async function AdminHome() {
   if (!await requireAdmin()) redirect("/portal");
   const admin = createServiceClient();
 
+  // The queue reads stand alone: if the scoreboard can't be read, what's waiting still shows (and the other way round).
+  const count = (r: { count: number | null; error: unknown }) => (r.error ? null : r.count ?? 0);
+  const settle = <T,>(p: PromiseLike<T>) => Promise.resolve(p).then((v) => v, () => null);
   const [s, apps, freeDays, desks, live, lastSync, quarantine] = await Promise.all([
-    readScoreboard(admin),
+    settle(readScoreboard(admin)),
     admin.from("applications").select("id", { count: "exact", head: true }).eq("status", "pending"),
     admin.from("free_day_claims").select("id", { count: "exact", head: true }).eq("status", "pending"),
-    admin.from("members").select("id").eq("disabled", false).in("member_type", ["cold_desk", "hot_desk"]),
-    admin.from("subscriptions").select("member_id").in("status", ["active", "trialing", "past_due"]),
+    settle(readAll<{ id: number }>("desk members", (from, to) => admin.from("members").select("id")
+      .eq("disabled", false).in("member_type", ["cold_desk", "hot_desk"]).order("id").range(from, to))),
+    settle(readAll<{ member_id: number; status: string }>("live subscriptions", (from, to) => admin.from("subscriptions")
+      .select("member_id, status").in("status", ["active", "trialing", "past_due"]).order("id").range(from, to))),
     admin.from("lock_sync_runs").select("failed").order("created_at", { ascending: false }).limit(1).maybeSingle(),
     admin.from("lock_slot_quarantine").select("slot", { count: "exact", head: true }),
   ]);
-  const billed = new Set((live.data ?? []).map((r) => r.member_id));
+  const billed = live && new Set(live.map((r) => r.member_id));
   const queue = adminQueue({
-    pendingApplications: apps.count ?? 0,
-    pendingFreeDays: freeDays.count ?? 0,
-    unbilledDesks: (desks.data ?? []).filter((m) => !billed.has(m.id)).length,
-    lastSyncFailures: (lastSync.data as { failed: number | null } | null)?.failed ?? 0,
-    quarantinedSlots: quarantine.count ?? 0,
+    lastSyncFailures: lastSync.error ? null : (lastSync.data as { failed: number | null } | null)?.failed ?? 0,
+    quarantinedSlots: count(quarantine),
+    pastDue: live && live.filter((r) => r.status === "past_due").length,
+    pendingApplications: count(apps),
+    pendingFreeDays: count(freeDays),
+    unbilledDesks: desks && billed ? desks.filter((m) => !billed.has(m.id)).length : null,
   });
-  const { goal } = s;
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: SCOREBOARD_TZ });
 
   return (
@@ -50,8 +56,13 @@ export default async function AdminHome() {
       <header>
         <h1 className="text-3xl font-bold text-forest">Today</h1>
         <p className="text-sm text-muted mt-2" data-testid="admin-goals">
-          {today} · <span className="text-foreground">{goal.payingMembers} of {goal.targetMembers}</span> paying members ·{" "}
-          <span className="text-foreground">{usd(goal.revenue.netCents)} of {usd(goal.revenueGoalCents)}</span> a month ·{" "}
+          {today} ·{" "}
+          {s ? (
+            <>
+              <span className="text-foreground">{s.goal.payingMembers} of {s.goal.targetMembers}</span> paying members ·{" "}
+              <span className="text-foreground">{usd(s.goal.revenue.netCents)} of {usd(s.goal.revenueGoalCents)}</span> a month ·{" "}
+            </>
+          ) : null}
           <Link href="/admin/scoreboard" className="text-sage hover:underline">Scoreboard →</Link>
         </p>
       </header>
@@ -82,11 +93,15 @@ export default async function AdminHome() {
             People to talk to, ranked by what it does for the goals. Done hides one until its facts change; Not now, {ACTION_RULES.notNowDays} days.
           </p>
         </div>
-        <NextActions
-          open={s.actions.open.map(forList)}
-          hidden={s.actions.hidden.map((a) => ({ ...forList(a), mark: a.mark.state }))}
-          top={ACTION_RULES.showTop}
-        />
+        {s ? (
+          <NextActions
+            open={s.actions.open.map(forList)}
+            hidden={s.actions.hidden.map((a) => ({ ...forList(a), mark: a.mark.state }))}
+            top={ACTION_RULES.showTop}
+          />
+        ) : (
+          <p className="text-sm text-red-400">Couldn&apos;t read the scoreboard just now, so there&apos;s no list. Reload in a minute.</p>
+        )}
       </section>
 
       <nav aria-label="Shortcuts" className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted border-t border-white/5 pt-4">

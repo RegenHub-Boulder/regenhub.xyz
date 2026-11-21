@@ -54,7 +54,8 @@ async function world() {
     insert into applications (email, name, membership_interest, status) values ('olu@example.test', 'Olu Sample', 'hot_desk', 'pending');
     insert into free_day_claims (email, name, status, supabase_user_id, claimed_date) values ('sam@example.test', 'Sam Sample', 'reserved', '${SAM}', current_date);
     insert into lock_sync_runs (synced, failed, partial, results) values (9, 1, 0, '[]');
-    insert into access_logs (member_id, method, result, created_at) values (2, 'pin', 'granted', '${ago(0.05)}'), (1, 'pin', 'granted', '${ago(0.1)}');
+    insert into access_logs (member_id, method, result, created_at) values (2, 'pin', 'granted', now() - interval '1 minute'), (1, 'pin', 'granted', now() - interval '2 minutes'),
+      (3, 'pin', 'granted', now() - interval '30 hours');
     select set_config('request.headers', '{}', false); select release_lock_writer('${WRITER}');`);
   vi.mocked(createServiceClient).mockReturnValue(db as never);
 }
@@ -104,7 +105,8 @@ describe("member home (/portal)", () => {
     expect(h).toContain('href="/portal/my-code"');
     // The old Day Passes card is the guest-code link, with the balance.
     expect(h).toMatch(/href="\/portal\/passes">Guest code<!-- --> \(3 passes left\)/);
-    // The old Hub activity card is one line; co-op members can open who came in.
+    // The old Hub activity card is one line, counted since midnight (Theo came in yesterday); co-op members can open
+    // who came in.
     expect(h).toMatch(/data-testid="here-today" href="\/portal\/access-log">2 members in today/);
     // The plan, with its controls (card member: change plan and manage subscription).
     const plan = at(h, 'data-testid="portal-membership"');
@@ -145,7 +147,10 @@ describe("admin home (/admin, Today)", () => {
     // Waiting on you: the lock first (urgent), then the application, then the unbilled desk (Uma).
     const waiting = at(h, 'data-testid="admin-waiting"');
     const lock = at(h, "The last lock sync failed on 1 code");
+    const pastDue = at(h, "1 subscription past due");
     const app = at(h, "1 application to review");
+    expect(lock).toBeLessThan(pastDue);
+    expect(pastDue).toBeLessThan(app);
     const desk = at(h, "1 desk member not billed");
     expect(lock).toBeLessThan(app);
     expect(app).toBeLessThan(desk);
@@ -166,11 +171,22 @@ describe("admin home (/admin, Today)", () => {
   });
 
   it("says when nothing is waiting", async () => {
-    await db.exec(`update applications set status = 'approved'; delete from lock_sync_runs;
+    await db.exec(`update applications set status = 'approved'; delete from lock_sync_runs; update subscriptions set status = 'active', past_due_since = null where member_id = 3;
       insert into subscriptions (member_id, plan_key, monthly_cents, net_cents, status, stripe_subscription_id, stripe_customer_id, stripe_price_id)
       values (4, 'cold_desk', 50000, 50000, 'active', 'sub_4', 'cus_4', 'price_x');`);
     signIn(ADMIN, "robin@example.test");
     expect(await html(AdminHome)).toContain("Nothing waiting.");
+  });
+
+  it("if the scoreboard can't be read, what's waiting still shows; a failed queue read says so", async () => {
+    // Both reads fail for real: the scoreboard's purchases and the quarantine table are gone.
+    await db.exec("drop table purchases cascade; drop table lock_slot_quarantine cascade;");
+    signIn(ADMIN, "robin@example.test");
+    const h = await html(AdminHome);
+    expect(h).toContain("1 application to review");
+    expect(h).toContain("Couldn&#x27;t check quarantined door slots");
+    expect(h).toContain("read the scoreboard just now");
+    expect(h).not.toContain("Nothing waiting.");
   });
 
   it("sends a member who isn't an admin to their portal", async () => {
