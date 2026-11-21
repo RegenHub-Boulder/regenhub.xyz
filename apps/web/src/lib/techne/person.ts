@@ -2,7 +2,7 @@
  * Every "Sign in with Techne" leaves a known person (T-497, Aaron 11-20: "If people sign up to a Techne account,
  * shouldn't we get their email right away?"). At the callback: read the account's email from its own PDS
  * (`com.atproto.server.getSession`, granted by the sign-in's `transition:email` scope, lib/techne/session.ts), its
- * public display name, and record them (migration 067 record_techne_sign_in): the person, the member they are (by
+ * public display name, and record them (migration 068 record_techne_sign_in): the person, the member they are (by
  * members.did, or a confirmed email matching a member with no Techne account), and a confirmed email on the
  * stay-in-touch list unless it is there already, unsubscribed, or the person said "No thanks".
  *
@@ -57,7 +57,7 @@ export interface RecordedPerson {
   newsletterAdded: boolean;
 }
 
-/** Save one sign-in (migration 067 record_techne_sign_in). Throws on a database error; the callback logs it and carries on. */
+/** Save one sign-in (migration 068 record_techne_sign_in). Throws on a database error; the callback logs it and carries on. */
 export async function recordSignIn(
   admin: Admin,
   p: { did: string; handle: string | null; name: string | null; email: AccountEmail | null },

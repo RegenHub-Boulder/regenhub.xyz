@@ -244,7 +244,7 @@ export async function doorDb(): Promise<PGlite> {
       payload jsonb not null default '{}'::jsonb, created_at timestamptz not null default now()
     );`);
   await pg.exec(await migration("064_techne_one_door.sql"));
-  // The stay-in-touch list (019 + 020's member_id) and 035's unsubscribes, as 067 needs them (the rest of 035 needs
+  // The stay-in-touch list (019 + 020's member_id) and 035's unsubscribes, as 068 needs them (the rest of 035 needs
   // Supabase's auth schema).
   await pg.exec(`
     create table interests (
@@ -253,7 +253,7 @@ export async function doorDb(): Promise<PGlite> {
       created_at timestamptz not null default now()
     );
     create table email_unsubscribes (email text primary key, created_at timestamptz not null default now(), source text);`);
-  await pg.exec(await migration("067_techne_people.sql"));
+  await pg.exec(await migration("068_techne_people.sql"));
   return pg;
 }
 

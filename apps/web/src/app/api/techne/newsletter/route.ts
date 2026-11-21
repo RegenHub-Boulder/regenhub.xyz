@@ -6,7 +6,7 @@ import { sameSiteJson, tooMany, withinIpLimit } from "@/lib/techne/guard";
 /**
  * POST /api/techne/newsletter { choice: "no" } — "No thanks" on the line shown after a Techne sign-in put the person on
  * the stay-in-touch list (T-497). Takes back only the list row that sign-in added and remembers the answer, so no
- * later sign-in adds them again (migration 067 decline_techne_newsletter). Who: this browser's Techne sign-in.
+ * later sign-in adds them again (migration 068 decline_techne_newsletter). Who: this browser's Techne sign-in.
  * It is not an unsubscribe: notes after a night they RSVP'd to have their own "no more notes" link.
  */
 export async function POST(request: Request) {

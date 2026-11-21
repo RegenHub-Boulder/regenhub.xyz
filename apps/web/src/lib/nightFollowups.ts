@@ -5,7 +5,7 @@
  *
  * Who: the people whose latest RSVP to the night says going (lib/techne/rsvp.ts countGoing), reached by the email this
  * site holds for their Techne account: the member it is linked to (members.did), else the person their Techne sign-in
- * recorded (techne_people, migration 067: the member a confirmed email matched, or their own confirmed email). It never
+ * recorded (techne_people, migration 068: the member a confirmed email matched, or their own confirmed email). It never
  * guesses one and never mails an unconfirmed address. Left out, with the reason shown to the steward: unsubscribed
  * from the newsletter, asked for no follow-ups, already sent one in the last 7 days, or a disabled account. People
  * going with no confirmed email on file (not signed in here since T-497, or an email their PDS can't vouch for) are counted
@@ -44,7 +44,7 @@ export interface FollowupMember {
   show_in_directory: boolean | null;
 }
 
-/** A Techne account as its sign-ins here recorded it (migration 067 techne_people). */
+/** A Techne account as its sign-ins here recorded it (migration 068 techne_people). */
 export interface FollowupTechnePerson {
   did: string;
   handle: string | null;

@@ -1,6 +1,6 @@
 /**
  * T-497: every "Sign in with Techne" leaves a known person with an email. The real routes (/techne/signin,
- * /techne/callback, /api/techne/newsletter), the real @atproto/oauth-client-node, and migration 067's SQL on PGlite.
+ * /techne/callback, /api/techne/newsletter), the real @atproto/oauth-client-node, and migration 068's SQL on PGlite.
  * Faked only at the network edge (test/support/oneDoorHarness.ts): the Techne PDS + its authorization server (which
  * answers com.atproto.server.getSession with the email only under the email scope, as a stock PDS does), PLC, GoTrue.
  */

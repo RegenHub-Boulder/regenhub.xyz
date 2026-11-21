@@ -1,4 +1,4 @@
--- Migration 067: every "Sign in with Techne" leaves a known person with an email (T-497).
+-- Migration 068: every "Sign in with Techne" leaves a known person with an email (T-497).
 --
 -- The sign-in now asks for the person's email (scope transition:email, lib/techne/session.ts) and reads it from their
 -- PDS (com.atproto.server.getSession: email + emailConfirmed). /techne/callback records them here, every sign-in.

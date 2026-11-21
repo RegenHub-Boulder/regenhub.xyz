@@ -233,7 +233,7 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
   });
 
   it("a Techne-only RSVP becomes reachable once they've signed in here: their confirmed email, the guest note", async () => {
-    // Kim signs in to RSVP (any page): the callback reads her email from her PDS and records her (migration 067).
+    // Kim signs in to RSVP (any page): the callback reads her email from her PDS and records her (migration 068).
     await signInAs(KIM.did);
     expect((await pg.query("select email, email_confirmed, member_id from techne_people where did = $1", [KIM.did])).rows)
       .toEqual([{ email: "kim@example.test", email_confirmed: true, member_id: null }]);

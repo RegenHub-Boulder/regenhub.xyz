@@ -118,7 +118,7 @@ includes `transition:email` (`lib/techne/session.ts`). pds.techne.town lists it 
 is not listed there, so we don't ask for it. The Techne docs (quickstart, reference, building-an-app) and the Techne
 MCP guide say nothing about email either way. At `/techne/callback` the server reads `com.atproto.server.getSession` on
 the person's own PDS (email + `emailConfirmed`) and the public display name, then `record_techne_sign_in` (migration
-067, `lib/techne/person.ts`) saves the person in `techne_people`, links the member (by `members.did`, else a confirmed
+068, `lib/techne/person.ts`) saves the person in `techne_people`, links the member (by `members.did`, else a confirmed
 email matching one member who has no Techne account), and puts a confirmed email on the stay-in-touch list
 (`interests`, `source_path 'techne'`) unless it is there already, a member's, unsubscribed, or declined. That sign-in
 leaves a one-time line, "We'll send you RegenHub news. No thanks". None of it opens the portal or writes
@@ -312,7 +312,7 @@ Each line was checked with one real read-only call on 2026-11-17.
 | `TECHNE_SIGNIN_ENABLED=true` (new name; drop `TECHNE_RSVP_ENABLED` if set) | Turns on the door, `/techne/client-metadata.json`, `/techne/callback`, the Techne `/admin/events` (`/portal/events` redirects there; the old page moves to `/portal/events/old`) | `https://pds.techne.town/.well-known/oauth-authorization-server`: issuer pds.techne.town, `client_id_metadata_document_supported: true`, DPoP ES256; handle resolution `unforced.techne.town` → did:plc:3hmy2v5fvvdh7vuujef5upvl. `https://regenhub.xyz/techne/client-metadata.json` answers 200 today with main's public (`none`) browser client: the flag is already on in production; `/techne/jwks.json` and `/techne/signin` are 404 until this PR ships |
 | `REGENOS_LOGIN_ENABLED=false` (Uni set it off 11-17 as a stopgap; keep it off) | That lane is what emailed a scenius link that went to beacon.techne.computer | With the one door no page shows the lane either way. With it off, `/login` redirects there, `/oauth/callback` is a 404, **the "Old steward page" goes away**, and **`/admin/members` "Sync claims to regenOS" turns off too** (it rides the same lane) |
 | Apply migration `064_techne_one_door.sql` **before** deploying (MCP `run_migration`; it is additive and main's code never touches its tables) | The one door's tables and functions; deployed without them, sign-in can't start (`/auth/login?error=techne_start`) | Confirmed in a test: with the OAuth-state table missing, sign-in answers 303 to `/auth/login?error=techne_start` |
-| Apply `067_techne_people.sql` after deploying (MCP `run_migration`; additive) | Every sign-in saved as a person with an email (T-497) | Until it runs, sign-ins log "recording the person failed" and carry on; follow-ups read members only |
+| Apply `068_techne_people.sql` after deploying (MCP `run_migration`; additive) | Every sign-in saved as a person with an email (T-497) | Until it runs, sign-ins log "recording the person failed" and carry on; follow-ups read members only |
 | No `TECHNE_PDS_URL`, `TECHNE_PLC_URL`, `TECHNE_HANDLE_DOMAIN`, `TECHNE_PLATFORM_DID`, `TECHNE_STAGING_STANDIN` | Production uses the SDK's defaults; the stand-in is refused for regenhub.xyz anyway | |
 
 The env vars are runtime: set them in Coolify and redeploy the web app. Production deploy is Aaron's go.

@@ -62,7 +62,7 @@ export interface NightFollowupView {
 
 /**
  * The DB facts that decide a batch, for the people going to some nights: the members their DIDs are linked to, what
- * their Techne sign-ins recorded (techne_people, migration 067: a member a confirmed email matched, or their own
+ * their Techne sign-ins recorded (techne_people, migration 068: a member a confirmed email matched, or their own
  * confirmed email), those members' paying subscriptions, and the holds on every email that could be written to.
  */
 async function batchFacts(admin: Admin, dids: string[]) {
@@ -73,7 +73,7 @@ async function batchFacts(admin: Admin, dids: string[]) {
     admin.from("techne_people").select("did, handle, name, email, email_confirmed, member_id").in("did", dids),
   ]);
   if (byDid.error) throw byDid.error;
-  // Deployed before migration 067 ran (deploy first, then migrate): follow-ups work as before, members only.
+  // Deployed before migration 068 ran (deploy first, then migrate): follow-ups work as before, members only.
   if (known.error) console.error("[night followups] techne_people read failed; members only:", known.error.message);
   const people = (known.error ? [] : (known.data ?? [])) as FollowupTechnePerson[];
   const rows = [...((byDid.data ?? []) as FollowupMember[])];
@@ -154,7 +154,7 @@ export async function readNightFollowups(admin: Admin, events: readonly Collecti
   ]);
   if (byId.error) throw byId.error;
   for (const m of (byId.data ?? []) as { id: number; name: string }[]) names.set(m.id, m.name);
-  // Before 067 runs this table is missing: those rows keep "(member removed)", as before.
+  // Before 068 runs this table is missing: those rows keep "(member removed)", as before.
   if (byTechne.error) console.error("[night followups] techne_people read failed:", byTechne.error.message);
   const byEmail = new Map<string, string>();
   for (const p of (byTechne.data ?? []) as { email: string; name: string | null; handle: string | null }[]) byEmail.set(p.email, techneName(p));

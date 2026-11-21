@@ -83,7 +83,7 @@ supabase/
     ├── 011_hub_friend.sql            # hub_friend member type
     ├── …
     ├── 066_night_followups.sql       # night follow-ups: decisions, sends, opt-outs
-    └── 067_techne_people.sql         # every Techne sign-in: the person, their email, the stay-in-touch list
+    └── 068_techne_people.sql         # every Techne sign-in: the person, their email, the stay-in-touch list
 DEPLOYMENT.md               # Full infra guide for agents + humans
 ```
 
@@ -93,7 +93,7 @@ DEPLOYMENT.md               # Full infra guide for agents + humans
 - `day_codes` — temporary door codes (PIN slots 125-249) issued against a pass
 - `access_logs` — every door access event
 - `interests` — public "stay in touch" signups from `/interest`. Linked to `members` via `member_id` (nullable FK). The funnel runs `interests → application → member → auth.users`; whichever events fire first, triggers backfill the linkage so admins can see who came from where. A Techne sign-in adds rows with `source_path = 'techne'` (below).
-- `techne_people` (migration 067, T-497) — one row per Techne account that ever signed in here: DID, handle, display
+- `techne_people` (migration 068, T-497) — one row per Techne account that ever signed in here: DID, handle, display
   name, email + `email_confirmed` (read from the person's PDS at sign-in, scope `transition:email`; "confirmed" is
   taken only from the home PDS, techne.town, whose sign-up proves the email: another server's is kept unconfirmed,
   since anyone can run a PDS that claims an address), `member_id` (by
@@ -102,7 +102,7 @@ DEPLOYMENT.md               # Full infra guide for agents + humans
   `declined`). `record_techne_sign_in` runs in `/techne/callback` (`lib/techne/person.ts`); a confirmed email not on the
   list, not a member's and not unsubscribed is added to `interests` once, and the browser gets the one-time line "We'll
   send you RegenHub news. No thanks" (`components/techne/NewsNote.tsx`; No thanks = `POST /api/techne/newsletter`,
-  `decline_techne_newsletter`: removes only that row and is remembered; a new email on the PDS moves the entry). Accounts that signed in before 067 get their
+  `decline_techne_newsletter`: removes only that row and is remembered; a new email on the PDS moves the entry). Accounts that signed in before 068 get their
   email at their next sign-in (no backfill); a grant without the email scope still signs in.
 
 - Member page fields on `members` (migration 065): `show_in_directory` (the opt-in: null = not asked, false = no, true = listed while in standing; co-op owners defaulted on), `working_on`, `links` (≤5 URLs), `show_rsvps`. See "Member pages and the directory" below.
@@ -220,7 +220,7 @@ pointed at `/membership`; members are thanked, told the next Studio Night, and (
 - **Who:** RSVP'd going (Techne, `fetchAttendance`) AND an email the site holds for that DID: the linked member's
   (`members.did`), else what their Techne sign-in recorded (`techne_people`: the member a confirmed email matched, or
   their own confirmed email; guest note, "Hi there," without a display name). Rows are keyed by DID (`keep: [did]`);
-  `night_followups.member_id` is null for a Techne-only person. RSVPs with no email (never signed in since 067) are
+  `night_followups.member_id` is null for a Techne-only person. RSVPs with no email (never signed in since 068) are
   counted on the page, never mailed; an unconfirmed email is never used. Held, with the reason shown: unsubscribed (`email_unsubscribes`), opted out
   (`night_followup_optouts`, the "No more notes after nights" link, `/api/followups/optout`: GET shows a button, its
   POST opts out, so a mail scanner opening links changes nothing), a follow-up in the last 7 days (across nights), or a
