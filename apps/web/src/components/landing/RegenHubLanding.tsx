@@ -12,6 +12,7 @@ import UpcomingEvents, { NextNights } from "@/components/landing/UpcomingEvents"
 import { PublicHeader } from "@/components/layout/PublicHeader";
 import { PublicFooter } from "@/components/layout/PublicFooter";
 import { HUB_ADDRESS, HUB_EMAIL, HUB_TELEGRAM } from "@/components/layout/publicNav";
+import { HeroArt } from "@/components/stylePreview/DirectionArt";
 
 export type SignedInMember = { name: string } | null;
 import forestBackground from "@/assets/forest-background.jpg";
@@ -19,9 +20,10 @@ import regenHubFull from "@/assets/regenhub-full.svg";
 
 export default function RegenHubLanding({ signedInMember }: { signedInMember?: SignedInMember }) {
   return (
-    <div className="min-h-screen relative overflow-x-hidden">
+    <div className="min-h-screen relative overflow-x-hidden" data-part="home">
       {/* Forest background */}
       <div
+        data-part="forest-bg"
         className="fixed inset-0 -z-10 opacity-30"
         style={{
           backgroundImage: `url(${forestBackground.src})`,
@@ -33,11 +35,12 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
       <PublicHeader />
 
       {/* Hero */}
-      <section className="relative px-6 py-16 md:py-24">
+      <section className="relative px-6 py-16 md:py-24" data-part="hero">
         <div className="max-w-4xl mx-auto text-center">
           <div className="glass-panel-strong p-8 md:p-12 hover-lift animate-fade-in-up">
-            <Image src={regenHubFull} alt="RegenHub" height={160} priority sizes="(min-width: 768px) 294px, 236px" className="h-32 md:h-40 w-auto mx-auto mb-6" />
-            <h1 className="text-xl md:text-2xl mb-3 text-muted max-w-2xl mx-auto leading-relaxed">
+            <HeroArt />
+            <Image src={regenHubFull} alt="RegenHub" height={160} priority sizes="(min-width: 768px) 294px, 236px" className="h-32 md:h-40 w-auto mx-auto mb-6" data-part="hero-mark" />
+            <h1 data-part="hero-title" className="text-xl md:text-2xl mb-3 text-muted max-w-2xl mx-auto leading-relaxed">
               Boulder&apos;s regenerative coworking space
             </h1>
             <p className="text-base text-muted/80 mb-8 max-w-lg mx-auto">

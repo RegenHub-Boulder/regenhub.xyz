@@ -57,6 +57,7 @@ export function ForestMascot() {
 
   return (
     <div
+      data-part="mascot"
       className="fixed hidden lg:block z-50 cursor-pointer"
       style={{
         left: `${mascotX}px`,

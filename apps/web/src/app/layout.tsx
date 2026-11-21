@@ -2,11 +2,14 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "@rainbow-me/rainbowkit/styles.css";
 import "./globals.css";
+// STAGING ONLY (T-482): every rule is scoped to html[data-style], which production never sets.
+import "./style-directions.css";
 // Validates required env vars at app boot — see lib/env.ts
 import "@/lib/env";
 import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
 import { NewsNote } from "@/components/techne/NewsNote";
 import { OG_IMAGES, SITE_DESCRIPTION, siteUrl } from "@/lib/metadata";
+import { isStylePreviewEnabled, STYLE_FONTS_HREF, stylePreviewScript } from "@/lib/stylePreview";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -46,8 +49,18 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // STAGING ONLY (T-482): the visual-direction switch. Off (the default, and always on regenhub.xyz) renders
+  // exactly what it did before: no script, no font link, no attribute.
+  const stylePreview = isStylePreviewEnabled();
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning={stylePreview || undefined}>
+      {stylePreview && (
+        <head>
+          <script dangerouslySetInnerHTML={{ __html: stylePreviewScript() }} />
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+          <link rel="stylesheet" href={STYLE_FONTS_HREF} />
+        </head>
+      )}
       <body className={inter.className}>
         {children}
         <ServiceWorkerRegister />

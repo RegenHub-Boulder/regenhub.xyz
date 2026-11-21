@@ -1,3 +1,32 @@
+# T-482 three looks for regenhub.xyz (staging, sample data)
+
+**What's judged:** which visual direction to take into the full revamp: Hand-set book, Field guide or Studio. Judge
+the feel (type, colour, room, imagery, how the page arrives), not the words: they are unchanged. Start at the picker.
+
+## Run it
+Sample people only, no production anything. Build with the switch on, then start the member pages preview:
+```
+B=19320; STYLE_PREVIEW_ENABLED=1 NEXT_PUBLIC_SITE_URL=http://127.0.0.1:$B NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:$((B+4)) \
+  NEXT_PUBLIC_SUPABASE_ANON_KEY=staging pnpm --filter web build
+STYLE_PREVIEW_ENABLED=1 T482_PORT_BASE=$B bash scripts/staging/member-pages-preview.sh
+```
+Open `/style-preview` (the picker). Any page takes `?style=book|field|studio` and remembers it; `?style=off` is
+today's look. Screens: `PLAYWRIGHT_DIR=<dir with playwright> node scripts/staging/style-directions-shots.mjs`.
+
+## Steps (screens in `walkthrough/style-directions/`, desktop 1280x800 and phone 390x844)
+1. **The picker** (`00-picker-desktop.png`). *"Three looks, side by side, each with why. My pick is the field guide."*
+2. **Hand-set book, home** (`book/01-home-*`, `motion-home-book.webm`). *"A small-press book: one column, Garamond,
+   ink and one moss colour. A brush circle is drawn once as the page opens."*
+3. **Field guide, home** (`field/01-home-*`, `motion-home-field.webm`). *"A painted view of the Flatirons settles in
+   back to front; every entry sits on a framed plate, in moss and ochre."*
+4. **Studio, home** (`studio/01-home-*`, `motion-home-studio.webm`). *"One clean sans, flat tiles, and one big serif
+   line beside a real photo from the roof."*
+5. **The same three on an event night, membership, members and the portal** (`*/02-*` to `*/05-*`). *"The real
+   pages restyle themselves; the portal stays still, since members use it daily."*
+6. **Today's look is untouched** (`base/`). *"Without the switch, the site renders pixel for pixel as it does now."*
+
+---
+
 # T-482 stewards post events without a site membership (staging, sample data)
 
 **What's judged:** a facilitator of RegenHub on Techne who is not a site member can now post and edit nights, and a

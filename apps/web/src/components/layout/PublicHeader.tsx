@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { MobileNav } from "@/components/nav/MobileNav";
 import { PUBLIC_NAV } from "@/components/layout/publicNav";
+import { ByTechne } from "@/components/stylePreview/DirectionArt";
 import regenHubLogo from "@/assets/regenhub-logo.svg";
 import regenHubText from "@/assets/regenhub-text.svg";
 
@@ -33,6 +34,7 @@ export function PublicHeader() {
               height={32}
               className="h-4 sm:h-7 w-auto shrink-0"
             />
+            <ByTechne />
           </Link>
         </div>
 
