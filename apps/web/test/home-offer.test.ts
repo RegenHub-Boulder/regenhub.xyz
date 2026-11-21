@@ -80,6 +80,15 @@ describe("the home page's nights", () => {
     expect(techne.calls.length).toBeGreaterThan(0);
   });
 
+  it("orders by the real start time, whatever offset a listed event was written in", async () => {
+    // 20:00Z is 1 PM in Denver, before a 6 PM night written as -07:00 (text order would put it second).
+    serve([ev("5a", "Agents Building Night", "2026-12-01T18:00:00-07:00"), ev("5b", "Lunch talk", "2026-12-01T20:00:00Z")]);
+    expect(lines(await renderNights()).map((l) => l.text)).toEqual([
+      "Tue, Dec 1, 1:00 PM Lunch talk",
+      "Tue, Dec 1, 6:00 PM Agents Building Night",
+    ]);
+  });
+
   it("shows at most five nights when the calendar is full", async () => {
     serve(Array.from({ length: 12 }, (_, i) => ev(`4${String(i).padStart(2, "0")}`, `Night ${i + 1}`, `2026-11-${22 + i}T18:00:00-07:00`)));
     const got = lines(await renderNights());

@@ -59,7 +59,7 @@ export function nextNights(events: CollectiveEvent[], now: Date, days = HOME_NIG
   const until = now.getTime() + days * 86_400_000;
   return events
     .filter((e) => e.startAt && !isCancelled(e) && !hasEnded(e, now) && Date.parse(e.startAt) < until)
-    .sort((a, b) => a.startAt!.localeCompare(b.startAt!))
+    .sort((a, b) => Date.parse(a.startAt!) - Date.parse(b.startAt!))
     .slice(0, limit);
 }
 

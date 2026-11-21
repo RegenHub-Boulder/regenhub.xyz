@@ -21,9 +21,9 @@ import { ordinalShort, techneTuesdays } from "@/lib/series";
  * lib/series.ts),
  * each with its next date, then the rest of the calendar.
  *
- * Same fallback contract as the landing section (components/landing/UpcomingEvents.tsx):
- * regenOS unconfigured, quiet, or unreachable ⇒ the Luma embed. This page must
- * never be an error page.
+ * regenOS unconfigured, quiet, or unreachable ⇒ the Luma embed for the rest of the calendar. This page must
+ * never be an error page. (The home page lists the next nights from the same read and never uses Luma:
+ * components/landing/HomeNights.tsx.)
  */
 
 export const metadata: Metadata = {
