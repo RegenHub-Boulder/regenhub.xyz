@@ -20,7 +20,7 @@ export function PublicHeader() {
       <nav className="glass-panel-subtle max-w-7xl mx-auto px-3 sm:px-6 py-3 flex items-center justify-between gap-2 sm:gap-3">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <MobileNav links={PUBLIC_NAV} />
-          <Link href="/" className="flex items-center gap-2 min-w-0" aria-label="RegenHub home" data-part="logo">
+          <Link href="/" className="flex items-center gap-2 min-w-0" aria-label="RegenHub home">
             <Image
               src={regenHubLogo}
               alt=""

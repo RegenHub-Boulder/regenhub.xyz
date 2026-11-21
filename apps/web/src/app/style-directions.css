@@ -64,10 +64,7 @@ html[data-style] :is(.hover-lift, .hover-glow) { transform: none; box-shadow: no
   html[data-style] .hover-glow:hover { box-shadow: none; }
 }
 
-/* The light logo files are drawn in pale green for the dark site: on paper they print in ink. */
-html[data-style] [data-part="logo"] img,
 html[data-style] .rh-enso-mark { filter: brightness(0); opacity: 0.86; }
-html[data-style] [data-part="logo"] img.animate-sway { animation: none; }
 html[data-style] .rh-by-techne {
   font-family: var(--rh-ui);
   font-size: 0.8125rem;
@@ -145,7 +142,7 @@ html[data-style] [data-part="hero-title"] ~ :not([data-part="hero-title"] + p) {
 html[data-style="book"] {
   --background: #ebe6d9;
   --foreground: #27231d;
-  --muted-foreground: #5f5749;
+  --muted-foreground: #534b3e;
   --heading: #27231d;
   --sage: #4b5a2c;          /* the spot colour: moss ink */
   --gold: #6e4f2f;          /* walnut, for prices */
@@ -197,7 +194,7 @@ html[data-style="book"] [data-part="home"] > section + section > div::before {
   margin: 0 auto 2.5rem;
   border-top: 1px solid var(--rh-rule-strong);
 }
-html[data-style="book"] [data-part="page"] > div > div { max-width: 40rem; }
+html[data-style="book"] [data-part="page"] > div > div:is(.max-w-3xl, .max-w-4xl, .max-w-5xl, .max-w-6xl) { max-width: 40rem; }
 html[data-style="book"] [data-part="page"] .grid { gap: 1.75rem 2.5rem; }
 /* The narrow measure holds two columns at most. */
 @media (min-width: 640px) {
@@ -229,7 +226,7 @@ html[data-style="book"] [data-part="hero-title"] { font-size: clamp(1.75rem, 3.2
 html[data-style="field"] {
   --background: #e6e8dc;
   --foreground: #22291e;
-  --muted-foreground: #525b48;
+  --muted-foreground: #475040;
   --heading: #2f3f27;
   --sage: #44593a;          /* moss */
   --gold: #8f5423;          /* ochre, darkened for text */
@@ -260,7 +257,7 @@ html[data-style="field"] {
 html[data-style="field"] body { line-height: 1.65; font-size: 1.0625rem; }
 html[data-style="field"] :is(h1, h2, h3) {
   font-weight: 350;
-  font-variation-settings: "SOFT" 100;
+  font-variation-settings: "SOFT" 100, "WONK" 0;
   letter-spacing: -0.01em;
   color: var(--heading);
 }
@@ -317,7 +314,7 @@ html[data-style="field"] [data-part="hero-title"] { font-size: clamp(1.9rem, 3.6
 html[data-style="studio"] {
   --background: #f5f4ef;
   --foreground: #191a17;
-  --muted-foreground: #585a53;
+  --muted-foreground: #4d4f48;
   --heading: #191a17;
   --sage: #1f4a3a;          /* pine */
   --gold: #1f4a3a;
@@ -471,45 +468,43 @@ html[data-style="field"] :is([data-part="page"], [data-part="home"]) p.mx-auto,
 html[data-style="studio"] :is([data-part="page"], [data-part="home"]) p.mx-auto { margin-left: 0; }
 
 /* The phone nav drawer: a solid sheet of the page's paper over a dimmed page, in every direction. */
-html[data-style] .fixed.z-\[101\] { background: var(--background) !important; border: 0; border-right: 1px solid var(--rh-rule-strong) !important; box-shadow: none; }
-html[data-style] .fixed.z-\[100\] { background: rgba(20, 20, 16, 0.32); backdrop-filter: none; -webkit-backdrop-filter: none; }
-/* Every copy of the pale logo files prints in ink, wherever a page places them. */
+html[data-style] [data-part="drawer"] { background: var(--background) !important; border: 0; border-right: 1px solid var(--rh-rule-strong) !important; box-shadow: none; }
+html[data-style] [data-part="drawer-scrim"] { background: rgba(20, 20, 16, 0.32); backdrop-filter: none; -webkit-backdrop-filter: none; }
+/* The logo files are drawn in pale green for the dark site: every copy prints in ink on paper. */
 html[data-style] img:is([src*="regenhub-full"], [src*="regenhub-text"], [src*="regenhub-logo"]) { filter: brightness(0); opacity: 0.86; }
 
 /* ---- Inner pages carry each direction's structure too --------------------------------------------- */
 
-/* Darker secondary text on all three papers (a cold read found the grey too faint). */
-html[data-style="book"] { --muted-foreground: #534b3e; }
-html[data-style="field"] { --muted-foreground: #475040; }
-html[data-style="studio"] { --muted-foreground: #4d4f48; }
 html[data-style] [data-testid="member-card"] { height: 100%; }
 
 /* Field: the header's edge lines up with the page's, and each page opens with the guide's chapter rule. */
 html[data-style="field"] header nav.glass-panel-subtle { max-width: 64rem; }
-html[data-style="field"] [data-part="page"] > div > div { max-width: 64rem; }
-html[data-style="field"] [data-part="page"] > div > div > header {
+html[data-style="field"] [data-part="page"] > div > div:is(.max-w-3xl, .max-w-4xl, .max-w-5xl, .max-w-6xl) { max-width: 64rem; }
+html[data-style="field"] [data-part="page"] > div > div:is(.max-w-3xl, .max-w-4xl, .max-w-5xl, .max-w-6xl) > header {
   border-top: 1px solid var(--rh-rule-strong);
   padding-top: 1rem;
 }
 
 /* Studio: the page's heading sits in its own left column, beside the content, on the same edge as the
    header. The carousel keeps room for its arrows. */
-html[data-style="studio"] [data-part="home"] [aria-roledescription="carousel"] { margin-inline: 3rem; }
+@media (min-width: 768px) {
+  html[data-style="studio"] [data-part="home"] [aria-roledescription="carousel"] { margin-inline: 3rem; }
+}
 @media (min-width: 1024px) {
-  html[data-style="studio"] [data-part="page"] > div > div:has(> header) {
+  html[data-style="studio"] [data-part="page"] > div > div:has(> header):has([data-testid="member-directory"], [data-testid="member-offer"]) {
     max-width: 80rem;
     display: grid;
     grid-template-columns: 19rem minmax(0, 1fr);
     column-gap: 3.5rem;
-    row-gap: 2rem;
+    row-gap: 0; /* the header spans rows the content may not fill: empty rows must have no height */
     align-items: start;
   }
-  html[data-style="studio"] [data-part="page"] > div > div:has(> header) > * { grid-column: 2; margin-top: 0; }
-  html[data-style="studio"] [data-part="page"] > div > div:has(> header) > header {
+  html[data-style="studio"] [data-part="page"] > div > div:has(> header):has([data-testid="member-directory"], [data-testid="member-offer"]) > * { grid-column: 2; margin-top: 0; margin-bottom: 2rem; }
+  html[data-style="studio"] [data-part="page"] > div > div:has(> header):has([data-testid="member-directory"], [data-testid="member-offer"]) > header {
     grid-column: 1;
     grid-row: 1 / span 12;
     position: sticky;
     top: 2rem;
   }
-  html[data-style="studio"] [data-part="page"] > div > div:has(> header) > header h1 { font-size: clamp(2.6rem, 4vw, 3.6rem); }
+  html[data-style="studio"] [data-part="page"] > div > div:has(> header):has([data-testid="member-directory"], [data-testid="member-offer"]) > header h1 { font-size: clamp(2.6rem, 4vw, 3.6rem); }
 }

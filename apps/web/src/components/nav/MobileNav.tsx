@@ -111,6 +111,7 @@ export function MobileNav({ links, trailing }: MobileNavProps) {
       {/* Overlay */}
       {open && (
         <div
+          data-part="drawer-scrim"
           className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm sm:hidden"
           onClick={() => setOpen(false)}
           aria-hidden
@@ -127,6 +128,7 @@ export function MobileNav({ links, trailing }: MobileNavProps) {
         tabIndex={-1}
         inert={!open}
         aria-hidden={!open}
+        data-part="drawer"
         className={`fixed top-0 left-0 z-[101] h-full w-72 sm:hidden
           glass-panel-strong border-r border-white/10
           transform transition-transform duration-250 ease-out
