@@ -15,7 +15,6 @@ import { PAYING_STATUSES } from "@/lib/memberStanding";
 import { isListed } from "@/lib/memberDirectory";
 import { RevealPin } from "@/components/portal/RevealPin";
 import { startOfDayIn } from "@/lib/series";
-import { SCOREBOARD_TZ } from "@/lib/scoreboard";
 import { DayPassRedemptionHero } from "@/components/portal/DayPassRedemptionHero";
 import { MembershipStatusCard } from "@/components/portal/MembershipStatusCard";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
@@ -174,7 +173,7 @@ export default async function PortalPage() {
     .from("access_logs")
     .select("member_id")
     .eq("result", "granted")
-    .gte("created_at", startOfDayIn(SCOREBOARD_TZ).toISOString())
+    .gte("created_at", startOfDayIn("America/Denver").toISOString())
     .not("member_id", "is", null);
   const hereNowCount = new Set((hereNowRows ?? []).map((r) => r.member_id)).size;
 

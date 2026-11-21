@@ -10,7 +10,7 @@ export interface AdminQueueCounts {
   /** Failures in the most recent lock sync run (0 when it was clean or there was none). */
   lastSyncFailures: number | null;
   quarantinedSlots: number | null;
-  /** Members past due and not paying on another subscription (lib/membershipRevenue.ts, as the scoreboard counts). */
+  /** Past-due subscriptions, as /admin/billing lists them. */
   pastDue: number | null;
   pendingApplications: number | null;
   pendingFreeDays: number | null;
@@ -33,7 +33,7 @@ const RULES: { key: keyof AdminQueueCounts; urgent: boolean; href: string; what:
   { key: "quarantinedSlots", urgent: true, href: "/admin/access?tab=sync", what: "quarantined door slots",
     label: (n) => `${plural(n, "door slot")} stuck in quarantine` },
   { key: "pastDue", urgent: true, href: "/admin/billing", what: "past-due payments",
-    label: (n) => `${plural(n, "member")} past due` },
+    label: (n) => `${plural(n, "subscription")} past due` },
   { key: "pendingApplications", urgent: false, href: "/admin/pipeline?tab=applications", what: "applications",
     label: (n) => `${plural(n, "application")} to review` },
   { key: "pendingFreeDays", urgent: false, href: "/admin/pipeline?tab=freedays", what: "free-day requests",

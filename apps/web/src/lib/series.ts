@@ -373,7 +373,10 @@ export function plannedNight(series: Series, date: string): PlannedNight {
   };
 }
 
-/** The instant the day `now` falls on starts in `timeZone` (local midnight), DST-correct via zonedTimeToUtc. */
+/**
+ * The instant the day `now` falls on starts in `timeZone` (local midnight), DST-correct via zonedTimeToUtc. Assumes
+ * 00:00 exists that day: true for Denver (its clocks change at 02:00), not for zones that change at midnight.
+ */
 export function startOfDayIn(timeZone: string, now = new Date()): Date {
   return zonedTimeToUtc(dateIn(now.toISOString(), timeZone), "00:00", timeZone);
 }

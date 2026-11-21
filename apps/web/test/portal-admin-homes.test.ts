@@ -152,7 +152,7 @@ describe("admin home (/admin, Today)", () => {
     // Waiting on you: the lock and Theo's missed payment first (urgent), then the application, then the unbilled desk.
     const waiting = at(h, 'data-testid="admin-waiting"');
     const lock = at(h, "The last lock sync failed on 1 code");
-    const pastDue = at(h, "1 member past due");
+    const pastDue = at(h, "1 subscription past due");
     const app = at(h, "1 application to review");
     expect(lock).toBeLessThan(pastDue);
     expect(pastDue).toBeLessThan(app);
