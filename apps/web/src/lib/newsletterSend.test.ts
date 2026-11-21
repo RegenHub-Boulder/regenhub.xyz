@@ -66,7 +66,8 @@ function database(count = 1) {
             return Promise.resolve({ data: owned ? [{ id: row.id }] : [], error: null }).then(resolve);
           }
           if (table === "newsletter_issues") return Promise.resolve({ data: {
-            id: 1, status: "draft", delivery_snapshot: null, subject: "Frozen", markdown_body: "Hello", issue_key: "test",
+            // Already confirmed and frozen (Send's confirm step is covered on a real Postgres in test/members-newsletter.test.ts).
+            id: 1, status: "sending", delivery_snapshot: { subject: "Frozen" }, subject: "Frozen", markdown_body: "Hello", issue_key: "test",
           }, error: null }).then(resolve);
           return Promise.resolve({ data: recipients.map((r) => ({ ...r })), error: null }).then(resolve);
         },

@@ -166,7 +166,8 @@ it('opt-out after preparation and re-preparation makes zero calls (REPRO3)', asy
   const db = database();
   expect((await prepareIssue(db.client, 1, "public")).audience).toBe(1);
   state.blocked = true;
-  expect(await prepareIssue(db.client, 1, "public")).toEqual({ audience: 0, total: 1 });
+  // The opted-out row is skipped, so it is no longer a recipient.
+  expect(await prepareIssue(db.client, 1, "public")).toEqual({ audience: 0, total: 0 });
   provider.mockResolvedValue({ ok: true, id: 'opted-out-message', rateLimited: false, quotaExceeded: false });
   await finish(sendBatch(db.client, 1, opts));
   expect(provider).not.toHaveBeenCalled(); expect(db.row.status).toBe('skipped');
