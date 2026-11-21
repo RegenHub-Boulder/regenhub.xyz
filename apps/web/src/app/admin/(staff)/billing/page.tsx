@@ -3,10 +3,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import {
-  DollarSign,
-  Users,
-  Ticket,
-  AlertCircle,
   ArrowDownCircle,
   CheckCircle2,
   ShoppingBag,
@@ -14,7 +10,6 @@ import {
   Activity,
 } from "lucide-react";
 import type { Subscription, Purchase, PassGrant, WebhookEvent } from "@/lib/supabase/types";
-import { SendPaymentReminderButton } from "@/components/admin/SendPaymentReminderButton";
 import { CollapsibleSection } from "@/components/admin/CollapsibleSection";
 import { CouponsSection } from "@/components/admin/CouponsSection";
 import { RateLabel } from "@/components/admin/RateLabel";
@@ -54,11 +49,6 @@ function fmtDate(iso: string | null) {
 
 function fmtMoney(cents: number): string {
   return `$${(cents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
-}
-
-function daysSince(iso: string | null): number | null {
-  if (!iso) return null;
-  return Math.floor((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24));
 }
 
 type SubWithMember = Subscription & {
@@ -114,10 +104,8 @@ export default async function BillingPage() {
   const pastDueSubs = billingSubs.filter((s) => s.status === "past_due");
   const cancelingSubs = billingSubs.filter((s) => s.cancel_at_period_end);
 
-  // One definition of paying + MRR, shared with the dashboard, the scoreboard and the MCP (lib/membershipRevenue.ts).
+  // One definition of plan revenue, shared with Today, the scoreboard and the MCP (lib/membershipRevenue.ts).
   const revenue = membershipRevenue(allSubs);
-  const mrrCents = revenue.netCents;
-  const cancelingCents = cancelingSubs.filter((s) => s.status !== "past_due").reduce((sum, s) => sum + effectiveMonthlyCents(s), 0);
   const mrrByPlan = Object.fromEntries(
     Object.entries(revenue.byPlan).map(([k, p]) => [k, { count: p.subscriptions, cents: p.netCents }]),
   );
@@ -137,7 +125,7 @@ export default async function BillingPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold text-forest">Billing</h1>
-        <p className="text-muted mt-1">Who&apos;s paying, what they&apos;re paying, and what needs attention</p>
+        <p className="text-muted mt-1">Every subscription, the plan mix, promo codes and purchases</p>
         <p className="text-xs text-muted mt-1">
           Rates are net of promo codes. List price is struck through when they differ.
         </p>
@@ -146,53 +134,23 @@ export default async function BillingPage() {
         </div>
       </div>
 
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="glass-panel">
-          <CardContent className="p-5">
-            <DollarSign className="w-6 h-6 text-sage mb-2" />
-            <p className="text-xs text-muted mb-1">MRR</p>
-            <p className="text-3xl font-bold text-foreground">{fmtMoney(mrrCents)}</p>
-            <p className="text-xs text-muted mt-1">
-              from {revenue.subscriptions} paying sub{revenue.subscriptions === 1 ? "" : "s"}
-              {cancelingCents > 0 && (
-                <span className="text-amber-400"> · −{fmtMoney(cancelingCents)} pending cancel</span>
-              )}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="glass-panel">
-          <CardContent className="p-5">
-            <Users className="w-6 h-6 text-sage mb-2" />
-            <p className="text-xs text-muted mb-1">Paying members</p>
-            <p className="text-3xl font-bold text-foreground">{revenue.members}</p>
-            <p className="text-xs text-muted mt-1">
-              active or trialing, card and USDC · {revenue.pastDue.members} more past due
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="glass-panel">
-          <CardContent className="p-5">
-            <Ticket className="w-6 h-6 text-sage mb-2" />
-            <p className="text-xs text-muted mb-1">Day passes this month</p>
-            <p className="text-3xl font-bold text-foreground">{fmtMoney(dayPassRevenueThisMonth)}</p>
-            <p className="text-xs text-muted mt-1">
-              {dayPassCountThisMonth} purchase{dayPassCountThisMonth === 1 ? "" : "s"}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="glass-panel">
-          <CardContent className="p-5">
-            <ArrowDownCircle className="w-6 h-6 text-amber-400 mb-2" />
-            <p className="text-xs text-muted mb-1">Queued to cancel</p>
-            <p className="text-3xl font-bold text-foreground">{cancelingSubs.length}</p>
-            <p className="text-xs text-muted mt-1">at end of current period</p>
-          </CardContent>
-        </Card>
-      </div>
+      {/* The totals (paying members, monthly revenue) live on the Scoreboard and past-due reminders on Today;
+          this page keeps the lists behind them (T-482). */}
+      <p className="text-sm text-muted" data-testid="billing-pointers">
+        Paying members and monthly revenue: <Link href="/admin/scoreboard" className="text-sage hover:underline">Scoreboard →</Link>
+        {" · "}
+        {pastDueSubs.length > 0 ? (
+          <>
+            <Link href="/admin/members?status=overdue" className="text-red-400 hover:underline">
+              {pastDueSubs.length} past due →
+            </Link>
+            {" · send reminders from "}
+            <Link href="/admin" className="text-sage hover:underline">Today →</Link>
+          </>
+        ) : (
+          "Nobody past due."
+        )}
+      </p>
 
       {/* Plan composition */}
       {Object.keys(mrrByPlan).length > 0 && (
@@ -208,47 +166,6 @@ export default async function BillingPage() {
                     <p className="text-lg font-semibold">{v.count}× · {fmtMoney(v.cents)}/mo</p>
                   </div>
                 ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Past-due alert section */}
-      {pastDueSubs.length > 0 && (
-        <Card className="glass-panel border border-red-500/30">
-          <CardContent className="p-5">
-            <h3 className="text-sm font-semibold mb-4 flex items-center gap-2 text-red-400">
-              <AlertCircle className="w-4 h-4" />
-              Past due — needs attention
-            </h3>
-            <div className="space-y-2">
-              {pastDueSubs.map((s) => {
-                const days = daysSince(s.past_due_since);
-                return (
-                  <div
-                    key={s.id}
-                    className="flex items-center justify-between gap-3 py-2 px-3 rounded hover:bg-white/5 transition-colors"
-                  >
-                    <Link
-                      href={s.members ? `/admin/members/${s.members.id}` : "#"}
-                      className="flex-1 flex items-center justify-between gap-3"
-                    >
-                      <div>
-                        <p className="text-sm font-medium">{s.members?.name ?? "(unknown member)"}</p>
-                        <p className="text-xs text-muted">{s.members?.email}</p>
-                      </div>
-                      <div className="text-right text-xs">
-                        <p className="text-red-400">{days != null ? `${days}d past due` : "past due"}</p>
-                        <p className="text-muted">
-                          {planLabels[s.plan_key] ?? s.plan_key} ·{" "}
-                          <RateLabel monthly_cents={s.monthly_cents} net_cents={s.net_cents} className="font-normal" />
-                        </p>
-                      </div>
-                    </Link>
-                    {s.members && <SendPaymentReminderButton memberId={s.members.id} />}
-                  </div>
-                );
-              })}
             </div>
           </CardContent>
         </Card>
@@ -425,7 +342,9 @@ export default async function BillingPage() {
           <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
             <ShoppingBag className="w-4 h-4 text-sage" />
             Recent day-pass purchases
-            <span className="text-xs text-muted font-normal">(latest {recentPurchases.length})</span>
+            <span className="text-xs text-muted font-normal">
+              (latest {recentPurchases.length} · this month {fmtMoney(dayPassRevenueThisMonth)} from {dayPassCountThisMonth})
+            </span>
           </h3>
           {recentPurchases.length === 0 ? (
             <p className="text-sm text-muted">No purchases yet.</p>

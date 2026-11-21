@@ -1,22 +1,23 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { issueKeyFor } from "@/lib/newsletter";
+import { issueKeyFor, normalizeAudience, withAudienceColumn } from "@/lib/newsletter";
+import { saveDraft } from "@/lib/newsletterSend";
 
 /** GET — the most recently touched issue (draft or sent), for the studio to load. */
 export async function GET() {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const admin = createServiceClient();
-  const { data } = await admin
+  const { data } = await withAudienceColumn((col) => admin
     .from("newsletter_issues")
-    .select("id, issue_key, subject, markdown_body, status, created_at, updated_at")
+    .select(`id, issue_key, subject, markdown_body, status, created_at, updated_at${col ? ", audience" : ""}`)
     .order("updated_at", { ascending: false })
     .limit(1)
-    .maybeSingle();
+    .maybeSingle());
   return NextResponse.json({ draft: data ?? null });
 }
 
-/** POST — create or update a draft. Won't clobber an already-sent issue key. */
+/** POST — create or update a draft (lib/newsletterSend saveDraft). Won't touch an issue that is sending or sent. */
 export async function POST(request: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -29,27 +30,11 @@ export async function POST(request: Request) {
   }
 
   const admin = createServiceClient();
-  const { data: existing } = await admin
-    .from("newsletter_issues")
-    .select("id, status, delivery_snapshot")
-    .eq("issue_key", issueKey)
-    .maybeSingle();
-  if (existing && (existing.status !== "draft" || existing.delivery_snapshot)) {
-    return NextResponse.json({ error: `Issue ${issueKey} is frozen for delivery` }, { status: 409 });
-  }
-
-  const { data, error } = await admin
-    .from("newsletter_issues")
-    .upsert(
-      { issue_key: issueKey, subject, markdown_body: markdown, status: "draft" },
-      { onConflict: "issue_key" },
-    )
-    .select("id, issue_key, subject, markdown_body, status")
-    .single();
-  if (error) {
-    if (error.code === "55000") return NextResponse.json({ error: "Issue is frozen for delivery" }, { status: 409 });
-    console.error("[Newsletter] draft save failed:", error);
-    return NextResponse.json({ error: "Could not save draft" }, { status: 500 });
-  }
-  return NextResponse.json({ draft: data });
+  const r = await saveDraft(admin, {
+    issueKey, subject, markdown, audience: body.audience === undefined ? undefined : normalizeAudience(body.audience),
+  });
+  if (r.ok) return NextResponse.json({ draft: r.draft });
+  if (r.reason === "error") console.error("[Newsletter] draft save failed:", r.message);
+  const status = r.reason === "error" || r.reason === "refresh_failed" ? 500 : 409;
+  return NextResponse.json({ error: r.reason === "error" ? "Could not save draft" : r.message }, { status });
 }

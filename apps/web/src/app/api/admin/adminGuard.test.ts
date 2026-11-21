@@ -152,19 +152,6 @@ describe("active admin: the guard hands the route the right identity", () => {
     expect(await res.json()).toMatchObject({ sent_to: USER.email });
   }, 30_000);
 
-  it("digest-note POST records the admin as author", async () => {
-    signInAs({ user: USER, member: ADMIN });
-    const service = makeSupabaseMock();
-    vi.mocked(createServiceClient).mockReturnValue(service as never);
-    const { POST } = await import("./digest-note/route");
-    const res = await POST(new Request("http://localhost/x", { method: "POST", body: JSON.stringify({ note: "Fridge is fixed" }) }));
-    expect(res.status).toBe(200);
-    const inserts = service.from.mock.results
-      .map((r) => (r.value as { insert: ReturnType<typeof vi.fn> }).insert.mock.calls)
-      .flat();
-    expect(inserts).toContainEqual([{ note: "Fridge is fixed", author_member_id: 42 }]);
-  }, 30_000);
-
   it("applications PATCH stamps rejected_by with the admin's member id", async () => {
     const session = signInAs({ user: USER, member: ADMIN });
     const { PATCH } = await import("./applications/route");

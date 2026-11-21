@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Screenshots of /admin/stewards on the staging preview (sample data only): the steward signs in with Techne, the
+// Screenshots of /admin/events?roles=open on the staging preview (sample data only): the steward signs in with Techne, the
 // last-manager refusal, adds Jo by handle as facilitator, changes and ends a role; then Ana (a sample member with no
 // role) gets the explainer. Run on a fresh preview (scripts/staging/preview.sh).
 // Usage: PLAYWRIGHT_DIR=<dir holding node_modules/playwright> node scripts/staging/stewards-shots.mjs [base] [outdir]
@@ -24,7 +24,7 @@ const settle = async () => {
 };
 
 // 1. Signed out: sign in with Techne.
-await page.goto(BASE + "/admin/stewards", { waitUntil: "networkidle" });
+await page.goto(BASE + "/admin/events?roles=open", { waitUntil: "networkidle" });
 await shot("signed-out");
 // 2. The steward signs in (the stand-in's picker stands in for techne.town's sign-in) and sees the roster.
 await page.click("button:has-text('Sign in with Techne')");
@@ -69,7 +69,7 @@ console.log("after end:", await rows());
 await shot("changed-and-ended");
 // 6. Ana, a member with no role in RegenHub on Techne: the explainer.
 await Promise.all([page.waitForURL("**"), page.click("button:has-text('Sign out')")]);
-await page.goto(BASE + "/admin/stewards", { waitUntil: "networkidle" });
+await page.goto(BASE + "/admin/events?roles=open", { waitUntil: "networkidle" });
 await page.click("button:has-text('Sign in with Techne')");
 await page.waitForSelector("text=Pick a sample person");
 await page.click("text=Ana (sample)");

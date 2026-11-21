@@ -9,6 +9,10 @@
  *   2. its `name` is the series name, alone or followed by a separator and a topic
  *      ("Agents Building Night", "Agents Building Night: local models").
  *      A renamed series keeps its old names in `formerNames`, so nights posted under them still match.
+ *   3. a night renamed by hand before (1) was written ("Ugly Sweater Party 420 Happy Hour"): the series name
+ *      appears in it as whole words and it starts in the series' slot (rule date, start within 30 min).
+ *
+ * "Add the next nights" writes (1) on every night it posts, so a later rename keeps the night in its series.
  *
  * Each night is an ordinary `community.lexicon.calendar.event`, so it shows
  * wherever Techne events show. Record keys stay TIDs, as the lexicon declares
@@ -273,13 +277,54 @@ export function dateIn(iso: string, timeZone: string): string {
 export interface SeriesMatchable {
   name?: string | null;
   uris?: readonly { uri?: string }[] | null;
+  /** The night's start (an ISO instant); lets a renamed night still match by its slot. */
+  startsAt?: string | null;
+}
+
+/** How far a night's start may be from the series' default start and still be in its slot. */
+export const SLOT_TOLERANCE_MIN = 30;
+
+function minutesIn(iso: string, timeZone: string): number {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", { timeZone, hourCycle: "h23", hour: "2-digit", minute: "2-digit" })
+      .formatToParts(new Date(iso))
+      .map((x) => [x.type, x.value]),
+  );
+  return +p.hour * 60 + +p.minute;
 }
 
 /**
- * Which series a night belongs to, or null.
- * A `uris` entry that is this site's `/events/<slug>` page wins; otherwise the name must be the
- * series name exactly, or the series name followed by `:`, `-`, `–`, `—` or `|`.
- * "Agents Nightly" or "Not Agents Night" are not in the series.
+ * Whether an instant falls in the series' slot: on a date of its rule (in its timezone) and starting within
+ * `SLOT_TOLERANCE_MIN` of its default start. "Fri 18 Dec 2026, 4:20pm Denver" is in 420 Happy Hour's slot.
+ */
+export function inSeriesSlot(series: Series, startIso: string | null | undefined): boolean {
+  if (!startIso || Number.isNaN(Date.parse(startIso))) return false;
+  const date = dateIn(startIso, series.timezone);
+  if (ruleDatesFrom(series.rule, date, 1)[0] !== date) return false;
+  const [h, m] = series.startTime.split(":").map(Number);
+  return Math.abs(minutesIn(startIso, series.timezone) - (h * 60 + m)) <= SLOT_TOLERANCE_MIN;
+}
+
+/** Whether `name` contains `phrase` as whole words, ignoring case ("Ugly Sweater Party 420 Happy Hour" ⊃ "420 Happy Hour"),
+ *  at any of its matches, not only the first. */
+function containsWords(name: string, phrase: string): boolean {
+  if (!phrase) return false;
+  for (let i = name.indexOf(phrase); i >= 0; i = name.indexOf(phrase, i + 1)) {
+    const before = name[i - 1];
+    const after = name[i + phrase.length];
+    if ((!before || !/[a-z0-9]/.test(before)) && (!after || !/[a-z0-9]/.test(after))) return true;
+  }
+  return false;
+}
+
+/**
+ * Which series a night belongs to, or null, in this order:
+ *   1. a `uris` entry that is this site's `/events/<slug>` page (the stable key "Add the next nights" writes);
+ *   2. the name is the series name exactly, or the series name followed by `:`, `-`, `–`, `—` or `|`;
+ *   3. a renamed night posted before the key existed: the series name appears in the name as whole words
+ *      and the night starts in the series' slot (inSeriesSlot), as "Ugly Sweater Party 420 Happy Hour" on a
+ *      Friday at 4:20pm.
+ * "Agents Nightly" or "Not Agents Night" at another time are not in the series.
  */
 export function seriesOf(event: SeriesMatchable): Series | null {
   for (const u of event.uris ?? []) {
@@ -293,6 +338,9 @@ export function seriesOf(event: SeriesMatchable): Series | null {
       const base = n.toLowerCase();
       if (name === base || /^\s*[:\-–—|]/.test(name.startsWith(base) ? name.slice(base.length) : "x")) return s;
     }
+  }
+  for (const s of SERIES) {
+    if (namesOf(s).some((n) => containsWords(name, n.toLowerCase())) && inSeriesSlot(s, event.startsAt)) return s;
   }
   return null;
 }

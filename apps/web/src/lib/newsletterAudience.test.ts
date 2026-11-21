@@ -12,7 +12,7 @@ const client = () =>
 beforeEach(async () => {
   pg = new PGlite();
   await pg.exec(`
-    create table members (id serial primary key, name text, email text, disabled boolean not null default false);
+    create table members (id serial primary key, name text, email text, member_type text, disabled boolean not null default false);
     create table interests (id serial primary key, name text, email text);
     create table email_unsubscribes (email text primary key);
     insert into members (name, email, disabled) values ('A', 'a@example.test', false), ('B', 'b@example.test', true),

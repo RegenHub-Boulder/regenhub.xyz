@@ -72,12 +72,12 @@ export default async function MyCodePage() {
         <AlertCircle className="w-8 h-8 text-muted mx-auto mb-3" />
         <h2 className="font-semibold mb-2">Permanent codes are for Full Members</h2>
         <p className="text-sm text-muted mb-5">
-          You&apos;re on a day-pass plan, so you generate a fresh code for each visit on the Passes page.
+          You&apos;re on a day-pass plan, so you generate a fresh code for each visit on the Day passes page.
         </p>
         <Link href="/portal/passes">
           <Button className="btn-primary-glass gap-2">
             <Ticket className="w-4 h-4" />
-            Go to Day Passes
+            Go to Day passes
           </Button>
         </Link>
       </div>
@@ -131,10 +131,10 @@ export default async function MyCodePage() {
       >
         <Zap className="w-5 h-5 text-gold shrink-0" />
         <div>
-          <p className="font-medium text-sm">Generate a live code for a guest</p>
+          <p className="font-medium text-sm">Make a door code for a guest</p>
           <p className="text-xs text-muted mt-0.5">Temporary codes with custom expiry — 4 hours to 1 week</p>
         </div>
-        <span className="ml-auto text-muted group-hover:text-foreground text-sm">Live Codes →</span>
+        <span className="ml-auto text-muted group-hover:text-foreground text-sm">Guest passes →</span>
       </Link>
 
       <div className="glass-panel p-6 space-y-3">

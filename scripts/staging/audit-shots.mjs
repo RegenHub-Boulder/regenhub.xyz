@@ -26,7 +26,10 @@ const PORTAL = [
 const ADMIN = [
   ["admin", "/admin"],
   ["admin-scoreboard", "/admin/scoreboard"],
-  ["admin-pipeline", "/admin/pipeline"],
+  // People (round 2): Applications · Free days · Interests · Members. Was Pipeline (+ its redirects).
+  ["admin-people", "/admin/people"],
+  ["admin-people-freedays", "/admin/people?tab=freedays"],
+  ["admin-people-interests", "/admin/people?tab=interests"],
   ["admin-members", "/admin/members"],
   // Theo (sample), past due: member 5 on the --audit seed (steward 1, Ana 2, Jo 3, Mira 4).
   ["admin-member-detail", "/admin/members/5"],
@@ -36,16 +39,15 @@ const ADMIN = [
   ["admin-members-new", "/admin/members/new"],
   ["admin-members-stale-links", "/admin/members/stale-links"],
   ["admin-billing", "/admin/billing"],
+  // Door (nav name; the route stays /admin/access, with /admin/codes and /admin/lock as tab redirects).
   ["admin-access", "/admin/access"],
-  ["admin-communications", "/admin/communications"],
-  ["admin-newsletter", "/admin/newsletter"],
-  ["admin-interests", "/admin/interests"],
-  ["admin-applications", "/admin/applications"],
-  ["admin-claims", "/admin/claims"],
-  ["admin-codes", "/admin/codes"],
-  ["admin-lock", "/admin/lock"],
+  ["admin-lock", "/admin/access?tab=sync"],
+  // Mail (round 2): the newsletter studio and Send to a group. Was Newsletter + Comms.
+  ["admin-mail", "/admin/mail"],
+  ["admin-mail-group", "/admin/mail?tab=group"],
+  // Events, with Roles inside (was /admin/stewards).
   ["admin-events", "/admin/events"],
-  ["admin-stewards", "/admin/stewards"],
+  ["admin-events-roles", "/admin/events?roles=open#roles"],
 ];
 const ROLES = [
   ["member", "Ana (sample)", [...PORTAL, ...ADMIN]],

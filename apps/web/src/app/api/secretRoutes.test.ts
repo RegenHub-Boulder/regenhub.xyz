@@ -41,15 +41,6 @@ const ROUTES: SecretRoute[] = [
   { name: "cron/door-watchdog", env: "CRON_SECRET", refused: 401, unsetStatus: 503, load: async () => (await import("./cron/door-watchdog/route")).POST },
   { name: "cron/hub-health-digest", env: "CRON_SECRET", refused: 401, unsetStatus: 503, load: async () => (await import("./cron/hub-health-digest/route")).POST },
   { name: "cron/lifecycle-nudges", env: "CRON_SECRET", refused: 401, unsetStatus: 503, load: async () => (await import("./cron/lifecycle-nudges/route")).POST },
-  {
-    name: "cron/newsletter", env: "CRON_SECRET", refused: 401, unsetStatus: 503,
-    load: async () => (await import("./cron/newsletter/route")).POST,
-    // NEWSLETTER_AUTOSEND_ENABLED is unset, so the normal answer is the kill switch.
-    passed: async (res) => {
-      expect(res.status).toBe(200);
-      expect(await res.json()).toMatchObject({ skipped: true });
-    },
-  },
   { name: "cron/past-due-sweep", env: "CRON_SECRET", refused: 401, unsetStatus: 503, load: async () => (await import("./cron/past-due-sweep/route")).POST },
   { name: "cron/sync-access-logs", env: "CRON_SECRET", refused: 401, unsetStatus: 503, load: async () => (await import("./cron/sync-access-logs/route")).POST },
   {

@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, Save, Eye, Users, Send, RotateCcw, DownloadCloud, Square } from "lucide-react";
+import { Loader2, Save, Eye, Users, Send, RotateCcw, Square } from "lucide-react";
 import { markdownToEmailHtml } from "@/lib/newsletterMarkdown";
+import { LumaCsvImport } from "@/components/admin/LumaCsvImport";
 
 interface Draft {
   id: number | null;
@@ -12,13 +13,16 @@ interface Draft {
   subject: string;
   markdown_body: string | null;
   status: string;
+  audience?: string;
 }
 interface Progress {
   total: number;
   sent: number;
   failed: number;
   pending: number;
+  skipped?: number;
   done: boolean;
+  queueKey?: string;
 }
 
 function errMessage(e: unknown): string {
@@ -34,7 +38,7 @@ async function api<T>(path: string, body?: unknown): Promise<T> {
   const text = await res.text();
   let data: unknown = null;
   if (text) { try { data = JSON.parse(text); } catch { /* keep null */ } }
-  if (!res.ok) throw new Error((data as { error?: string })?.error ?? `HTTP ${res.status}`);
+  if (!res.ok) throw Object.assign(new Error((data as { error?: string })?.error ?? `HTTP ${res.status}`), { data });
   return data as T;
 }
 
@@ -54,6 +58,9 @@ export function NewsletterStudio({
   const [issueKey] = useState(initialDraft?.issue_key ?? null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [audience, setAudience] = useState<"public" | "members">(initialDraft?.audience === "members" ? "members" : "public");
+  const [audienceCount, setAudienceCount] = useState<number | null>(null);
+  const members = audience === "members";
 
   const [busy, setBusy] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -74,9 +81,10 @@ export function NewsletterStudio({
   async function saveDraft(): Promise<number | null> {
     setBusy("save"); setErr(null); setMsg(null);
     try {
-      const d = await api<{ draft: Draft }>("/api/admin/newsletter/draft", { subject, markdown, issue_key: issueKey });
+      const d = await api<{ draft: Draft }>("/api/admin/newsletter/draft", { subject, markdown, issue_key: issueKey, audience });
       setIssueId(d.draft.id); setStatus(d.draft.status); setMsg("Draft saved.");
       onMutate?.(d.draft.id ?? undefined);
+      if (d.draft.id) await refreshStatus(d.draft.id);
       return d.draft.id;
     } catch (e) { setErr(errMessage(e)); return null; }
     finally { setBusy(null); }
@@ -85,17 +93,8 @@ export function NewsletterStudio({
   async function preview() {
     setBusy("preview"); setErr(null); setMsg(null);
     try {
-      const r = await api<{ ok: boolean; sent_to: string }>("/api/admin/newsletter/preview", { subject, markdown, issue_key: issueKey });
+      const r = await api<{ ok: boolean; sent_to: string }>("/api/admin/newsletter/preview", { subject, markdown, issue_key: issueKey, audience });
       setMsg(r.ok ? `Preview sent to ${r.sent_to}.` : "Preview failed to send (check email config).");
-    } catch (e) { setErr(errMessage(e)); }
-    finally { setBusy(null); }
-  }
-
-  async function importLuma() {
-    setBusy("luma"); setErr(null); setMsg(null);
-    try {
-      const r = await api<{ fetched: number; imported: number; skipped: number; note?: string }>("/api/admin/newsletter/import-luma");
-      setMsg(r.note ?? `Luma: ${r.imported} new contacts added, ${r.skipped} already on the list (of ${r.fetched}).`);
     } catch (e) { setErr(errMessage(e)); }
     finally { setBusy(null); }
   }
@@ -106,12 +105,14 @@ export function NewsletterStudio({
       const d = await res.json();
       if (d.progress) setProgress(d.progress);
       if (d.issue?.status) setStatus(d.issue.status);
+      setAudienceCount(typeof d.audience_count === "number" ? d.audience_count : null);
     } catch { /* ignore */ }
   }
 
   async function prepare() {
-    let id = issueId;
-    if (!id) { id = await saveDraft(); if (!id) return; }
+    // Always save first, so the queue is built for the audience (and text) on screen, not the one last saved.
+    const id = await saveDraft();
+    if (!id) return;
     setBusy("prepare"); setErr(null); setMsg(null);
     try {
       const r = await api<{ total: number }>("/api/admin/newsletter/prepare", { issue_id: id });
@@ -128,7 +129,7 @@ export function NewsletterStudio({
     if (!retry) {
       // Only the not-yet-sent recipients actually go out (the ledger skips sent ones).
       const toSend = progress.pending + progress.failed;
-      const ok = window.confirm(`Send "${subject}" to ${toSend} recipient${toSend === 1 ? "" : "s"}? This goes to real inboxes (already-sent are skipped).`);
+      const ok = window.confirm(`Send "${subject}" to ${toSend} ${members ? "member" : "recipient"}${toSend === 1 ? "" : "s"}${members ? " (members only)" : ""}? This goes to real inboxes (already-sent are skipped).`);
       if (!ok) return;
     }
     setErr(null); setMsg(null); setSending(true); stopRef.current = false;
@@ -137,9 +138,10 @@ export function NewsletterStudio({
       // Loop one batch at a time until the ledger is drained (or stopped).
       // Each batch self-paces (rate-limit back-off lives server-side).
       while (!stopRef.current) {
+        // The first call names the list shown beside Send: the server sends to that list only.
         const r = await api<{ processed: number; quotaReached?: boolean; progress: Progress }>(
           "/api/admin/newsletter/send",
-          { issue_id: id, retry_failed: first && retry },
+          { issue_id: id, retry_failed: first && retry, expected_queue: progress.queueKey, expected_audience: audience },
         );
         first = false;
         setProgress(r.progress);
@@ -151,7 +153,12 @@ export function NewsletterStudio({
         if (r.processed === 0) { setMsg("Nothing left to send."); break; }
       }
       if (stopRef.current) setMsg("Paused. Click Send to resume — already-sent recipients are skipped.");
-    } catch (e) { setErr(errMessage(e)); }
+    } catch (e) {
+      // A list that changed since it was shown comes back with the new numbers: show them, send nothing.
+      const fresh = (e as { data?: { progress?: Progress } }).data?.progress;
+      if (fresh) setProgress(fresh);
+      setErr(errMessage(e));
+    }
     finally { setSending(false); onMutate?.(); }
   }
 
@@ -164,7 +171,7 @@ export function NewsletterStudio({
       {/* Compose */}
       <Card className="glass-panel border border-sage/20">
         <CardContent className="p-5 space-y-3">
-          <h3 className="text-sm font-semibold">Compose {issueKey ? <span className="text-muted font-normal">· {issueKey}</span> : null}{sent ? <span className="text-emerald-400 font-normal"> · sent</span> : null}</h3>
+          <h3 className="text-sm font-semibold">Compose {issueKey ? <span className="text-muted font-normal">· {issueKey}</span> : null}{sent ? <span className="text-emerald-400 font-normal"> · sent</span> : null}{members ? <span className="ml-2 rounded bg-sage/20 px-1.5 py-px text-[11px] font-medium text-sage">Members</span> : null}</h3>
           <div>
             <label className="text-xs text-muted">Subject</label>
             <input
@@ -216,18 +223,32 @@ export function NewsletterStudio({
       <Card className="glass-panel border border-sage/20">
         <CardContent className="p-5 space-y-3">
           <div className="flex items-center gap-2"><Users className="w-4 h-4 text-sage" /><h3 className="text-sm font-semibold">Audience</h3></div>
+          <div role="radiogroup" aria-label="Audience" className="inline-flex rounded-md border border-white/10 p-0.5 text-xs">
+            {(["public", "members"] as const).map((a) => (
+              <button
+                key={a}
+                type="button"
+                role="radio"
+                aria-checked={audience === a}
+                disabled={sent || !!busy}
+                onClick={() => { setAudience(a); setAudienceCount(null); setProgress(null); setMsg("Audience changed. Save the draft, then Prepare audience."); }}
+                className={`rounded px-3 py-1 ${audience === a ? "bg-sage/30 text-foreground" : "text-muted hover:text-foreground"}`}
+              >
+                {a === "public" ? "Everyone" : "Members only"}
+              </button>
+            ))}
+          </div>
           <p className="text-xs text-muted">
-            Recipients = members + the interests list (incl. imported Luma contacts) − unsubscribes.
-            Importing Luma adds new calendar people to the interests list with one-click unsubscribe.
+            {members
+              ? "Recipients = members in standing (hub friends, desk members, or a paid plan of $30+ a month) − unsubscribes. The email says “For RegenHub members”, and the issue stays off the public archive."
+              : "Recipients = members + the interests list (incl. imported Luma contacts) − unsubscribes. To add Luma people, export a CSV from Luma (the calendar’s People, or an event’s Guests) and import it: you see what it would add before anything is written."}
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" disabled={!!busy || sent} onClick={importLuma} className="btn-glass text-xs gap-1 h-7">
-              {busy === "luma" ? <Loader2 className="w-3 h-3 animate-spin" /> : <DownloadCloud className="w-3 h-3" />} Import Luma contacts
-            </Button>
             <Button size="sm" disabled={!!busy || sent} onClick={prepare} className="btn-glass text-xs gap-1 h-7">
               {busy === "prepare" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Users className="w-3 h-3" />} Prepare audience
             </Button>
           </div>
+          {!members && <LumaCsvImport disabled={!!busy} />}
         </CardContent>
       </Card>
 
@@ -246,6 +267,7 @@ export function NewsletterStudio({
                 <span>{progress.pending} pending</span>
                 {progress.failed > 0 && <span className="text-red-400">{progress.failed} failed</span>}
                 <span>of {progress.total}</span>
+                {!!progress.skipped && <span title="Unsubscribed, or no longer in this audience">{progress.skipped} left out</span>}
                 {sending && <span className="text-sage">· sending…</span>}
               </div>
             </div>
@@ -254,13 +276,16 @@ export function NewsletterStudio({
           <div className="flex flex-wrap gap-2">
             {!sending ? (
               <Button size="sm" disabled={!!busy || sent || !progress?.total} onClick={() => runSend(false)} className="btn-glass text-xs gap-1 h-7">
-                <Send className="w-3 h-3" /> Send to all
+                <Send className="w-3 h-3" /> {members ? "Send to members" : "Send to all"}
               </Button>
             ) : (
               <Button size="sm" onClick={() => { stopRef.current = true; }} className="btn-glass text-xs gap-1 h-7">
                 <Square className="w-3 h-3" /> Pause
               </Button>
             )}
+            <span className="self-center text-xs text-muted" data-testid="send-audience">
+              {members ? "Members only" : "Everyone"} · {progress?.total ? progress.total : audienceCount ?? "?"} recipient{(progress?.total ? progress.total : audienceCount) === 1 ? "" : "s"}
+            </span>
             {progress && progress.failed > 0 && !sending && (
               <Button size="sm" disabled={!!busy} onClick={() => runSend(true)} className="btn-glass text-xs gap-1 h-7">
                 <RotateCcw className="w-3 h-3" /> Retry {progress.failed} failed

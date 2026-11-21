@@ -20,8 +20,8 @@ describe("adminQueue (Waiting on you)", () => {
   it("links each queue to where it's done", () => {
     const all = adminQueue({ lastSyncFailures: 1, quarantinedSlots: 1, pastDue: 2, pendingApplications: 1, pendingFreeDays: 1, unbilledDesks: 1 });
     expect(Object.fromEntries(all.map((i) => [i.key, i.href]))).toEqual({
-      lastSyncFailures: "/admin/access?tab=sync", quarantinedSlots: "/admin/access?tab=sync", pastDue: "/admin/billing",
-      pendingApplications: "/admin/pipeline?tab=applications", pendingFreeDays: "/admin/pipeline?tab=freedays",
+      lastSyncFailures: "/admin/access?tab=sync", quarantinedSlots: "/admin/access?tab=sync", pastDue: "/admin/members?status=overdue",
+      pendingApplications: "/admin/people?tab=applications", pendingFreeDays: "/admin/people?tab=freedays",
       unbilledDesks: "/admin/members?status=no_subscription",
     });
     expect(all.find((i) => i.key === "pastDue")?.label).toBe("2 subscriptions past due");

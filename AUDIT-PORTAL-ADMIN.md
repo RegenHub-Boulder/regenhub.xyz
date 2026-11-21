@@ -128,14 +128,14 @@ note and auto-send · the all-time funnel (done) · the stats card (done).
 |---|---|---|---|---|
 | 1 | Admin home becomes Today (queues + What to do next; Overview's cards, funnel and recent lists gone) | high | S | **done in this PR** |
 | 2 | Member home leads with the door code | high | S | **done in this PR** |
-| 3 | Merge Comms into Newsletter ("Mail"); retire the old Luma note and auto-send | high | M | proposed (needs Aaron's yes on retiring auto-send) |
-| 4 | One name per thing (Members, Guest passes, Free days, Mail) across nav, headings, cards and emails | medium | S | proposed |
-| 5 | Manage Events: Upcoming and follow-ups first, Add nights behind a button, Roles inside | medium | S | proposed |
-| 6 | Billing drops its KPI cards and past-due list (Scoreboard and Today have them) | medium | S | proposed |
-| 7 | Admin nav to 7; People = Members + Pipeline (Applications tab first) | medium | M | proposed |
-| 8 | Member nav: Home · Guest passes · (Events for stewards) | medium | S | proposed |
-| 9 | Member page Billing: one box per subscription, with Send reminder | low | S | proposed |
-| 10 | Access label fixes (which "active codes", dates, enum badges) | low | S | proposed |
+| 3 | Merge Comms into Newsletter ("Mail"); retire the old Luma note and auto-send | high | M | **done in round 2** (Aaron's yes, 11-20) |
+| 4 | One name per thing (Members, Guest passes, Free days, Mail) across nav, headings, cards and emails | medium | S | **done in round 2** |
+| 5 | Manage Events: Upcoming and follow-ups first, Add nights behind a button, Roles inside | medium | S | **done in round 2** |
+| 6 | Billing drops its KPI cards and past-due list (Scoreboard and Today have them) | medium | S | **done in round 2** |
+| 7 | Admin nav to 7; People = Members + Pipeline (Applications tab first) | medium | M | **done in round 2** |
+| 8 | Member nav: Home · Guest passes · (Events for stewards) | medium | S | **done in round 2** |
+| 9 | Member page Billing: one box per subscription, with Send reminder | low | S | **done in round 2** |
+| 10 | Access label fixes (which "active codes", dates, enum badges) | low | S | **done in round 2** |
 | 11 | Cut `/portal/events/old` and the regenOS-lane legacy | low | S | waits on Aaron retiring the lane |
 
 ## What's built (PR)
@@ -185,6 +185,63 @@ their links and order; What to do next with Send reminder; quick door code, find
 Members; the Scoreboard's pointer; a non-admin sent to `/portal`. Proof that the tests bite: pointing Guest code at
 the wrong page, dropping the stale-links href and raising the applications threshold turned three tests red. Restoring
 the code turned them green again.
+
+## Round 2: items 3–10 (built)
+
+**Admin nav (7, was 10):** Today · Scoreboard · People · Billing · Door · Events · Mail, "Portal →" on the right. A
+Techne steward who isn't a site admin sees only Events. **Member nav:** Home · Guest passes · Events (only for a Techne
+steward of RegenHub) · Admin (admins). My Code and Profile left the bar: the code is on Home, Profile under Home.
+
+- **Mail** (`/admin/mail`): the newsletter studio and "Send to a group" (was Comms) as two tabs. Retired: the old
+  Luma-built biweekly newsletter, its "newsletter note" composer, the auto-send switch (`NEWSLETTER_AUTOSEND_ENABLED`,
+  `NEWSLETTER_INCLUDE_STATS`), `/api/cron/newsletter` and the preview-to-me route. The monthly hub pulse no longer
+  folds in a note. **Left in the database:** the `digest_notes` table and its rows (nothing reads them; no migration
+  was needed). The two env vars can be removed from Coolify; nothing reads them.
+- **People** (`/admin/people`): Applications (first, with its pending count) · Free days · Interests · Members. Each tab
+  is a link and reads only its rows. Members keeps `/admin/members`; Stale auth links and Sync claims to regenOS sit
+  under "More". The heading says People, not Users.
+- **Billing**: the MRR / paying / day-pass / queued-to-cancel cards and the past-due list are gone. One line says how
+  many are past due (→ Members filtered to overdue) and points to the Scoreboard for totals and Today for reminders.
+  Today's past-due item now opens the same overdue list, not Billing.
+- **Events**: this week's nights and the follow-ups lead; "Add the next nights" opens from a button beside "New event";
+  **Roles** (was `/admin/stewards`) is a closed section at the foot.
+- **Member page Billing**: one Membership box per subscription, one status badge, Send reminder when past due.
+- **Door** (was Access): the "Guest codes" tab; "N guest codes live" vs "Member codes"; quarantine times in Boulder
+  time; member types in words.
+- **Scoreboard**: the definitions sit behind a closed "How we count". **First day**: Hub Essentials opens by itself
+  only on a newcomer's visit day.
+- **Names**: Members, Guest passes (a daily member's nav says Day passes: the same page holds their own passes), Free
+  days / free-day requests, Mail, People, Door, Today. Emails, the Telegram approval links and the MCP tool text point
+  at the new homes.
+- **Old URLs redirect**: `/admin/pipeline` (tabs kept), `/admin/applications`, `/admin/interests`, `/admin/claims` →
+  People; `/admin/newsletter`, `/admin/communications` → Mail; `/admin/stewards` → Events, Roles open.
+  `apps/web/test/portal-admin-structure.test.ts` checks every route in the tables above still has a page, each
+  redirect's target, both navs and the merged pages.
+
+### Clutter, round 2 (admin signed in; same sample data; `scripts/staging/audit-compare.mjs`)
+
+Screens: `docs/audit-portal-admin/before-round2/` and `after-round2/`. A merged page is compared against the pages it
+replaced, summed.
+
+| Screen | Sections | Boxes | Buttons | Words | Height desktop / phone (px) |
+|---|---|---|---|---|---|
+| Newsletter + Comms → Mail | 9 → 4 | 7 → 3 | 19 → 13 | 352 → 123 | 3140 → 1284 / 3935 → 1571 |
+| Manage Events | 7 → 7 | 4 → 4 | 8 → 8 | 288 → 145 | 1798 → 1098 / 2214 → 1414 |
+| Billing | 7 → 6 | 10 → 5 | 3 → 2 | 270 → 233 | 1733 → 1425 / 2448 → 1938 |
+| Member page, Billing tab | 3 → 2 | 3 → 2 | 7 → 8 | 82 → 77 | 900 → 900 / 926 → 844 |
+| Scoreboard | 9 → 9 | 8 → 8 | 1 → 1 | 630 → 553 | 1971 → 1939 / 3350 → 3222 |
+| Applications → People | 5 → 5 | 4 → 4 | 20 → 17 | 158 → 147 | 1132 → 1124 / 1628 → 1600 |
+| Free days → People | 4 → 4 | 3 → 3 | 12 → 9 | 121 → 110 | 900 → 900 / 1210 → 1182 |
+| Interests → People | 1 → 1 | 16 → 16 | 3 → 0 | 115 → 104 | 900 → 900 / 922 → 894 |
+| Members | 1 → 1 | 1 → 1 | 16 → 16 | 195 → 197 | 1380 → 1496 / 2717 → 2741 |
+| Door, guest codes / lock sync | 2 → 2 · 2 → 2 | 2 → 2 · 6 → 6 | 12 → 12 · 4 → 4 | 105 → 106 · 171 → 184 | 900 → 900 · 1294 → 1294 |
+| Admin nav links (desktop + phone menu) | | | | | 12 → 9 (member 6 → 3) |
+
+Read with care: Mail's numbers are its Newsletter tab; Send to a group is one click away and no longer stacked under
+it. Members grew a little (the People tabs sit above the list; More hides two tools). Door grew 13 words of clearer
+labels. The newcomer's first day is unchanged in the sample because Sam's free day is today, the one day Hub
+Essentials opens on purpose; on any other day it starts closed. The stewards' Roles page is now a section of Events,
+so Events with Roles open (1380 px) replaces Events plus a separate Roles page.
 
 ## Fixed along the way (staging and test tools)
 

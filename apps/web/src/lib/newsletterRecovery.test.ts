@@ -164,9 +164,10 @@ it('stale claim acknowledgement makes zero calls after replacement (REPRO2)', as
 });
 it('opt-out after preparation and re-preparation makes zero calls (REPRO3)', async () => {
   const db = database();
-  expect((await prepareIssue(db.client, 1)).audience).toBe(1);
+  expect((await prepareIssue(db.client, 1, "public")).audience).toBe(1);
   state.blocked = true;
-  expect(await prepareIssue(db.client, 1)).toEqual({ audience: 0, total: 1 });
+  // The opted-out row is skipped, so it is no longer a recipient.
+  expect(await prepareIssue(db.client, 1, "public")).toEqual({ audience: 0, total: 0 });
   provider.mockResolvedValue({ ok: true, id: 'opted-out-message', rateLimited: false, quotaExceeded: false });
   await finish(sendBatch(db.client, 1, opts));
   expect(provider).not.toHaveBeenCalled(); expect(db.row.status).toBe('skipped');
@@ -174,7 +175,7 @@ it('opt-out after preparation and re-preparation makes zero calls (REPRO3)', asy
 });
 
 it('opt-out after prepare is excluded at claim without re-preparation', async () => {
-  const db = database(); await prepareIssue(db.client, 1); state.blocked = true;
+  const db = database(); await prepareIssue(db.client, 1, "public"); state.blocked = true;
   await finish(sendBatch(db.client, 1, opts));
   expect(provider).not.toHaveBeenCalled(); expect(db.row.status).toBe('skipped');
 });
