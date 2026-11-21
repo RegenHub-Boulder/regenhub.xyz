@@ -91,11 +91,11 @@ export async function GET(req: NextRequest) {
     return fail(app.next, "web session", err);
   }
 
-  // Who this is, with their email (best-effort; never fails the sign-in).
-  const person = await rememberPerson(admin, { did, handle, session: signedIn.session ?? null, homeAccount: signedIn.homeAccount });
-  if (person?.newsletterAdded) {
-    jar.set(NEWS_NOTE_COOKIE, "1", { ...cookieOptions(600), httpOnly: false });
-  }
+  // Who this is, with their email (best-effort; never fails the sign-in). Runs alongside the portal work below.
+  const remembered = rememberPerson(admin, { did, handle, session: signedIn.session ?? null, homeAccount: signedIn.homeAccount });
+  const noteIfAdded = async () => {
+    if ((await remembered)?.newsletterAdded) jar.set(NEWS_NOTE_COOKIE, "1", { ...cookieOptions(600), httpOnly: false });
+  };
 
   // A portal session for a member linked to a different Techne account ends here (in this browser only), and so does
   // any portal session when this browser switches from one Techne account to another: the browser is never
@@ -131,7 +131,9 @@ export async function GET(req: NextRequest) {
   if (portalFailed && needsPortal) {
     const u = new URL(loginUrlFor(app.next), siteOrigin());
     u.searchParams.set("error", "techne_portal");
+    await noteIfAdded();
     return NextResponse.redirect(u, 303);
   }
+  await noteIfAdded();
   return NextResponse.redirect(new URL(app.next, siteOrigin()), 303);
 }

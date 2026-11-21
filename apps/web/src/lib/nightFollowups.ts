@@ -53,6 +53,11 @@ export interface FollowupTechnePerson {
   member_id: number | null;
 }
 
+/** How a Techne-only person is named to a steward: their display name, else @handle (never part of their email). */
+export function techneName(p: { name: string | null; handle: string | null }): string {
+  return p.name || (p.handle ? `@${p.handle}` : "(Techne sign-in)");
+}
+
 export interface FollowupPerson {
   /** The RSVP's Techne account: the key a steward's ticks are sent back by. */
   did: string;
@@ -98,10 +103,12 @@ export function followupBatch(input: {
   const found: FollowupPerson[] = [];
   for (const did of new Set(input.goingDids)) {
     const t = techne.get(did);
-    // The member: linked by DID, else the one this account's confirmed email matched at sign-in.
-    const m = byDid.get(did) ?? (t?.member_id != null ? byId.get(t.member_id) : undefined);
-    const memberEmail = m?.email?.trim().toLowerCase();
     const ownEmail = t?.email_confirmed ? t.email?.trim().toLowerCase() : undefined;
+    // The member: linked by DID, else the one this account's confirmed email matched at sign-in, while the two
+    // addresses still match (a member row whose email changed since is someone else's now).
+    const byEmailLink = t?.member_id != null ? byId.get(t.member_id) : undefined;
+    const m = byDid.get(did) ?? (byEmailLink && byEmailLink.email?.trim().toLowerCase() === ownEmail ? byEmailLink : undefined);
+    const memberEmail = m?.email?.trim().toLowerCase();
     const email = memberEmail || ownEmail;
     if (!email) {
       out.noEmail += 1;
@@ -117,7 +124,7 @@ export function followupBatch(input: {
       });
     } else {
       found.push({
-        did, memberId: null, name: t!.name || (t!.handle ? `@${t!.handle}` : "(Techne sign-in)"), greetName: t!.name ?? "",
+        did, memberId: null, name: techneName(t!), greetName: t!.name ?? "",
         email, variant: "guest", askForPage: false, held: input.holds.get(email) ?? null,
       });
     }

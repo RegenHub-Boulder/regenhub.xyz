@@ -12,7 +12,7 @@ import { canSignEmailLinks, followupOptoutUrl, unsubscribeUrl } from "@/lib/news
 import { PAYING_STATUSES } from "@/lib/memberStanding";
 import { fetchAttendance, fetchCollectiveEvents, fetchPublicRegenosEvent, type CollectiveEvent } from "@/lib/regenos/events";
 import {
-  followupBatch, nightValues, nightsForFollowup, personValues, renderFollowup,
+  followupBatch, nightValues, nightsForFollowup, personValues, renderFollowup, techneName,
   type FollowupMember, type FollowupTechnePerson, type FollowupVariant, type HeldReason, type RenderedNote,
 } from "@/lib/nightFollowups";
 
@@ -144,22 +144,20 @@ export async function readNightFollowups(admin: Admin, events: readonly Collecti
   const facts = await batchFacts(admin, [...new Set(going.flatMap((a) => a?.goingDids ?? []))]);
   const names = new Map(facts.members.map((m) => [m.id, m.name]));
   const missing = [...new Set(outcomeRows.flatMap((o) => (o.member_id && !names.has(o.member_id) ? [o.member_id] : [])))];
-  if (missing.length) {
-    const { data, error: nErr } = await admin.from("members").select("id, name").in("id", missing);
-    if (nErr) throw nErr;
-    for (const m of data ?? []) names.set(m.id, m.name);
-  }
-  // A note to someone known only by their Techne sign-in has no member: name it from techne_people.
-  const byEmail = new Map<string, string>();
+  // A note to someone known only by their Techne sign-in has no member: named from techne_people (confirmed rows only).
   const techneOnly = [...new Set(outcomeRows.flatMap((o) => (o.member_id == null ? [o.email] : [])))];
-  if (techneOnly.length) {
-    // Before 067 runs this table is missing: those rows keep "(member removed)", as before.
-    const { data, error: tErr } = await admin.from("techne_people").select("email, name, handle").in("email", techneOnly);
-    if (tErr) console.error("[night followups] techne_people read failed:", tErr.message);
-    for (const p of (data ?? []) as { email: string; name: string | null; handle: string | null }[]) {
-      byEmail.set(p.email, p.name || (p.handle ? `@${p.handle}` : "(Techne sign-in)"));
-    }
-  }
+  const [byId, byTechne] = await Promise.all([
+    missing.length ? admin.from("members").select("id, name").in("id", missing) : Promise.resolve({ data: [], error: null }),
+    techneOnly.length
+      ? admin.from("techne_people").select("email, name, handle").in("email", techneOnly).eq("email_confirmed", true)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (byId.error) throw byId.error;
+  for (const m of (byId.data ?? []) as { id: number; name: string }[]) names.set(m.id, m.name);
+  // Before 067 runs this table is missing: those rows keep "(member removed)", as before.
+  if (byTechne.error) console.error("[night followups] techne_people read failed:", byTechne.error.message);
+  const byEmail = new Map<string, string>();
+  for (const p of (byTechne.data ?? []) as { email: string; name: string | null; handle: string | null }[]) byEmail.set(p.email, techneName(p));
 
   return nights.map((n, i) => {
     const b = decided.get(n.uri);
@@ -349,7 +347,7 @@ export async function retryNightFollowups(admin: Admin, eventUri: string, stewar
   // A Techne-only person's greeting is their Techne display name (techne_people), as on the first attempt.
   const unsavedTechne = rows.filter((r) => r.html == null && r.member_id == null).map((r) => r.email);
   if (unsavedTechne.length) {
-    const { data, error: tErr } = await admin.from("techne_people").select("email, name").in("email", unsavedTechne);
+    const { data, error: tErr } = await admin.from("techne_people").select("email, name").in("email", unsavedTechne).eq("email_confirmed", true);
     if (tErr) console.error("[night followups] retry: techne_people read failed, sending with a plain greeting:", tErr);
     for (const p of (data ?? []) as { email: string; name: string | null }[]) {
       if (p.name) people.set(p.email, { greetName: p.name, askForPage: false });

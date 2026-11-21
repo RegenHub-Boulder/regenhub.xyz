@@ -115,6 +115,13 @@ describe("followupBatch: who gets a note, and which", () => {
     expect(b.held.map((p) => [p.name, p.held])).toEqual([["Gone", "disabled"]]);
   });
 
+  it("an email-matched member counts only while the member's email is still the one the account confirmed", () => {
+    const people = [{ did: "did:plc:moved", handle: "m.techne.town", name: "Mo", email: "old@example.test", email_confirmed: true, member_id: 1 }];
+    const b = followupBatch({ goingDids: ["did:plc:moved"], members, people, subs, holds: new Map() });
+    // Member 1's email is p1@ now: the note goes to Mo's own confirmed address, as a guest, never to p1@.
+    expect(b.send.map((p) => [p.name, p.email, p.memberId])).toEqual([["Mo", "old@example.test", null]]);
+  });
+
   it("with nothing held back, everyone linked is on the send list", () => {
     const b = followupBatch({ goingDids: ["did:plc:p1"], members, subs, holds: new Map() });
     expect(b.send.map((p) => p.email)).toEqual(["p1@example.test"]);

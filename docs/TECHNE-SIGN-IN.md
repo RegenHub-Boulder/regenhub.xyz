@@ -127,8 +127,12 @@ grant without the email scope, just records no email.
 - **Whose "confirmed" counts:** only the home PDS's (pds.techne.town, or `TECHNE_PDS_URL`), the server whose sign-up
   proves the email with a code. An account on another server (reached by hand-back) keeps its email as unconfirmed: it
   links no member, joins no list and gets no note, because anyone can run a PDS that says an address is confirmed.
-- **The list decision is per email:** a new email on the PDS is looked at again at the next sign-in; "No thanks"
-  stays (it was about us, not the address). A disabled member's email doesn't count as already on the list.
+- **The list decision is per email:** a new email on the PDS is looked at again at the next sign-in, and the entry this
+  added for the old address goes (the entry follows the person); "No thanks" stays (it was about us, not the address).
+  A disabled member's email doesn't count as already on the list. An email-matched member counts only while the
+  member's email is still the one the account confirmed.
+- **Counts:** these list rows (`source_path 'techne'`) count in the admin "Interest signups", the daily digest and the
+  scoreboard's stay-in-touch funnel like any signup.
 - **Before this shipped:** an account that signed in earlier has a grant without the email scope. Nothing breaks
   (RSVP and posting keep working on the old grant); its email is read at its next sign-in. No backfill, no forced
   re-consent: a new sign-in shows the PDS's consent with the email line, and the email link stays the fallback.

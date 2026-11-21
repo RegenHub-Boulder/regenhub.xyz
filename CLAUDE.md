@@ -102,7 +102,7 @@ DEPLOYMENT.md               # Full infra guide for agents + humans
   `declined`). `record_techne_sign_in` runs in `/techne/callback` (`lib/techne/person.ts`); a confirmed email not on the
   list, not a member's and not unsubscribed is added to `interests` once, and the browser gets the one-time line "We'll
   send you RegenHub news. No thanks" (`components/techne/NewsNote.tsx`; No thanks = `POST /api/techne/newsletter`,
-  `decline_techne_newsletter`: removes only that row and is remembered). Accounts that signed in before 067 get their
+  `decline_techne_newsletter`: removes only that row and is remembered; a new email on the PDS moves the entry). Accounts that signed in before 067 get their
   email at their next sign-in (no backfill); a grant without the email scope still signs in.
 
 - Member page fields on `members` (migration 065): `show_in_directory` (the opt-in: null = not asked, false = no, true = listed while in standing; co-op owners defaulted on), `working_on`, `links` (≤5 URLs), `show_rsvps`. See "Member pages and the directory" below.

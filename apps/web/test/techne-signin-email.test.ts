@@ -193,14 +193,25 @@ describe("every Techne sign-in is a person with an email", () => {
     home.emails.set(kim.did, { email: "kim-new@example.test", confirmed: true });
     browser.jar = new Map();
     await signIn(kim.did);
-    expect((await list()).map((r) => r.email)).toEqual(["kim@example.test", "kim-new@example.test"]);
+    // The list entry follows her address: the old one goes, the new one is added (and the line shows again).
+    expect((await list()).map((r) => r.email)).toEqual(["kim-new@example.test"]);
     expect(browser.jar.get(NEWS_NOTE_COOKIE)).toBe("1");
     expect(await noThanks().then((r) => r.status)).toBe(200);
-    expect((await list()).map((r) => r.email)).toEqual(["kim@example.test"]); // only the row this added goes
+    expect(await list()).toEqual([]); // No thanks leaves nothing of hers on the list
     home.emails.set(kim.did, { email: "kim-third@example.test", confirmed: true });
     browser.jar = new Map();
     await signIn(kim.did);
-    expect((await list()).map((r) => r.email)).toEqual(["kim@example.test"]);
+    expect(await list()).toEqual([]);
+  });
+
+  it("an /interest row of the same address is never touched by a later email change", async () => {
+    const ivy = account("ivy2", { email: "ivy@example.test", confirmed: true });
+    await pg.query("insert into interests (email, source_path) values ('ivy@example.test', '/interest')");
+    await signIn(ivy.did);
+    home.emails.set(ivy.did, { email: "ivy-new@example.test", confirmed: true });
+    browser.jar = new Map();
+    await signIn(ivy.did);
+    expect((await list()).map((r) => [r.email, r.source_path])).toEqual([["ivy@example.test", "/interest"], ["ivy-new@example.test", "techne"]]);
   });
 
   it("a former member (disabled) isn't 'already on the list': the newsletter skips disabled members", async () => {
