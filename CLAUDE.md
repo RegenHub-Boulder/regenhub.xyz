@@ -370,10 +370,10 @@ draft route read it from the issue. Changing a draft's audience (studio or MCP) 
 longer in it is skipped, and anyone an earlier switch skipped comes back (067's `newsletter_prepare`). Skipped rows
 are neither recipients nor failures (`issueProgress.skipped`; 067's `recipients_count`). **Send goes only to the list the steward saw:** status returns
 `progress.queueKey` (a fingerprint of the queued rows); the studio's first Send carries it and the audience on screen
-(`expected_queue`, `expected_audience`; Prepare always saves first). `confirmQueue` first moves the issue to
-`sending` (not yet frozen), so no prepare, draft save or MCP save can touch the queue from then on (`saveDraft`
-updates only while `status = 'draft'`); then it refuses (409, back to `draft`) a queue or audience that changed,
-re-checks standing and unsubscribes (skipping, never adding), and the first batch freezes it. **Deploy before 067 is
+(`expected_queue`, `expected_audience`; Prepare always saves first). `confirmQueue` calls 067's
+`newsletter_confirm_send`, which in one transaction under the issue lock refuses (409, nothing changed) a queue or
+audience that changed, skips anyone no longer in the audience by standing or unsubscribes (never adds), and freezes
+the issue, so no prepare or draft save can touch the queue after. Studio and MCP saves share `saveDraft`. **Deploy before 067 is
 safe:** every read and write of the column goes through `withAudienceColumn` (`lib/newsletter.ts`); without the
 column all issues are public and a members-only save is refused with a pointer to 067. Subtract: drop
 `withAudienceColumn` in the PR after 067 runs in production (owner: whoever runs the 067 migration). A members issue's email says "For RegenHub members" and has no web link; `/news` lists it for nobody and

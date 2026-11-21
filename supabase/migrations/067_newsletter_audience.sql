@@ -46,3 +46,32 @@ begin
     sent_count = (select count(*) from newsletter_sends where issue_id = p_issue and status = 'sent')
     where id = p_issue and run_token = p_token;
 end $$;
+
+-- Send goes only to the list the steward saw. In one transaction under the issue's row lock: the draft's audience
+-- and its queue's fingerprint (lib/newsletterSend.ts queueKeyOf: md5 of the non-skipped row ids, comma-joined in
+-- order, first 16 hex) must be what the studio showed; anyone no longer in the audience (p_rows: who it reaches now,
+-- by standing and unsubscribes) is skipped, never added; and the issue is frozen, so nothing can be prepared into it
+-- after. Returns 'ok' (or 'ok' for an issue that is no longer a draft: nothing to confirm), or why it refused, with
+-- nothing changed.
+create or replace function public.newsletter_confirm_send(p_issue integer, p_key text, p_audience text, p_rows jsonb, p_site text)
+returns text language plpgsql security definer set search_path = public as $$
+declare i newsletter_issues; k text; n integer;
+begin
+  select * into i from newsletter_issues where id = p_issue for update;
+  if not found then return 'not_found'; end if;
+  if i.delivery_snapshot is not null or i.status <> 'draft' then return 'ok'; end if;
+  if i.markdown_body is null or i.subject = '' then return 'empty'; end if;
+  if i.audience is distinct from p_audience then return 'audience'; end if;
+  select left(md5(coalesce(string_agg(id::text, ',' order by id), '')), 16), count(*) into k, n
+    from newsletter_sends where issue_id = p_issue and status <> 'skipped';
+  if n = 0 then return 'not_prepared'; end if;
+  if k is distinct from p_key then return 'changed'; end if;
+  update newsletter_sends set status = 'skipped', last_error = 'No longer in audience'
+    where issue_id = p_issue and status = 'pending' and first_attempt_at is null
+      and not exists (select 1 from jsonb_to_recordset(p_rows) as r(email text) where lower(r.email) = newsletter_sends.email);
+  update newsletter_issues set status = 'sending', delivery_snapshot = jsonb_build_object(
+    'markdown_body', markdown_body, 'subject', subject, 'issue_key', issue_key, 'site_url', p_site) where id = p_issue;
+  return 'ok';
+end $$;
+revoke all on function public.newsletter_confirm_send(integer, text, text, jsonb, text) from public, anon, authenticated;
+grant execute on function public.newsletter_confirm_send(integer, text, text, jsonb, text) to service_role;

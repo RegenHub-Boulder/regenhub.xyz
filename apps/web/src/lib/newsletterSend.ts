@@ -2,6 +2,7 @@ import { defaultEmailFrom, defaultEmailReplyTo } from "@regenhub/shared";
 import { createHash, randomUUID } from "crypto";
 import type { createServiceClient } from "@/lib/supabase/admin";
 import { compileAudience, MEMBERS_AUDIENCE_NEEDS_067, normalizeAudience, withAudienceColumn, type NewsletterAudience } from "@/lib/newsletter";
+import { isMissingFunction } from "@/lib/onchain/invoiceKind";
 import { readAll } from "@/lib/supabase/readAll";
 import { renderDraftEmail } from "@/lib/newsletterMarkdown";
 import { sendEmailDetailed } from "@/lib/email";
@@ -28,7 +29,8 @@ export interface Progress {
 
 /** A short fingerprint of a set of queue row ids. */
 function queueKeyOf(ids: number[]): string {
-  return createHash("sha256").update([...ids].sort((a, b) => a - b).join(",")).digest("hex").slice(0, 16);
+  // Same as 067's newsletter_confirm_send: md5 of the ids in order, comma-joined, first 16 hex.
+  return createHash("md5").update([...ids].sort((a, b) => a - b).join(",")).digest("hex").slice(0, 16);
 }
 
 /** Materialize the audience into pending ledger rows. Idempotent. */
@@ -67,49 +69,39 @@ export async function issueProgress(admin: Admin, issueId: number): Promise<Prog
   return p;
 }
 
-export type ConfirmResult =
-  | { ok: true }
-  | { ok: false; reason: "stale_page" | "not_prepared" | "changed" | "audience"; progress: Progress };
+export type ConfirmReason = "stale_page" | "not_prepared" | "changed" | "audience" | "empty" | "not_found";
+export type ConfirmResult = { ok: true } | { ok: false; reason: ConfirmReason; progress: Progress };
 
 /**
- * Before a draft's first batch. Moves the issue out of `draft` first (status 'sending', not yet frozen), so from
- * here no prepare, draft save or MCP save can touch the queue. Then checks it is still the list the steward saw
- * (`expectedKey` = Progress.queueKey, for `expectedAudience`), and re-checks it against the audience now (standing,
- * unsubscribes), skipping anyone who left it. Never adds anyone. A refusal puts the issue back to `draft`.
- * An issue already in this state (an earlier Send that stopped before its first batch) is checked again the same way.
+ * Before a draft's first batch: Send goes only to the list the steward saw. `expectedKey` is the Progress.queueKey
+ * and `expectedAudience` the audience the studio showed. 067's newsletter_confirm_send, in one transaction under the
+ * issue's lock, refuses a changed audience or queue (changing nothing), skips anyone no longer in the audience
+ * (standing, unsubscribes; never adds), and freezes the issue, so nothing can be prepared into it afterwards.
+ * Before 067 (no function) the same checks run here, without the lock: every issue is public then.
  */
 export async function confirmQueue(
-  admin: Admin, issueId: number, expectedKey: unknown, expectedAudience: unknown,
+  admin: Admin, issueId: number, expectedKey: unknown, expectedAudience: unknown, siteUrl: string,
 ): Promise<ConfirmResult> {
-  const refuse = async (reason: "stale_page" | "not_prepared" | "changed" | "audience", unlock = true): Promise<ConfirmResult> => {
-    if (unlock) {
-      const { error } = await admin.from("newsletter_issues").update({ status: "draft" }).eq("id", issueId)
-        .eq("status", "sending").is("delivery_snapshot", null).is("run_token", null);
-      if (error) throw error;
-    }
-    return { ok: false, reason, progress: await issueProgress(admin, issueId) };
-  };
-  if (typeof expectedKey !== "string") return refuse("stale_page", false);
+  const refuse = async (reason: ConfirmReason): Promise<ConfirmResult> => ({ ok: false, reason, progress: await issueProgress(admin, issueId) });
+  if (typeof expectedKey !== "string" || typeof expectedAudience !== "string") return refuse("stale_page");
+  const audience = normalizeAudience(expectedAudience);
+  const reach = await compileAudience(admin, audience);
+  const { data, error } = await admin.rpc("newsletter_confirm_send", {
+    p_issue: issueId, p_key: expectedKey, p_audience: audience, p_rows: reach.map((r) => ({ email: r.email })), p_site: siteUrl,
+  });
+  if (!error) return data === "ok" ? { ok: true } : refuse(data as ConfirmReason);
+  if (!isMissingFunction(error)) throw error;
 
-  const { data: locked, error: lockError } = await withAudienceColumn((col) => admin.from("newsletter_issues")
-    .update({ status: "sending" }).eq("id", issueId).in("status", ["draft", "sending"]).is("delivery_snapshot", null)
-    .is("run_token", null).select(col ? "id, audience" : "id"));
-  if (lockError) throw lockError;
-  const row = (locked as unknown as { id: number; audience?: string }[] | null)?.[0];
-  // Nothing to lock: another Send has already frozen the issue, after its own confirmation.
-  if (!row) return { ok: true };
-  const audience = normalizeAudience(row.audience);
-  if (expectedAudience !== undefined && normalizeAudience(expectedAudience) !== audience) return refuse("audience");
-
-  const rows = await readAll<{ id: number; email: string; status: string; first_attempt_at: string | null }>("newsletter_sends", (f, t) =>
-    admin.from("newsletter_sends").select("id, email, status, first_attempt_at").eq("issue_id", issueId)
+  // Pre-067: no audience column (every issue is public), no function.
+  if (audience !== "public") return refuse("audience");
+  const progress = await issueProgress(admin, issueId);
+  if (progress.total === 0) return refuse("not_prepared");
+  if (progress.queueKey !== expectedKey) return refuse("changed");
+  const inAudience = new Set(reach.map((r) => r.email.toLowerCase()));
+  const pending = await readAll<{ id: number; email: string; first_attempt_at: string | null }>("newsletter_sends", (f, t) =>
+    admin.from("newsletter_sends").select("id, email, first_attempt_at").eq("issue_id", issueId).eq("status", "pending")
       .order("id", { ascending: true }).range(f, t));
-  const live = rows.filter((r) => r.status !== "skipped");
-  if (live.length === 0) return refuse("not_prepared");
-  if (expectedKey !== queueKeyOf(live.map((r) => Number(r.id)))) return refuse("changed");
-  const inAudience = new Set((await compileAudience(admin, audience)).map((r) => r.email.toLowerCase()));
-  const leaving = live.filter((r) => r.status === "pending" && !r.first_attempt_at && !inAudience.has(r.email.toLowerCase())).map((r) => Number(r.id));
-  await skipRows(admin, issueId, leaving, "No longer in audience");
+  await skipRows(admin, issueId, pending.filter((r) => !r.first_attempt_at && !inAudience.has(r.email.toLowerCase())).map((r) => Number(r.id)), "No longer in audience");
   return { ok: true };
 }
 
@@ -229,10 +221,9 @@ export type SaveDraftResult =
   | { ok: false; reason: "sent" | "frozen" | "needs_067" | "refresh_failed" | "error"; message: string; draft?: { id: number; issue_key: string } };
 
 /**
- * Create or update a draft (studio and MCP). An existing issue changes only while it is still a draft: the update is
- * conditional on `status = 'draft'` and no snapshot, so a Send that has started (confirmQueue's lock) can't be undone
- * by a save that read the row a moment earlier. `audience` undefined keeps the draft's own (public for a new one).
- * A changed audience re-prepares the queue, if there is one.
+ * Create or update a draft (studio and MCP). Never touches an issue that is sending or sent: once Send has confirmed
+ * the list the issue is frozen, and the freeze guard (055) refuses a save that read the row a moment earlier.
+ * `audience` undefined keeps the draft's own (public for a new one). A changed audience re-prepares the queue, if any.
  */
 export async function saveDraft(
   admin: Admin, input: { issueKey: string; subject: string; markdown: string; audience?: NewsletterAudience },
@@ -248,19 +239,13 @@ export async function saveDraft(
   const audience = input.audience ?? normalizeAudience(existing?.audience);
   // Before migration 067 every issue is public: save without the column, and refuse a members-only one plainly.
   if (!audienceColumn && audience === "members") return { ok: false, reason: "needs_067", message: MEMBERS_AUDIENCE_NEEDS_067 };
-  const fields = { subject: input.subject, markdown_body: input.markdown, ...(audienceColumn ? { audience } : {}) };
-  const cols = `id, issue_key, subject, markdown_body, status${audienceColumn ? ", audience" : ""}`;
-  const { data, error } = existing
-    ? await admin.from("newsletter_issues").update(fields).eq("id", existing.id).eq("status", "draft")
-      .is("delivery_snapshot", null).select(cols)
-    : await admin.from("newsletter_issues").insert({ issue_key: input.issueKey, status: "draft", ...fields }).select(cols);
-  if (error) {
-    if (error.code === "55000" || error.code === "23505") return frozen; // frozen meanwhile, or created by someone else just now
-    return { ok: false, reason: "error", message: error.message };
-  }
-  const row = (data as unknown as Omit<Extract<SaveDraftResult, { ok: true }>["draft"], "audience">[] | null)?.[0];
-  if (!row) return frozen;
-  const draft = { ...row, audience };
+  const { data, error } = await admin.from("newsletter_issues")
+    .upsert({ issue_key: input.issueKey, subject: input.subject, markdown_body: input.markdown, status: "draft", ...(audienceColumn ? { audience } : {}) },
+      { onConflict: "issue_key" })
+    .select("id, issue_key, subject, markdown_body, status")
+    .single();
+  if (error) return error.code === "55000" ? frozen : { ok: false, reason: "error", message: error.message };
+  const draft = { ...(data as Omit<Extract<SaveDraftResult, { ok: true }>["draft"], "audience">), audience };
   if (existing && normalizeAudience(existing.audience) !== audience) {
     try { await reprepareIfQueued(admin, draft.id, audience); }
     catch (e) {

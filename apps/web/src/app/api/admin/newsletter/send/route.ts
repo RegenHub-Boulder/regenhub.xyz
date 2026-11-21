@@ -5,8 +5,9 @@ import { normalizeAudience, withAudienceColumn } from "@/lib/newsletter";
 import { sendBatch, retryFailed, confirmQueue } from "@/lib/newsletterSend";
 
 /**
- * POST { issue_id, expected_queue?, retry_failed?, limit? } — send the next batch of recipients.
- * A draft's first Send must carry `expected_queue` (Progress.queueKey from status): it goes only to that list.
+ * POST { issue_id, expected_queue, expected_audience, retry_failed?, limit? } — send the next batch of recipients.
+ * A draft's first Send must carry `expected_queue` (Progress.queueKey from status) and `expected_audience` (the
+ * audience shown): it goes only to that list (lib/newsletterSend confirmQueue). Later batches don't need them.
  * The studio calls this repeatedly until progress.done. Resumable + rate-limit
  * aware. The shared engine acquires issue/recipient claims and finalizes the
  * issue under its run token.
@@ -43,22 +44,23 @@ export async function POST(request: Request) {
 
   if (isRetry) await retryFailed(admin, issueId);
 
-  // Until the first batch freezes it, Send goes only to the list the steward saw: the queue is locked against
-  // prepares, refused if it changed since, re-checked against the audience now (standing, unsubscribes), never added to.
-  if (!issue.delivery_snapshot) {
-    const check = await confirmQueue(admin, issueId, body.expected_queue, body.expected_audience);
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
+  // A draft's first Send goes only to the list the steward saw: refused if it or its audience changed since,
+  // re-checked against the audience now (standing, unsubscribes; never added to), and frozen in the same step.
+  if (issue.status === "draft" && !issue.delivery_snapshot) {
+    const check = await confirmQueue(admin, issueId, body.expected_queue, body.expected_audience, siteUrl);
     if (!check.ok) {
       const error = {
         stale_page: "This page is out of date. Reload it, check the recipients, then Send.",
         not_prepared: "Prepare the audience first.",
         changed: `The recipient list changed since you looked: it is ${check.progress.total} now. Check it, then Send again.`,
         audience: "The issue's audience changed since you looked. Reload, check the recipients, then Send.",
+        empty: "draft is missing a subject or body",
+        not_found: "issue not found",
       }[check.reason];
-      return NextResponse.json({ error, progress: check.progress }, { status: 409 });
+      return NextResponse.json({ error, progress: check.progress }, { status: check.reason === "not_found" ? 404 : 409 });
     }
   }
-
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
   const result = await sendBatch(admin, issueId, {
     markdown: issue.markdown_body,
     subject: issue.subject,

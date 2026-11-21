@@ -66,7 +66,7 @@ it("the studio saves, lists, prepares and sends a draft as public; a members dra
   expect((await preparePost(new Request("http://x/api/admin/newsletter/prepare", post({ issue_id: draft.id })))).status).toBe(200);
   const st = (await (await statusGet(new Request(`http://x/api/admin/newsletter/status?issue_id=${draft.id}`))).json()) as { progress: { total: number; queueKey: string } };
   expect(st.progress.total).toBe(2);
-  const sent = await sendPost(new Request("http://x/api/admin/newsletter/send", post({ issue_id: draft.id, expected_queue: st.progress.queueKey })));
+  const sent = await sendPost(new Request("http://x/api/admin/newsletter/send", post({ issue_id: draft.id, expected_queue: st.progress.queueKey, expected_audience: "public" })));
   expect(sent.status).toBe(200);
   expect(mail.to.sort()).toEqual(["desk@example.test", "lead@example.test"]);
 });
