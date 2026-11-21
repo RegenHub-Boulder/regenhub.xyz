@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SERIES, getSeries, nthWeekdayOfMonth, ordinalShort, plannedNight, rhythmOf, ruleDatesFrom, seriesOf, techneTuesdays, topicOf, zonedTimeToUtc } from "./series";
+import { SERIES, getSeries, nthWeekdayOfMonth, ordinalShort, plannedNight, rhythmOf, ruleDatesFrom, seriesOf, startOfDayIn, techneTuesdays, topicOf, zonedTimeToUtc } from "./series";
 
 const agents = getSeries("agents-night")!;
 const civic = getSeries("civic-tech-night")!;
@@ -138,5 +138,22 @@ describe("times", () => {
         endsAt: "2026-12-02T03:00:00.000Z",
       });
     }
+  });
+});
+
+describe("startOfDayIn", () => {
+  const at = (iso: string, tz = "America/Denver") => startOfDayIn(tz, new Date(iso)).toISOString();
+  it("is local midnight in Denver, summer and winter", () => {
+    expect(at("2026-07-15T16:00:00Z")).toBe("2026-07-15T06:00:00.000Z");
+    expect(at("2026-11-20T16:00:00Z")).toBe("2026-11-20T07:00:00.000Z");
+    // Late evening in Denver is already the next day in UTC.
+    expect(at("2026-11-21T05:30:00Z")).toBe("2026-11-20T07:00:00.000Z");
+  });
+  it("is right on both daylight-saving days", () => {
+    expect(at("2026-03-08T16:00:00Z")).toBe("2026-03-08T07:00:00.000Z"); // the day clocks go forward (began on MST)
+    expect(at("2026-11-01T17:00:00Z")).toBe("2026-11-01T06:00:00.000Z"); // the day clocks go back (began on MDT)
+  });
+  it("works east of UTC too", () => {
+    expect(at("2026-11-20T03:00:00Z", "Asia/Tokyo")).toBe("2026-11-19T15:00:00.000Z");
   });
 });

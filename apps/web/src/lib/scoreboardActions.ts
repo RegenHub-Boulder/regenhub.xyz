@@ -1,5 +1,5 @@
 /**
- * "What to do next" on /admin/scoreboard (T-497): recommended actions, each a person or a night, why, and one step.
+ * "What to do next" on /admin, the admin home (T-497; moved there from /admin/scoreboard in T-482): recommended actions, each a person or a night, why, and one step.
  * Pure: fed by the rows and counts lib/scoreboard.ts already makes (one definition of every number), tested without a
  * database. The page and the MCP's `recommended_actions` both read `recommendedActions` + `visibleActions`.
  *

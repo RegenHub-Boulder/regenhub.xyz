@@ -16,6 +16,8 @@
 # No production database, no production Techne, no production Supabase.
 # T497_FOLLOWUPS=1 seeds a night that just ended with sample RSVPs (followups-seed.mjs) for the follow-ups on
 # /admin/events, and sends mail to the staging outbox (EMAIL_PROVIDER=outbox; /staging/outbox shows the latest).
+# T482_AUDIT=1 (alone) runs the stand-in on the real schema with sample rows for every /portal and /admin screen
+# (audit-seed.mjs); scripts/staging/audit-shots.mjs captures and counts them. The steward is an admin there.
 # T482_SCOREBOARD=1 also seeds the fictional rows /admin/scoreboard reads (scoreboard-seed.mjs); sign in as the steward.
 # Env: T482_STATE (state dir, default ~/.cache/t482), T482_BUILD (where pgenv/, target/ and appview.env live;
 # default T482_STATE), T482_PORT_BASE.
@@ -46,7 +48,7 @@ export DATABASE_URL="postgres://postgres@127.0.0.1:$P_PG/t482" BIND_ADDR="127.0.
 for _ in $(seq 60); do curl -sf "http://127.0.0.1:$P_APPVIEW/health" >/dev/null && break; sleep 1; done
 node "$ROOT/scripts/staging/seed.mjs" --appview "http://127.0.0.1:$P_APPVIEW" --out "$STATE" > "$S/seed.log"
 node "$ROOT/scripts/staging/techne-standin.mjs" --port "$P_STANDIN" --appview "http://127.0.0.1:$P_APPVIEW" --state "$STATE" > "$S/standin.log" 2>&1 & pids+=($!)
-node "$ROOT/scripts/staging/supabase-standin.mjs" --port "$P_SUPA" --state "$STATE" ${T482_SCOREBOARD:+--scoreboard} ${T497_FOLLOWUPS:+--followups} > "$S/supabase-standin.log" 2>&1 & pids+=($!)
+node "$ROOT/scripts/staging/supabase-standin.mjs" --port "$P_SUPA" --state "$STATE" ${T482_SCOREBOARD:+--scoreboard} ${T497_FOLLOWUPS:+--followups} ${T482_AUDIT:+--audit} > "$S/supabase-standin.log" 2>&1 & pids+=($!)
 for _ in $(seq 20); do curl -sf -o /dev/null "http://127.0.0.1:$P_STANDIN/signin" && break; sleep 0.5; done
 node "$ROOT/scripts/staging/seed-rsvps.mjs" --standin "http://127.0.0.1:$P_STANDIN" --state "$STATE" >> "$S/seed.log"
 if [ -n "${T497_FOLLOWUPS:-}" ]; then

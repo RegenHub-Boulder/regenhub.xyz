@@ -7,7 +7,7 @@ import type { RecommendedAction } from "@/lib/scoreboardActions";
 import { ACTION_KIND_LABEL } from "@/lib/scoreboardActionKinds";
 
 /**
- * The MCP's scoreboard tools (T-497): the numbers and the recommended actions /admin/scoreboard shows, so Uni can
+ * The MCP's scoreboard tools (T-497): the numbers /admin/scoreboard shows and the recommended actions on /admin (Today), so Uni can
  * prepare the every-other-Wednesday numbers itself. Read-only, `read` scope, gated like billing_summary. Both read
  * through readScoreboard (lib/scoreboardData.ts), so every number has the one definition the page uses. No email
  * addresses or payment details in the text: people are named, with their member id.
@@ -94,7 +94,7 @@ export async function recommendedActionsHandler(
   const lines = [
     `## What to do next, ${s.today}`,
     `${open.length} open${hidden.length > 0 ? `, ${hidden.length} dismissed (Done, or Not now for two weeks)` : ""}. ` +
-      "Ranked by goal impact, then urgency. Mark them Done or Not now on /admin/scoreboard.",
+      "Ranked by goal impact, then urgency. Mark them Done or Not now on /admin (Today, the admin home).",
     "",
   ];
   if (open.length === 0) lines.push("Nothing needs doing right now.");
@@ -112,7 +112,7 @@ export const SCOREBOARD_DESCRIPTIONS = {
     "Read-only. The co-op scoreboard (/admin/scoreboard) as text: paying members ($30+/mo plans) and net membership revenue against the " +
     "goals (net +10 members and $2,750/mo by 2027-01-20), pace against the straight line to the goal, subscriptions started and cancelled per " +
     "month, the funnel per month (stay-in-touch signups, applications, day passes, first subscriptions), event turnout from Techne by series, " +
-    "and the newsletter list. Same definitions as the page, the admin dashboard and billing_summary. No names or contact details.",
+    "and the newsletter list. Same definitions as the scoreboard page, the admin home and billing_summary. No names or contact details.",
   recommended_actions:
     "Read-only. The scoreboard's \"what to do next\" list, ranked by goal impact then urgency: past-due members (send the reminder), members " +
     "set to end (talk first), people who left in the last 90 days (a personal note), new members (welcome), day-pass buyers and regular " +

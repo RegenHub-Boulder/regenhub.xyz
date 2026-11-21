@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import Link from "next/link";
-import { Key, Ticket, User, ClipboardList, CheckCircle, Clock, MessageCircle, Zap, Calendar, CalendarDays, ArrowRight, AlertCircle, Wallet, CalendarClock } from "lucide-react";
+import { Ticket, ClipboardList, CheckCircle, Clock, MessageCircle, Zap, Calendar, ArrowRight, AlertCircle, Wallet, CalendarClock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import HubEssentials from "@/components/portal/HubEssentials";
 import InviteCard from "@/components/portal/InviteCard";
@@ -13,13 +13,12 @@ import { OnboardingChecklist } from "@/components/portal/OnboardingChecklist";
 import { DirectoryAsk } from "@/components/portal/DirectoryAsk";
 import { PAYING_STATUSES } from "@/lib/memberStanding";
 import { isListed } from "@/lib/memberDirectory";
-import { HubActivityCard } from "@/components/portal/HubActivityCard";
+import { RevealPin } from "@/components/portal/RevealPin";
+import { startOfDayIn } from "@/lib/series";
 import { DayPassRedemptionHero } from "@/components/portal/DayPassRedemptionHero";
 import { MembershipStatusCard } from "@/components/portal/MembershipStatusCard";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { planLabel, getPlan } from "@/lib/plans";
-import { isStewardEventsEnabled, isTechneSignInEnabled } from "@/lib/techne/config";
-import { STEWARD_PATH } from "@/lib/techne/session";
 import { isSyntheticEmail } from "@/lib/regenos/syntheticEmail";
 import { OnchainBillingCard } from "@/components/portal/OnchainBillingCard";
 import { RemoveWalletButton } from "@/components/portal/RemoveWalletButton";
@@ -167,45 +166,15 @@ export default async function PortalPage() {
     idleWallet = data;
   }
 
-  // Hub activity counts for the "what's happening today" card. When the HA
-  // → /api/access-events bridge starts firing, access_logs gets the real
-  // signal; until then we fall back to day_codes counts as the best-we-have.
-  /* eslint-disable react-hooks/purity -- server component, renders once per request */
-  const dayStartIso = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.toISOString(); })();
-  const sixHoursAgoIso = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
-  const nowIso = new Date().toISOString();
-  /* eslint-enable react-hooks/purity */
+  // "In today" on the door panel: distinct members who unlocked since midnight at the hub (service client:
+  // access_logs RLS hides other members from the signed-in one).
   const adminClient = createServiceClient();
-  const [
-    { count: activeGuestCodes },
-    { count: guestCodesToday },
-    { count: fullMembersCount },
-    { data: hereNowRows },
-  ] = await Promise.all([
-    supabase
-      .from("day_codes")
-      .select("*", { count: "exact", head: true })
-      .eq("is_active", true)
-      .gt("expires_at", nowIso),
-    supabase
-      .from("day_codes")
-      .select("*", { count: "exact", head: true })
-      .gte("issued_at", dayStartIso),
-    supabase
-      .from("members")
-      .select("*", { count: "exact", head: true })
-      .eq("disabled", false)
-      .in("member_type", ["cold_desk", "hot_desk", "hub_friend"]),
-    // Distinct members who unlocked in the last 6 hours — true "here now"
-    // signal. Uses service client because access_logs RLS hides other
-    // members from the authed user.
-    adminClient
-      .from("access_logs")
-      .select("member_id")
-      .eq("result", "granted")
-      .gte("created_at", sixHoursAgoIso)
-      .not("member_id", "is", null),
-  ]);
+  const { data: hereNowRows } = await adminClient
+    .from("access_logs")
+    .select("member_id")
+    .eq("result", "granted")
+    .gte("created_at", startOfDayIn("America/Denver").toISOString())
+    .not("member_id", "is", null);
   const hereNowCount = new Set((hereNowRows ?? []).map((r) => r.member_id)).size;
 
   // Install-prompt eligibility: don't nag first-time visitors before they've
@@ -227,30 +196,6 @@ export default async function PortalPage() {
         .limit(1)
         .maybeSingle();
       installPromptEligible = !!ownEntry;
-    }
-  }
-
-  // Most recent attributed entry — for the freshness signal on the card.
-  // Co-op-gated like the access log itself: only show names to co-op members + admins.
-  let lastEntry: { memberName: string; whenIso: string } | null = null;
-  if (member && (member.is_coop_member || member.is_admin)) {
-    const { data: lastRow } = await adminClient
-      .from("access_logs")
-      .select("created_at, member_id")
-      .eq("result", "granted")
-      .not("member_id", "is", null)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (lastRow?.member_id) {
-      const { data: lastMember } = await adminClient
-        .from("members")
-        .select("name")
-        .eq("id", lastRow.member_id)
-        .maybeSingle();
-      if (lastMember?.name) {
-        lastEntry = { memberName: lastMember.name, whenIso: lastRow.created_at };
-      }
     }
   }
 
@@ -356,8 +301,13 @@ export default async function PortalPage() {
       })
     : null;
 
+  const coopView = !!member.is_coop_member || !!member.is_admin;
+  const passesLeft = member.day_passes_balance ?? 0;
+
+  // The member home (T-482): what a member comes for, most often first. The door (their code, a guest code), then
+  // anything that needs them (a payment, a next step, first-week setup), then their plan, then everything else.
   return (
-    <div className="space-y-8">
+    <div className="max-w-3xl space-y-8">
       {/* Top-priority banner: payment failed needs attention */}
       {activeSubscription?.status === "past_due" && (
         <div className="glass-panel p-4 border border-red-500/40 bg-red-500/5 flex items-start gap-3">
@@ -374,15 +324,91 @@ export default async function PortalPage() {
         </div>
       )}
 
-      <div>
-        <h1 className="text-3xl font-bold text-forest">Welcome back, {member.name.split(" ")[0]}</h1>
-        <p className="text-muted mt-1">{typeLabel} Member</p>
-        {interestSignupLabel && (
+      <header>
+        <h1 className="text-3xl font-bold text-forest">Hi, {member.name.split(" ")[0]}</h1>
+        <p className="text-muted mt-1">{typeLabel} member</p>
+        {isNewMember && interestSignupLabel && (
           <p className="text-xs text-muted mt-2">
             Thanks for joining our list on {interestSignupLabel}. Glad you stuck with us.
           </p>
         )}
-      </div>
+      </header>
+
+      {isFullMember ? (
+        <Card className="glass-panel" data-testid="portal-door">
+          <CardContent className="p-6">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="text-sm font-semibold">Your door code</h2>
+              <Link href="/portal/my-code" className="text-sm text-muted hover:text-foreground">
+                {member.pin_code ? "Change" : "Set it"}
+              </Link>
+            </div>
+            {member.pin_code ? (
+              <RevealPin code={member.pin_code} slot={null} />
+            ) : (
+              <p className="text-sm text-amber-400 mt-3">
+                No code yet. <Link href="/portal/my-code" className="underline">Set your door code</Link> to get in.
+              </p>
+            )}
+            <div className="flex flex-wrap gap-x-6 gap-y-2 mt-5 text-sm">
+              <Link href="/portal/passes" className="text-sage hover:underline">
+                Guest code{passesLeft > 0 ? ` (${passesLeft} ${passesLeft === 1 ? "pass" : "passes"} left)` : ""} →
+              </Link>
+              <HereToday count={hereNowCount} canSee={coopView} />
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <DayPassRedemptionHero member={member} />
+          <div className="grid sm:grid-cols-2 gap-4" data-testid="portal-door">
+            {freeDayClaim && (
+              <Link href="/freeday">
+                <Card className="glass-panel hover-lift cursor-pointer border border-gold/20">
+                  <CardContent className="p-6">
+                    {freeDayClaim.status === "activated" ? (
+                      <>
+                        <Zap className="w-8 h-8 text-gold mb-3" />
+                        <h3 className="font-semibold mb-1">Free Day Active</h3>
+                        <p className="text-sm text-muted">View your door code</p>
+                      </>
+                    ) : freeDayClaim.status === "reserved" ? (
+                      <>
+                        <Calendar className="w-8 h-8 text-gold mb-3" />
+                        <h3 className="font-semibold mb-1">Free Day Reserved</h3>
+                        <p className="text-sm text-muted">
+                          {!freeDayClaim.claimed_date || freeDayClaim.claimed_date === new Intl.DateTimeFormat("en-CA", { timeZone: "America/Denver" }).format(new Date())
+                            ? "Tap to get your door code — visit any weekday"
+                            : `Reserved for ${new Date(freeDayClaim.claimed_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <Clock className="w-8 h-8 text-sage mb-3" />
+                        <h3 className="font-semibold mb-1">Application Pending</h3>
+                        <p className="text-sm text-muted">Your free day is being reviewed</p>
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+              </Link>
+            )}
+
+            <Link href="/portal/passes">
+              <Card className="glass-panel hover-lift cursor-pointer h-full">
+                <CardContent className="p-6">
+                  <Ticket className="w-8 h-8 text-sage mb-3" />
+                  <h3 className="font-semibold mb-1">Day passes</h3>
+                  <p className="text-sm text-muted">
+                    {passesLeft > 0 ? `${passesLeft} left. Get a door code for today, or buy more.` : "Buy a day pass for door access."}
+                  </p>
+                </CardContent>
+              </Card>
+            </Link>
+          </div>
+          <p className="text-sm"><HereToday count={hereNowCount} canSee={coopView} /></p>
+        </>
+      )}
 
       <MembershipStatusCard
         memberType={member.member_type}
@@ -391,9 +417,6 @@ export default async function PortalPage() {
         applicationInterest={application?.membership_interest}
         hasActiveSubscription={!!activeSubscription}
       />
-
-
-      <DayPassRedemptionHero member={member} />
 
       {askDirectory && <DirectoryAsk />}
 
@@ -407,110 +430,11 @@ export default async function PortalPage() {
         />
       )}
 
-      <HubActivityCard
-        hereNow={hereNowCount}
-        activeGuestCodes={activeGuestCodes ?? 0}
-        guestCodesToday={guestCodesToday ?? 0}
-        fullMembers={fullMembersCount ?? 0}
-        canZoomIn={!!member.is_coop_member || !!member.is_admin}
-        lastEntry={lastEntry}
-      />
-
       <InstallPrompt eligible={installPromptEligible} />
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {isFullMember && (
-          <Link href="/portal/my-code">
-            <Card className="glass-panel hover-lift cursor-pointer">
-              <CardContent className="p-6">
-                <Key className="w-8 h-8 text-sage mb-3" />
-                <h3 className="font-semibold mb-1">My Door Code</h3>
-                <p className="text-sm text-muted">View or change your permanent door code</p>
-                {member.pin_code ? (
-                  <p className="text-sm text-sage mt-3">Code active</p>
-                ) : (
-                  <p className="text-sm text-amber-400 mt-3">No code set</p>
-                )}
-              </CardContent>
-            </Card>
-          </Link>
-        )}
-
-        {freeDayClaim && !isFullMember && (
-          <Link href="/freeday">
-            <Card className="glass-panel hover-lift cursor-pointer border border-gold/20">
-              <CardContent className="p-6">
-                {freeDayClaim.status === "activated" ? (
-                  <>
-                    <Zap className="w-8 h-8 text-gold mb-3" />
-                    <h3 className="font-semibold mb-1">Free Day Active</h3>
-                    <p className="text-sm text-muted">View your door code</p>
-                  </>
-                ) : freeDayClaim.status === "reserved" ? (
-                  <>
-                    <Calendar className="w-8 h-8 text-gold mb-3" />
-                    <h3 className="font-semibold mb-1">Free Day Reserved</h3>
-                    <p className="text-sm text-muted">
-                      {!freeDayClaim.claimed_date || freeDayClaim.claimed_date === new Intl.DateTimeFormat("en-CA", { timeZone: "America/Denver" }).format(new Date())
-                        ? "Tap to get your door code — visit any weekday"
-                        : `Reserved for ${new Date(freeDayClaim.claimed_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <Clock className="w-8 h-8 text-sage mb-3" />
-                    <h3 className="font-semibold mb-1">Application Pending</h3>
-                    <p className="text-sm text-muted">Your free day is being reviewed</p>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          </Link>
-        )}
-
-        <Link href="/portal/passes">
-          <Card className="glass-panel hover-lift cursor-pointer">
-            <CardContent className="p-6">
-              <Ticket className="w-8 h-8 text-sage mb-3" />
-              <h3 className="font-semibold mb-1">Day Passes</h3>
-              <p className="text-sm text-muted">
-                {isFullMember ? "Generate guest day pass codes" : "Buy day passes for door access"}
-              </p>
-            </CardContent>
-          </Card>
-        </Link>
-
-        <Link href="/portal/profile">
-          <Card className="glass-panel hover-lift cursor-pointer">
-            <CardContent className="p-6">
-              <User className="w-8 h-8 text-sage mb-3" />
-              <h3 className="font-semibold mb-1">Profile</h3>
-              <p className="text-sm text-muted">Update your bio, skills, and contact info</p>
-            </CardContent>
-          </Card>
-        </Link>
-
-        {/* Flag-gated only — the page itself says what you may do (the Techne door, or the old regenOS lane). */}
-        {isStewardEventsEnabled() && (
-          <Link href={isTechneSignInEnabled() ? STEWARD_PATH : "/portal/events"}>
-            <Card className="glass-panel hover-lift cursor-pointer">
-              <CardContent className="p-6">
-                <CalendarDays className="w-8 h-8 text-sage mb-3" />
-                <h3 className="font-semibold mb-1">Manage Events</h3>
-                <p className="text-sm text-muted">
-                  {isTechneSignInEnabled() ? "RegenHub's calendar on Techne, for stewards" : "Create and edit the collective's calendar"}
-                </p>
-              </CardContent>
-            </Card>
-          </Link>
-        )}
-
-        {member.is_coop_member && <InviteCard />}
-      </div>
-
-      {/* Subscription management — shown for ANY active sub (desk or social tiers) */}
+      {/* Your plan: shown for any active subscription (desk or daily tiers) */}
       {activeSubscription && (
-        <Card className="glass-panel border border-sage/20">
+        <Card className="glass-panel" data-testid="portal-membership">
           <CardContent className="p-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
@@ -621,7 +545,23 @@ export default async function PortalPage() {
         </Card>
       )}
 
+      <nav aria-label="More" className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted border-t border-white/5 pt-4" data-testid="portal-more">
+        <Link href="/portal/profile" className="hover:text-foreground">Your profile</Link>
+        {coopView && <Link href="/portal/access-log" className="hover:text-foreground">Who came in</Link>}
+      </nav>
+
+      {member.is_coop_member && <InviteCard />}
+
       <HubEssentials defaultExpanded={isNewMember} />
     </div>
   );
 }
+
+/** One quiet line instead of the old stats card: how many members came in today, and (co-op) who. */
+function HereToday({ count, canSee }: { count: number; canSee: boolean }) {
+  const text = count === 0 ? "Nobody in yet today" : `${count} ${count === 1 ? "member" : "members"} in today`;
+  return canSee
+    ? <Link href="/portal/access-log" className="text-muted hover:text-foreground" data-testid="here-today">{text} →</Link>
+    : <span className="text-muted" data-testid="here-today">{text}</span>;
+}
+

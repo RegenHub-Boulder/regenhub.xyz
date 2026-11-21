@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Before / after: member home and admin home (T-482)</title>
+<style>
+  body { margin: 0; font: 16px/1.5 system-ui, sans-serif; background: #f2ede2; color: #1d1a16; }
+  main { max-width: 1500px; margin: 0 auto; padding: 24px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p { margin: 0 0 16px; color: #555; }
+  nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  button { font: inherit; padding: 6px 12px; border: 1px solid #b9b0a0; background: #fbf8f1; border-radius: 6px; cursor: pointer; }
+  button[aria-pressed=true] { background: #4f6b3a; color: #fff; border-color: #4f6b3a; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  figure { margin: 0; }
+  figcaption { font-weight: 600; margin-bottom: 6px; }
+  img { width: 100%; border: 1px solid #ccc; }
+  .phone img { max-width: 390px; }
+</style>
+<main>
+  <h1>Before / after: the two rebuilt home pages</h1>
+  <p>Sample data only. Pick a screen and a size; old on the left, new on the right. Judge: does the page lead with what you came for, and is anything you need missing?</p>
+  <nav id="screen">
+    <button data-v="member">Member home (Ana, hot desk)</button>
+    <button data-v="newcomer">Member home (Sam, first day)</button>
+    <button data-v="admin-admin">Admin home</button>
+    <button data-v="admin-admin-scoreboard">Scoreboard</button>
+  </nav>
+  <nav id="size">
+    <button data-v="desktop">Desktop</button>
+    <button data-v="phone">Phone</button>
+  </nav>
+  <div class="pair" id="pair">
+    <figure><figcaption>Before</figcaption><img id="before" alt="Before"></figure>
+    <figure><figcaption>After</figcaption><img id="after" alt="After"></figure>
+  </div>
+</main>
+<script>
+  const state = { screen: "member", size: "desktop" };
+  const file = (s, z) => {
+    if (s === "member" || s === "newcomer") return `${s}-${z}-portal.png`;
+    const [role, ...rest] = s.split("-");
+    return `${role}-${z}-${rest.join("-")}.png`;
+  };
+  function draw() {
+    const f = file(state.screen, state.size);
+    document.getElementById("before").src = `before/${f}`;
+    document.getElementById("after").src = `after/${f}`;
+    document.getElementById("pair").className = `pair ${state.size}`;
+    for (const [id, key] of [["screen", "screen"], ["size", "size"]]) {
+      for (const b of document.querySelectorAll(`#${id} button`)) b.setAttribute("aria-pressed", String(b.dataset.v === state[key]));
+    }
+  }
+  for (const [id, key] of [["screen", "screen"], ["size", "size"]]) {
+    document.getElementById(id).addEventListener("click", (e) => {
+      if (e.target.dataset.v) { state[key] = e.target.dataset.v; draw(); }
+    });
+  }
+  draw();
+</script>
+</html>
