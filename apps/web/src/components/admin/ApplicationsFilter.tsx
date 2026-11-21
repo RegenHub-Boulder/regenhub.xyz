@@ -17,6 +17,7 @@ const interestLabels: Record<string, string> = {
   social_events_1: "Social · 1 day/mo",
   social_events_5: "Social · 5 days/mo",
   hot_desk: "Hot Desk",
+  cold_desk: "Cold Desk",
   reserved_desk: "Reserved Desk",
   community: "Community",
 };
