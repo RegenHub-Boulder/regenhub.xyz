@@ -153,7 +153,7 @@ function Night({ night }: { night: NightFollowupView }) {
               <p className="text-xs text-muted" data-testid="followup-held">
                 {night.held.length > 0 && <>Left out: {night.held.map((p) => `${p.name} (${p.held ? HELD_TEXT[p.held] : ""})`).join(", ")}. </>}
                 {night.noEmail > 0 &&
-                  `${night.noEmail} RSVP'd with a Techne account that hasn't signed in here since we started asking for an email, so there's none to write to yet.`}
+                  `${night.noEmail} RSVP'd with a Techne account we have no confirmed email for.`}
               </p>
             )}
             {(night.previews.guest || night.previews.member) && (

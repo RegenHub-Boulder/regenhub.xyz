@@ -41,7 +41,7 @@ assert.deepEqual(people.map((s) => s.replace(/\s+/g, " ").trim()), ["Ana Sample 
 const held = await night.locator("[data-testid=followup-held]").innerText();
 assert.match(held, /Lee Sample \(unsubscribed from email\)/);
 // Jo (not linked) and Kim (Techne only) haven't signed in here since sign-ins carry the email.
-assert.match(held, /2 RSVP'd with a Techne account that hasn't signed in here since we started asking for an email/);
+assert.match(held, /2 RSVP'd with a Techne account we have no confirmed email for/);
 assert.ok(!/@/.test(text), "no emails on the page");
 assert.ok(await night.locator("button:has-text('Send 2 notes')").isEnabled());
 await shot(page, "batch-review-desktop", { clip: await clipOf(page, "[data-testid=night-followups]") });

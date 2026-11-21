@@ -20,7 +20,7 @@ Everyone is a sample person. Mail goes to the staging outbox (`/staging/outbox`)
 ## Steps
 1. **The review** (`walkthrough/night-followup/01-batch-review-desktop.png`). "The day after a night, Manage Events
    shows who RSVP'd and which note each would get. Ana is a member, Sam isn't. Lee unsubscribed, so Lee is left out,
-   and two people RSVP'd with Techne accounts that haven't signed in here since we started asking for an email."
+   and two people RSVP'd with Techne accounts we have no confirmed email for yet."
 2. **The guest note** (`02-guest-note-preview.png`). "Sam gets a thank-you, the next Civic Tech Night, an invitation
    to a Friday demo as our guest, Studio Night for members, and the membership page."
 3. **The member note** (`03-member-note-preview.png`). "Ana gets the next Studio Night, and since her member page

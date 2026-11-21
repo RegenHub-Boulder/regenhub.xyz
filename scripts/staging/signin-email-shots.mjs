@@ -64,7 +64,7 @@ const night = page.locator("[data-testid=followup-night]").first();
 const people = (await night.locator("[data-testid=followup-people] li").allInnerTexts()).map((s) => s.replace(/\s+/g, " ").trim());
 const kimRow = people.find((p) => /kim-sample/.test(p));
 assert.ok(kimRow && /guest note$/.test(kimRow), `Kim on the list with the guest note: ${people.join(" | ")}`);
-assert.match(await night.locator("[data-testid=followup-held]").innerText(), /1 RSVP'd with a Techne account that hasn't signed in here/); // Jo
+assert.match(await night.locator("[data-testid=followup-held]").innerText(), /1 RSVP'd with a Techne account we have no confirmed email for/); // Jo
 await shot(page, "followups-list-kim", { clip: await clipOf(page, "[data-testid=night-followups]") });
 
 // 4. Send Kim's note only; it lands in the staging outbox with the new first line.

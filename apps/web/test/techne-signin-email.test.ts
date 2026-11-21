@@ -214,11 +214,12 @@ describe("every Techne sign-in is a person with an email", () => {
     expect((await list()).map((r) => [r.email, r.source_path])).toEqual([["ivy@example.test", "/interest"], ["ivy-new@example.test", "techne"]]);
   });
 
-  it("a former member (disabled) isn't 'already on the list': the newsletter skips disabled members", async () => {
+  it("a disabled member's address isn't put on the list: the newsletter leaves them out on purpose", async () => {
     const fay = account("fay", { email: "fay@example.test", confirmed: true });
     await one(pg, "insert into members(name, email, disabled) values ('Fay', 'fay@example.test', true) returning id");
     await signIn(fay.did);
-    expect(await person(fay.did)).toMatchObject({ newsletter: "added" });
+    expect(await person(fay.did)).toMatchObject({ newsletter: "already" });
+    expect(await list()).toEqual([]);
   });
 
   it("respects an unsubscribe: an unsubscribed email is never put back on the list", async () => {

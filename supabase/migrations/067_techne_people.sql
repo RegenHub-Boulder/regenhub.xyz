@@ -110,7 +110,8 @@ begin
     if exists (select 1 from email_unsubscribes u where lower(trim(u.email)) = v_person.email) then
       v_person.newsletter := 'unsubscribed';
     elsif exists (select 1 from interests i where lower(trim(i.email)) = v_person.email)
-       or exists (select 1 from members m where lower(trim(m.email)) = v_person.email and not m.disabled) then
+       -- any member, disabled too: the newsletter leaves disabled members out on purpose, and a sign-in doesn't undo that
+       or exists (select 1 from members m where lower(trim(m.email)) = v_person.email) then
       v_person.newsletter := 'already';
     else
       insert into interests (email, name, source_path, member_id)

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { doorOff, notFound, requireTechne } from "@/lib/techne/portalDoor";
-import { sameSiteJson } from "@/lib/techne/guard";
+import { sameSiteJson, tooMany, withinIpLimit } from "@/lib/techne/guard";
 
 /**
  * POST /api/techne/newsletter { choice: "no" } — "No thanks" on the line shown after a Techne sign-in put the person on
@@ -18,6 +18,7 @@ export async function POST(request: Request) {
   const admin = createServiceClient();
   const signedIn = await requireTechne(admin);
   if (!signedIn.ok) return signedIn.response;
+  if (!(await withinIpLimit(admin, request, "newsletter"))) return tooMany();
   const { error } = await admin.rpc("decline_techne_newsletter", { p_did: signedIn.who.did });
   if (error) {
     console.error("[techne] newsletter decline failed:", error.message);
