@@ -12,7 +12,7 @@ export default async function NewMemberPage({ searchParams }: Props) {
   return (
     <div className="space-y-8 max-w-2xl">
       <div>
-        <h1 className="text-3xl font-bold text-forest">Add Member</h1>
+        <h1 className="text-3xl font-bold text-forest">Add member</h1>
         <p className="text-muted mt-1">
           {email
             ? `Creating profile for ${email}`

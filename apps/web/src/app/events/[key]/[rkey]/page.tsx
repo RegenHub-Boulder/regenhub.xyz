@@ -111,14 +111,14 @@ export default async function EventDetailPage({ params }: PageProps) {
           </header>
 
           {event.description && (
-            <div className="border-t border-white/10 pt-6">
+            <div className="border-t border-rule pt-6">
               {/* Full text, deliberately unclamped — the landing card is the summary, this is the event. */}
               <p className="whitespace-pre-line leading-relaxed">{event.description}</p>
             </div>
           )}
 
           {memberPart && (
-            <div className="border-t border-white/10 pt-6 space-y-1" data-testid="event-member-part">
+            <div className="border-t border-rule pt-6 space-y-1" data-testid="event-member-part">
               <h2 className="font-semibold flex items-center gap-2">
                 <Lock className="w-4 h-4 text-sage" /> {memberPart.title}
               </h2>

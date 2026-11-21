@@ -50,7 +50,7 @@ export function NewsletterCard() {
           <h3 className="text-sm font-semibold">Biweekly newsletter</h3>
         </div>
         <p className="text-xs text-muted">
-          <strong className="text-amber-400">Auto-send is currently OFF.</strong> Nothing
+          <strong className="text-warn">Auto-send is currently OFF.</strong> Nothing
           ships automatically until <code className="text-foreground">NEWSLETTER_AUTOSEND_ENABLED=true</code> is
           set in Coolify. Once on, it sends every other Tuesday (odd ISO weeks) to all
           members + the interests list: your note above + upcoming Luma events. The
@@ -68,7 +68,7 @@ export function NewsletterCard() {
             <p>Issue {result.issue_key} · {result.events_count} event{result.events_count === 1 ? "" : "s"} · note {result.note_included ? "included" : "not set"} · {result.audience_size == null ? "the audience couldn't be read" : `would reach ${result.audience_size} people`}</p>
           </div>
         )}
-        {error && <p className="text-xs text-red-400">{error}</p>}
+        {error && <p className="text-xs text-danger">{error}</p>}
       </CardContent>
     </Card>
   );

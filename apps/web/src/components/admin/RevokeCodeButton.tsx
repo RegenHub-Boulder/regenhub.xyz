@@ -41,7 +41,7 @@ export function RevokeCodeButton({ codeId, code }: { codeId: number; code: strin
         <span className="flex items-center gap-1 text-xs text-sage">
           <Check className="w-3.5 h-3.5" /> Revoked
         </span>
-        {error && <p className="text-xs text-amber-400">{error}</p>}
+        {error && <p className="text-xs text-warn">{error}</p>}
       </div>
     );
   }
@@ -50,13 +50,13 @@ export function RevokeCodeButton({ codeId, code }: { codeId: number; code: strin
     return (
       <div className="flex flex-col items-end gap-1">
         <div className="flex items-center gap-1.5">
-          <span className="text-xs text-red-400">Revoke {code}?</span>
+          <span className="text-xs text-danger">Revoke {code}?</span>
           <Button
             size="sm"
             variant="ghost"
             disabled={loading}
             onClick={handleRevoke}
-            className="text-red-400 hover:text-red-300 hover:bg-red-500/10 text-xs h-7 px-2"
+            className="text-danger hover:text-danger hover:bg-danger/10 text-xs h-7 px-2"
           >
             {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Yes"}
           </Button>
@@ -70,7 +70,7 @@ export function RevokeCodeButton({ codeId, code }: { codeId: number; code: strin
             No
           </Button>
         </div>
-        {error && <p className="text-xs text-red-400">{error}</p>}
+        {error && <p className="text-xs text-danger">{error}</p>}
       </div>
     );
   }
@@ -81,7 +81,7 @@ export function RevokeCodeButton({ codeId, code }: { codeId: number; code: strin
       disabled={loading}
       variant="ghost"
       size="sm"
-      className="btn-glass text-red-400 hover:text-red-300"
+      className="btn-glass text-danger hover:text-danger"
     >
       Revoke
     </Button>

@@ -45,7 +45,7 @@ export default async function PortalLayout({ children }: { children: React.React
   ];
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen" data-surface="work">
       <header className="sticky top-0 z-50 px-6 py-3">
         <nav className="glass-panel-subtle max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-6">
@@ -70,7 +70,7 @@ export default async function PortalLayout({ children }: { children: React.React
           <SignOutButton className="hidden sm:block" />
         </nav>
       </header>
-      <main className="max-w-7xl mx-auto px-6 py-8" data-part="portal">{children}</main>
+      <main className="max-w-7xl mx-auto px-6 py-8">{children}</main>
     </div>
   );
 }

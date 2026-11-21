@@ -155,7 +155,7 @@ export function ImportLumaCard({
           </ul>
         )}
         {done && <p className="text-xs text-sage">{done}</p>}
-        {error && <p className="text-xs text-red-400">{error}</p>}
+        {error && <p className="text-xs text-danger">{error}</p>}
       </CardContent>
     </Card>
   );

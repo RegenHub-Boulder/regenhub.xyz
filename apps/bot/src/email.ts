@@ -55,12 +55,12 @@ export function freeDayApprovedEmail(args: { name: string; siteUrl: string }) {
   return {
     subject: "Your RegenHub day pass is ready",
     html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
         <p>Hi ${firstName},</p>
         <p>You&rsquo;re cleared to visit RegenHub — <strong>a day pass is waiting in your account.</strong></p>
         <p>When you&rsquo;re ready to come in any weekday between 8&nbsp;AM and 6&nbsp;PM:</p>
         <p style="margin: 20px 0;">
-          <a href="${base}/portal/passes" style="background: #2d5e3e; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Get my door code</a>
+          <a href="${base}/portal/passes" style="background: #4b5a2c; color: white; padding: 12px 20px; border-radius: 2px; text-decoration: none; display: inline-block;">Get my door code</a>
         </p>
         <p>You&rsquo;ll sign in with your email (no password — we&rsquo;ll send you a one-time link), tap <strong>Generate code</strong>, and get a 6-digit PIN valid until 6&nbsp;PM that day. It works on both 2nd-floor door keypads — front and back.</p>
         <h3 style="margin-top: 28px;">When you arrive</h3>
@@ -85,7 +85,7 @@ export function membershipApprovedEmail(args: { name: string; siteUrl: string })
   return {
     subject: "You're cleared to subscribe to RegenHub membership",
     html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
         <p>Hi ${firstName},</p>
         <p>You&rsquo;re approved to subscribe to a RegenHub membership whenever you&rsquo;re ready. Five tiers:</p>
         <ul style="line-height: 1.7; padding-left: 20px;">
@@ -97,7 +97,7 @@ export function membershipApprovedEmail(args: { name: string; siteUrl: string })
         </ul>
         <p>Day passes accumulate &mdash; they never expire. Plus members get day passes at $25 instead of $30, and access to members-only events. Full Access tiers (Hot/Cold Desk) auto-allocate your PIN on signup.</p>
         <p style="margin: 16px 0;">
-          <a href="${base}/membership" style="background: #2d5e3e; color: white; padding: 10px 18px; border-radius: 8px; text-decoration: none; display: inline-block;">See membership tiers</a>
+          <a href="${base}/membership" style="background: #4b5a2c; color: white; padding: 10px 18px; border-radius: 2px; text-decoration: none; display: inline-block;">See membership tiers</a>
         </p>
         <p>Any questions, just reply.</p>
         <p>&mdash; RegenHub</p>
@@ -113,12 +113,12 @@ export function freeDayPlusMembershipApprovedEmail(args: { name: string; siteUrl
   return {
     subject: "You're approved for a free day + RegenHub membership",
     html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
         <p>Hi ${firstName},</p>
         <p>Welcome — you&rsquo;re approved on two fronts:</p>
         <p><strong>1. Your day pass — already in your account.</strong> Come any weekday between 8&nbsp;AM and 6&nbsp;PM. When you&rsquo;re ready, sign in and tap <strong>Generate code</strong>:</p>
         <p style="margin: 16px 0;">
-          <a href="${base}/portal/passes" style="background: #2d5e3e; color: white; padding: 10px 18px; border-radius: 8px; text-decoration: none; display: inline-block;">Get my door code</a>
+          <a href="${base}/portal/passes" style="background: #4b5a2c; color: white; padding: 10px 18px; border-radius: 2px; text-decoration: none; display: inline-block;">Get my door code</a>
         </p>
         <p><strong>2. RegenHub membership.</strong> You&rsquo;re also cleared to sign up for any tier when you&rsquo;re ready:</p>
         <ul style="line-height: 1.7; padding-left: 20px;">
@@ -130,7 +130,7 @@ export function freeDayPlusMembershipApprovedEmail(args: { name: string; siteUrl
         </ul>
         <p>Day passes accumulate &mdash; they never expire. Plus members get day passes at $25 instead of $30, and access to members-only events. Full Access tiers (Hot/Cold Desk) auto-allocate your PIN on signup.</p>
         <p style="margin: 16px 0;">
-          <a href="${base}/membership" style="background: #2d5e3e; color: white; padding: 10px 18px; border-radius: 8px; text-decoration: none; display: inline-block;">See membership tiers</a>
+          <a href="${base}/membership" style="background: #4b5a2c; color: white; padding: 10px 18px; border-radius: 2px; text-decoration: none; display: inline-block;">See membership tiers</a>
         </p>
         <p><strong>Address:</strong> 1515 Walnut St, Suite 200, Boulder, CO</p>
         <p>Any questions, just reply.</p>

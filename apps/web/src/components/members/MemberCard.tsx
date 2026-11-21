@@ -18,7 +18,7 @@ export function MemberPhoto({ member, size }: { member: Pick<PublicMember, "name
       <img
         src={member.photoUrl}
         alt=""
-        className={`${box} rounded-full object-cover border border-white/10 shrink-0`}
+        className={`${box} rounded-full object-cover border border-rule shrink-0`}
         referrerPolicy="no-referrer"
       />
     );
@@ -26,8 +26,7 @@ export function MemberPhoto({ member, size }: { member: Pick<PublicMember, "name
   return (
     <div
       aria-hidden
-      className={`${box} rounded-full shrink-0 flex items-center justify-center font-semibold text-sage border border-white/10`}
-      style={{ background: "rgba(45,90,61,0.35)" }}
+      className={`${box} rounded-full shrink-0 flex items-center justify-center font-semibold text-sage border border-rule bg-moss/10`}
     >
       {initials(member.name)}
     </div>
@@ -39,7 +38,7 @@ export function MemberCard({ member }: { member: PublicMember }) {
   return (
     <Link
       href={`/members/${encodeURIComponent(member.slug)}`}
-      className="glass-panel hover-lift rounded-xl p-5 flex gap-4 items-start focus-visible:outline focus-visible:outline-2 focus-visible:outline-sage"
+      className="glass-panel-subtle py-4 flex gap-4 items-start focus-visible:outline focus-visible:outline-2 focus-visible:outline-sage"
       data-testid="member-card"
     >
       <MemberPhoto member={member} size="sm" />
@@ -52,7 +51,7 @@ export function MemberCard({ member }: { member: PublicMember }) {
         {member.skills.length > 0 && (
           <div className="flex flex-wrap gap-1 pt-1">
             {member.skills.slice(0, 3).map((s) => (
-              <span key={s} className="text-xs px-2 py-0.5 rounded-full border border-white/10 text-muted max-w-[10rem] truncate">
+              <span key={s} className="text-xs px-2 py-0.5 rounded-full border border-rule text-muted max-w-[10rem] truncate">
                 {s}
               </span>
             ))}

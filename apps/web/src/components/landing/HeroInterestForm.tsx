@@ -53,7 +53,7 @@ export default function HeroInterestForm() {
           Stay in Touch
         </Button>
       </div>
-      {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
+      {error && <p className="text-xs text-danger mt-2">{error}</p>}
     </form>
   );
 }

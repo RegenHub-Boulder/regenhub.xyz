@@ -176,7 +176,7 @@ export function ApplicationActions({
             <>Approved by <span className="text-sage">{approvedByName}</span> · {relTime(application.checkout_sent_at)}</>
           )}
           {status === "rejected" && rejectedByName && (
-            <>Rejected by <span className="text-red-400">{rejectedByName}</span> · {relTime(application.rejected_at)}</>
+            <>Rejected by <span className="text-danger">{rejectedByName}</span> · {relTime(application.rejected_at)}</>
           )}
           {status === "pending" && rejectedByName && (
             <span className="italic">Previously rejected by {rejectedByName} · {relTime(application.rejected_at)}</span>
@@ -190,7 +190,7 @@ export function ApplicationActions({
               size="sm"
               disabled={busy}
               onClick={() => setShowApprove(!showApprove)}
-              className="bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 border border-emerald-500/30 text-xs gap-1 h-7 px-2"
+              className="bg-ok/10 hover:bg-ok/10 text-ok border border-ok/40 text-xs gap-1 h-7 px-2"
             >
               <Check className="w-3 h-3" /> Approve
             </Button>
@@ -207,7 +207,7 @@ export function ApplicationActions({
               size="sm"
               disabled={busy}
               onClick={reject}
-              className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 text-xs gap-1 h-7 px-2"
+              className="bg-danger/10 hover:bg-danger/10 text-danger border border-danger/40 text-xs gap-1 h-7 px-2"
             >
               <X className="w-3 h-3" /> Reject
             </Button>
@@ -237,7 +237,7 @@ export function ApplicationActions({
 
       {/* Approval modal — inline panel */}
       {showApprove && status === "pending" && (
-        <div className="glass-panel p-4 space-y-3 border border-emerald-500/20">
+        <div className="glass-panel p-4 space-y-3 border border-ok/40">
           <div>
             <p className="text-xs text-muted mb-1.5 font-medium">Plan (rate can be customized below)</p>
             <div className="flex gap-2 flex-wrap">
@@ -249,7 +249,7 @@ export function ApplicationActions({
                   className={`px-3 py-1.5 rounded text-xs border ${
                     planKey === p.key
                       ? "bg-sage/20 border-sage/50 text-sage"
-                      : "bg-white/5 border-white/10 text-muted hover:bg-white/10"
+                      : "bg-tint border-rule text-muted hover:bg-tint"
                   }`}
                 >
                   {p.label} · ${p.defaultDollars}/mo
@@ -268,7 +268,7 @@ export function ApplicationActions({
                 step="1"
                 value={monthlyDollars}
                 onChange={(e) => setMonthlyDollars(e.target.value)}
-                className="w-24 bg-white/5 border border-white/10 rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
+                className="w-24 bg-tint border border-rule rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
               />
               <span className="text-sm text-muted">/ month</span>
             </div>
@@ -284,7 +284,7 @@ export function ApplicationActions({
               value={discountNote}
               onChange={(e) => setDiscountNote(e.target.value)}
               placeholder="e.g. Founder rate, Friend of co-op"
-              className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
+              className="w-full bg-tint border border-rule rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
             />
           </div>
 
@@ -307,14 +307,14 @@ export function ApplicationActions({
                     value={promoDollars}
                     onChange={(e) => setPromoDollars(e.target.value)}
                     placeholder="0"
-                    className="w-20 bg-white/5 border border-white/10 rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
+                    className="w-20 bg-tint border border-rule rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
                   />
                   <span className="text-xs text-muted">off</span>
                 </div>
                 <select
                   value={promoDuration}
                   onChange={(e) => setPromoDuration(e.target.value as DurationChoice)}
-                  className="bg-white/5 border border-white/10 rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
+                  className="bg-tint border border-rule rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
                 >
                   <option value="repeating">for N months</option>
                   <option value="forever">forever</option>
@@ -326,7 +326,7 @@ export function ApplicationActions({
                       min="1"
                       value={promoMonths}
                       onChange={(e) => setPromoMonths(e.target.value)}
-                      className="w-14 bg-white/5 border border-white/10 rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
+                      className="w-14 bg-tint border border-rule rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
                     />
                     <span className="text-xs text-muted">mo</span>
                   </div>
@@ -340,7 +340,7 @@ export function ApplicationActions({
               size="sm"
               disabled={busy}
               onClick={submitApprove}
-              className="bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 border border-emerald-500/30 text-xs gap-1 h-7"
+              className="bg-ok/10 hover:bg-ok/10 text-ok border border-ok/40 text-xs gap-1 h-7"
             >
               {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
               Generate Checkout Link
@@ -375,7 +375,7 @@ export function ApplicationActions({
                 </span>
               )}
               {application.discount_cents != null && application.discount_cents > 0 && (
-                <span className="text-amber-400 ml-1">
+                <span className="text-warn ml-1">
                   · ${application.discount_cents / 100} off
                   {application.discount_duration === "repeating"
                     ? ` × ${application.discount_months}mo`
@@ -387,7 +387,7 @@ export function ApplicationActions({
               )}
             </div>
             {checkoutCompleted && (
-              <span className="text-xs text-emerald-400">✓ Completed</span>
+              <span className="text-xs text-ok">✓ Completed</span>
             )}
           </div>
           {!checkoutCompleted && (
@@ -428,7 +428,7 @@ export function ApplicationActions({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Internal notes..."
-            className="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-sm placeholder:text-muted focus:outline-none focus:border-sage/50"
+            className="flex-1 bg-tint border border-rule rounded px-2 py-1 text-sm placeholder:text-muted focus:outline-none focus:border-sage/50"
           />
           <Button
             size="sm"
@@ -441,7 +441,7 @@ export function ApplicationActions({
         </div>
       )}
 
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      {error && <p className="text-xs text-danger">{error}</p>}
     </div>
   );
 }

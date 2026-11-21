@@ -93,7 +93,7 @@ export function RequestDayPassButton({ isFullMember, remainingUses }: Props) {
             : "No expiry — revoke manually to remove"}
         </p>
         {result.lock_status && (
-          <div className={`flex items-center justify-center gap-1.5 mt-2 text-xs ${hasLockWarning ? "text-amber-400" : "text-emerald-400"}`}>
+          <div className={`flex items-center justify-center gap-1.5 mt-2 text-xs ${hasLockWarning ? "text-warn" : "text-ok"}`}>
             {hasLockWarning
               ? <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
               : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
@@ -125,7 +125,7 @@ export function RequestDayPassButton({ isFullMember, remainingUses }: Props) {
         </Button>
         {loading && <p className="text-xs text-muted animate-pulse">Programming front and back door locks...</p>}
         {!loading && <p className="text-xs text-muted">Code expires at 6 PM today</p>}
-        {error && <p className="text-xs text-red-400">{error}</p>}
+        {error && <p className="text-xs text-danger">{error}</p>}
       </div>
     );
   }
@@ -146,7 +146,7 @@ export function RequestDayPassButton({ isFullMember, remainingUses }: Props) {
                   className={`px-3 py-1 rounded text-xs transition-colors ${
                     selected
                       ? "bg-gold/20 text-gold border border-gold/40"
-                      : "bg-white/5 text-muted border border-white/10 hover:bg-white/10"
+                      : "bg-tint text-muted border border-rule hover:bg-tint"
                   }`}
                 >
                   {p.hours === null ? <Infinity className="w-3 h-3 inline" /> : p.label}
@@ -200,7 +200,7 @@ export function RequestDayPassButton({ isFullMember, remainingUses }: Props) {
         </Button>
       </div>
       {loading && <p className="text-xs text-muted animate-pulse">Programming front and back door locks...</p>}
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      {error && <p className="text-xs text-danger">{error}</p>}
     </div>
   );
 }

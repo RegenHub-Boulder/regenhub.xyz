@@ -98,7 +98,7 @@ export function formatEventRange(startAt: string | null, endAt?: string | null):
 function EventCardBody({ event, external }: { event: UpcomingEvent; external: boolean }) {
   const when = formatEventWhen(event.startAt);
   return (
-    <div className="glass-panel-subtle rounded-lg p-5 flex items-start gap-4 hover-lift">
+    <div className="glass-panel-subtle py-5 flex items-start gap-4 hover-lift">
       <CalendarDays className="w-5 h-5 text-sage shrink-0 mt-1" />
       <div className="min-w-0">
         {when && <p className="text-sm text-muted mb-1">{when}</p>}
@@ -140,7 +140,7 @@ export function EventCard({ event }: { event: UpcomingEvent }) {
 
 export function EventList({ events }: { events: UpcomingEvent[] }) {
   return (
-    <ul className="space-y-3">
+    <ul className="border-b border-rule">
       {events.map((event) => (
         <li key={event.id}>
           <EventCard event={event} />

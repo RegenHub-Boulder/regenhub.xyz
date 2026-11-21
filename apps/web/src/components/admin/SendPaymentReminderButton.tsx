@@ -43,11 +43,11 @@ export function SendPaymentReminderButton({ memberId }: Props) {
         className="btn-glass text-xs h-7 gap-1 shrink-0"
       >
         {busy ? <Loader2 className="w-3 h-3 animate-spin" />
-          : sent ? <Check className="w-3 h-3 text-emerald-400" />
+          : sent ? <Check className="w-3 h-3 text-ok" />
           : <Mail className="w-3 h-3" />}
         {sent ? "Sent" : "Send reminder"}
       </Button>
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      {error && <p className="text-xs text-danger">{error}</p>}
     </div>
   );
 }

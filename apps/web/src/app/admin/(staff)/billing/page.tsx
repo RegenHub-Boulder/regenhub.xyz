@@ -36,10 +36,10 @@ const planLabels: Record<string, string> = new Proxy({}, {
 });
 
 const statusStyle: Record<string, string> = {
-  active: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-  trialing: "bg-sky-500/20 text-sky-400 border-sky-500/30",
-  past_due: "bg-red-500/20 text-red-400 border-red-500/30",
-  canceled: "bg-white/10 text-muted border-white/20",
+  active: "bg-ok/10 text-ok border-ok/40",
+  trialing: "bg-note/10 text-note border-note/40",
+  past_due: "bg-danger/10 text-danger border-danger/40",
+  canceled: "bg-tint text-muted border-rule",
 };
 
 function fmtDate(iso: string | null) {
@@ -156,7 +156,7 @@ export default async function BillingPage() {
             <p className="text-xs text-muted mt-1">
               from {revenue.subscriptions} paying sub{revenue.subscriptions === 1 ? "" : "s"}
               {cancelingCents > 0 && (
-                <span className="text-amber-400"> · −{fmtMoney(cancelingCents)} pending cancel</span>
+                <span className="text-warn"> · −{fmtMoney(cancelingCents)} pending cancel</span>
               )}
             </p>
           </CardContent>
@@ -186,7 +186,7 @@ export default async function BillingPage() {
 
         <Card className="glass-panel">
           <CardContent className="p-5">
-            <ArrowDownCircle className="w-6 h-6 text-amber-400 mb-2" />
+            <ArrowDownCircle className="w-6 h-6 text-warn mb-2" />
             <p className="text-xs text-muted mb-1">Queued to cancel</p>
             <p className="text-3xl font-bold text-foreground">{cancelingSubs.length}</p>
             <p className="text-xs text-muted mt-1">at end of current period</p>
@@ -215,9 +215,9 @@ export default async function BillingPage() {
 
       {/* Past-due alert section */}
       {pastDueSubs.length > 0 && (
-        <Card className="glass-panel border border-red-500/30">
+        <Card className="glass-panel border border-danger/40">
           <CardContent className="p-5">
-            <h3 className="text-sm font-semibold mb-4 flex items-center gap-2 text-red-400">
+            <h3 className="text-sm font-semibold mb-4 flex items-center gap-2 text-danger">
               <AlertCircle className="w-4 h-4" />
               Past due — needs attention
             </h3>
@@ -227,7 +227,7 @@ export default async function BillingPage() {
                 return (
                   <div
                     key={s.id}
-                    className="flex items-center justify-between gap-3 py-2 px-3 rounded hover:bg-white/5 transition-colors"
+                    className="flex items-center justify-between gap-3 py-2 px-3 rounded hover:bg-tint transition-colors"
                   >
                     <Link
                       href={s.members ? `/admin/members/${s.members.id}` : "#"}
@@ -238,7 +238,7 @@ export default async function BillingPage() {
                         <p className="text-xs text-muted">{s.members?.email}</p>
                       </div>
                       <div className="text-right text-xs">
-                        <p className="text-red-400">{days != null ? `${days}d past due` : "past due"}</p>
+                        <p className="text-danger">{days != null ? `${days}d past due` : "past due"}</p>
                         <p className="text-muted">
                           {planLabels[s.plan_key] ?? s.plan_key} ·{" "}
                           <RateLabel monthly_cents={s.monthly_cents} net_cents={s.net_cents} className="font-normal" />
@@ -256,9 +256,9 @@ export default async function BillingPage() {
 
       {/* Canceling section */}
       {cancelingSubs.length > 0 && (
-        <Card className="glass-panel border border-amber-500/20">
+        <Card className="glass-panel border border-warn/40">
           <CardContent className="p-5">
-            <h3 className="text-sm font-semibold mb-4 flex items-center gap-2 text-amber-400">
+            <h3 className="text-sm font-semibold mb-4 flex items-center gap-2 text-warn">
               <ArrowDownCircle className="w-4 h-4" />
               Cancellations queued
             </h3>
@@ -267,14 +267,14 @@ export default async function BillingPage() {
                 <Link
                   key={s.id}
                   href={s.members ? `/admin/members/${s.members.id}` : "#"}
-                  className="flex items-center justify-between gap-3 py-2 px-3 rounded hover:bg-white/5 transition-colors"
+                  className="flex items-center justify-between gap-3 py-2 px-3 rounded hover:bg-tint transition-colors"
                 >
                   <div>
                     <p className="text-sm font-medium">{s.members?.name ?? "(unknown member)"}</p>
                     <p className="text-xs text-muted">{s.members?.email}</p>
                   </div>
                   <div className="text-right text-xs">
-                    <p className="text-amber-400">Ends {fmtDate(s.current_period_end)}</p>
+                    <p className="text-warn">Ends {fmtDate(s.current_period_end)}</p>
                     <p className="text-muted">
                       {planLabels[s.plan_key] ?? s.plan_key} ·{" "}
                       <RateLabel monthly_cents={s.monthly_cents} net_cents={s.net_cents} className="font-normal" />
@@ -303,7 +303,7 @@ export default async function BillingPage() {
               <div className="overflow-x-auto hidden sm:block">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-white/10 text-left text-muted text-xs">
+                    <tr className="border-b border-rule text-left text-muted text-xs">
                       <th className="py-2 pr-4 font-medium">Member</th>
                       <th className="py-2 pr-4 font-medium">Plan</th>
                       <th className="py-2 pr-4 font-medium">Rate</th>
@@ -317,7 +317,7 @@ export default async function BillingPage() {
                     {billingSubs
                       .sort((a, b) => effectiveMonthlyCents(b) - effectiveMonthlyCents(a))
                       .map((s) => (
-                        <tr key={s.id} className="border-b border-white/5 hover:bg-white/5">
+                        <tr key={s.id} className="border-b border-rule hover:bg-tint">
                           <td className="py-2 pr-4">
                             {s.members ? (
                               <Link href={`/admin/members/${s.members.id}`} className="hover:text-sage">
@@ -333,11 +333,11 @@ export default async function BillingPage() {
                             <RateLabel monthly_cents={s.monthly_cents} net_cents={s.net_cents} />
                           </td>
                           <td className="py-2 pr-4">
-                            <Badge className={`text-xs ${statusStyle[s.status] ?? "border-white/20"}`}>
+                            <Badge className={`text-xs ${statusStyle[s.status] ?? "border-rule"}`}>
                               {s.status}
                             </Badge>
                             {s.cancel_at_period_end && (
-                              <Badge className="text-xs bg-amber-500/20 text-amber-400 border-amber-500/30 ml-1">
+                              <Badge className="text-xs bg-warn/10 text-warn border-warn/40 ml-1">
                                 canceling
                               </Badge>
                             )}
@@ -367,7 +367,7 @@ export default async function BillingPage() {
                         <RateLabel monthly_cents={s.monthly_cents} net_cents={s.net_cents} className="text-sm" />
                       </div>
                       <div className="flex items-center gap-2 text-xs text-muted">
-                        <Badge className={`text-xs ${statusStyle[s.status] ?? "border-white/20"}`}>{s.status}</Badge>
+                        <Badge className={`text-xs ${statusStyle[s.status] ?? "border-rule"}`}>{s.status}</Badge>
                         <span>·</span>
                         <span>{planLabels[s.plan_key] ?? s.plan_key}</span>
                       </div>
@@ -403,7 +403,7 @@ export default async function BillingPage() {
               <Link
                 key={g.id}
                 href={g.members ? `/admin/members/${g.members.id}` : "#"}
-                className="flex items-center justify-between gap-3 py-2 px-3 rounded hover:bg-white/5 transition-colors"
+                className="flex items-center justify-between gap-3 py-2 px-3 rounded hover:bg-tint transition-colors"
               >
                 <div>
                   <p className="text-sm font-medium">{g.members?.name ?? "(unknown)"}</p>
@@ -435,7 +435,7 @@ export default async function BillingPage() {
                 <Link
                   key={p.id}
                   href={p.members ? `/admin/members/${p.members.id}` : "#"}
-                  className="flex items-center justify-between gap-3 py-2 px-3 rounded hover:bg-white/5 transition-colors"
+                  className="flex items-center justify-between gap-3 py-2 px-3 rounded hover:bg-tint transition-colors"
                 >
                   <div>
                     <p className="text-sm font-medium">{p.members?.name ?? p.email ?? "(unknown)"}</p>
@@ -464,7 +464,7 @@ export default async function BillingPage() {
               Stripe webhook activity
               <span className="text-xs text-muted font-normal">(last {events.length})</span>
               {failedEvents.length > 0 && (
-                <Badge className="text-xs bg-amber-500/20 text-amber-400 border-amber-500/30">
+                <Badge className="text-xs bg-warn/10 text-warn border-warn/40">
                   {failedEvents.length} need attention
                 </Badge>
               )}
@@ -479,7 +479,7 @@ export default async function BillingPage() {
           <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-white/10 text-left text-muted">
+                  <tr className="border-b border-rule text-left text-muted">
                     <th className="py-2 pr-3 font-medium">Event</th>
                     <th className="py-2 pr-3 font-medium">Status</th>
                     <th className="py-2 pr-3 font-medium">Member</th>
@@ -490,12 +490,12 @@ export default async function BillingPage() {
                 <tbody>
                   {events.map((e) => {
                     const statusColor =
-                      e.status === "ok" ? "text-emerald-400"
-                      : e.status === "processing" ? "text-sky-400"
-                      : e.status === "data_error" ? "text-amber-400"
-                      : "text-red-400";
+                      e.status === "ok" ? "text-ok"
+                      : e.status === "processing" ? "text-note"
+                      : e.status === "data_error" ? "text-warn"
+                      : "text-danger";
                     return (
-                      <tr key={e.id} className="border-b border-white/5">
+                      <tr key={e.id} className="border-b border-rule">
                         <td className="py-2 pr-3 font-mono text-xs text-muted">{e.event_type}</td>
                         <td className="py-2 pr-3">
                           <span className={statusColor}>{e.status}</span>

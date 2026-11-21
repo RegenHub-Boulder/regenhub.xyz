@@ -20,7 +20,7 @@ export function CollapsibleSection({ title, hint, defaultOpen = false, children 
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="w-full px-5 py-4 flex items-center justify-between gap-3 hover:bg-white/5 transition-colors"
+        className="w-full px-5 py-4 flex items-center justify-between gap-3 hover:bg-tint transition-colors"
       >
         <div className="flex items-center gap-2 text-left">
           {open ? <ChevronDown className="w-4 h-4 text-muted" /> : <ChevronRight className="w-4 h-4 text-muted" />}

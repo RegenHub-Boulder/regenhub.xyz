@@ -44,7 +44,7 @@ export function ClaimActions({ claimId, currentStatus }: Props) {
             size="sm"
             disabled={busy}
             onClick={() => updateStatus("reserved")}
-            className="bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 border border-emerald-500/30 text-xs gap-1 h-7 px-2"
+            className="bg-ok/10 hover:bg-ok/10 text-ok border border-ok/40 text-xs gap-1 h-7 px-2"
           >
             <Check className="w-3 h-3" /> Approve
           </Button>
@@ -52,7 +52,7 @@ export function ClaimActions({ claimId, currentStatus }: Props) {
             size="sm"
             disabled={busy}
             onClick={() => updateStatus("cancelled")}
-            className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 text-xs gap-1 h-7 px-2"
+            className="bg-danger/10 hover:bg-danger/10 text-danger border border-danger/40 text-xs gap-1 h-7 px-2"
           >
             <X className="w-3 h-3" /> Reject
           </Button>
@@ -63,7 +63,7 @@ export function ClaimActions({ claimId, currentStatus }: Props) {
           size="sm"
           disabled={busy}
           onClick={() => updateStatus("cancelled")}
-          className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 text-xs gap-1 h-7 px-2"
+          className="bg-danger/10 hover:bg-danger/10 text-danger border border-danger/40 text-xs gap-1 h-7 px-2"
         >
           <X className="w-3 h-3" /> Cancel
         </Button>
@@ -78,7 +78,7 @@ export function ClaimActions({ claimId, currentStatus }: Props) {
           Revert to Pending
         </Button>
       )}
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
     </div>
   );
 }

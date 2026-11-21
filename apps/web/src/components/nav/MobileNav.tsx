@@ -111,8 +111,7 @@ export function MobileNav({ links, trailing }: MobileNavProps) {
       {/* Overlay */}
       {open && (
         <div
-          data-part="drawer-scrim"
-          className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm sm:hidden"
+          className="fixed inset-0 z-[100] bg-ink/30 sm:hidden"
           onClick={() => setOpen(false)}
           aria-hidden
         />
@@ -128,14 +127,13 @@ export function MobileNav({ links, trailing }: MobileNavProps) {
         tabIndex={-1}
         inert={!open}
         aria-hidden={!open}
-        data-part="drawer"
         className={`fixed top-0 left-0 z-[101] h-full w-72 sm:hidden
-          glass-panel-strong border-r border-white/10
+          bg-background border-r border-rule
           transform transition-transform duration-250 ease-out
           ${open ? "translate-x-0" : "-translate-x-full"}`}
       >
         {/* Drawer header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-rule">
           <Link
             href="/"
             className="text-forest font-bold text-lg"
@@ -166,10 +164,10 @@ export function MobileNav({ links, trailing }: MobileNavProps) {
                   isActive
                     ? link.accent
                       ? "text-gold bg-gold/10 border-l-2 border-gold"
-                      : "text-foreground bg-white/5 border-l-2 border-forest"
+                      : "text-foreground bg-tint border-l-2 border-forest"
                     : link.accent
                       ? "text-gold hover:bg-gold/5"
-                      : "text-muted hover:text-foreground hover:bg-white/5"
+                      : "text-muted hover:text-foreground hover:bg-tint"
                 }`}
               >
                 {link.label}
@@ -180,7 +178,7 @@ export function MobileNav({ links, trailing }: MobileNavProps) {
 
         {/* Bottom area — trailing content (sign out, etc.) */}
         {trailing && (
-          <div className="absolute bottom-0 left-0 right-0 px-5 py-4 border-t border-white/10">
+          <div className="absolute bottom-0 left-0 right-0 px-5 py-4 border-t border-rule">
             {trailing}
           </div>
         )}

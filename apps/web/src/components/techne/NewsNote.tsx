@@ -37,7 +37,7 @@ export function NewsNote() {
   return (
     <div
       role="status"
-      className="fixed inset-x-0 bottom-4 z-50 mx-auto flex w-[min(34rem,calc(100%-2rem))] items-center gap-3 rounded-xl border border-emerald-900/15 bg-white px-4 py-3 text-sm text-emerald-950 shadow-lg"
+      className="fixed inset-x-0 bottom-4 z-50 mx-auto flex w-[min(34rem,calc(100%-2rem))] items-center gap-3 rounded-xl border border-ok/40 bg-white px-4 py-3 text-sm text-ok shadow-lg"
     >
       <p className="flex-1">
         {state === "declined"
@@ -51,7 +51,7 @@ export function NewsNote() {
           type="button"
           onClick={decline}
           disabled={state === "saving"}
-          className="rounded-md px-2 py-1 font-medium text-emerald-800 underline underline-offset-2 hover:bg-emerald-50 disabled:opacity-60"
+          className="rounded-md px-2 py-1 font-medium text-ok underline underline-offset-2 hover:bg-ok/10 disabled:opacity-60"
         >
           {state === "error" ? "Try again" : "No thanks"}
         </button>
@@ -60,7 +60,7 @@ export function NewsNote() {
         type="button"
         aria-label="Close"
         onClick={() => setState("hidden")}
-        className="rounded-md px-2 py-1 text-emerald-900/60 hover:bg-emerald-50"
+        className="rounded-md px-2 py-1 text-ok hover:bg-ok/10"
       >
         ×
       </button>

@@ -32,7 +32,7 @@ export function ManageSubscriptionButton() {
         {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
         Manage subscription
       </Button>
-      {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
+      {error && <p className="text-xs text-danger mt-2">{error}</p>}
     </>
   );
 }

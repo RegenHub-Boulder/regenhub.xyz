@@ -37,7 +37,7 @@ export default async function PassesPage({ searchParams }: PageProps) {
     return (
       <div className="glass-panel p-8 text-center max-w-md mx-auto mt-16">
         <Ticket className="w-8 h-8 text-muted mx-auto mb-3" />
-        <h2 className="text-xl font-semibold mb-2">Account Not Found</h2>
+        <h2 className="text-xl font-semibold mb-2">Account not found</h2>
         <p className="text-muted text-sm">
           Your login isn&apos;t linked to a member profile yet. Contact an admin to get set up.
         </p>
@@ -135,10 +135,10 @@ export default async function PassesPage({ searchParams }: PageProps) {
 
       {/* Post-checkout banner */}
       {justPurchased && (
-        <div className="glass-panel p-4 border border-emerald-500/30 bg-emerald-500/5 flex items-start gap-3">
-          <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+        <div className="glass-panel p-4 border border-ok/40 bg-ok/10 flex items-start gap-3">
+          <CheckCircle className="w-5 h-5 text-ok shrink-0 mt-0.5" />
           <div>
-            <p className="font-medium text-emerald-400">
+            <p className="font-medium text-ok">
               Purchase complete — {justPurchased.passes} pass{justPurchased.passes === 1 ? "" : "es"} added to your balance.
             </p>
             <p className="text-xs text-muted mt-0.5">Thanks for supporting RegenHub.</p>
@@ -146,23 +146,23 @@ export default async function PassesPage({ searchParams }: PageProps) {
         </div>
       )}
       {usdcJustLanded && !justPurchased && (
-        <div className="glass-panel p-4 border border-emerald-500/30 bg-emerald-500/5 flex items-start gap-3">
-          <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+        <div className="glass-panel p-4 border border-ok/40 bg-ok/10 flex items-start gap-3">
+          <CheckCircle className="w-5 h-5 text-ok shrink-0 mt-0.5" />
           <div>
-            <p className="font-medium text-emerald-400">USDC payment verified — 1 pass added to your balance.</p>
+            <p className="font-medium text-ok">USDC payment verified — 1 pass added to your balance.</p>
             <p className="text-xs text-muted mt-0.5">A receipt is on its way to your email.</p>
           </div>
         </div>
       )}
       {params.checkout === "cancelled" && !justPurchased && (
-        <div className="glass-panel p-4 border border-white/10 flex items-start gap-3">
+        <div className="glass-panel p-4 border border-rule flex items-start gap-3">
           <XCircle className="w-5 h-5 text-muted shrink-0 mt-0.5" />
           <p className="text-sm text-muted">Checkout cancelled — no charge made.</p>
         </div>
       )}
       {purchaseError && (
-        <div className="glass-panel p-4 border border-amber-500/30 bg-amber-500/5">
-          <p className="text-sm text-amber-400">{purchaseError}</p>
+        <div className="glass-panel p-4 border border-warn/40 bg-warn/10">
+          <p className="text-sm text-warn">{purchaseError}</p>
         </div>
       )}
 
@@ -223,7 +223,7 @@ export default async function PassesPage({ searchParams }: PageProps) {
                       {timeLabel != null ? (
                         <>
                           <span>{timeLabel}</span>
-                          <Badge variant="outline" className="text-xs border-white/20">
+                          <Badge variant="outline" className="text-xs border-rule">
                             {expiresAt!.toLocaleDateString("en-US", {
                               month: "short", day: "numeric",
                               timeZone: "America/Denver",
@@ -289,7 +289,7 @@ export default async function PassesPage({ searchParams }: PageProps) {
             <Receipt className="w-5 h-5 text-sage" />
             Recent activity
           </h2>
-          <div className="glass-panel divide-y divide-white/5">
+          <div className="glass-panel divide-y divide-rule">
             {/* Merge + sort by date desc */}
             {[
               ...(recentPurchases ?? []).map((p) => ({

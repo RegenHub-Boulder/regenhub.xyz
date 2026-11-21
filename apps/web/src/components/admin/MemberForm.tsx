@@ -213,13 +213,13 @@ export function MemberForm({ member, initialEmail, initialUserId }: Props) {
             variant="ghost"
             disabled={loading}
             onClick={handleDelete}
-            className="text-red-400 hover:text-red-300 hover:bg-red-500/10 gap-2"
+            className="text-danger hover:text-danger hover:bg-danger/10 gap-2"
           >
             <Trash2 className="w-4 h-4" />
             Delete
           </Button>
         )}
-        {error && <span className="text-sm text-red-400">{error}</span>}
+        {error && <span className="text-sm text-danger">{error}</span>}
       </div>
     </form>
   );

@@ -25,7 +25,7 @@ export function GaslessPaymentReview({ amountCents, authorization }: Props) {
       <p className="text-[11px] text-muted">
         This is a single-use authorization for this exact amount. It is not an unlimited allowance and does not authorize future renewals.
       </p>
-      <p className="text-[11px] text-amber-300">
+      <p className="text-[11px] text-warn">
         If MetaMask labels the request deceptive or untrusted, cancel it and tell RegenHub. Do not confirm a wallet security warning.
       </p>
     </div>

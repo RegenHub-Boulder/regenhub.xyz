@@ -77,11 +77,11 @@ export default async function AdminHome() {
         {queue.length === 0 ? (
           <p className="text-sm text-muted">Nothing waiting.</p>
         ) : (
-          <ul className="divide-y divide-white/5 border-y border-white/5">
+          <ul className="divide-y divide-rule border-y border-rule">
             {queue.map((q) => (
               <li key={q.key}>
                 <Link href={q.href} className="flex items-center gap-3 py-2.5 text-sm hover:text-sage">
-                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${q.urgent ? "bg-red-400" : "bg-amber-400"}`} />
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${q.urgent ? "bg-danger" : "bg-warn"}`} />
                   <span className="flex-1">{q.label}</span>
                   <span className="text-muted">→</span>
                 </Link>
@@ -105,11 +105,11 @@ export default async function AdminHome() {
             top={ACTION_RULES.showTop}
           />
         ) : (
-          <p className="text-sm text-red-400">Couldn&apos;t read the scoreboard just now, so there&apos;s no list. Reload in a minute.</p>
+          <p className="text-sm text-danger">Couldn&apos;t read the scoreboard just now, so there&apos;s no list. Reload in a minute.</p>
         )}
       </section>
 
-      <nav aria-label="Shortcuts" className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted border-t border-white/5 pt-4">
+      <nav aria-label="Shortcuts" className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted border-t border-rule pt-4">
         <Link href="/admin/access?tab=codes" className="hover:text-foreground">Quick door code</Link>
         <Link href="/admin/members" className="hover:text-foreground">Find a member</Link>
         <Link href="/admin/members/new" className="hover:text-foreground">Add a member</Link>

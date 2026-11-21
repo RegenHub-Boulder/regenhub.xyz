@@ -21,7 +21,7 @@ const TABS_BASE: { key: PipelineTab; label: string }[] = [
 function pendingBadge(count: number) {
   if (count <= 0) return null;
   return (
-    <span className="text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-full">
+    <span className="text-xs bg-warn/10 text-warn border border-warn/40 px-1.5 py-0.5 rounded-full">
       {count}
     </span>
   );

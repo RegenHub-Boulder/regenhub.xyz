@@ -194,7 +194,7 @@ export function CouponsSection() {
             Members type the code on Stripe Checkout after clicking Subscribe.
           </p>
 
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-danger">{error}</p>}
 
           {/* Existing codes table */}
           {codes === null ? (
@@ -208,7 +208,7 @@ export function CouponsSection() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-xs text-muted">
-                  <tr className="border-b border-white/10">
+                  <tr className="border-b border-rule">
                     <th className="text-left py-2 px-2 font-normal">Code</th>
                     <th className="text-left py-2 px-2 font-normal">Discount</th>
                     <th className="text-left py-2 px-2 font-normal">Duration</th>
@@ -220,7 +220,7 @@ export function CouponsSection() {
                 </thead>
                 <tbody>
                   {codes.map((c) => (
-                    <tr key={c.promotion_code_id} className="border-b border-white/5">
+                    <tr key={c.promotion_code_id} className="border-b border-rule">
                       <td className="py-2 px-2 font-mono text-xs">{c.code}</td>
                       <td className="py-2 px-2">{discountLabel(c)}</td>
                       <td className="py-2 px-2 text-muted">{durationLabel(c)}</td>
@@ -231,11 +231,11 @@ export function CouponsSection() {
                       </td>
                       <td className="py-2 px-2">
                         {c.active ? (
-                          <Badge className="text-xs bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+                          <Badge className="text-xs bg-ok/10 text-ok border-ok/40">
                             active
                           </Badge>
                         ) : (
-                          <Badge className="text-xs bg-white/10 text-muted border-white/20">
+                          <Badge className="text-xs bg-tint text-muted border-rule">
                             inactive
                           </Badge>
                         )}
@@ -243,12 +243,12 @@ export function CouponsSection() {
                       <td className="py-2 px-2 text-right">
                         {confirmDeleteId === c.promotion_code_id ? (
                           <div className="flex items-center gap-1 justify-end">
-                            <span className="text-xs text-red-400 mr-1">Delete?</span>
+                            <span className="text-xs text-danger mr-1">Delete?</span>
                             <Button
                               size="sm"
                               disabled={deletingId === c.promotion_code_id}
                               onClick={() => deleteCode(c.promotion_code_id)}
-                              className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 text-xs h-6 px-2"
+                              className="bg-danger/10 hover:bg-danger/10 text-danger border border-danger/40 text-xs h-6 px-2"
                             >
                               {deletingId === c.promotion_code_id ? (
                                 <Loader2 className="w-3 h-3 animate-spin" />
@@ -279,7 +279,7 @@ export function CouponsSection() {
                               size="sm"
                               variant="ghost"
                               onClick={() => setConfirmDeleteId(c.promotion_code_id)}
-                              className="text-xs h-6 px-2 text-muted hover:text-red-400"
+                              className="text-xs h-6 px-2 text-muted hover:text-danger"
                               title="Delete the underlying coupon — irreversible"
                             >
                               <Trash2 className="w-3 h-3" />
@@ -325,7 +325,7 @@ export function CouponsSection() {
                     value={code}
                     onChange={(e) => setCode(e.target.value.toUpperCase())}
                     placeholder="WORKEXCHANGE_HOT"
-                    className="w-48 bg-white/5 border border-white/10 rounded px-2 py-1 text-sm font-mono focus:outline-none focus:border-sage/50"
+                    className="w-48 bg-tint border border-rule rounded px-2 py-1 text-sm font-mono focus:outline-none focus:border-sage/50"
                   />
                 </div>
                 <div>
@@ -333,7 +333,7 @@ export function CouponsSection() {
                   <select
                     value={discountType}
                     onChange={(e) => setDiscountType(e.target.value as "amount" | "percent")}
-                    className="bg-white/5 border border-white/10 rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
+                    className="bg-tint border border-rule rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
                   >
                     <option value="amount">$ off</option>
                     <option value="percent">% off</option>
@@ -349,7 +349,7 @@ export function CouponsSection() {
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
                       placeholder="125"
-                      className="w-24 bg-white/5 border border-white/10 rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
+                      className="w-24 bg-tint border border-rule rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
                     />
                   </div>
                 ) : (
@@ -362,7 +362,7 @@ export function CouponsSection() {
                       value={percent}
                       onChange={(e) => setPercent(e.target.value)}
                       placeholder="50"
-                      className="w-20 bg-white/5 border border-white/10 rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
+                      className="w-20 bg-tint border border-rule rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
                     />
                   </div>
                 )}
@@ -374,7 +374,7 @@ export function CouponsSection() {
                   <select
                     value={duration}
                     onChange={(e) => setDuration(e.target.value as "forever" | "once" | "repeating")}
-                    className="bg-white/5 border border-white/10 rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
+                    className="bg-tint border border-rule rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
                   >
                     <option value="forever">Forever (every renewal)</option>
                     <option value="once">First charge only</option>
@@ -390,7 +390,7 @@ export function CouponsSection() {
                       max="24"
                       value={months}
                       onChange={(e) => setMonths(e.target.value)}
-                      className="w-20 bg-white/5 border border-white/10 rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
+                      className="w-20 bg-tint border border-rule rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
                     />
                   </div>
                 )}
@@ -402,7 +402,7 @@ export function CouponsSection() {
                     value={maxRedemptions}
                     onChange={(e) => setMaxRedemptions(e.target.value)}
                     placeholder="unlimited"
-                    className="w-32 bg-white/5 border border-white/10 rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
+                    className="w-32 bg-tint border border-rule rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
                   />
                 </div>
               </div>
@@ -418,7 +418,7 @@ export function CouponsSection() {
                       className={`px-2 py-1 rounded text-xs border ${
                         restrictKeys.has(p.key)
                           ? "bg-sage/20 border-sage/50 text-sage"
-                          : "bg-white/5 border-white/10 text-muted hover:bg-white/10"
+                          : "bg-tint border-rule text-muted hover:bg-tint"
                       }`}
                     >
                       {p.label}
@@ -427,7 +427,7 @@ export function CouponsSection() {
                 </div>
               </div>
 
-              {createErr && <p className="text-xs text-red-400">{createErr}</p>}
+              {createErr && <p className="text-xs text-danger">{createErr}</p>}
 
               <div className="flex gap-2">
                 <Button

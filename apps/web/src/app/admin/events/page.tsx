@@ -88,7 +88,7 @@ export default async function ManageEventsPage() {
       <div className="space-y-8">
         {header}
         {who(null)}
-        <p className="text-sm text-red-300" role="alert">
+        <p className="text-sm text-danger" role="alert">
           Couldn&apos;t read RegenHub&apos;s roles from Techne just now. Reload to try again.
         </p>
       </div>
@@ -201,7 +201,7 @@ export default async function ManageEventsPage() {
         editingOff={read !== null && !siblingsKnown}
         followups={
           followups === null ? (
-            <p className="text-sm text-red-300" role="alert">
+            <p className="text-sm text-danger" role="alert">
               Couldn&apos;t read the follow-ups after nights just now. Reload to try again.
             </p>
           ) : (

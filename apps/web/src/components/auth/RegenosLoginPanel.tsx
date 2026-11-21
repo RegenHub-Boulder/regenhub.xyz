@@ -146,7 +146,7 @@ export function RegenosLoginPanel({ next = "/portal" }: { next?: string }) {
         <p className="text-sm text-muted">
           You&apos;re signed in as <strong>{existingHandle}</strong>.
         </p>
-        {error && <p className="text-red-400 text-sm">{error}</p>}
+        {error && <p className="text-danger text-sm">{error}</p>}
         <Button onClick={finish} disabled={busy} className="btn-primary-glass w-full">
           {busy ? "Signing you in…" : "Continue to RegenHub"}
         </Button>
@@ -163,7 +163,7 @@ export function RegenosLoginPanel({ next = "/portal" }: { next?: string }) {
             We sent a sign-in link to <strong>{email}</strong>. Open it, then come back here.
           </p>
         </div>
-        {error && <p className="text-red-400 text-sm">{error}</p>}
+        {error && <p className="text-danger text-sm">{error}</p>}
         <Button onClick={finish} disabled={busy} className="btn-glass w-full">
           {busy ? "Signing you in…" : "I've clicked the link"}
         </Button>
@@ -201,21 +201,21 @@ export function RegenosLoginPanel({ next = "/portal" }: { next?: string }) {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
             required
-            className="bg-white/10 border-white/20 text-foreground placeholder:text-muted"
+            className="bg-tint border-rule text-foreground placeholder:text-muted"
           />
           <p className="text-xs text-muted">
             Use your membership email — that&apos;s how we find your RegenHub account.
           </p>
         </div>
-        {error && <p className="text-red-400 text-sm">{error}</p>}
+        {error && <p className="text-danger text-sm">{error}</p>}
         <Button type="submit" disabled={busy} className="btn-primary-glass w-full">
           {busy ? "Checking…" : "Continue with email"}
         </Button>
       </form>
       <div className="flex items-center gap-3 text-xs text-muted" aria-hidden="true">
-        <span className="h-px flex-1 bg-white/10" />
+        <span className="h-px flex-1 bg-tint" />
         or
-        <span className="h-px flex-1 bg-white/10" />
+        <span className="h-px flex-1 bg-tint" />
       </div>
       <OAuthSignInButton />
     </Panel>

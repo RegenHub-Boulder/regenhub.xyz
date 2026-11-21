@@ -105,7 +105,7 @@ export function OnboardingChecklist({ hasPinCode, hasPhoto, hasBio, hasTelegram,
                 ) : (
                   <Link
                     {...linkProps}
-                    className="flex items-start gap-2.5 px-2 py-1.5 text-sm rounded hover:bg-white/5 transition-colors"
+                    className="flex items-start gap-2.5 px-2 py-1.5 text-sm rounded hover:bg-tint transition-colors"
                   >
                     <Circle className="w-4 h-4 text-muted shrink-0 mt-0.5" />
                     <div className="flex-1 min-w-0">

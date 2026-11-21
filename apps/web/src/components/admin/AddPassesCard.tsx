@@ -47,7 +47,7 @@ export function AddPassesCard({ memberId, initialBalance }: Props) {
       <CardContent className="p-6">
         <div className="flex items-center gap-2 mb-4">
           <Ticket className="w-5 h-5 text-sage" />
-          <h3 className="font-semibold">Day Pass Balance</h3>
+          <h3 className="font-semibold">Day pass balance</h3>
         </div>
 
         <div className="flex items-end gap-4 flex-wrap">
@@ -78,7 +78,7 @@ export function AddPassesCard({ memberId, initialBalance }: Props) {
               type="button"
               onClick={() => handleAdjust("subtract")}
               disabled={loading || balance === 0}
-              className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 gap-1.5"
+              className="bg-danger/10 hover:bg-danger/10 text-danger border border-danger/40 gap-1.5"
             >
               <Minus className="w-4 h-4" />
               Subtract
@@ -86,7 +86,7 @@ export function AddPassesCard({ memberId, initialBalance }: Props) {
           </div>
         </div>
 
-        {error && <p className="text-sm text-red-400 mt-3">{error}</p>}
+        {error && <p className="text-sm text-danger mt-3">{error}</p>}
       </CardContent>
     </Card>
   );

@@ -107,7 +107,7 @@ export function ChangePlanButton({ currentPlanKey, currentMonthlyCents, currentP
                   type="button"
                   disabled={busy}
                   onClick={() => switchTo(p.key)}
-                  className="w-full glass-panel p-3 text-left hover:bg-white/5 transition-colors flex items-center justify-between gap-3 disabled:opacity-50"
+                  className="w-full glass-panel p-3 text-left hover:bg-tint transition-colors flex items-center justify-between gap-3 disabled:opacity-50"
                 >
                   <div>
                     <p className="text-sm font-medium">{p.label}</p>
@@ -122,16 +122,16 @@ export function ChangePlanButton({ currentPlanKey, currentMonthlyCents, currentP
                     </p>
                   </div>
                   {target === p.key && busy && <Loader2 className="w-4 h-4 animate-spin text-sage" />}
-                  {target === p.key && !busy && !error && <Check className="w-4 h-4 text-emerald-400" />}
+                  {target === p.key && !busy && !error && <Check className="w-4 h-4 text-ok" />}
                 </button>
               );
             })}
           </div>
 
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-danger">{error}</p>}
 
           {current.desk && (
-            <div className="pt-2 border-t border-white/5">
+            <div className="pt-2 border-t border-rule">
               <p className="text-xs text-muted">
                 Moving between Hot and Cold Desk still needs an admin touch — email{" "}
                 <a href="mailto:boulder.regenhub@gmail.com" className="text-sage hover:underline">boulder.regenhub@gmail.com</a>.
@@ -176,7 +176,7 @@ export function CancelPlanSwitchButton({ keepLabel }: { keepLabel: string }) {
         {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Undo2 className="w-4 h-4" />}
         Keep {keepLabel}
       </Button>
-      {error && <p className="text-xs text-red-400 max-w-xs">{error}</p>}
+      {error && <p className="text-xs text-danger max-w-xs">{error}</p>}
     </div>
   );
 }

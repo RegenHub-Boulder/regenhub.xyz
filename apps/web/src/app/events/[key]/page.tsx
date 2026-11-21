@@ -98,7 +98,7 @@ export default async function SeriesPage({ params }: PageProps) {
         )}
 
         <section className="glass-panel-strong p-6 md:p-8 space-y-3" data-testid="series-next">
-          <h2 className="text-sm uppercase tracking-wide text-muted">Next night</h2>
+          <h2 className="text-sm text-muted">Next night</h2>
           <p className="text-2xl font-semibold flex items-start gap-2">
             <CalendarDays className="w-6 h-6 text-sage shrink-0 mt-1" />
             <span>{nightTimes ?? NO_NEXT_NIGHT}</span>

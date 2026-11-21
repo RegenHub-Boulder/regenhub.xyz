@@ -23,13 +23,13 @@ interface Props {
 }
 
 const invoiceStyle: Record<string, string> = {
-  open: "bg-amber-500/20 text-amber-400 border-amber-500/30",
-  submitted: "bg-sky-500/20 text-sky-400 border-sky-500/30",
-  detected: "bg-sky-500/20 text-sky-400 border-sky-500/30",
-  paid: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-  void: "bg-white/10 text-muted border-white/20",
-  expired: "bg-white/10 text-muted border-white/20",
-  exception: "bg-red-500/20 text-red-400 border-red-500/30",
+  open: "bg-warn/10 text-warn border-warn/40",
+  submitted: "bg-note/10 text-note border-note/40",
+  detected: "bg-note/10 text-note border-note/40",
+  paid: "bg-ok/10 text-ok border-ok/40",
+  void: "bg-tint text-muted border-rule",
+  expired: "bg-tint text-muted border-rule",
+  exception: "bg-danger/10 text-danger border-danger/40",
 };
 
 function fmtDate(iso: string | null) {
@@ -110,17 +110,17 @@ export function CancelMembershipCard({ memberId, memberName, subscription, invoi
   }
 
   const statusBadge = !isLive ? (
-    <Badge className="text-xs bg-white/10 text-muted border-white/20">
+    <Badge className="text-xs bg-tint text-muted border-rule">
       Canceled {fmtDate(subscription.canceled_at)}
     </Badge>
   ) : subscription.cancel_at_period_end ? (
-    <Badge className="text-xs bg-amber-500/20 text-amber-400 border-amber-500/30">
+    <Badge className="text-xs bg-warn/10 text-warn border-warn/40">
       Cancels {fmtDate(periodEnd)}
     </Badge>
   ) : isPastDue ? (
-    <Badge className="text-xs bg-red-500/20 text-red-400 border-red-500/30">Past due</Badge>
+    <Badge className="text-xs bg-danger/10 text-danger border-danger/40">Past due</Badge>
   ) : (
-    <Badge className="text-xs bg-emerald-500/20 text-emerald-400 border-emerald-500/30">Active</Badge>
+    <Badge className="text-xs bg-ok/10 text-ok border-ok/40">Active</Badge>
   );
 
   return (
@@ -131,7 +131,7 @@ export function CancelMembershipCard({ memberId, memberName, subscription, invoi
             <XCircle className="w-5 h-5 text-sage" />
             <h3 className="font-semibold">Membership</h3>
             {statusBadge}
-            <Badge className="text-xs bg-white/5 border-white/15 text-muted">
+            <Badge className="text-xs bg-tint border-rule text-muted">
               {isCrypto ? "Crypto · USDC" : "Card · Stripe"}
             </Badge>
             <span className="text-xs text-muted">{planLabel(subscription.plan_key)}</span>
@@ -140,7 +140,7 @@ export function CancelMembershipCard({ memberId, memberName, subscription, invoi
             <Button
               size="sm"
               onClick={open}
-              className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 text-xs h-7"
+              className="bg-danger/10 hover:bg-danger/10 text-danger border border-danger/40 text-xs h-7"
             >
               Cancel membership
             </Button>
@@ -151,13 +151,13 @@ export function CancelMembershipCard({ memberId, memberName, subscription, invoi
           <div className="text-xs space-y-1" role="status">
             <p className="text-sage">{resultSummary(result)}</p>
             {result.warnings.map((w) => (
-              <p key={w} className="text-amber-400">{w}</p>
+              <p key={w} className="text-warn">{w}</p>
             ))}
           </div>
         )}
 
         {invoices.length > 0 && (
-          <div className="pt-3 border-t border-white/10">
+          <div className="pt-3 border-t border-rule">
             <p className="text-xs text-muted mb-2 font-medium">Crypto invoices</p>
             <table className="w-full text-xs">
               <thead>
@@ -170,12 +170,12 @@ export function CancelMembershipCard({ memberId, memberName, subscription, invoi
               </thead>
               <tbody>
                 {invoices.map((inv) => (
-                  <tr key={inv.id} className="border-t border-white/5">
+                  <tr key={inv.id} className="border-t border-rule">
                     <td className="py-1.5 pr-3 font-mono text-muted">{inv.id}</td>
                     <td className="py-1.5 pr-3">{fmtDate(inv.period_start)} – {fmtDate(inv.period_end)}</td>
                     <td className="py-1.5 pr-3">${(inv.amount_cents / 100).toFixed(2)} USDC</td>
                     <td className="py-1.5">
-                      <Badge className={`text-xs ${invoiceStyle[inv.status] ?? "border-white/20"}`}>{inv.status}</Badge>
+                      <Badge className={`text-xs ${invoiceStyle[inv.status] ?? "border-rule"}`}>{inv.status}</Badge>
                     </td>
                   </tr>
                 ))}
@@ -187,7 +187,7 @@ export function CancelMembershipCard({ memberId, memberName, subscription, invoi
         <dialog
           ref={dialogRef}
           aria-labelledby={`cancel-title-${memberId}`}
-          className="glass-panel-strong rounded-xl p-0 m-auto max-w-lg w-[calc(100%-2rem)] text-foreground backdrop:bg-black/60 backdrop:backdrop-blur-sm"
+          className="glass-panel-strong rounded-xl p-0 m-auto max-w-lg w-[calc(100%-2rem)] text-foreground backdrop:bg-ink/10 backdrop:backdrop-blur-sm"
         >
           <div className="p-6 space-y-4 text-sm">
             <h2 id={`cancel-title-${memberId}`} className="text-lg font-semibold">
@@ -261,11 +261,11 @@ export function CancelMembershipCard({ memberId, memberName, subscription, invoi
                 onChange={(e) => setReason(e.target.value)}
                 rows={2}
                 maxLength={500}
-                className="mt-1 w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-sage/50"
+                className="mt-1 w-full bg-tint border border-rule rounded px-2 py-1.5 text-sm focus:outline-none focus:border-sage/50"
               />
             </label>
 
-            {error && <p className="text-xs text-red-400" role="alert">{error}</p>}
+            {error && <p className="text-xs text-danger" role="alert">{error}</p>}
 
             <div className="flex gap-2 justify-end">
               <Button size="sm" variant="ghost" disabled={busy} onClick={() => dialogRef.current?.close()} className="text-xs h-8">
@@ -275,7 +275,7 @@ export function CancelMembershipCard({ memberId, memberName, subscription, invoi
                 size="sm"
                 disabled={busy}
                 onClick={confirm}
-                className="bg-red-600/30 hover:bg-red-600/50 text-red-300 border border-red-500/40 text-xs h-8 gap-1"
+                className="bg-danger/10 hover:bg-danger/10 text-danger border border-danger/40 text-xs h-8 gap-1"
               >
                 {busy && <Loader2 className="w-3 h-3 animate-spin" />}
                 Confirm cancel

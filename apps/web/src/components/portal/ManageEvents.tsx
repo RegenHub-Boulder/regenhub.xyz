@@ -164,8 +164,8 @@ export function ManageEvents({
   return (
     <div className="space-y-6">
       {error && (
-        <div className="glass-panel p-4 border border-red-500/40 bg-red-500/5">
-          <p className="text-sm text-red-400">{error}</p>
+        <div className="glass-panel p-4 border border-danger/40 bg-danger/10">
+          <p className="text-sm text-danger">{error}</p>
         </div>
       )}
 
@@ -356,7 +356,7 @@ function EventList({
 }) {
   return (
     <div className="space-y-3">
-      <h2 className="text-sm font-medium text-muted uppercase tracking-wide">{title}</h2>
+      <h2 className="text-sm font-medium text-muted">{title}</h2>
       {events.length === 0 ? (
         <p className="text-sm text-muted">{emptyLabel}</p>
       ) : (
@@ -396,7 +396,7 @@ function EventList({
                   <Button
                     onClick={() => onCancel(event)}
                     disabled={busyRkey === event.rkey}
-                    className="btn-glass gap-2 px-4 text-red-400"
+                    className="btn-glass gap-2 px-4 text-danger"
                   >
                     {busyRkey === event.rkey ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />

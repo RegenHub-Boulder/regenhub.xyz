@@ -183,7 +183,7 @@ export function MagicLinkWizard({ token }: { token: string }) {
             spellCheck={false}
             autoFocus
             disabled={busy}
-            className="bg-white/10 border-white/20 text-foreground placeholder:text-muted"
+            className="bg-tint border-rule text-foreground placeholder:text-muted"
           />
           <AvailabilityNote
             handle={handle}
@@ -193,7 +193,7 @@ export function MagicLinkWizard({ token }: { token: string }) {
           />
         </div>
         {error && (
-          <p className="text-red-400 text-sm" role="alert">
+          <p className="text-danger text-sm" role="alert">
             {error}
           </p>
         )}
@@ -223,7 +223,7 @@ function AvailabilityNote({
   localMessage: string | null;
 }) {
   if (handle.trim().length > 0 && localMessage) {
-    return <p className="text-xs text-red-400">{localMessage}</p>;
+    return <p className="text-xs text-danger">{localMessage}</p>;
   }
   if (checking) {
     return <p className="text-xs text-muted">Checking…</p>;
@@ -233,7 +233,7 @@ function AvailabilityNote({
   }
   if (probe.status === "taken") {
     return (
-      <p className="text-xs text-red-400">
+      <p className="text-xs text-danger">
         {probe.handle ?? handle.trim()} is taken.
         {probe.suggestion ? ` ${probe.suggestion} is free.` : ""}
       </p>

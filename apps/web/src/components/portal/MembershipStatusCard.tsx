@@ -71,7 +71,7 @@ export function MembershipStatusCard({
           <HandHeart className="w-7 h-7 text-sage shrink-0 mt-0.5" />
           <div className="flex-1">
             <h3 className="font-semibold mb-1 flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-emerald-400" /> You&apos;re a Hub Friend
+              <CheckCircle className="w-4 h-4 text-ok" /> You&apos;re a Hub Friend
             </h3>
             <p className="text-sm text-muted mb-3">
               You&apos;ve got member access as a friend of the hub — member events, day passes at the member rate,
@@ -91,9 +91,9 @@ export function MembershipStatusCard({
   // Approval supersedes an old application row: if they're cleared, point them at plans.
   if (approvedForDaily) {
     return (
-      <Card className="glass-panel border border-emerald-500/30 bg-emerald-500/[0.04]">
+      <Card className="glass-panel border border-ok/40 bg-ok/10">
         <CardContent className="p-6 flex items-start gap-4">
-          <CheckCircle className="w-7 h-7 text-emerald-400 shrink-0 mt-0.5" />
+          <CheckCircle className="w-7 h-7 text-ok shrink-0 mt-0.5" />
           <div className="flex-1">
             <h3 className="font-semibold mb-1">You&apos;re approved to join — pick your plan</h3>
             <p className="text-sm text-muted mb-3">
@@ -112,9 +112,9 @@ export function MembershipStatusCard({
   if (applicationStatus === "pending") {
     const interest = prettyInterest(applicationInterest);
     return (
-      <Card className="glass-panel border border-amber-500/30 bg-amber-500/[0.03]">
+      <Card className="glass-panel border border-warn/40 bg-warn/10">
         <CardContent className="p-6 flex items-start gap-4">
-          <Clock className="w-7 h-7 text-amber-400 shrink-0 mt-0.5" />
+          <Clock className="w-7 h-7 text-warn shrink-0 mt-0.5" />
           <div className="flex-1">
             <h3 className="font-semibold mb-1">Your membership application is under review</h3>
             <p className="text-sm text-muted">
@@ -130,7 +130,7 @@ export function MembershipStatusCard({
 
   if (applicationStatus === "rejected") {
     return (
-      <Card className="glass-panel border border-white/10">
+      <Card className="glass-panel border border-rule">
         <CardContent className="p-6 flex items-start gap-4">
           <MessageCircle className="w-7 h-7 text-muted shrink-0 mt-0.5" />
           <div className="flex-1">

@@ -59,7 +59,7 @@ export function DirectoryAsk() {
           <Link href="/members" className="text-sage underline">regenhub.xyz/members</Link>. Never your email or plan.
           You can change this on your profile.
         </p>
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
       </div>
       <div className="flex gap-2 shrink-0">
         <Button type="button" disabled={busy} onClick={() => answer(true)} className="btn-primary-glass">

@@ -74,7 +74,7 @@ export default async function StewardsPage() {
       <div className="space-y-8">
         {header}
         {who}
-        <p className="text-sm text-red-300" role="alert">
+        <p className="text-sm text-danger" role="alert">
           Couldn&apos;t read RegenHub&apos;s roles from Techne just now. Reload to try again.
         </p>
       </div>

@@ -22,7 +22,7 @@ export interface NextAction {
   fingerprint: string;
 }
 
-const DOT = { high: "bg-red-400", medium: "bg-amber-400", low: "bg-sage" } as const;
+const DOT = { high: "bg-danger", medium: "bg-warn", low: "bg-sage" } as const;
 
 type Mark = "done" | "not_now" | "open";
 
@@ -55,7 +55,7 @@ function QuickButton({ quick, onSent }: { quick: NonNullable<NextAction["quick"]
         {state === "busy" ? <Loader2 className="w-3 h-3 animate-spin" /> : state === "sent" ? <Check className="w-3 h-3" /> : <Mail className="w-3 h-3" />}
         {state === "sent" ? "Sent" : quick.label}
       </button>
-      {state !== "idle" && state !== "busy" && state !== "sent" && <span className="text-xs text-red-400">{state}</span>}
+      {state !== "idle" && state !== "busy" && state !== "sent" && <span className="text-xs text-danger">{state}</span>}
     </span>
   );
 }
@@ -139,12 +139,12 @@ export function NextActions({ open, hidden, top }: { open: NextAction[]; hidden:
 
   return (
     <div>
-      {error && <p className="text-xs text-red-400 mb-2">{error}</p>}
+      {error && <p className="text-xs text-danger mb-2">{error}</p>}
       {notice && !error && <p className="text-xs text-sage mb-2">{notice}</p>}
       {list.length === 0 ? (
         <p className="text-sm text-muted">Nothing needs doing right now.</p>
       ) : (
-        <ul className="divide-y divide-white/5">
+        <ul className="divide-y divide-rule">
           {shown.map((a) => (
             <Row key={a.id} a={a} onMark={onMark} onSent={() => {
               setSent((x) => new Set(x).add(a.id));
@@ -168,7 +168,7 @@ export function NextActions({ open, hidden, top }: { open: NextAction[]; hidden:
         {pending && <Loader2 className="w-3 h-3 animate-spin" />}
       </div>
       {showHidden && back.length > 0 && (
-        <ul className="divide-y divide-white/5 mt-2 opacity-70">
+        <ul className="divide-y divide-rule mt-2 opacity-70">
           {back.map((a) => <Row key={a.id} a={a} onMark={onMark} dismissed={sent.has(a.id) ? "Reminder sent" : a.mark === "done" ? "Done" : "Not now"} />)}
         </ul>
       )}

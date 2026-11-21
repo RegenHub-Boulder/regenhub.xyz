@@ -237,7 +237,7 @@ export function ProfileForm({ member, extras }: { member: Member; extras: Profil
                 <img
                   src={form.profile_photo_url}
                   alt="Profile preview"
-                  className="w-12 h-12 rounded-full object-cover border border-white/10 shrink-0"
+                  className="w-12 h-12 rounded-full object-cover border border-rule shrink-0"
                   onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
                 />
               ) : extras.techneAvatarUrl ? (
@@ -245,10 +245,10 @@ export function ProfileForm({ member, extras }: { member: Member; extras: Profil
                 <img
                   src={extras.techneAvatarUrl}
                   alt="Your Techne avatar"
-                  className="w-12 h-12 rounded-full object-cover border border-white/10 shrink-0"
+                  className="w-12 h-12 rounded-full object-cover border border-rule shrink-0"
                 />
               ) : (
-                <div className="w-12 h-12 rounded-full bg-sage/15 border border-white/10 shrink-0" />
+                <div className="w-12 h-12 rounded-full bg-sage/15 border border-rule shrink-0" />
               )}
               <Input
                 id="photo"
@@ -308,7 +308,7 @@ export function ProfileForm({ member, extras }: { member: Member; extras: Profil
           {loading ? "Saving…" : "Save changes"}
         </Button>
         {saved && <span className="text-sm text-sage">Saved!</span>}
-        {error && <span className="text-sm text-red-400">{error}</span>}
+        {error && <span className="text-sm text-danger">{error}</span>}
       </div>
     </form>
   );

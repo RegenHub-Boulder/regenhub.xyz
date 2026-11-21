@@ -47,13 +47,13 @@ export function RevokeCodeButton({ codeId }: { codeId: number }) {
     return (
       <div className="flex flex-col items-end gap-1">
         <div className="flex items-center gap-1.5">
-          <span className="text-xs text-red-400">Revoke?</span>
+          <span className="text-xs text-danger">Revoke?</span>
           <Button
             size="sm"
             variant="ghost"
             disabled={loading}
             onClick={handleRevoke}
-            className="text-red-400 hover:text-red-300 hover:bg-red-500/10 text-xs h-7 px-2"
+            className="text-danger hover:text-danger hover:bg-danger/10 text-xs h-7 px-2"
           >
             {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Yes"}
           </Button>
@@ -67,7 +67,7 @@ export function RevokeCodeButton({ codeId }: { codeId: number }) {
             No
           </Button>
         </div>
-        {error && <p className="text-xs text-red-400">{error}</p>}
+        {error && <p className="text-xs text-danger">{error}</p>}
       </div>
     );
   }
@@ -77,7 +77,7 @@ export function RevokeCodeButton({ codeId }: { codeId: number }) {
       size="sm"
       variant="ghost"
       onClick={() => setConfirming(true)}
-      className="text-muted hover:text-red-400 hover:bg-red-500/10 h-7 w-7 p-0"
+      className="text-muted hover:text-danger hover:bg-danger/10 h-7 w-7 p-0"
       title="Revoke code"
     >
       <X className="w-3.5 h-3.5" />

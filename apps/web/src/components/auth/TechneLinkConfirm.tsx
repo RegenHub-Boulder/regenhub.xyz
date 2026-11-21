@@ -38,7 +38,7 @@ export function TechneLinkConfirm({ code }: { code: string }) {
         {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Link and open my portal"}
       </Button>
       {error && (
-        <p className="text-sm text-red-300" role="alert">
+        <p className="text-sm text-danger" role="alert">
           {error}
         </p>
       )}

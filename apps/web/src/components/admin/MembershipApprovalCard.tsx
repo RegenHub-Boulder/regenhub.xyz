@@ -116,9 +116,9 @@ export function MembershipApprovalCard({
             <ShieldCheck className="w-4 h-4 text-sage" />
             <p className="text-sm font-medium">Daily Member ($30 / $50 / $100)</p>
             {approved ? (
-              <Badge className="text-xs bg-emerald-500/20 text-emerald-400 border-emerald-500/30">Approved</Badge>
+              <Badge className="text-xs bg-ok/10 text-ok border-ok/40">Approved</Badge>
             ) : (
-              <Badge className="text-xs bg-white/10 text-muted border-white/20">Not approved</Badge>
+              <Badge className="text-xs bg-tint text-muted border-rule">Not approved</Badge>
             )}
           </div>
           {approved && approvedAt && (
@@ -134,7 +134,7 @@ export function MembershipApprovalCard({
             className={
               approved
                 ? "btn-glass text-xs h-7 gap-1"
-                : "bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 border border-emerald-500/30 text-xs h-7 gap-1"
+                : "bg-ok/10 hover:bg-ok/10 text-ok border border-ok/40 text-xs h-7 gap-1"
             }
           >
             {busy === "toggle" ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
@@ -143,14 +143,14 @@ export function MembershipApprovalCard({
         </div>
 
         {/* Full-membership approval row (Hot $250 / Cold $500) */}
-        <div className="space-y-3 pt-3 border-t border-white/5">
+        <div className="space-y-3 pt-3 border-t border-rule">
           <div className="flex items-center gap-2 flex-wrap">
             <Armchair className="w-4 h-4 text-gold" />
             <p className="text-sm font-medium">Full Member (Hot $250 / Cold $500)</p>
             {approvedForFull ? (
               <Badge className="text-xs bg-gold/20 text-gold border-gold/30">Approved</Badge>
             ) : (
-              <Badge className="text-xs bg-white/10 text-muted border-white/20">Not approved</Badge>
+              <Badge className="text-xs bg-tint text-muted border-rule">Not approved</Badge>
             )}
           </div>
           <p className="text-xs text-muted">
@@ -180,13 +180,13 @@ export function MembershipApprovalCard({
         </div>
 
         {hasActiveSubscription && (
-          <p className="text-xs text-amber-400">
+          <p className="text-xs text-warn">
             Member already has an active subscription — approval changes here won&apos;t affect it.
           </p>
         )}
 
         {(approved || approvedForFull) && memberEmail && (
-          <div className="pt-3 border-t border-white/5">
+          <div className="pt-3 border-t border-rule">
             <Button
               size="sm"
               disabled={busy !== null}
@@ -199,7 +199,7 @@ export function MembershipApprovalCard({
           </div>
         )}
 
-        {error && <p className="text-xs text-red-400">{error}</p>}
+        {error && <p className="text-xs text-danger">{error}</p>}
       </CardContent>
     </Card>
   );

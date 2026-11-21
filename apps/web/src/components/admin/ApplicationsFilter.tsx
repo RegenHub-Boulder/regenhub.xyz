@@ -22,10 +22,10 @@ const interestLabels: Record<string, string> = {
 };
 
 const statusStyle: Record<ApplicationStatus, string> = {
-  pending: "border-amber-400/50 text-amber-400",
-  approved: "border-emerald-400/50 text-emerald-400",
-  rejected: "border-red-400/50 text-red-400",
-  closed:   "border-white/20 text-muted",
+  pending: "border-warn/40 text-warn",
+  approved: "border-ok/40 text-ok",
+  rejected: "border-danger/40 text-danger",
+  closed:   "border-rule text-muted",
 };
 
 const statusTabs = ["all", "pending", "approved", "rejected", "closed"] as const;
@@ -74,7 +74,7 @@ export function ApplicationsFilter({
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
               activeTab === tab
                 ? "bg-sage/20 text-sage border border-sage/30"
-                : "bg-white/5 text-muted border border-white/10 hover:bg-white/10"
+                : "bg-tint text-muted border border-rule hover:bg-tint"
             }`}
           >
             {tab === "all" ? "All" : tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -122,7 +122,7 @@ export function ApplicationsFilter({
                 </div>
                 <div className="flex items-center gap-3 text-xs text-muted">
                   <span>{app.email}</span>
-                  <Badge variant="outline" className="text-xs border-white/20 text-muted">
+                  <Badge variant="outline" className="text-xs border-rule text-muted">
                     {interestLabels[app.membership_interest] ?? app.membership_interest}
                   </Badge>
                   <span>

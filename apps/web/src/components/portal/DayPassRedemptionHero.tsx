@@ -73,19 +73,19 @@ export async function DayPassRedemptionHero({ member }: Props) {
         <CardContent className="p-6 sm:p-8">
           <div className="flex items-center gap-2 mb-3">
             <Sparkles className="w-4 h-4 text-gold" />
-            <span className="text-xs uppercase tracking-wider text-gold font-medium">
+            <span className="text-xs text-gold font-medium">
               Your door code
             </span>
             <span className="text-xs text-muted ml-auto">{formatRemaining(activeCode.expires_at, nowMs)}</span>
           </div>
-          <p className="text-5xl sm:text-6xl font-bold text-foreground font-mono tracking-wider tabular-nums text-center my-4 select-all">
+          <p className="text-5xl sm:text-6xl font-serif font-normal text-foreground tabular-nums [font-variant-numeric:lining-nums_tabular-nums] tracking-[0.14em] text-center my-4 select-all">
             {activeCode.code}
           </p>
           <p className="text-xs text-muted text-center mb-5">
             Valid until 6 PM today. Use at the front-door keypad.
           </p>
 
-          <div className="grid sm:grid-cols-3 gap-3 text-xs text-muted border-t border-white/5 pt-4">
+          <div className="grid sm:grid-cols-3 gap-3 text-xs text-muted border-t border-rule pt-4">
             <div className="flex items-start gap-2">
               <Key className="w-4 h-4 text-sage shrink-0 mt-0.5" />
               <div>
@@ -141,7 +141,7 @@ export async function DayPassRedemptionHero({ member }: Props) {
           </div>
         </div>
 
-        <div className="grid sm:grid-cols-2 gap-3 text-xs text-muted border-t border-white/5 pt-4 mt-5">
+        <div className="grid sm:grid-cols-2 gap-3 text-xs text-muted border-t border-rule pt-4 mt-5">
           <div className="flex items-start gap-2">
             <MapPin className="w-4 h-4 text-sage shrink-0 mt-0.5" />
             <p>1515 Walnut St, Suite 200, Boulder, CO — 2nd floor</p>

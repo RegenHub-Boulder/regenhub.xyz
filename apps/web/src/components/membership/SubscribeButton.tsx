@@ -97,7 +97,7 @@ export function SubscribeButton({ planKey, isAuthenticated, authedEmail, cta = "
             Cancel
           </Button>
         </div>
-        {error && <p className="text-xs text-red-400">{error}</p>}
+        {error && <p className="text-xs text-danger">{error}</p>}
         <p className="text-xs text-muted">
           We&apos;ll email you a sign-in link after payment so you can manage your subscription.
         </p>
@@ -118,7 +118,7 @@ export function SubscribeButton({ planKey, isAuthenticated, authedEmail, cta = "
       {isAuthenticated && authedEmail && (
         <p className="text-xs text-muted mt-1.5">Subscribing as {authedEmail}</p>
       )}
-      {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
+      {error && <p className="text-xs text-danger mt-2">{error}</p>}
     </div>
   );
 }

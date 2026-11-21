@@ -70,12 +70,12 @@ export default async function MemberPage({ params }: PageProps) {
 
         {m.skills.length > 0 && (
           <section className="space-y-2" aria-labelledby="skills">
-            <h2 id="skills" className="text-sm uppercase tracking-wider text-sage">
+            <h2 id="skills" className="text-sm text-sage">
               Skills
             </h2>
             <ul className="flex flex-wrap gap-2">
               {m.skills.map((s) => (
-                <li key={s} className="text-sm px-3 py-1 rounded-full border border-white/15 break-all">
+                <li key={s} className="text-sm px-3 py-1 rounded-full border border-rule break-all">
                   {s}
                 </li>
               ))}
@@ -85,7 +85,7 @@ export default async function MemberPage({ params }: PageProps) {
 
         {m.links.length > 0 && (
           <section className="space-y-2" aria-labelledby="links">
-            <h2 id="links" className="text-sm uppercase tracking-wider text-sage">
+            <h2 id="links" className="text-sm text-sage">
               Links
             </h2>
             <ul className="space-y-1">
@@ -108,7 +108,7 @@ export default async function MemberPage({ params }: PageProps) {
 
         {nights && nights.length > 0 && (
           <section className="space-y-2" aria-labelledby="nights" data-testid="member-nights">
-            <h2 id="nights" className="text-sm uppercase tracking-wider text-sage">
+            <h2 id="nights" className="text-sm text-sage">
               Recent nights at the hub
             </h2>
             <ul className="space-y-1">
@@ -129,7 +129,7 @@ export default async function MemberPage({ params }: PageProps) {
           </section>
         )}
 
-        <p className="text-sm text-muted border-t border-white/10 pt-6">
+        <p className="text-sm text-muted border-t border-rule pt-6">
           {m.name.split(" ")[0]} is a member of RegenHub Boulder.{" "}
           <Link href="/membership" className="text-sage underline">
             About membership

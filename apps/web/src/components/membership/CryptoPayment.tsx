@@ -378,7 +378,7 @@ function CryptoSubscribeButtonInner(props: Props) {
         </div>
       )}
       {moveOffer && phase === "idle" && (
-        <div className="rounded-lg border border-amber-400/30 bg-amber-400/5 p-3 text-left space-y-2">
+        <div className="rounded-lg border border-warn/40 bg-warn/10 p-3 text-left space-y-2">
           <p className="text-xs">{moveOffer}</p>
           <div className="flex gap-2 flex-wrap">
             <Button type="button" onClick={() => void verifyAndPay(true)} className="btn-glass text-xs">Sign to move it here</Button>
@@ -386,8 +386,8 @@ function CryptoSubscribeButtonInner(props: Props) {
           </div>
         </div>
       )}
-      {phase === "complete" && <p className="text-xs text-emerald-400">{purpose.doneLine}</p>}
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      {phase === "complete" && <p className="text-xs text-ok">{purpose.doneLine}</p>}
+      {error && <p className="text-xs text-danger">{error}</p>}
     </div>
   );
 }

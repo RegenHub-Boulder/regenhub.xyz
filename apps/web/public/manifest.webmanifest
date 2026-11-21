@@ -6,8 +6,8 @@
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0e1410",
-  "theme_color": "#2d5e3e",
+  "background_color": "#ebe6d9",
+  "theme_color": "#ebe6d9",
   "icons": [
     {
       "src": "/regenhub-logo.svg",

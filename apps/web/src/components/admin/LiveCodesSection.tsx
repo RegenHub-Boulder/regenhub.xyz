@@ -35,7 +35,7 @@ export function LiveCodesSection({ codes, members, recentInactiveCount, nowMs }:
           <div className="glass-panel overflow-x-auto hidden sm:block">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/10 text-left text-muted">
+                <tr className="border-b border-rule text-left text-muted">
                   <th className="px-4 py-3 font-medium">Code</th>
                   <th className="px-4 py-3 font-medium">Slot</th>
                   <th className="px-4 py-3 font-medium">Label / Member</th>
@@ -51,7 +51,7 @@ export function LiveCodesSection({ codes, members, recentInactiveCount, nowMs }:
                     : false;
                   const member = c.members;
                   return (
-                    <tr key={c.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                    <tr key={c.id} className="border-b border-rule hover:bg-tint transition-colors">
                       <td className="px-4 py-3 font-mono font-bold text-gold">{c.code}</td>
                       <td className="px-4 py-3 text-muted">{c.pin_slot}</td>
                       <td className="px-4 py-3">
@@ -61,7 +61,7 @@ export function LiveCodesSection({ codes, members, recentInactiveCount, nowMs }:
                         {expiresAt ? (
                           <Badge
                             variant="outline"
-                            className={`text-xs ${expiringSoon ? "border-orange-400/50 text-orange-400" : "border-white/20 text-muted"}`}
+                            className={`text-xs ${expiringSoon ? "border-warn/40 text-warn" : "border-rule text-muted"}`}
                           >
                             {expiresAt.toLocaleString("en-US", {
                               timeZone: "America/Denver",
@@ -105,7 +105,7 @@ export function LiveCodesSection({ codes, members, recentInactiveCount, nowMs }:
                     {expiresAt ? (
                       <Badge
                         variant="outline"
-                        className={`text-xs ${expiringSoon ? "border-orange-400/50 text-orange-400" : "border-white/20 text-muted"}`}
+                        className={`text-xs ${expiringSoon ? "border-warn/40 text-warn" : "border-rule text-muted"}`}
                       >
                         {expiresAt.toLocaleString("en-US", {
                           timeZone: "America/Denver",

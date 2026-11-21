@@ -1,5 +1,6 @@
 import { portalViewer } from "@/lib/admin";
 import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
 import { MobileNav, type NavLink } from "@/components/nav/MobileNav";
 import { techneConfig } from "@/lib/techne/config";
 import { regenosCollectiveDid } from "@/lib/regenos/config";
@@ -34,13 +35,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const links = [...(isAdmin ? staffLinks : []), ...stewards, ...(user ? [portalLink] : [])];
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen" data-surface="work">
       <header className="sticky top-0 z-50 px-6 py-3">
         <nav className="glass-panel-subtle max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-6">
             <MobileNav links={links} />
             <Link href="/" className="text-forest font-bold text-lg">RegenHub</Link>
-            <span className="text-xs bg-gold/20 text-gold px-2 py-0.5 rounded-full font-medium">Admin</span>
+            <Badge>Admin</Badge>
             <div className="hidden sm:flex gap-4 text-sm">
               {links
                 .filter((l) => !l.accent) // accent links (Portal) render separately below

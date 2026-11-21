@@ -341,10 +341,10 @@ export default function FreeDayForm({
 
           <Card className="glass-panel-strong">
             <CardContent className="p-8 text-center">
-              <p className="text-sm text-muted mb-2 uppercase tracking-wider">
+              <p className="text-sm text-muted mb-2">
                 Your Door Code
               </p>
-              <p className="text-5xl md:text-6xl font-mono font-bold text-gold tracking-[0.2em] mb-4">
+              <p className="text-5xl md:text-6xl font-serif font-normal text-foreground tabular-nums [font-variant-numeric:lining-nums_tabular-nums] tracking-[0.14em] mb-4">
                 {doorCode}
               </p>
               {expiresAt && (
@@ -356,7 +356,7 @@ export default function FreeDayForm({
                 </p>
               )}
               {lockStatus && (
-                <p className={`text-sm mt-2 ${lockStatus.includes("didn't respond") ? "text-amber-400" : "text-emerald-400"}`}>
+                <p className={`text-sm mt-2 ${lockStatus.includes("didn't respond") ? "text-warn" : "text-ok"}`}>
                   {lockStatus}
                 </p>
               )}
@@ -451,7 +451,7 @@ export default function FreeDayForm({
             </p>
 
             {error && (
-              <p className="text-sm text-red-400 mb-4">{error}</p>
+              <p className="text-sm text-danger mb-4">{error}</p>
             )}
 
             <Button
@@ -635,7 +635,7 @@ export default function FreeDayForm({
                 />
               </div>
 
-              {error && <p className="text-sm text-red-400">{error}</p>}
+              {error && <p className="text-sm text-danger">{error}</p>}
 
               <Button
                 type="submit"

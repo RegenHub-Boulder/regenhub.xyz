@@ -50,7 +50,7 @@ export function AdminTabs<K extends string>({
 
   return (
     <div className="space-y-6">
-      <div className="flex gap-1 border-b border-white/10 -mb-px overflow-x-auto">
+      <div className="flex gap-1 border-b border-rule -mb-px overflow-x-auto">
         {tabs.map((t) => (
           <button
             key={t.key}

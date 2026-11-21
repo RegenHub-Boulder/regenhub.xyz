@@ -164,14 +164,14 @@ export function NewsletterStudio({
       {/* Compose */}
       <Card className="glass-panel border border-sage/20">
         <CardContent className="p-5 space-y-3">
-          <h3 className="text-sm font-semibold">Compose {issueKey ? <span className="text-muted font-normal">· {issueKey}</span> : null}{sent ? <span className="text-emerald-400 font-normal"> · sent</span> : null}</h3>
+          <h3 className="text-sm font-semibold">Compose {issueKey ? <span className="text-muted font-normal">· {issueKey}</span> : null}{sent ? <span className="text-ok font-normal"> · sent</span> : null}</h3>
           <div>
             <label className="text-xs text-muted">Subject</label>
             <input
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               disabled={sent}
-              className="w-full mt-1 px-3 py-2 rounded-md bg-black/20 border border-white/10 text-sm"
+              className="w-full mt-1 px-3 py-2 rounded-md bg-ink/10 border border-rule text-sm"
               placeholder="RegenHub dispatch — …"
             />
           </div>
@@ -182,7 +182,7 @@ export function NewsletterStudio({
               onChange={(e) => setMarkdown(e.target.value)}
               disabled={sent}
               rows={16}
-              className="w-full mt-1 px-3 py-2 rounded-md bg-black/20 border border-white/10 text-sm font-mono leading-relaxed"
+              className="w-full mt-1 px-3 py-2 rounded-md bg-ink/10 border border-rule text-sm font-mono leading-relaxed"
               placeholder="## News from the cooperative&#10;&#10;Hi friends, …"
             />
           </div>
@@ -198,7 +198,7 @@ export function NewsletterStudio({
             </Button>
           </div>
           {showPreview && (
-            <div className="mt-2 rounded-md border border-white/10 bg-white p-5 max-h-[520px] overflow-auto">
+            <div className="mt-2 rounded-md border border-rule bg-white p-5 max-h-[520px] overflow-auto">
               <div
                 style={{
                   color: "#1a1a1a",
@@ -238,13 +238,13 @@ export function NewsletterStudio({
 
           {progress && (
             <div className="space-y-1.5">
-              <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
-                <div className="h-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+              <div className="h-2 w-full rounded-full bg-tint overflow-hidden">
+                <div className="h-full bg-ok transition-all" style={{ width: `${pct}%` }} />
               </div>
               <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted">
-                <span className="text-emerald-400">✓ {progress.sent} sent</span>
+                <span className="text-ok">✓ {progress.sent} sent</span>
                 <span>{progress.pending} pending</span>
-                {progress.failed > 0 && <span className="text-red-400">{progress.failed} failed</span>}
+                {progress.failed > 0 && <span className="text-danger">{progress.failed} failed</span>}
                 <span>of {progress.total}</span>
                 {sending && <span className="text-sage">· sending…</span>}
               </div>
@@ -267,12 +267,12 @@ export function NewsletterStudio({
               </Button>
             )}
           </div>
-          {sent && <p className="text-xs text-emerald-400">This issue is marked sent. Compose a new draft for the next one.</p>}
+          {sent && <p className="text-xs text-ok">This issue is marked sent. Compose a new draft for the next one.</p>}
         </CardContent>
       </Card>
 
       {msg && <p className="text-xs text-sage">{msg}</p>}
-      {err && <p className="text-xs text-red-400">{err}</p>}
+      {err && <p className="text-xs text-danger">{err}</p>}
     </div>
   );
 }

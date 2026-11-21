@@ -80,7 +80,7 @@ export function DigestNoteCard() {
               A note is waiting (last edited {new Date(existingAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}) — saving replaces it.
             </p>
           )}
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-danger">{error}</p>}
         </div>
       </CardContent>
     </Card>

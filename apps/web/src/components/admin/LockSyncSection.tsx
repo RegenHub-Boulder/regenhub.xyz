@@ -60,7 +60,7 @@ export function LockSyncSection({ members, lastRun, nowMs }: Props) {
       </div>
 
       {lastRun && (
-        <Card className={`glass-panel ${lastRun.failed > 0 ? "border border-red-500/30" : lastRun.partial > 0 ? "border border-amber-500/30" : ""}`}>
+        <Card className={`glass-panel ${lastRun.failed > 0 ? "border border-danger/40" : lastRun.partial > 0 ? "border border-warn/40" : ""}`}>
           <CardContent className="p-5">
             <div className="flex items-start gap-3">
               <History className="w-5 h-5 text-sage mt-0.5 shrink-0" />
@@ -68,15 +68,15 @@ export function LockSyncSection({ members, lastRun, nowMs }: Props) {
                 <p className="text-sm font-semibold">Last sync · {relTime(lastRun.created_at, nowMs)}</p>
                 <p className="text-xs text-muted mt-0.5">
                   {lastRun.synced} synced
-                  {lastRun.failed > 0 && <span className="text-red-400"> · {lastRun.failed} failed</span>}
-                  {lastRun.partial > 0 && <span className="text-amber-400"> · {lastRun.partial} partial</span>}
+                  {lastRun.failed > 0 && <span className="text-danger"> · {lastRun.failed} failed</span>}
+                  {lastRun.partial > 0 && <span className="text-warn"> · {lastRun.partial} partial</span>}
                   {lastRun.members?.name && <> · triggered by {lastRun.members.name}</>}
                 </p>
               </div>
             </div>
             {lastFailures.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-white/5">
-                <p className="text-xs font-medium text-red-400 flex items-center gap-1.5 mb-2">
+              <div className="mt-3 pt-3 border-t border-rule">
+                <p className="text-xs font-medium text-danger flex items-center gap-1.5 mb-2">
                   <AlertTriangle className="w-3.5 h-3.5" /> Failures
                 </p>
                 <ul className="text-xs space-y-1 text-muted">
@@ -97,9 +97,9 @@ export function LockSyncSection({ members, lastRun, nowMs }: Props) {
             <Lock className="w-5 h-5 text-sage mb-2" />
             <p className="text-sm text-muted">Slot usage</p>
             <p className="text-2xl font-bold">{members.length} / {TOTAL_SLOTS}</p>
-            <div className="mt-2 h-1.5 bg-white/5 rounded-full overflow-hidden">
+            <div className="mt-2 h-1.5 bg-tint rounded-full overflow-hidden">
               <div
-                className={`h-full ${utilizationPct > 80 ? "bg-amber-400" : "bg-sage"}`}
+                className={`h-full ${utilizationPct > 80 ? "bg-warn" : "bg-sage"}`}
                 style={{ width: `${Math.min(100, utilizationPct)}%` }}
               />
             </div>
@@ -108,9 +108,9 @@ export function LockSyncSection({ members, lastRun, nowMs }: Props) {
         </Card>
         <Card className="glass-panel">
           <CardContent className="p-5">
-            <CheckCircle2 className="w-5 h-5 text-green-400 mb-2" />
+            <CheckCircle2 className="w-5 h-5 text-ok mb-2" />
             <p className="text-sm text-muted">Active codes</p>
-            <p className="text-2xl font-bold text-green-400">{active.length}</p>
+            <p className="text-2xl font-bold text-ok">{active.length}</p>
           </CardContent>
         </Card>
         <Card className="glass-panel">
@@ -125,7 +125,7 @@ export function LockSyncSection({ members, lastRun, nowMs }: Props) {
       <div className="glass-panel overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-white/10 text-left text-muted">
+            <tr className="border-b border-rule text-left text-muted">
               <th className="px-4 py-3 font-medium">Slot</th>
               <th className="px-4 py-3 font-medium">Member</th>
               <th className="px-4 py-3 font-medium">Code</th>
@@ -135,24 +135,24 @@ export function LockSyncSection({ members, lastRun, nowMs }: Props) {
           </thead>
           <tbody>
             {members.map((m) => (
-              <tr key={m.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+              <tr key={m.id} className="border-b border-rule hover:bg-tint transition-colors">
                 <td className="px-4 py-3 font-mono text-muted">{m.pin_code_slot}</td>
                 <td className="px-4 py-3 font-medium">{m.name}</td>
                 <td className="px-4 py-3 font-mono text-gold">
                   {m.pin_code ?? <span className="text-muted">—</span>}
                 </td>
                 <td className="px-4 py-3">
-                  <Badge variant="outline" className="text-xs capitalize border-white/20">
+                  <Badge variant="outline" className="text-xs capitalize border-rule">
                     {m.member_type}
                   </Badge>
                 </td>
                 <td className="px-4 py-3">
                   {m.disabled || !m.pin_code ? (
-                    <Badge variant="outline" className="text-xs border-red-500/30 text-red-400">
+                    <Badge variant="outline" className="text-xs border-danger/40 text-danger">
                       {m.disabled ? "disabled" : "no code"}
                     </Badge>
                   ) : (
-                    <Badge className="text-xs bg-green-500/20 text-green-400 border-green-500/30">
+                    <Badge className="text-xs bg-ok/10 text-ok border-ok/40">
                       active
                     </Badge>
                   )}

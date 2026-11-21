@@ -43,7 +43,7 @@ export async function TechneDoor({ next, banner = null, techneError = null, mode
   return (
     <div className="space-y-6 text-center" data-testid="techne-door">
       {techneError && (
-        <p className="text-sm text-red-300" role="alert">
+        <p className="text-sm text-danger" role="alert">
           {techneError}
         </p>
       )}

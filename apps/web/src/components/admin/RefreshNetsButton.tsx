@@ -51,7 +51,7 @@ export function RefreshNetsButton() {
         Refresh rates from Stripe
       </Button>
       {msg && <p className="text-xs text-muted">{msg}</p>}
-      {err && <p className="text-xs text-red-400">{err}</p>}
+      {err && <p className="text-xs text-danger">{err}</p>}
     </div>
   );
 }

@@ -127,7 +127,7 @@ export function MemberActivityTimeline({ rows }: Props) {
   return (
     <Card className="glass-panel">
       <CardContent className="p-0">
-        <ul className="divide-y divide-white/5">
+        <ul className="divide-y divide-rule">
           {rows.map((r) => {
             const label = ACTION_LABELS[r.action] ?? r.action;
             const detail = summary(r);
@@ -148,11 +148,11 @@ export function MemberActivityTimeline({ rows }: Props) {
                   )}
                 </div>
                 {r.action.includes("revoked") || r.action.includes("disabled") || r.action.includes("deleted") ? (
-                  <Badge className="text-[10px] bg-red-500/15 text-red-400 border-red-500/25">
+                  <Badge className="text-[10px] bg-danger/10 text-danger border-danger/40">
                     {r.action.split("_").pop()}
                   </Badge>
                 ) : r.action.includes("approved") || r.action.includes("granted") || r.action.includes("applied") ? (
-                  <Badge className="text-[10px] bg-emerald-500/15 text-emerald-400 border-emerald-500/25">
+                  <Badge className="text-[10px] bg-ok/10 text-ok border-ok/40">
                     {r.action.split("_").pop()}
                   </Badge>
                 ) : null}

@@ -94,7 +94,7 @@ export function MemberOffer() {
             <div className="space-y-1">
               <p className="font-semibold">
                 {title}
-                {soon && <span className="ml-2 text-xs font-normal uppercase tracking-wide text-muted">Coming soon</span>}
+                {soon && <span className="ml-2 text-xs font-normal text-muted">Coming soon</span>}
               </p>
               <p className="text-sm text-muted leading-relaxed">{body}</p>
             </div>

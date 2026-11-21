@@ -255,8 +255,8 @@ function eventRow(e: LumaEvent): string {
     minute: "2-digit",
   });
   return `<tr>
-    <td style="padding: 6px 14px 6px 0; color: #555; white-space: nowrap; vertical-align: top; font-size: 14px;">${when}</td>
-    <td style="padding: 6px 0; font-size: 14px;"><a href="${e.url}" style="color: #2d5e3e; font-weight: 600; text-decoration: none;">${e.name}</a></td>
+    <td style="padding: 6px 14px 6px 0; color: #514939; white-space: nowrap; vertical-align: top; font-size: 14px;">${when}</td>
+    <td style="padding: 6px 0; font-size: 14px;"><a href="${e.url}" style="color: #4b5a2c; font-weight: 600; text-decoration: none;">${e.name}</a></td>
   </tr>`;
 }
 
@@ -278,50 +278,50 @@ export function renderNewsletterHtml(issue: CompiledIssue, recipientEmail: strin
   const mrr = `$${(stats.mrrCents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 
   const noteHtml = issue.note
-    ? `<div style="background: #f0f4f1; border-left: 3px solid #2d5e3e; padding: 14px 18px; margin: 22px 0; border-radius: 0 8px 8px 0;">
+    ? `<div style="background: #efe9dc; border-left: 3px solid #4b5a2c; padding: 14px 18px; margin: 22px 0; border-radius: 0 8px 8px 0;">
         <p style="margin: 0; white-space: pre-wrap;">${issue.note.text}</p>
-        ${issue.note.author ? `<p style="margin: 8px 0 0; font-size: 13px; color: #555;">— ${issue.note.author}</p>` : ""}
+        ${issue.note.author ? `<p style="margin: 8px 0 0; font-size: 13px; color: #514939;">— ${issue.note.author}</p>` : ""}
       </div>`
     : "";
 
   const eventsHtml = issue.events.length > 0
     ? `<h3 style="margin: 26px 0 8px;">Upcoming at the hub</h3>
        <table style="border-collapse: collapse;">${issue.events.map(eventRow).join("")}</table>
-       <p style="font-size: 13px; color: #555; margin-top: 8px;">Full calendar + RSVP: <a href="https://lu.ma/regenhub" style="color: #2d5e3e;">lu.ma/regenhub</a></p>`
-    : `<p style="font-size: 14px; color: #555; margin-top: 22px;">Events calendar: <a href="https://lu.ma/regenhub" style="color: #2d5e3e;">lu.ma/regenhub</a></p>`;
+       <p style="font-size: 13px; color: #514939; margin-top: 8px;">Full calendar + RSVP: <a href="https://lu.ma/regenhub" style="color: #4b5a2c;">lu.ma/regenhub</a></p>`
+    : `<p style="font-size: 14px; color: #514939; margin-top: 22px;">Events calendar: <a href="https://lu.ma/regenhub" style="color: #4b5a2c;">lu.ma/regenhub</a></p>`;
 
   const tierRows = stats.tierCounts
-    .map((t) => `<tr><td style="padding: 3px 12px 3px 0; color: #555; font-size: 14px;">${t.label}</td><td style="padding: 3px 0; font-weight: 600; font-size: 14px;">${t.count}</td></tr>`)
+    .map((t) => `<tr><td style="padding: 3px 12px 3px 0; color: #514939; font-size: 14px;">${t.label}</td><td style="padding: 3px 0; font-weight: 600; font-size: 14px;">${t.count}</td></tr>`)
     .join("");
 
   const statsHtml = includeStats
     ? `<h3 style="margin: 28px 0 8px;">The numbers (last two weeks)</h3>
-      <p style="font-size: 13px; color: #555; margin: 0 0 8px;">As a cooperative, we share the same numbers we look at — ${stats.monthLabel}.</p>
+      <p style="font-size: 13px; color: #514939; margin: 0 0 8px;">As a cooperative, we share the same numbers we look at — ${stats.monthLabel}.</p>
       <table style="width: 100%; border-collapse: collapse; margin: 8px 0;">
-        <tr><td style="padding: 3px 12px 3px 0; color: #555; font-size: 14px;">Monthly recurring revenue</td><td style="padding: 3px 0; font-weight: 600; font-size: 14px;">${mrr}</td></tr>
-        <tr><td style="padding: 3px 12px 3px 0; color: #555; font-size: 14px;">Paying members</td><td style="padding: 3px 0; font-weight: 600; font-size: 14px;">${stats.payingMembers}</td></tr>
-        <tr><td style="padding: 3px 12px 3px 0; color: #555; font-size: 14px;">New members</td><td style="padding: 3px 0; font-weight: 600; font-size: 14px;">${stats.newMembers}</td></tr>
-        <tr><td style="padding: 3px 12px 3px 0; color: #555; font-size: 14px;">Door entries</td><td style="padding: 3px 0; font-weight: 600; font-size: 14px;">${stats.totalVisits}</td></tr>
-        <tr><td style="padding: 3px 12px 3px 0; color: #555; font-size: 14px;">Day codes issued</td><td style="padding: 3px 0; font-weight: 600; font-size: 14px;">${stats.dayCodesIssued}</td></tr>
-        <tr><td style="padding: 3px 12px 3px 0; color: #555; font-size: 14px;">Free-day signups</td><td style="padding: 3px 0; font-weight: 600; font-size: 14px;">${stats.freeDaySignups}</td></tr>
+        <tr><td style="padding: 3px 12px 3px 0; color: #514939; font-size: 14px;">Monthly recurring revenue</td><td style="padding: 3px 0; font-weight: 600; font-size: 14px;">${mrr}</td></tr>
+        <tr><td style="padding: 3px 12px 3px 0; color: #514939; font-size: 14px;">Paying members</td><td style="padding: 3px 0; font-weight: 600; font-size: 14px;">${stats.payingMembers}</td></tr>
+        <tr><td style="padding: 3px 12px 3px 0; color: #514939; font-size: 14px;">New members</td><td style="padding: 3px 0; font-weight: 600; font-size: 14px;">${stats.newMembers}</td></tr>
+        <tr><td style="padding: 3px 12px 3px 0; color: #514939; font-size: 14px;">Door entries</td><td style="padding: 3px 0; font-weight: 600; font-size: 14px;">${stats.totalVisits}</td></tr>
+        <tr><td style="padding: 3px 12px 3px 0; color: #514939; font-size: 14px;">Day codes issued</td><td style="padding: 3px 0; font-weight: 600; font-size: 14px;">${stats.dayCodesIssued}</td></tr>
+        <tr><td style="padding: 3px 12px 3px 0; color: #514939; font-size: 14px;">Free-day signups</td><td style="padding: 3px 0; font-weight: 600; font-size: 14px;">${stats.freeDaySignups}</td></tr>
       </table>
       <table style="border-collapse: collapse; margin: 4px 0 12px;">${tierRows}</table>`
     : "";
 
   return `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
-      <p style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: #2d5e3e; margin-bottom: 4px;">RegenHub dispatch</p>
+    <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
+      <p style="font-size: 13px; font-style: italic; color: #4b5a2c; margin-bottom: 4px;">RegenHub dispatch</p>
       <h2 style="margin: 0 0 14px;">News from the cooperative</h2>
       ${noteHtml}
       ${eventsHtml}
       ${statsHtml}
-      <p style="font-size: 14px; margin-top: 24px;">Want to co-work with us? <a href="${base}/freeday" style="color: #2d5e3e;">Claim a free day</a> or <a href="${base}/membership" style="color: #2d5e3e;">see membership tiers</a>.</p>
+      <p style="font-size: 14px; margin-top: 24px;">Want to co-work with us? <a href="${base}/freeday" style="color: #4b5a2c;">Claim a free day</a> or <a href="${base}/membership" style="color: #4b5a2c;">see membership tiers</a>.</p>
       <p style="font-size: 14px;">Questions or ideas — just reply, it goes straight to a human.</p>
-      <p style="font-size: 14px;">With gratitude,<br>RegenHub<br><span style="color: #888; font-size: 12px;">1515 Walnut St, Suite 200, Boulder, CO</span></p>
-      <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0 12px;" />
-      <p style="font-size: 11px; color: #999;">
+      <p style="font-size: 14px;">With gratitude,<br>RegenHub<br><span style="color: #6b6152; font-size: 12px;">1515 Walnut St, Suite 200, Boulder, CO</span></p>
+      <hr style="border: none; border-top: 1px solid #ddd5c4; margin: 24px 0 12px;" />
+      <p style="font-size: 11px; color: #6b6152;">
         You're receiving this because you're a RegenHub member or joined our list.
-        <a href="${unsubscribeUrl(recipientEmail, siteUrl)}" style="color: #999;">Unsubscribe</a>
+        <a href="${unsubscribeUrl(recipientEmail, siteUrl)}" style="color: #6b6152;">Unsubscribe</a>
       </p>
     </div>
   `;

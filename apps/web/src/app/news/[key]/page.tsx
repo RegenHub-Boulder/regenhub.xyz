@@ -9,8 +9,6 @@ import { markdownToEmailHtml } from "@/lib/newsletterMarkdown";
 // lists only sent issues; drafts are reachable only by direct link.
 export const dynamic = "force-dynamic";
 
-const cardFont = "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-
 export async function generateMetadata({ params }: { params: Promise<{ key: string }> }): Promise<Metadata> {
   const { key } = await params;
   const admin = createServiceClient();
@@ -34,21 +32,18 @@ export default async function NewsIssuePage({ params }: { params: Promise<{ key:
   const html = markdownToEmailHtml(issue.markdown_body);
 
   return (
-    <div className="px-4 py-10">
-      <article
-        className="mx-auto max-w-[620px] rounded-xl bg-white shadow-lg p-8 sm:p-10"
-        style={{ color: "#1a1a1a", fontFamily: cardFont, lineHeight: 1.6 }}
-      >
-        <p style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: "0.08em", color: "#2d5e3e", margin: "0 0 2px" }}>
+    <div className="px-6 py-10">
+      <article className="mx-auto max-w-[40rem] [&_a]:text-sage">
+        <p className="text-sm italic text-sage mb-0.5">
           RegenHub dispatch{issue.status === "draft" ? " · draft" : ""}
         </p>
-        {dateLabel && <p style={{ fontSize: 13, color: "#888", margin: "0 0 8px" }}>{dateLabel}</p>}
+        {dateLabel && <p className="text-sm text-muted mb-2">{dateLabel}</p>}
         <div dangerouslySetInnerHTML={{ __html: html }} />
-        <hr style={{ border: "none", borderTop: "1px solid #e5e5e5", margin: "28px 0 14px" }} />
-        <p style={{ fontSize: 13, margin: 0 }}>
-          <Link href="/news" style={{ color: "#2d5e3e" }}>← All dispatches</Link>
+        <hr className="mt-8 mb-4 border-rule" />
+        <p className="text-sm">
+          <Link href="/news">← All dispatches</Link>
           {"  ·  "}
-          <a href="https://regenhub.xyz/freeday" style={{ color: "#2d5e3e" }}>Grab a free day pass</a>
+          <a href="https://regenhub.xyz/freeday">Grab a free day pass</a>
         </p>
       </article>
     </div>
