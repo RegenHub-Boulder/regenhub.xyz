@@ -74,8 +74,9 @@ export default async function PortalLayout({ children }: { children: React.React
 
 /**
  * Events is for stewards: with the Techne door on, only someone signed in with Techne who holds facilitator or above
- * in RegenHub sees it (the page explains itself to anyone else who follows an old link). The roster is read only
- * when there is a Techne session, so most members cost nothing here. Door off: the old regenOS lane, flag-gated.
+ * in RegenHub sees it (the page explains itself to anyone else who follows an old link). The roster is read
+ * only when there is a Techne session, cached five minutes, so most members cost nothing here. Door off: the old
+ * regenOS lane, flag-gated.
  */
 async function showEvents(door: boolean): Promise<boolean> {
   if (!door) return isStewardEventsEnabled();
@@ -84,7 +85,8 @@ async function showEvents(door: boolean): Promise<boolean> {
   try {
     const techne = await currentTechne();
     if (!techne) return false;
-    return !!(await stewardCheck(collective, techne.did))?.steward;
+    // A hint, not a gate (the Events page checks fresh): a roster up to five minutes old is fine here.
+    return !!(await stewardCheck(collective, techne.did, 300))?.steward;
   } catch {
     return false;
   }

@@ -101,13 +101,14 @@ export type RosterChange =
 
 export class RosterRefusal extends Error {}
 
-/** The collective's claims, read fresh. Null when Techne couldn't be read in full (a partial roster could hide a
- *  manager, or a claim a change has to end). */
-export async function fetchRoster(collective: string): Promise<Claim[] | null> {
+/** The collective's claims, read fresh (or up to `revalidate` seconds old, for a hint like the portal's nav link;
+ *  every gate reads fresh). Null when Techne couldn't be read in full (a partial roster could hide a manager, or a
+ *  claim a change has to end). */
+export async function fetchRoster(collective: string, revalidate = 0): Promise<Claim[] | null> {
   const rows = await listRecords<MembershipValue>(
     { where: { all: [{ type: { is: MEMBERSHIP_NSID } }, { author: { is: collective } }] } },
     // Ended claims stay (an end date, never a delete), so the list only grows: read up to 2,000.
-    { revalidate: 0, strict: true, maxPages: 20 },
+    { revalidate, strict: true, maxPages: 20 },
   );
   return rows ? claimsFrom(rows, collective) : null;
 }
@@ -125,9 +126,11 @@ export interface StewardCheck {
 export const isSteward = (h: Holder | null | undefined): boolean => !!h && h.role >= MANAGE_ROLE;
 
 /** The one steward check for RegenHub's pages and routes: the roster read fresh, and this DID's place in it. Null
- *  when Techne couldn't be read in full. The site's own membership and admin flag play no part. */
-export async function stewardCheck(collective: string, did: string): Promise<StewardCheck | null> {
-  const claims = await fetchRoster(collective);
+ *  when Techne couldn't be read in full. The site's own membership and admin flag play no part. `revalidate` > 0 is
+ *  for hints only (the portal's Events link): a cached roster can be minutes old, and its pages cached at different
+ *  times. Every gate (pages, write routes) leaves it at 0. */
+export async function stewardCheck(collective: string, did: string, revalidate = 0): Promise<StewardCheck | null> {
+  const claims = await fetchRoster(collective, revalidate);
   if (!claims) return null;
   const holders = holdersFrom(claims);
   const me = holders.find((h) => h.did === did) ?? null;

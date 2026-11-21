@@ -237,7 +237,7 @@ export default async function ScoreboardPage() {
               <p><span className="text-2xl font-bold tabular-nums">{s.newsletter.listSize}</span> <span className="text-muted">on the list (members and stay-in-touch, minus unsubscribes)</span></p>
               {s.newsletter.lastIssue ? (
                 <p>
-                  Last issue, <Link href="/admin/newsletter" className="text-sage hover:underline">{s.newsletter.lastIssue.subject}</Link>{" "}
+                  Last issue, <Link href="/admin/mail" className="text-sage hover:underline">{s.newsletter.lastIssue.subject}</Link>{" "}
                   <span className="text-muted">({day(s.newsletter.lastIssue.createdAt)})</span>: sent to{" "}
                   <span className="font-semibold tabular-nums">{s.newsletter.lastIssue.sent}</span> of {s.newsletter.lastIssue.total}
                   {s.newsletter.lastIssue.failed > 0 && <span className="text-amber-400"> · {s.newsletter.lastIssue.failed} failed or skipped</span>}

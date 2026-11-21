@@ -1,0 +1,2334 @@
+{
+ "member/desktop/portal": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 4,
+  "nested": 0,
+  "buttons": 5,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 919,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/portal-my-code": {
+  "url": "/portal/my-code",
+  "headings": 2,
+  "h": [
+   "My Door Code",
+   "How to use the keypad"
+  ],
+  "boxes": 3,
+  "nested": 0,
+  "buttons": 3,
+  "links": 1,
+  "fields": 1,
+  "tabs": 0,
+  "words": 80,
+  "height": 900,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/portal-passes": {
+  "url": "/portal/passes",
+  "headings": 3,
+  "h": [
+   "Guest passes",
+   "Active codes",
+   "Buy guest passes"
+  ],
+  "boxes": 3,
+  "nested": 0,
+  "buttons": 4,
+  "links": 0,
+  "fields": 0,
+  "tabs": 0,
+  "words": 47,
+  "height": 900,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/portal-profile": {
+  "url": "/portal/profile",
+  "headings": 3,
+  "h": [
+   "Profile",
+   "Your member page",
+   "Techne account"
+  ],
+  "boxes": 3,
+  "nested": 0,
+  "buttons": 2,
+  "links": 2,
+  "fields": 11,
+  "tabs": 0,
+  "words": 166,
+  "height": 1776,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/portal-access-log": {
+  "url": "/portal/access-log",
+  "headings": 6,
+  "h": [
+   "Hub access log",
+   "YESTERDAY \u00b7 6",
+   "THU, NOV 19 \u00b7 2",
+   "WED, NOV 18 \u00b7 1",
+   "TUE, NOV 17 \u00b7 1",
+   "MON, NOV 16 \u00b7 2"
+  ],
+  "boxes": 5,
+  "nested": 0,
+  "buttons": 1,
+  "links": 1,
+  "fields": 0,
+  "tabs": 0,
+  "words": 160,
+  "height": 1178,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/portal-events": {
+  "url": "/admin/events",
+  "headings": 2,
+  "h": [
+   "Manage Events",
+   "Posting events is for RegenHub's facilitators and managers"
+  ],
+  "boxes": 1,
+  "nested": 0,
+  "buttons": 1,
+  "links": 1,
+  "fields": 0,
+  "tabs": 0,
+  "words": 59,
+  "height": 900,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/portal-events-old": {
+  "url": "/portal/events/old",
+  "headings": 2,
+  "h": [
+   "404",
+   "This page could not be found."
+  ],
+  "boxes": 0,
+  "nested": 0,
+  "buttons": 0,
+  "links": 0,
+  "fields": 0,
+  "tabs": 0,
+  "words": 7,
+  "height": 900,
+  "navLinks": 0,
+  "status": 404
+ },
+ "member/desktop/admin": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 993,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/admin-scoreboard": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 993,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/admin-people": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 993,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/admin-people-freedays": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 993,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/admin-people-interests": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 4,
+  "nested": 0,
+  "buttons": 5,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 919,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/admin-members": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 993,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/admin-member-detail": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 993,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/admin-member-detail-billing": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 993,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/admin-member-detail-access": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 993,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/admin-member-detail-activity": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 993,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/admin-members-new": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 993,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/admin-members-stale-links": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 993,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/admin-billing": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 993,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/admin-access": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 993,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/admin-lock": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 4,
+  "nested": 0,
+  "buttons": 5,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 919,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/admin-mail": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 993,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/admin-mail-group": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 993,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/admin-events": {
+  "url": "/admin/events",
+  "headings": 2,
+  "h": [
+   "Manage Events",
+   "Posting events is for RegenHub's facilitators and managers"
+  ],
+  "boxes": 1,
+  "nested": 0,
+  "buttons": 1,
+  "links": 1,
+  "fields": 0,
+  "tabs": 0,
+  "words": 59,
+  "height": 900,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/desktop/admin-events-roles": {
+  "url": "/admin/events?roles=open",
+  "headings": 2,
+  "h": [
+   "Manage Events",
+   "Posting events is for RegenHub's facilitators and managers"
+  ],
+  "boxes": 1,
+  "nested": 0,
+  "buttons": 1,
+  "links": 1,
+  "fields": 0,
+  "tabs": 0,
+  "words": 59,
+  "height": 900,
+  "navLinks": 3,
+  "status": 200
+ },
+ "member/phone/portal": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 1171,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/portal-my-code": {
+  "url": "/portal/my-code",
+  "headings": 2,
+  "h": [
+   "My Door Code",
+   "How to use the keypad"
+  ],
+  "boxes": 3,
+  "nested": 0,
+  "buttons": 3,
+  "links": 1,
+  "fields": 1,
+  "tabs": 0,
+  "words": 80,
+  "height": 844,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/portal-passes": {
+  "url": "/portal/passes",
+  "headings": 3,
+  "h": [
+   "Guest passes",
+   "Active codes",
+   "Buy guest passes"
+  ],
+  "boxes": 3,
+  "nested": 0,
+  "buttons": 4,
+  "links": 0,
+  "fields": 0,
+  "tabs": 0,
+  "words": 47,
+  "height": 846,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/portal-profile": {
+  "url": "/portal/profile",
+  "headings": 3,
+  "h": [
+   "Profile",
+   "Your member page",
+   "Techne account"
+  ],
+  "boxes": 3,
+  "nested": 0,
+  "buttons": 2,
+  "links": 2,
+  "fields": 11,
+  "tabs": 0,
+  "words": 166,
+  "height": 1990,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/portal-access-log": {
+  "url": "/portal/access-log",
+  "headings": 6,
+  "h": [
+   "Hub access log",
+   "YESTERDAY \u00b7 6",
+   "THU, NOV 19 \u00b7 2",
+   "WED, NOV 18 \u00b7 1",
+   "TUE, NOV 17 \u00b7 1",
+   "MON, NOV 16 \u00b7 2"
+  ],
+  "boxes": 5,
+  "nested": 0,
+  "buttons": 1,
+  "links": 1,
+  "fields": 0,
+  "tabs": 0,
+  "words": 160,
+  "height": 1237,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/portal-events": {
+  "url": "/admin/events",
+  "headings": 2,
+  "h": [
+   "Manage Events",
+   "Posting events is for RegenHub's facilitators and managers"
+  ],
+  "boxes": 1,
+  "nested": 0,
+  "buttons": 1,
+  "links": 1,
+  "fields": 0,
+  "tabs": 0,
+  "words": 59,
+  "height": 844,
+  "navLinks": 2,
+  "status": 200
+ },
+ "member/phone/portal-events-old": {
+  "url": "/portal/events/old",
+  "headings": 2,
+  "h": [
+   "404",
+   "This page could not be found."
+  ],
+  "boxes": 0,
+  "nested": 0,
+  "buttons": 0,
+  "links": 0,
+  "fields": 0,
+  "tabs": 0,
+  "words": 7,
+  "height": 844,
+  "navLinks": 0,
+  "status": 404
+ },
+ "member/phone/admin": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 1171,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/admin-scoreboard": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 1171,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/admin-people": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 1171,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/admin-people-freedays": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 1171,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/admin-people-interests": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 1171,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/admin-members": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 1171,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/admin-member-detail": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 1171,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/admin-member-detail-billing": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 1171,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/admin-member-detail-access": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 1171,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/admin-member-detail-activity": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 1171,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/admin-members-new": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 1171,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/admin-members-stale-links": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 1171,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/admin-billing": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 1171,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/admin-access": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 1171,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/admin-lock": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 1171,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/admin-mail": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 1171,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/admin-mail-group": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership\u00b7 Hot Desk \u00b7 $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 1171,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/admin-events": {
+  "url": "/admin/events",
+  "headings": 2,
+  "h": [
+   "Manage Events",
+   "Posting events is for RegenHub's facilitators and managers"
+  ],
+  "boxes": 1,
+  "nested": 0,
+  "buttons": 1,
+  "links": 1,
+  "fields": 0,
+  "tabs": 0,
+  "words": 59,
+  "height": 844,
+  "navLinks": 2,
+  "status": 200
+ },
+ "member/phone/admin-events-roles": {
+  "url": "/admin/events?roles=open",
+  "headings": 2,
+  "h": [
+   "Manage Events",
+   "Posting events is for RegenHub's facilitators and managers"
+  ],
+  "boxes": 1,
+  "nested": 0,
+  "buttons": 1,
+  "links": 1,
+  "fields": 0,
+  "tabs": 0,
+  "words": 59,
+  "height": 844,
+  "navLinks": 2,
+  "status": 200
+ },
+ "newcomer/desktop/portal": {
+  "url": "/portal",
+  "headings": 6,
+  "h": [
+   "Hi, Sam",
+   "Free Day Reserved",
+   "Day passes",
+   "Ready to become a member?",
+   "Get oriented",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 0,
+  "buttons": 3,
+  "links": 10,
+  "fields": 0,
+  "tabs": 0,
+  "words": 357,
+  "height": 1967,
+  "navLinks": 3,
+  "status": 200
+ },
+ "newcomer/desktop/portal-my-code": {
+  "url": "/portal/my-code",
+  "headings": 1,
+  "h": [
+   "Permanent codes are for Full Members"
+  ],
+  "boxes": 1,
+  "nested": 0,
+  "buttons": 1,
+  "links": 1,
+  "fields": 0,
+  "tabs": 0,
+  "words": 29,
+  "height": 900,
+  "navLinks": 3,
+  "status": 200
+ },
+ "newcomer/desktop/portal-passes": {
+  "url": "/portal/passes",
+  "headings": 3,
+  "h": [
+   "Day passes",
+   "Get a day pass",
+   "Become a Member"
+  ],
+  "boxes": 4,
+  "nested": 0,
+  "buttons": 3,
+  "links": 1,
+  "fields": 0,
+  "tabs": 0,
+  "words": 98,
+  "height": 1016,
+  "navLinks": 3,
+  "status": 200
+ },
+ "newcomer/desktop/portal-profile": {
+  "url": "/portal/profile",
+  "headings": 3,
+  "h": [
+   "Profile",
+   "Your member page",
+   "Techne account"
+  ],
+  "boxes": 3,
+  "nested": 0,
+  "buttons": 2,
+  "links": 1,
+  "fields": 11,
+  "tabs": 0,
+  "words": 159,
+  "height": 1736,
+  "navLinks": 3,
+  "status": 200
+ },
+ "newcomer/desktop/portal-access-log": {
+  "url": "/portal/access-log",
+  "headings": 1,
+  "h": [
+   "Access log is co-op-only"
+  ],
+  "boxes": 1,
+  "nested": 0,
+  "buttons": 1,
+  "links": 1,
+  "fields": 0,
+  "tabs": 0,
+  "words": 26,
+  "height": 900,
+  "navLinks": 3,
+  "status": 200
+ },
+ "newcomer/desktop/portal-events": {
+  "url": "/admin/events",
+  "headings": 2,
+  "h": [
+   "Manage Events",
+   "Posting events is for RegenHub's facilitators and managers"
+  ],
+  "boxes": 1,
+  "nested": 0,
+  "buttons": 1,
+  "links": 1,
+  "fields": 0,
+  "tabs": 0,
+  "words": 59,
+  "height": 900,
+  "navLinks": 3,
+  "status": 200
+ },
+ "newcomer/desktop/portal-events-old": {
+  "url": "/portal/events/old",
+  "headings": 2,
+  "h": [
+   "404",
+   "This page could not be found."
+  ],
+  "boxes": 0,
+  "nested": 0,
+  "buttons": 0,
+  "links": 0,
+  "fields": 0,
+  "tabs": 0,
+  "words": 7,
+  "height": 900,
+  "navLinks": 0,
+  "status": 404
+ },
+ "newcomer/phone/portal": {
+  "url": "/portal",
+  "headings": 6,
+  "h": [
+   "Hi, Sam",
+   "Free Day Reserved",
+   "Day passes",
+   "Ready to become a member?",
+   "Get oriented",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 0,
+  "buttons": 3,
+  "links": 10,
+  "fields": 0,
+  "tabs": 0,
+  "words": 357,
+  "height": 2621,
+  "navLinks": 1,
+  "status": 200
+ },
+ "newcomer/phone/portal-my-code": {
+  "url": "/portal/my-code",
+  "headings": 1,
+  "h": [
+   "Permanent codes are for Full Members"
+  ],
+  "boxes": 1,
+  "nested": 0,
+  "buttons": 1,
+  "links": 1,
+  "fields": 0,
+  "tabs": 0,
+  "words": 29,
+  "height": 844,
+  "navLinks": 1,
+  "status": 200
+ },
+ "newcomer/phone/portal-passes": {
+  "url": "/portal/passes",
+  "headings": 3,
+  "h": [
+   "Day passes",
+   "Get a day pass",
+   "Become a Member"
+  ],
+  "boxes": 4,
+  "nested": 0,
+  "buttons": 3,
+  "links": 1,
+  "fields": 0,
+  "tabs": 0,
+  "words": 98,
+  "height": 1234,
+  "navLinks": 1,
+  "status": 200
+ },
+ "newcomer/phone/portal-profile": {
+  "url": "/portal/profile",
+  "headings": 3,
+  "h": [
+   "Profile",
+   "Your member page",
+   "Techne account"
+  ],
+  "boxes": 3,
+  "nested": 0,
+  "buttons": 2,
+  "links": 1,
+  "fields": 11,
+  "tabs": 0,
+  "words": 159,
+  "height": 1930,
+  "navLinks": 1,
+  "status": 200
+ },
+ "newcomer/phone/portal-access-log": {
+  "url": "/portal/access-log",
+  "headings": 1,
+  "h": [
+   "Access log is co-op-only"
+  ],
+  "boxes": 1,
+  "nested": 0,
+  "buttons": 1,
+  "links": 1,
+  "fields": 0,
+  "tabs": 0,
+  "words": 26,
+  "height": 844,
+  "navLinks": 1,
+  "status": 200
+ },
+ "newcomer/phone/portal-events": {
+  "url": "/admin/events",
+  "headings": 2,
+  "h": [
+   "Manage Events",
+   "Posting events is for RegenHub's facilitators and managers"
+  ],
+  "boxes": 1,
+  "nested": 0,
+  "buttons": 1,
+  "links": 1,
+  "fields": 0,
+  "tabs": 0,
+  "words": 59,
+  "height": 844,
+  "navLinks": 2,
+  "status": 200
+ },
+ "newcomer/phone/portal-events-old": {
+  "url": "/portal/events/old",
+  "headings": 2,
+  "h": [
+   "404",
+   "This page could not be found."
+  ],
+  "boxes": 0,
+  "nested": 0,
+  "buttons": 0,
+  "links": 0,
+  "fields": 0,
+  "tabs": 0,
+  "words": 7,
+  "height": 844,
+  "navLinks": 0,
+  "status": 404
+ },
+ "admin/desktop/portal": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Robin",
+   "Your door code",
+   "Membership\u00b7 Cold Desk \u00b7 $0/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 6,
+  "nested": 1,
+  "buttons": 8,
+  "links": 6,
+  "fields": 0,
+  "tabs": 0,
+  "words": 94,
+  "height": 1155,
+  "navLinks": 5,
+  "status": 200
+ },
+ "admin/desktop/portal-my-code": {
+  "url": "/portal/my-code",
+  "headings": 2,
+  "h": [
+   "My Door Code",
+   "How to use the keypad"
+  ],
+  "boxes": 3,
+  "nested": 0,
+  "buttons": 3,
+  "links": 1,
+  "fields": 1,
+  "tabs": 0,
+  "words": 80,
+  "height": 900,
+  "navLinks": 5,
+  "status": 200
+ },
+ "admin/desktop/portal-passes": {
+  "url": "/portal/passes",
+  "headings": 3,
+  "h": [
+   "Guest passes",
+   "Active codes",
+   "Buy guest passes"
+  ],
+  "boxes": 3,
+  "nested": 0,
+  "buttons": 4,
+  "links": 0,
+  "fields": 0,
+  "tabs": 0,
+  "words": 56,
+  "height": 900,
+  "navLinks": 5,
+  "status": 200
+ },
+ "admin/desktop/portal-profile": {
+  "url": "/portal/profile",
+  "headings": 3,
+  "h": [
+   "Profile",
+   "Your member page",
+   "Techne account"
+  ],
+  "boxes": 3,
+  "nested": 0,
+  "buttons": 2,
+  "links": 1,
+  "fields": 11,
+  "tabs": 0,
+  "words": 163,
+  "height": 1736,
+  "navLinks": 5,
+  "status": 200
+ },
+ "admin/desktop/portal-access-log": {
+  "url": "/portal/access-log",
+  "headings": 6,
+  "h": [
+   "Hub access log",
+   "YESTERDAY \u00b7 6",
+   "THU, NOV 19 \u00b7 2",
+   "WED, NOV 18 \u00b7 1",
+   "TUE, NOV 17 \u00b7 1",
+   "MON, NOV 16 \u00b7 2"
+  ],
+  "boxes": 5,
+  "nested": 0,
+  "buttons": 1,
+  "links": 1,
+  "fields": 0,
+  "tabs": 0,
+  "words": 160,
+  "height": 1178,
+  "navLinks": 5,
+  "status": 200
+ },
+ "admin/desktop/portal-events": {
+  "url": "/admin/events",
+  "headings": 7,
+  "h": [
+   "Manage Events",
+   "UPCOMING",
+   "Agents Building Night",
+   "420 Happy Hour",
+   "Also on Luma?",
+   "Only on Luma",
+   "Roles"
+  ],
+  "boxes": 4,
+  "nested": 0,
+  "buttons": 8,
+  "links": 9,
+  "fields": 0,
+  "tabs": 0,
+  "words": 145,
+  "height": 1098,
+  "navLinks": 9,
+  "status": 200
+ },
+ "admin/desktop/portal-events-old": {
+  "url": "/portal/events/old",
+  "headings": 2,
+  "h": [
+   "404",
+   "This page could not be found."
+  ],
+  "boxes": 0,
+  "nested": 0,
+  "buttons": 0,
+  "links": 0,
+  "fields": 0,
+  "tabs": 0,
+  "words": 7,
+  "height": 900,
+  "navLinks": 0,
+  "status": 404
+ },
+ "admin/desktop/admin": {
+  "url": "/admin",
+  "headings": 3,
+  "h": [
+   "Today",
+   "Waiting on you",
+   "What to do next"
+  ],
+  "boxes": 0,
+  "nested": 0,
+  "buttons": 9,
+  "links": 12,
+  "fields": 0,
+  "tabs": 0,
+  "words": 225,
+  "height": 1025,
+  "navLinks": 9,
+  "status": 200
+ },
+ "admin/desktop/admin-scoreboard": {
+  "url": "/admin/scoreboard",
+  "headings": 9,
+  "h": [
+   "Scoreboard",
+   "Headline",
+   "Subscriptions per month",
+   "Funnel per month",
+   "Event turnout",
+   "Newsletter",
+   "People to follow up",
+   "Cancelled since Jul 1, 2026 (1)",
+   "Bought a day pass, never subscribed (0)"
+  ],
+  "boxes": 8,
+  "nested": 0,
+  "buttons": 1,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 553,
+  "height": 1939,
+  "navLinks": 9,
+  "status": 200
+ },
+ "admin/desktop/admin-people": {
+  "url": "/admin/people",
+  "headings": 5,
+  "h": [
+   "People",
+   "Olu (sample)",
+   "Pia (sample)",
+   "Zed (sample)",
+   "Bo Nguyen (sample)"
+  ],
+  "boxes": 4,
+  "nested": 0,
+  "buttons": 17,
+  "links": 4,
+  "fields": 1,
+  "tabs": 4,
+  "words": 147,
+  "height": 1124,
+  "navLinks": 9,
+  "status": 200
+ },
+ "admin/desktop/admin-people-freedays": {
+  "url": "/admin/people?tab=freedays",
+  "headings": 4,
+  "h": [
+   "People",
+   "Sam Sample",
+   "Nora (sample)",
+   "Gus Ferreira (sample)"
+  ],
+  "boxes": 3,
+  "nested": 0,
+  "buttons": 9,
+  "links": 4,
+  "fields": 1,
+  "tabs": 4,
+  "words": 110,
+  "height": 900,
+  "navLinks": 9,
+  "status": 200
+ },
+ "admin/desktop/admin-people-interests": {
+  "url": "/admin/people?tab=interests",
+  "headings": 1,
+  "h": [
+   "People"
+  ],
+  "boxes": 16,
+  "nested": 12,
+  "buttons": 0,
+  "links": 13,
+  "fields": 0,
+  "tabs": 4,
+  "words": 104,
+  "height": 900,
+  "navLinks": 9,
+  "status": 200
+ },
+ "admin/desktop/admin-members": {
+  "url": "/admin/members",
+  "headings": 1,
+  "h": [
+   "People"
+  ],
+  "boxes": 1,
+  "nested": 0,
+  "buttons": 16,
+  "links": 19,
+  "fields": 3,
+  "tabs": 4,
+  "words": 197,
+  "height": 1496,
+  "navLinks": 9,
+  "status": 200
+ },
+ "admin/desktop/admin-member-detail": {
+  "url": "/admin/members/5",
+  "headings": 2,
+  "h": [
+   "Theo Lindqvist (sample)",
+   "Approval ladder"
+  ],
+  "boxes": 3,
+  "nested": 0,
+  "buttons": 9,
+  "links": 0,
+  "fields": 8,
+  "tabs": 4,
+  "words": 165,
+  "height": 1232,
+  "navLinks": 9,
+  "status": 200
+ },
+ "admin/desktop/admin-member-detail-billing": {
+  "url": "/admin/members/5?tab=billing",
+  "headings": 2,
+  "h": [
+   "Theo Lindqvist (sample)",
+   "Membership"
+  ],
+  "boxes": 2,
+  "nested": 0,
+  "buttons": 8,
+  "links": 0,
+  "fields": 0,
+  "tabs": 4,
+  "words": 77,
+  "height": 900,
+  "navLinks": 9,
+  "status": 200
+ },
+ "admin/desktop/admin-member-detail-access": {
+  "url": "/admin/members/5?tab=access",
+  "headings": 3,
+  "h": [
+   "Theo Lindqvist (sample)",
+   "Day Pass Balance",
+   "Techne account"
+  ],
+  "boxes": 4,
+  "nested": 0,
+  "buttons": 6,
+  "links": 0,
+  "fields": 1,
+  "tabs": 4,
+  "words": 65,
+  "height": 900,
+  "navLinks": 9,
+  "status": 200
+ },
+ "admin/desktop/admin-member-detail-activity": {
+  "url": "/admin/members/5?tab=activity",
+  "headings": 1,
+  "h": [
+   "Theo Lindqvist (sample)"
+  ],
+  "boxes": 2,
+  "nested": 0,
+  "buttons": 4,
+  "links": 0,
+  "fields": 0,
+  "tabs": 4,
+  "words": 66,
+  "height": 900,
+  "navLinks": 9,
+  "status": 200
+ },
+ "admin/desktop/admin-members-new": {
+  "url": "/admin/members/new",
+  "headings": 1,
+  "h": [
+   "Add Member"
+  ],
+  "boxes": 1,
+  "nested": 0,
+  "buttons": 2,
+  "links": 0,
+  "fields": 9,
+  "tabs": 0,
+  "words": 53,
+  "height": 900,
+  "navLinks": 9,
+  "status": 200
+ },
+ "admin/desktop/admin-members-stale-links": {
+  "url": "/admin/members/stale-links",
+  "headings": 1,
+  "h": [
+   "Stale Auth Links"
+  ],
+  "boxes": 1,
+  "nested": 0,
+  "buttons": 0,
+  "links": 0,
+  "fields": 0,
+  "tabs": 0,
+  "words": 52,
+  "height": 900,
+  "navLinks": 9,
+  "status": 200
+ },
+ "admin/desktop/admin-billing": {
+  "url": "/admin/billing",
+  "headings": 6,
+  "h": [
+   "Billing",
+   "Plan composition",
+   "Cancellations queued",
+   "All subscriptions\n(8)",
+   "Promo codes",
+   "Recent day-pass purchases\n(latest 0 \u00b7 this month $0 from 0)"
+  ],
+  "boxes": 5,
+  "nested": 0,
+  "buttons": 2,
+  "links": 11,
+  "fields": 0,
+  "tabs": 0,
+  "words": 233,
+  "height": 1425,
+  "navLinks": 9,
+  "status": 200
+ },
+ "admin/desktop/admin-access": {
+  "url": "/admin/access?tab=codes",
+  "headings": 2,
+  "h": [
+   "Door",
+   "Quick Code"
+  ],
+  "boxes": 2,
+  "nested": 0,
+  "buttons": 12,
+  "links": 0,
+  "fields": 2,
+  "tabs": 2,
+  "words": 106,
+  "height": 900,
+  "navLinks": 9,
+  "status": 200
+ },
+ "admin/desktop/admin-lock": {
+  "url": "/admin/access?tab=sync",
+  "headings": 2,
+  "h": [
+   "Door",
+   "Quarantined slots (1)"
+  ],
+  "boxes": 6,
+  "nested": 0,
+  "buttons": 4,
+  "links": 0,
+  "fields": 0,
+  "tabs": 2,
+  "words": 184,
+  "height": 1294,
+  "navLinks": 9,
+  "status": 200
+ },
+ "admin/desktop/admin-mail": {
+  "url": "/admin/mail?tab=newsletter",
+  "headings": 4,
+  "h": [
+   "Mail",
+   "Compose \u00b7 2026-W48",
+   "Audience",
+   "Send"
+  ],
+  "boxes": 3,
+  "nested": 0,
+  "buttons": 13,
+  "links": 1,
+  "fields": 2,
+  "tabs": 2,
+  "words": 123,
+  "height": 1284,
+  "navLinks": 9,
+  "status": 200
+ },
+ "admin/desktop/admin-mail-group": {
+  "url": "/admin/mail?tab=group",
+  "headings": 3,
+  "h": [
+   "Mail",
+   "Audience",
+   "Message"
+  ],
+  "boxes": 2,
+  "nested": 0,
+  "buttons": 8,
+  "links": 1,
+  "fields": 9,
+  "tabs": 2,
+  "words": 99,
+  "height": 1389,
+  "navLinks": 9,
+  "status": 200
+ },
+ "admin/desktop/admin-events": {
+  "url": "/admin/events",
+  "headings": 7,
+  "h": [
+   "Manage Events",
+   "UPCOMING",
+   "Agents Building Night",
+   "420 Happy Hour",
+   "Also on Luma?",
+   "Only on Luma",
+   "Roles"
+  ],
+  "boxes": 4,
+  "nested": 0,
+  "buttons": 8,
+  "links": 9,
+  "fields": 0,
+  "tabs": 0,
+  "words": 145,
+  "height": 1098,
+  "navLinks": 9,
+  "status": 200
+ },
+ "admin/desktop/admin-events-roles": {
+  "url": "/admin/events?roles=open",
+  "headings": 7,
+  "h": [
+   "Manage Events",
+   "UPCOMING",
+   "Agents Building Night",
+   "420 Happy Hour",
+   "Also on Luma?",
+   "Only on Luma",
+   "Roles"
+  ],
+  "boxes": 6,
+  "nested": 2,
+  "buttons": 10,
+  "links": 9,
+  "fields": 3,
+  "tabs": 0,
+  "words": 192,
+  "height": 1380,
+  "navLinks": 9,
+  "status": 200
+ },
+ "admin/phone/portal": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Robin",
+   "Your door code",
+   "Membership\u00b7 Cold Desk \u00b7 $0/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 6,
+  "nested": 1,
+  "buttons": 8,
+  "links": 6,
+  "fields": 0,
+  "tabs": 0,
+  "words": 94,
+  "height": 1421,
+  "navLinks": 1,
+  "status": 200
+ },
+ "admin/phone/portal-my-code": {
+  "url": "/portal/my-code",
+  "headings": 2,
+  "h": [
+   "My Door Code",
+   "How to use the keypad"
+  ],
+  "boxes": 3,
+  "nested": 0,
+  "buttons": 3,
+  "links": 1,
+  "fields": 1,
+  "tabs": 0,
+  "words": 80,
+  "height": 844,
+  "navLinks": 1,
+  "status": 200
+ },
+ "admin/phone/portal-passes": {
+  "url": "/portal/passes",
+  "headings": 3,
+  "h": [
+   "Guest passes",
+   "Active codes",
+   "Buy guest passes"
+  ],
+  "boxes": 3,
+  "nested": 0,
+  "buttons": 4,
+  "links": 0,
+  "fields": 0,
+  "tabs": 0,
+  "words": 56,
+  "height": 886,
+  "navLinks": 1,
+  "status": 200
+ },
+ "admin/phone/portal-profile": {
+  "url": "/portal/profile",
+  "headings": 3,
+  "h": [
+   "Profile",
+   "Your member page",
+   "Techne account"
+  ],
+  "boxes": 3,
+  "nested": 0,
+  "buttons": 2,
+  "links": 1,
+  "fields": 11,
+  "tabs": 0,
+  "words": 163,
+  "height": 1930,
+  "navLinks": 1,
+  "status": 200
+ },
+ "admin/phone/portal-access-log": {
+  "url": "/portal/access-log",
+  "headings": 6,
+  "h": [
+   "Hub access log",
+   "YESTERDAY \u00b7 6",
+   "THU, NOV 19 \u00b7 2",
+   "WED, NOV 18 \u00b7 1",
+   "TUE, NOV 17 \u00b7 1",
+   "MON, NOV 16 \u00b7 2"
+  ],
+  "boxes": 5,
+  "nested": 0,
+  "buttons": 1,
+  "links": 1,
+  "fields": 0,
+  "tabs": 0,
+  "words": 160,
+  "height": 1237,
+  "navLinks": 1,
+  "status": 200
+ },
+ "admin/phone/portal-events": {
+  "url": "/admin/events",
+  "headings": 7,
+  "h": [
+   "Manage Events",
+   "UPCOMING",
+   "Agents Building Night",
+   "420 Happy Hour",
+   "Also on Luma?",
+   "Only on Luma",
+   "Roles"
+  ],
+  "boxes": 4,
+  "nested": 0,
+  "buttons": 8,
+  "links": 9,
+  "fields": 0,
+  "tabs": 0,
+  "words": 145,
+  "height": 1414,
+  "navLinks": 2,
+  "status": 200
+ },
+ "admin/phone/portal-events-old": {
+  "url": "/portal/events/old",
+  "headings": 2,
+  "h": [
+   "404",
+   "This page could not be found."
+  ],
+  "boxes": 0,
+  "nested": 0,
+  "buttons": 0,
+  "links": 0,
+  "fields": 0,
+  "tabs": 0,
+  "words": 7,
+  "height": 844,
+  "navLinks": 0,
+  "status": 404
+ },
+ "admin/phone/admin": {
+  "url": "/admin",
+  "headings": 3,
+  "h": [
+   "Today",
+   "Waiting on you",
+   "What to do next"
+  ],
+  "boxes": 0,
+  "nested": 0,
+  "buttons": 9,
+  "links": 12,
+  "fields": 0,
+  "tabs": 0,
+  "words": 225,
+  "height": 1363,
+  "navLinks": 2,
+  "status": 200
+ },
+ "admin/phone/admin-scoreboard": {
+  "url": "/admin/scoreboard",
+  "headings": 9,
+  "h": [
+   "Scoreboard",
+   "Headline",
+   "Subscriptions per month",
+   "Funnel per month",
+   "Event turnout",
+   "Newsletter",
+   "People to follow up",
+   "Cancelled since Jul 1, 2026 (1)",
+   "Bought a day pass, never subscribed (0)"
+  ],
+  "boxes": 8,
+  "nested": 0,
+  "buttons": 1,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 553,
+  "height": 3222,
+  "navLinks": 2,
+  "status": 200
+ },
+ "admin/phone/admin-people": {
+  "url": "/admin/people",
+  "headings": 5,
+  "h": [
+   "People",
+   "Olu (sample)",
+   "Pia (sample)",
+   "Zed (sample)",
+   "Bo Nguyen (sample)"
+  ],
+  "boxes": 4,
+  "nested": 0,
+  "buttons": 17,
+  "links": 4,
+  "fields": 1,
+  "tabs": 4,
+  "words": 147,
+  "height": 1600,
+  "navLinks": 2,
+  "status": 200
+ },
+ "admin/phone/admin-people-freedays": {
+  "url": "/admin/people?tab=freedays",
+  "headings": 4,
+  "h": [
+   "People",
+   "Sam Sample",
+   "Nora (sample)",
+   "Gus Ferreira (sample)"
+  ],
+  "boxes": 3,
+  "nested": 0,
+  "buttons": 9,
+  "links": 4,
+  "fields": 1,
+  "tabs": 4,
+  "words": 110,
+  "height": 1182,
+  "navLinks": 2,
+  "status": 200
+ },
+ "admin/phone/admin-people-interests": {
+  "url": "/admin/people?tab=interests",
+  "headings": 1,
+  "h": [
+   "People"
+  ],
+  "boxes": 16,
+  "nested": 12,
+  "buttons": 0,
+  "links": 13,
+  "fields": 0,
+  "tabs": 4,
+  "words": 104,
+  "height": 894,
+  "navLinks": 2,
+  "status": 200
+ },
+ "admin/phone/admin-members": {
+  "url": "/admin/members",
+  "headings": 1,
+  "h": [
+   "People"
+  ],
+  "boxes": 13,
+  "nested": 0,
+  "buttons": 16,
+  "links": 19,
+  "fields": 3,
+  "tabs": 4,
+  "words": 235,
+  "height": 2741,
+  "navLinks": 2,
+  "status": 200
+ },
+ "admin/phone/admin-member-detail": {
+  "url": "/admin/members/5?tab=overview",
+  "headings": 2,
+  "h": [
+   "Theo Lindqvist (sample)",
+   "Approval ladder"
+  ],
+  "boxes": 3,
+  "nested": 0,
+  "buttons": 9,
+  "links": 0,
+  "fields": 8,
+  "tabs": 4,
+  "words": 165,
+  "height": 1680,
+  "navLinks": 2,
+  "status": 200
+ },
+ "admin/phone/admin-member-detail-billing": {
+  "url": "/admin/members/5?tab=billing",
+  "headings": 2,
+  "h": [
+   "Theo Lindqvist (sample)",
+   "Membership"
+  ],
+  "boxes": 2,
+  "nested": 0,
+  "buttons": 8,
+  "links": 0,
+  "fields": 0,
+  "tabs": 4,
+  "words": 77,
+  "height": 844,
+  "navLinks": 2,
+  "status": 200
+ },
+ "admin/phone/admin-member-detail-access": {
+  "url": "/admin/members/5?tab=access",
+  "headings": 3,
+  "h": [
+   "Theo Lindqvist (sample)",
+   "Day Pass Balance",
+   "Techne account"
+  ],
+  "boxes": 4,
+  "nested": 0,
+  "buttons": 6,
+  "links": 0,
+  "fields": 1,
+  "tabs": 4,
+  "words": 65,
+  "height": 944,
+  "navLinks": 2,
+  "status": 200
+ },
+ "admin/phone/admin-member-detail-activity": {
+  "url": "/admin/members/5?tab=activity",
+  "headings": 1,
+  "h": [
+   "Theo Lindqvist (sample)"
+  ],
+  "boxes": 2,
+  "nested": 0,
+  "buttons": 4,
+  "links": 0,
+  "fields": 0,
+  "tabs": 4,
+  "words": 66,
+  "height": 844,
+  "navLinks": 2,
+  "status": 200
+ },
+ "admin/phone/admin-members-new": {
+  "url": "/admin/members/new",
+  "headings": 1,
+  "h": [
+   "Add Member"
+  ],
+  "boxes": 1,
+  "nested": 0,
+  "buttons": 2,
+  "links": 0,
+  "fields": 9,
+  "tabs": 0,
+  "words": 53,
+  "height": 991,
+  "navLinks": 2,
+  "status": 200
+ },
+ "admin/phone/admin-members-stale-links": {
+  "url": "/admin/members/stale-links",
+  "headings": 1,
+  "h": [
+   "Stale Auth Links"
+  ],
+  "boxes": 1,
+  "nested": 0,
+  "buttons": 0,
+  "links": 0,
+  "fields": 0,
+  "tabs": 0,
+  "words": 44,
+  "height": 844,
+  "navLinks": 2,
+  "status": 200
+ },
+ "admin/phone/admin-billing": {
+  "url": "/admin/billing",
+  "headings": 6,
+  "h": [
+   "Billing",
+   "Plan composition",
+   "Cancellations queued",
+   "All subscriptions\n(8)",
+   "Promo codes",
+   "Recent day-pass purchases\n(latest 0 \u00b7 this month $0 from 0)"
+  ],
+  "boxes": 13,
+  "nested": 8,
+  "buttons": 2,
+  "links": 11,
+  "fields": 0,
+  "tabs": 0,
+  "words": 170,
+  "height": 1938,
+  "navLinks": 2,
+  "status": 200
+ },
+ "admin/phone/admin-access": {
+  "url": "/admin/access?tab=codes",
+  "headings": 2,
+  "h": [
+   "Door",
+   "Quick Code"
+  ],
+  "boxes": 4,
+  "nested": 0,
+  "buttons": 12,
+  "links": 0,
+  "fields": 2,
+  "tabs": 2,
+  "words": 106,
+  "height": 1024,
+  "navLinks": 2,
+  "status": 200
+ },
+ "admin/phone/admin-lock": {
+  "url": "/admin/access?tab=sync",
+  "headings": 2,
+  "h": [
+   "Door",
+   "Quarantined slots (1)"
+  ],
+  "boxes": 6,
+  "nested": 0,
+  "buttons": 4,
+  "links": 0,
+  "fields": 0,
+  "tabs": 2,
+  "words": 184,
+  "height": 2048,
+  "navLinks": 2,
+  "status": 200
+ },
+ "admin/phone/admin-mail": {
+  "url": "/admin/mail",
+  "headings": 4,
+  "h": [
+   "Mail",
+   "Compose \u00b7 2026-W48",
+   "Audience",
+   "Send"
+  ],
+  "boxes": 3,
+  "nested": 0,
+  "buttons": 13,
+  "links": 1,
+  "fields": 2,
+  "tabs": 2,
+  "words": 116,
+  "height": 1571,
+  "navLinks": 2,
+  "status": 200
+ },
+ "admin/phone/admin-mail-group": {
+  "url": "/admin/mail?tab=group",
+  "headings": 3,
+  "h": [
+   "Mail",
+   "Audience",
+   "Message"
+  ],
+  "boxes": 2,
+  "nested": 0,
+  "buttons": 8,
+  "links": 1,
+  "fields": 9,
+  "tabs": 2,
+  "words": 99,
+  "height": 1667,
+  "navLinks": 2,
+  "status": 200
+ },
+ "admin/phone/admin-events": {
+  "url": "/admin/events",
+  "headings": 7,
+  "h": [
+   "Manage Events",
+   "UPCOMING",
+   "Agents Building Night",
+   "420 Happy Hour",
+   "Also on Luma?",
+   "Only on Luma",
+   "Roles"
+  ],
+  "boxes": 4,
+  "nested": 0,
+  "buttons": 8,
+  "links": 9,
+  "fields": 0,
+  "tabs": 0,
+  "words": 145,
+  "height": 1414,
+  "navLinks": 2,
+  "status": 200
+ },
+ "admin/phone/admin-events-roles": {
+  "url": "/admin/events?roles=open",
+  "headings": 7,
+  "h": [
+   "Manage Events",
+   "UPCOMING",
+   "Agents Building Night",
+   "420 Happy Hour",
+   "Also on Luma?",
+   "Only on Luma",
+   "Roles"
+  ],
+  "boxes": 6,
+  "nested": 2,
+  "buttons": 10,
+  "links": 9,
+  "fields": 3,
+  "tabs": 0,
+  "words": 192,
+  "height": 1895,
+  "navLinks": 2,
+  "status": 200
+ }
+}

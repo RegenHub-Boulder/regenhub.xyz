@@ -218,6 +218,7 @@ describe("the merged pages", () => {
     expect(pointers).toContain('href="/admin/scoreboard"');
     expect(pointers).toContain('href="/admin"');
     expect(pointers).toMatch(/1(<!-- -->)? past due/);
+    expect(pointers).toContain('href="/admin/members?status=overdue"');
     expect(h).not.toContain("Past due — needs attention");
     expect(h).not.toContain(">MRR<");
     expect(h).not.toContain("Queued to cancel");

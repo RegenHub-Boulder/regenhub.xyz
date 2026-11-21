@@ -325,8 +325,8 @@ export function adminDigestEmail(d: DigestData): { subject: string; html: string
       textLines.push(`- ${d.pendingFreeDays} free-day requests pending: ${base}/admin/people?tab=freedays`);
     }
     if (d.pastDueSubs) {
-      lines.push(`<li><strong>${d.pastDueSubs}</strong> subscription${d.pastDueSubs === 1 ? "" : "s"} past due — <a href="${base}/admin/billing">review →</a></li>`);
-      textLines.push(`- ${d.pastDueSubs} subscriptions past due: ${base}/admin/billing`);
+      lines.push(`<li><strong>${d.pastDueSubs}</strong> subscription${d.pastDueSubs === 1 ? "" : "s"} past due — <a href="${base}/admin/members?status=overdue">review →</a></li>`);
+      textLines.push(`- ${d.pastDueSubs} subscriptions past due: ${base}/admin/members?status=overdue`);
     }
     if (d.lockSyncFailed) {
       lines.push(`<li><strong>${d.lockSyncFailed}</strong> lock-sync failure${d.lockSyncFailed === 1 ? "" : "s"} from the last run — <a href="${base}/admin/access?tab=sync">retry →</a></li>`);

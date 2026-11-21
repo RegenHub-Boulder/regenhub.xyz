@@ -141,12 +141,15 @@ export default async function BillingPage() {
         {" · "}
         {pastDueSubs.length > 0 ? (
           <>
-            <span className="text-red-400">{pastDueSubs.length} past due</span>, with reminders:{" "}
+            <Link href="/admin/members?status=overdue" className="text-red-400 hover:underline">
+              {pastDueSubs.length} past due →
+            </Link>
+            {" · send reminders from "}
+            <Link href="/admin" className="text-sage hover:underline">Today →</Link>
           </>
         ) : (
-          "Past-due reminders: "
+          "Nobody past due."
         )}
-        <Link href="/admin" className="text-sage hover:underline">Today →</Link>
       </p>
 
       {/* Plan composition */}
