@@ -212,15 +212,33 @@ it("bug 3: a list that grew after the steward looked is refused, and Send with n
   expect(mail.to).toEqual([]);
 });
 
-it("bug 3: a prepare that lands between the check and the first batch still reaches nobody new", async () => {
+it("bug 3: a prepare or draft save that lands between the check and the first batch can't touch the queue", async () => {
   const id = await saveDraft("2026-W64", "members");
   await prepareIssue(db as never, id, "members");
   const seen = await status(id);
-  // Another tab widens the queue just before this Send freezes the issue.
-  db.beforeNextWrite("rpc:newsletter_begin_run", () => prepareIssue(db as never, id, "public"));
+  // Another tab widens the queue, and the MCP saves the draft as public, just before this Send freezes the issue.
+  let refused: unknown = null;
+  let saveStatus = 0;
+  db.beforeNextWrite("rpc:newsletter_begin_run", async () => {
+    refused = await prepareIssue(db as never, id, "public").then(() => null, (e: { code?: string }) => e.code);
+    saveStatus = (await adminDraft(new Request("http://localhost/api/admin/newsletter/draft", post({ issue_key: "2026-W64", subject: "S", markdown: "B", audience: "public" })))).status;
+  });
   mail.to.length = 0;
-  expect((await send({ issue_id: id, expected_queue: seen.progress.queueKey })).status).toBe(200);
+  expect((await send({ issue_id: id, expected_queue: seen.progress.queueKey, expected_audience: "members" })).status).toBe(200);
+  expect(refused).toBe("55000");
+  expect(saveStatus).toBe(409);
   expect(mail.to.map((e) => e.toLowerCase()).sort()).toEqual(["desk@example.test", "friend@example.test", "paid30@example.test", "trial@example.test"]);
-  const late = await db.sql<{ n: number }>("select count(*)::int n from newsletter_sends where issue_id = $1 and last_error = 'Added after Send was confirmed'", [id]);
-  expect(late[0].n).toBeGreaterThan(0);
+});
+
+it("bug 3 (review): a Send shown for one audience is refused when the issue's audience is another, and unlocks the draft", async () => {
+  const id = await saveDraft("2026-W65", "public");
+  await prepareIssue(db as never, id, "public");
+  const seen = await status(id);
+  mail.to.length = 0;
+  // The studio showed "Members only" (toggled, not saved) over the public queue.
+  const res = await send({ issue_id: id, expected_queue: seen.progress.queueKey, expected_audience: "members" });
+  expect(res.status).toBe(409);
+  expect(mail.to).toEqual([]);
+  expect((await db.sql<{ status: string }>("select status from newsletter_issues where id = $1", [id]))[0].status).toBe("draft");
+  await saveDraft("2026-W65", "members"); // still editable
 });

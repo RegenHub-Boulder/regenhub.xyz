@@ -305,8 +305,8 @@ export function inSeriesSlot(series: Series, startIso: string | null | undefined
   return Math.abs(minutesIn(startIso, series.timezone) - (h * 60 + m)) <= SLOT_TOLERANCE_MIN;
 }
 
-/** Whether `name` contains `phrase` as whole words, ignoring case ("Ugly Sweater Party 420 Happy Hour" ⊃ "420 Happy Hour"). */
-/** Whether `phrase` appears in `name` as whole words at any of its matches, not only the first. */
+/** Whether `name` contains `phrase` as whole words, ignoring case ("Ugly Sweater Party 420 Happy Hour" ⊃ "420 Happy Hour"),
+ *  at any of its matches, not only the first. */
 function containsWords(name: string, phrase: string): boolean {
   if (!phrase) return false;
   for (let i = name.indexOf(phrase); i >= 0; i = name.indexOf(phrase, i + 1)) {

@@ -43,19 +43,19 @@ export async function POST(request: Request) {
 
   if (isRetry) await retryFailed(admin, issueId);
 
-  // A draft's first Send goes only to the list the steward saw: refused if it changed since, re-checked against the
-  // audience now (standing, unsubscribes; a changed audience narrows it), never added to.
-  const audience = normalizeAudience(issue.audience);
-  let confirmed: Set<number> | undefined;
-  if (issue.status === "draft" && !issue.delivery_snapshot) {
-    const check = await confirmQueue(admin, issueId, audience, body.expected_queue);
+  // Until the first batch freezes it, Send goes only to the list the steward saw: the queue is locked against
+  // prepares, refused if it changed since, re-checked against the audience now (standing, unsubscribes), never added to.
+  if (!issue.delivery_snapshot) {
+    const check = await confirmQueue(admin, issueId, body.expected_queue, body.expected_audience);
     if (!check.ok) {
-      const error = check.reason === "not_prepared"
-        ? "Prepare the audience first."
-        : `The recipient list changed since you looked: it is ${check.progress.total} now. Check it, then Send again.`;
+      const error = {
+        stale_page: "This page is out of date. Reload it, check the recipients, then Send.",
+        not_prepared: "Prepare the audience first.",
+        changed: `The recipient list changed since you looked: it is ${check.progress.total} now. Check it, then Send again.`,
+        audience: "The issue's audience changed since you looked. Reload, check the recipients, then Send.",
+      }[check.reason];
       return NextResponse.json({ error, progress: check.progress }, { status: 409 });
     }
-    confirmed = check.confirmed;
   }
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
@@ -64,8 +64,7 @@ export async function POST(request: Request) {
     subject: issue.subject,
     siteUrl,
     issueKey: issue.issue_key,
-    audience,
-    confirmed,
+    audience: normalizeAudience(issue.audience),
     limit: Number(body.limit) || 20,
   });
 

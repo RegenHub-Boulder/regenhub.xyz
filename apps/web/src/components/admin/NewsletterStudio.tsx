@@ -110,8 +110,9 @@ export function NewsletterStudio({
   }
 
   async function prepare() {
-    let id = issueId;
-    if (!id) { id = await saveDraft(); if (!id) return; }
+    // Always save first, so the queue is built for the audience (and text) on screen, not the one last saved.
+    const id = await saveDraft();
+    if (!id) return;
     setBusy("prepare"); setErr(null); setMsg(null);
     try {
       const r = await api<{ total: number }>("/api/admin/newsletter/prepare", { issue_id: id });
@@ -140,7 +141,7 @@ export function NewsletterStudio({
         // The first call names the list shown beside Send: the server sends to that list only.
         const r = await api<{ processed: number; quotaReached?: boolean; progress: Progress }>(
           "/api/admin/newsletter/send",
-          { issue_id: id, retry_failed: first && retry, expected_queue: progress.queueKey },
+          { issue_id: id, retry_failed: first && retry, expected_queue: progress.queueKey, expected_audience: audience },
         );
         first = false;
         setProgress(r.progress);
