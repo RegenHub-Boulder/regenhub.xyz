@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { compileAudience, normalizeAudience } from "@/lib/newsletter";
 import { issueProgress } from "@/lib/newsletterSend";
 
 /** GET ?issue_id= — current send progress (counts by status) + issue meta. */
@@ -13,7 +14,13 @@ export async function GET(request: Request) {
   const admin = createServiceClient();
   const [progress, { data: issue }] = await Promise.all([
     issueProgress(admin, issueId),
-    admin.from("newsletter_issues").select("id, issue_key, subject, status").eq("id", issueId).maybeSingle(),
+    admin.from("newsletter_issues").select("id, issue_key, subject, status, audience").eq("id", issueId).maybeSingle(),
   ]);
-  return NextResponse.json({ progress, issue });
+  // How many people the issue's audience is right now. Only asked before Prepare (afterwards the queue size says it): null when it can't be read.
+  const audience = normalizeAudience(issue?.audience);
+  const audienceCount = progress.total > 0 ? null : await compileAudience(admin, audience).then((a) => a.length).catch((e) => {
+    console.error("[newsletter-status] audience read failed", e);
+    return null;
+  });
+  return NextResponse.json({ progress, issue, audience_count: audienceCount });
 }

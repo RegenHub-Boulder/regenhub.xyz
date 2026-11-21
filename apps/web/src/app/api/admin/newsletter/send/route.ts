@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { sendBatch, retryFailed } from "@/lib/newsletterSend";
+import { normalizeAudience } from "@/lib/newsletter";
+import { sendBatch, retryFailed, prepareIssue } from "@/lib/newsletterSend";
 
 /**
  * POST { issue_id, retry_failed?, limit? } — send the next batch of recipients.
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
   const admin = createServiceClient();
   const { data: issue } = await admin
     .from("newsletter_issues")
-    .select("id, issue_key, subject, markdown_body, status")
+    .select("id, issue_key, subject, markdown_body, status, audience, delivery_snapshot")
     .eq("id", issueId)
     .maybeSingle();
   if (!issue) return NextResponse.json({ error: "issue not found" }, { status: 404 });
@@ -40,6 +41,12 @@ export async function POST(request: Request) {
 
   if (isRetry) await retryFailed(admin, issueId);
 
+  // Until the first batch freezes the issue, the queue is re-matched to the issue's audience, so a changed audience
+  // (studio, MCP, a failed refresh) can never send to people the audience doesn't include. Idempotent.
+  if (issue.status === "draft" && !issue.delivery_snapshot) {
+    await prepareIssue(admin, issueId, normalizeAudience(issue.audience));
+  }
+
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
   const result = await sendBatch(admin, issueId, {
@@ -47,6 +54,7 @@ export async function POST(request: Request) {
     subject: issue.subject,
     siteUrl,
     issueKey: issue.issue_key,
+    audience: normalizeAudience(issue.audience),
     limit: Number(body.limit) || 20,
   });
 

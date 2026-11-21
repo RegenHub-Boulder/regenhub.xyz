@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { prepareIssue, sendBatch } from "@/lib/newsletterSend";
-import { compileIssue, renderNewsletterText, isoWeek } from "@/lib/newsletter";
+import { compileIssue, renderNewsletterText, isoWeek, normalizeAudience } from "@/lib/newsletter";
 import { hasBearerSecret } from "@/lib/secretAuth";
 
 /** Biweekly cron. Both cron and the studio send the same frozen issue through
@@ -44,16 +44,16 @@ export async function POST(req: Request) {
   }, { onConflict: "issue_key", ignoreDuplicates: true });
   if (insertError) throw insertError;
   const { data: stored, error } = await admin.from("newsletter_issues")
-    .select("id, status, markdown_body, subject, delivery_snapshot, note").eq("issue_key", issue.issueKey).single();
+    .select("id, status, markdown_body, subject, delivery_snapshot, note, audience").eq("issue_key", issue.issueKey).single();
   if (error) throw error;
   if (stored.status === "sent") return NextResponse.json({ skipped: true, reason: "already sent" });
-  if (!stored.delivery_snapshot) await prepareIssue(admin, stored.id);
+  if (!stored.delivery_snapshot) await prepareIssue(admin, stored.id, normalizeAudience(stored.audience));
   let result = await sendBatch(admin, stored.id, {
-    markdown: stored.markdown_body, subject: stored.subject, siteUrl, issueKey: issue.issueKey,
+    markdown: stored.markdown_body, subject: stored.subject, siteUrl, issueKey: issue.issueKey, audience: normalizeAudience(stored.audience),
   });
   while (!result.progress.done && !result.quotaReached && result.processed > 0 && result.rateLimited === 0 && result.progress.sending === 0 && result.progress.unknown === 0) {
     const next = await sendBatch(admin, stored.id, {
-      markdown: stored.markdown_body, subject: stored.subject, siteUrl, issueKey: issue.issueKey,
+      markdown: stored.markdown_body, subject: stored.subject, siteUrl, issueKey: issue.issueKey, audience: normalizeAudience(stored.audience),
     });
     result = { ...next, processed: result.processed + next.processed,
       sent: result.sent + next.sent, failed: result.failed + next.failed,

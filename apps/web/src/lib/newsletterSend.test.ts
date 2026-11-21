@@ -163,7 +163,7 @@ it("explicit retry resets terminal failure only", async () => {
   expect(await retryFailed(db.admin, 1)).toBe(1); expect(db.row.status).toBe("pending");
 });
 it("prepare materializes recipients through the issue-locked RPC", async () => {
-  const db = database(); expect(await prepareIssue(db.admin, 1)).toEqual({ audience: 1, total: 1 });
+  const db = database(); expect(await prepareIssue(db.admin, 1, "public")).toEqual({ audience: 1, total: 1 });
   expect(db.admin.rpc).toHaveBeenCalledWith("newsletter_prepare", expect.objectContaining({ p_issue: 1 }));
 });
 
