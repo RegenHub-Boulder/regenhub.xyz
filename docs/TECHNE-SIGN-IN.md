@@ -129,7 +129,8 @@ grant without the email scope, just records no email.
   links no member, joins no list and gets no note, because anyone can run a PDS that says an address is confirmed.
 - **The list decision is per email:** a new email on the PDS is looked at again at the next sign-in, and the entry this
   added for the old address goes (the entry follows the person); "No thanks" stays (it was about us, not the address).
-  A disabled member's email counts as already handled: the newsletter leaves disabled members out on purpose. An email-matched member counts only while the
+  "Already there" means the newsletter reaches the address now (an `interests` row, or a member who isn't disabled), and
+  it is looked at again at each sign-in. An email-matched member counts only while the
   member's email is still the one the account confirmed.
 - **Counts:** these list rows (`source_path 'techne'`) count in the admin "Interest signups", the daily digest and the
   scoreboard's stay-in-touch funnel like any signup.

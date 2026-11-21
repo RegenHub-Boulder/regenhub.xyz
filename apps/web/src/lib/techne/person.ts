@@ -16,8 +16,9 @@ import { fetchTechneProfile } from "./profile";
 
 type Admin = ReturnType<typeof createServiceClient>;
 
+/** The two reads run together; the sign-in's redirect waits at most the longer of the two. */
 const READ_WAIT_MS = 3000;
-/** The display name is only a greeting: the sign-in's redirect never waits longer than this for it. */
+/** The display name is only a greeting: its read is cut off sooner. */
 const NAME_WAIT_MS = 1500;
 
 export interface AccountEmail {
@@ -87,10 +88,7 @@ export async function rememberPerson(
   try {
     const [read, profile] = await Promise.all([
       o.session ? readAccountEmail(o.session) : Promise.resolve(null),
-      Promise.race([
-        fetchTechneProfile(o.did, { revalidate: 0 }).catch(() => null),
-        new Promise<null>((ok) => setTimeout(() => ok(null), NAME_WAIT_MS)),
-      ]),
+      fetchTechneProfile(o.did, { revalidate: 0, timeoutMs: NAME_WAIT_MS }).catch(() => null),
     ]);
     const email = read && { email: read.email, confirmed: read.confirmed && o.homeAccount };
     return await recordSignIn(admin, { did: o.did, handle: o.handle, name: profile?.displayName ?? null, email });

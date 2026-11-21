@@ -214,12 +214,23 @@ describe("every Techne sign-in is a person with an email", () => {
     expect((await list()).map((r) => [r.email, r.source_path])).toEqual([["ivy@example.test", "/interest"], ["ivy-new@example.test", "techne"]]);
   });
 
-  it("a disabled member's address isn't put on the list: the newsletter leaves them out on purpose", async () => {
+  it("'already there' means the newsletter reaches the address now: a disabled member's doesn't count", async () => {
     const fay = account("fay", { email: "fay@example.test", confirmed: true });
     await one(pg, "insert into members(name, email, disabled) values ('Fay', 'fay@example.test', true) returning id");
     await signIn(fay.did);
-    expect(await person(fay.did)).toMatchObject({ newsletter: "already" });
-    expect(await list()).toEqual([]);
+    expect(await person(fay.did)).toMatchObject({ newsletter: "added" });
+  });
+
+  it("'already' is looked at again: a member row removed since doesn't leave them off the list", async () => {
+    const gil = account("gil", { email: "gil@example.test", confirmed: true });
+    const id = await addMember("Gil", "gil@example.test");
+    await signIn(gil.did);
+    expect(await person(gil.did)).toMatchObject({ newsletter: "already" });
+    await pg.query("delete from members where id = $1", [id]);
+    browser.jar = new Map();
+    await signIn(gil.did);
+    expect(await person(gil.did)).toMatchObject({ newsletter: "added" });
+    expect((await list()).map((r) => r.email)).toEqual(["gil@example.test"]);
   });
 
   it("respects an unsubscribe: an unsubscribed email is never put back on the list", async () => {

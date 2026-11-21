@@ -96,11 +96,12 @@ begin
     end if;
   end if;
 
-  -- The stay-in-touch list: a confirmed email, decided once per email ("No thanks" is never redone). A new email on the
-  -- PDS is decided again, and the list entry this added for the old one goes: the entry follows the person's address.
+  -- The stay-in-touch list, for a confirmed email. "No thanks" is never redone, and an add only for a new email (the
+  -- list entry this added for the old one goes: the entry follows the person's address). 'already' and 'unsubscribed'
+  -- are looked at again each sign-in, so a member row removed since, or a lifted unsubscribe, doesn't leave them out.
   if v_person.email is not null and v_person.email_confirmed
      and v_person.newsletter is distinct from 'declined'
-     and (v_person.newsletter is null or v_person.newsletter_email is distinct from v_person.email) then
+     and (v_person.newsletter is distinct from 'added' or v_person.newsletter_email is distinct from v_person.email) then
     perform pg_advisory_xact_lock(hashtext('techne_newsletter:' || v_person.email));
     v_decided := true;
     if v_person.newsletter = 'added' and v_person.interest_id is not null then
@@ -110,8 +111,8 @@ begin
     if exists (select 1 from email_unsubscribes u where lower(trim(u.email)) = v_person.email) then
       v_person.newsletter := 'unsubscribed';
     elsif exists (select 1 from interests i where lower(trim(i.email)) = v_person.email)
-       -- any member, disabled too: the newsletter leaves disabled members out on purpose, and a sign-in doesn't undo that
-       or exists (select 1 from members m where lower(trim(m.email)) = v_person.email) then
+       -- "already there": the newsletter reaches this address now (lib/newsletter.ts: interests, and members not disabled)
+       or exists (select 1 from members m where lower(trim(m.email)) = v_person.email and not m.disabled) then
       v_person.newsletter := 'already';
     else
       insert into interests (email, name, source_path, member_id)

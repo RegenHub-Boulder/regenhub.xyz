@@ -8,7 +8,8 @@
  * recorded (techne_people, migration 067: the member a confirmed email matched, or their own confirmed email). It never
  * guesses one and never mails an unconfirmed address. Left out, with the reason shown to the steward: unsubscribed
  * from the newsletter, asked for no follow-ups, already sent one in the last 7 days, or a disabled account. People
- * going with no email on file (never signed in here since T-497) are counted (`noEmail`), never mailed.
+ * going with no confirmed email on file (not signed in here since T-497, or an email their PDS can't vouch for) are counted
+ * (`noEmail`), never mailed.
  * Which note: `member` for a member in standing (lib/memberStanding.ts), `guest` for everyone else.
  */
 
