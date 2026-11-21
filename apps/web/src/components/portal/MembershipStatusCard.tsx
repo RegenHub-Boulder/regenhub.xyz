@@ -45,7 +45,7 @@ export function MembershipStatusCard({
   if (memberType === "cold_desk" || memberType === "hot_desk") {
     const label = memberType === "cold_desk" ? "Cold Desk" : "Hot Desk";
     return (
-      <Card className="glass-panel border border-gold/30 bg-gold/[0.03]">
+      <Card className="glass-panel border border-gold/30">
         <CardContent className="p-6 flex items-start gap-4">
           <CreditCard className="w-7 h-7 text-gold shrink-0 mt-0.5" />
           <div className="flex-1">
@@ -66,7 +66,7 @@ export function MembershipStatusCard({
   // Hub Friend — a comped member. Positive status, gentle path to more.
   if (memberType === "hub_friend") {
     return (
-      <Card className="glass-panel border border-sage/30 bg-sage/[0.04]">
+      <Card className="glass-panel border border-sage/30">
         <CardContent className="p-6 flex items-start gap-4">
           <HandHeart className="w-7 h-7 text-sage shrink-0 mt-0.5" />
           <div className="flex-1">

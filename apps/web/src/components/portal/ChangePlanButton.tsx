@@ -107,7 +107,7 @@ export function ChangePlanButton({ currentPlanKey, currentMonthlyCents, currentP
                   type="button"
                   disabled={busy}
                   onClick={() => switchTo(p.key)}
-                  className="w-full glass-panel p-3 text-left hover:bg-tint transition-colors flex items-center justify-between gap-3 disabled:opacity-50"
+                  className="w-full glass-panel p-3 text-left hover:bg-ink/10 transition-colors flex items-center justify-between gap-3 disabled:opacity-50"
                 >
                   <div>
                     <p className="text-sm font-medium">{p.label}</p>

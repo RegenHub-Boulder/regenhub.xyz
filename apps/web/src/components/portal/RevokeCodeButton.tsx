@@ -53,7 +53,7 @@ export function RevokeCodeButton({ codeId }: { codeId: number }) {
             variant="ghost"
             disabled={loading}
             onClick={handleRevoke}
-            className="text-danger hover:text-danger hover:bg-danger/10 text-xs h-7 px-2"
+            className="text-danger hover:text-foreground hover:bg-danger/20 text-xs h-7 px-2"
           >
             {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Yes"}
           </Button>
@@ -77,7 +77,7 @@ export function RevokeCodeButton({ codeId }: { codeId: number }) {
       size="sm"
       variant="ghost"
       onClick={() => setConfirming(true)}
-      className="text-muted hover:text-danger hover:bg-danger/10 h-7 w-7 p-0"
+      className="text-muted hover:text-danger hover:bg-danger/20 h-7 w-7 p-0"
       title="Revoke code"
     >
       <X className="w-3.5 h-3.5" />

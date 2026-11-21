@@ -78,7 +78,7 @@ export function AddPassesCard({ memberId, initialBalance }: Props) {
               type="button"
               onClick={() => handleAdjust("subtract")}
               disabled={loading || balance === 0}
-              className="bg-danger/10 hover:bg-danger/10 text-danger border border-danger/40 gap-1.5"
+              className="bg-danger/10 hover:bg-danger/20 text-danger border border-danger/40 gap-1.5"
             >
               <Minus className="w-4 h-4" />
               Subtract

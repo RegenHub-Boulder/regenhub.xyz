@@ -51,7 +51,7 @@ export default function HubEssentials({
     <div className={`glass-panel overflow-hidden ${className}`}>
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-tint transition-colors"
+        className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-ink/10 transition-colors"
       >
         <h3 className="text-lg font-semibold text-forest">Hub essentials</h3>
         <ChevronDown

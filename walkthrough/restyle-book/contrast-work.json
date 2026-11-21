@@ -28,7 +28,7 @@
   "fails": []
  },
  "/portal/access-log": {
-  "checked": 58,
+  "checked": 60,
   "overImage": 0,
   "disabled": 0,
   "min": 6.25,
@@ -87,14 +87,14 @@
   "checked": 31,
   "overImage": 0,
   "disabled": 1,
-  "min": 5.71,
+  "min": 5.59,
   "fails": []
  },
  "/admin/members/5?tab=activity": {
   "checked": 26,
   "overImage": 0,
   "disabled": 0,
-  "min": 5.71,
+  "min": 5.59,
   "fails": []
  },
  "/admin/members/new": {

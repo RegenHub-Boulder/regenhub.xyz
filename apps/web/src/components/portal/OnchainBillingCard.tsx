@@ -289,7 +289,7 @@ function OnchainBillingCardInner(props: Props) {
       {isConnected && address && (
         <ConnectButton.Custom>
           {({ account, openAccountModal }) => account && (
-            <button type="button" onClick={openAccountModal} className="rounded-md border border-rule bg-tint px-2.5 py-1.5 text-xs hover:bg-tint transition-colors">
+            <button type="button" onClick={openAccountModal} className="rounded-md border border-rule bg-tint px-2.5 py-1.5 text-xs hover:bg-ink/10 transition-colors">
               {connector?.name ?? "Wallet"} · {account.displayName}
             </button>
           )}

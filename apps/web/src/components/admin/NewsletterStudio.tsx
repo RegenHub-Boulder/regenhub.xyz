@@ -198,11 +198,11 @@ export function NewsletterStudio({
             </Button>
           </div>
           {showPreview && (
-            <div className="mt-2 rounded-md border border-rule bg-white p-5 max-h-[520px] overflow-auto">
+            <div className="mt-2 rounded-md border border-rule bg-sheet p-5 max-h-[520px] overflow-auto">
               <div
                 style={{
-                  color: "#1a1a1a",
-                  fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                  color: "#27231d",
+                  fontFamily: "'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif",
                   lineHeight: 1.55,
                 }}
                 dangerouslySetInnerHTML={{ __html: markdownToEmailHtml(markdown) }}

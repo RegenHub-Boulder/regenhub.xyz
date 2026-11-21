@@ -5,7 +5,7 @@
 //   white/black overlays  border-white/10 → border-rule, bg-white/5 → bg-tint (bg-ink/10 above 10%)
 //   status hues           red/rose → danger, amber/yellow/orange → warn, emerald/green/lime/teal → ok,
 //                         sky/blue/indigo/purple/violet/cyan → note; text keeps the tone, fills become a /10 tint
-//                         (a solid fill, e.g. a status dot, stays solid), borders /40
+//                         (a solid fill, e.g. a status dot, stays solid; a hover fill /20), borders /40
 //   faded text            text-muted/60 → text-muted, text-foreground/70 → text-muted (≥85% stays ink)
 //   capitals              `uppercase` and its letter-spacing go: labels are sentence case
 // --check exits 1 if anything is left to change (for CI or a reviewer).
@@ -42,18 +42,19 @@ function transform(src) {
   s = s.replace(new RegExp(`${B}${V}(border(?:-[xytrbl])?|divide(?:-[xy])?)-(?:white|black)(\\/\\[?[\\d.]+\\]?)?(?![\\w/-])`, "g"),
     (_, v, k) => `${v}${k}-rule`);
   s = s.replace(new RegExp(`${B}${V}bg-(?:white|black)(\\/\\[?[\\d.]+\\]?)(?![\\w/-])`, "g"),
-    (_, v, o) => `${v}${(opacity(o) ?? 100) <= 10 ? "bg-tint" : "bg-ink/10"}`);
+    (_, v, o) => `${v}${(opacity(o) ?? 100) <= 10 && !v.includes("hover:") ? "bg-tint" : "bg-ink/10"}`);
   // status hues
   s = s.replace(new RegExp(`${B}${V}(text|bg|border(?:-[xytrbl])?|ring|outline|divide|fill|stroke|from|to|via)-(${FAM})-(\\d{2,3})(\\/\\[?[\\d.]+\\]?)?(?![\\w/-])`, "g"),
     (_, v, k, fam, shade, o) => {
       const t = TONE[fam];
-      if (k === "bg") return `${v}bg-${t}${o || Number(shade) <= 100 ? "/10" : ""}`;
+      // a hover fill is a step darker than the resting one, so hover still shows
+      if (k === "bg") return `${v}bg-${t}${v.includes("hover:") ? "/20" : o || Number(shade) <= 100 ? "/10" : ""}`;
       if (k.startsWith("border") || k === "divide") return `${v}${k}-${t}/40`;
       return `${v}${k}-${t}`;
     });
   // faded text: the muted ink is already the quietest tone that reads (AA), so text colours carry no opacity
   s = s.replace(new RegExp(`${B}${V}text-(muted|sage|gold|forest|ok|warn|danger|note)\\/\\[?[\\d.]+\\]?(?![\\w/-])`, "g"),
-    (_, v, t) => `${v}text-${t}`);
+    (_, v, t) => `${v}text-${v.includes("hover:") ? "foreground" : t}`);
   s = s.replace(new RegExp(`${B}${V}text-foreground\\/(\\d+)(?![\\w/-])`, "g"),
     (_, v, n) => `${v}text-${Number(n) >= 85 ? "foreground" : "muted"}`);
   // capitals: drop `uppercase` and the tracking that came with it

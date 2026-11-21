@@ -146,7 +146,7 @@ export function RequestDayPassButton({ isFullMember, remainingUses }: Props) {
                   className={`px-3 py-1 rounded text-xs transition-colors ${
                     selected
                       ? "bg-gold/20 text-gold border border-gold/40"
-                      : "bg-tint text-muted border border-rule hover:bg-tint"
+                      : "bg-tint text-muted border border-rule hover:bg-ink/10"
                   }`}
                 >
                   {p.hours === null ? <Infinity className="w-3 h-3 inline" /> : p.label}

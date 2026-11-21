@@ -112,7 +112,7 @@ export function NewsletterManager({ initialIssues }: { initialIssues: Issue[] })
                 key={i.id}
                 onClick={() => setSelectedId(i.id)}
                 className={`w-full rounded-lg border px-3 py-2.5 text-left transition-colors ${
-                  active ? "border-sage/50 bg-tint" : "border-rule hover:bg-tint"
+                  active ? "border-sage/50 bg-tint" : "border-rule hover:bg-ink/10"
                 }`}
               >
                 <div className="text-sm font-medium text-foreground truncate">{i.subject || "Untitled"}</div>

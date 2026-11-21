@@ -213,7 +213,7 @@ export function MemberForm({ member, initialEmail, initialUserId }: Props) {
             variant="ghost"
             disabled={loading}
             onClick={handleDelete}
-            className="text-danger hover:text-danger hover:bg-danger/10 gap-2"
+            className="text-danger hover:text-foreground hover:bg-danger/20 gap-2"
           >
             <Trash2 className="w-4 h-4" />
             Delete

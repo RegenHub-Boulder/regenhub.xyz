@@ -190,7 +190,7 @@ export function ApplicationActions({
               size="sm"
               disabled={busy}
               onClick={() => setShowApprove(!showApprove)}
-              className="bg-ok/10 hover:bg-ok/10 text-ok border border-ok/40 text-xs gap-1 h-7 px-2"
+              className="bg-ok/10 hover:bg-ok/20 text-ok border border-ok/40 text-xs gap-1 h-7 px-2"
             >
               <Check className="w-3 h-3" /> Approve
             </Button>
@@ -207,7 +207,7 @@ export function ApplicationActions({
               size="sm"
               disabled={busy}
               onClick={reject}
-              className="bg-danger/10 hover:bg-danger/10 text-danger border border-danger/40 text-xs gap-1 h-7 px-2"
+              className="bg-danger/10 hover:bg-danger/20 text-danger border border-danger/40 text-xs gap-1 h-7 px-2"
             >
               <X className="w-3 h-3" /> Reject
             </Button>
@@ -249,7 +249,7 @@ export function ApplicationActions({
                   className={`px-3 py-1.5 rounded text-xs border ${
                     planKey === p.key
                       ? "bg-sage/20 border-sage/50 text-sage"
-                      : "bg-tint border-rule text-muted hover:bg-tint"
+                      : "bg-tint border-rule text-muted hover:bg-ink/10"
                   }`}
                 >
                   {p.label} · ${p.defaultDollars}/mo
@@ -340,7 +340,7 @@ export function ApplicationActions({
               size="sm"
               disabled={busy}
               onClick={submitApprove}
-              className="bg-ok/10 hover:bg-ok/10 text-ok border border-ok/40 text-xs gap-1 h-7"
+              className="bg-ok/10 hover:bg-ok/20 text-ok border border-ok/40 text-xs gap-1 h-7"
             >
               {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
               Generate Checkout Link

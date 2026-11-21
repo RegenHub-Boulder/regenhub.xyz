@@ -227,7 +227,7 @@ export default async function BillingPage() {
                 return (
                   <div
                     key={s.id}
-                    className="flex items-center justify-between gap-3 py-2 px-3 rounded hover:bg-tint transition-colors"
+                    className="flex items-center justify-between gap-3 py-2 px-3 rounded hover:bg-ink/10 transition-colors"
                   >
                     <Link
                       href={s.members ? `/admin/members/${s.members.id}` : "#"}
@@ -267,7 +267,7 @@ export default async function BillingPage() {
                 <Link
                   key={s.id}
                   href={s.members ? `/admin/members/${s.members.id}` : "#"}
-                  className="flex items-center justify-between gap-3 py-2 px-3 rounded hover:bg-tint transition-colors"
+                  className="flex items-center justify-between gap-3 py-2 px-3 rounded hover:bg-ink/10 transition-colors"
                 >
                   <div>
                     <p className="text-sm font-medium">{s.members?.name ?? "(unknown member)"}</p>
@@ -317,7 +317,7 @@ export default async function BillingPage() {
                     {billingSubs
                       .sort((a, b) => effectiveMonthlyCents(b) - effectiveMonthlyCents(a))
                       .map((s) => (
-                        <tr key={s.id} className="border-b border-rule hover:bg-tint">
+                        <tr key={s.id} className="border-b border-rule hover:bg-ink/10">
                           <td className="py-2 pr-4">
                             {s.members ? (
                               <Link href={`/admin/members/${s.members.id}`} className="hover:text-sage">
@@ -403,7 +403,7 @@ export default async function BillingPage() {
               <Link
                 key={g.id}
                 href={g.members ? `/admin/members/${g.members.id}` : "#"}
-                className="flex items-center justify-between gap-3 py-2 px-3 rounded hover:bg-tint transition-colors"
+                className="flex items-center justify-between gap-3 py-2 px-3 rounded hover:bg-ink/10 transition-colors"
               >
                 <div>
                   <p className="text-sm font-medium">{g.members?.name ?? "(unknown)"}</p>
@@ -435,7 +435,7 @@ export default async function BillingPage() {
                 <Link
                   key={p.id}
                   href={p.members ? `/admin/members/${p.members.id}` : "#"}
-                  className="flex items-center justify-between gap-3 py-2 px-3 rounded hover:bg-tint transition-colors"
+                  className="flex items-center justify-between gap-3 py-2 px-3 rounded hover:bg-ink/10 transition-colors"
                 >
                   <div>
                     <p className="text-sm font-medium">{p.members?.name ?? p.email ?? "(unknown)"}</p>

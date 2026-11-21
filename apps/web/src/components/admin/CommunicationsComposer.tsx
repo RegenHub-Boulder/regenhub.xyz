@@ -126,7 +126,7 @@ export function CommunicationsComposer() {
                   className={`px-2.5 py-1 rounded text-xs border ${
                     selectedTypes.has(t.key)
                       ? "bg-sage/20 border-sage/50 text-sage"
-                      : "bg-tint border-rule text-muted hover:bg-tint"
+                      : "bg-tint border-rule text-muted hover:bg-ink/10"
                   }`}
                 >
                   {t.label}

@@ -38,7 +38,7 @@ export function RemoveWalletButton({ walletId, address }: { walletId: number; ad
       {confirming ? (
         <div className="flex items-center gap-2 flex-wrap">
           <p className="text-xs">Remove {short} from this account? You can link it again later.</p>
-          <Button size="sm" disabled={busy} onClick={() => void remove()} className="text-xs gap-1.5 bg-danger/10 hover:bg-danger/10 text-danger border border-danger/40">
+          <Button size="sm" disabled={busy} onClick={() => void remove()} className="text-xs gap-1.5 bg-danger/10 hover:bg-danger/20 text-danger border border-danger/40">
             {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Remove
           </Button>
           <Button size="sm" variant="ghost" disabled={busy} onClick={() => setConfirming(false)} className="text-xs">Keep it</Button>

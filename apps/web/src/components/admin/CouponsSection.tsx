@@ -248,7 +248,7 @@ export function CouponsSection() {
                               size="sm"
                               disabled={deletingId === c.promotion_code_id}
                               onClick={() => deleteCode(c.promotion_code_id)}
-                              className="bg-danger/10 hover:bg-danger/10 text-danger border border-danger/40 text-xs h-6 px-2"
+                              className="bg-danger/10 hover:bg-danger/20 text-danger border border-danger/40 text-xs h-6 px-2"
                             >
                               {deletingId === c.promotion_code_id ? (
                                 <Loader2 className="w-3 h-3 animate-spin" />
@@ -418,7 +418,7 @@ export function CouponsSection() {
                       className={`px-2 py-1 rounded text-xs border ${
                         restrictKeys.has(p.key)
                           ? "bg-sage/20 border-sage/50 text-sage"
-                          : "bg-tint border-rule text-muted hover:bg-tint"
+                          : "bg-tint border-rule text-muted hover:bg-ink/10"
                       }`}
                     >
                       {p.label}

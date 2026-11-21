@@ -44,7 +44,7 @@ export function AdminRevokeCodeButton({ codeId, label }: Props) {
         size="sm"
         variant="ghost"
         onClick={() => setConfirming(true)}
-        className="text-danger hover:text-danger text-xs h-7 px-2 gap-1"
+        className="text-danger hover:text-foreground text-xs h-7 px-2 gap-1"
       >
         <Ban className="w-3 h-3" />
         Revoke
@@ -59,7 +59,7 @@ export function AdminRevokeCodeButton({ codeId, label }: Props) {
         size="sm"
         disabled={busy}
         onClick={revoke}
-        className="bg-danger/10 hover:bg-danger/10 text-danger border border-danger/40 text-xs h-7 gap-1"
+        className="bg-danger/10 hover:bg-danger/20 text-danger border border-danger/40 text-xs h-7 gap-1"
       >
         {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : "Confirm"}
       </Button>

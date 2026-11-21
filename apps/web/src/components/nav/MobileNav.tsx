@@ -167,7 +167,7 @@ export function MobileNav({ links, trailing }: MobileNavProps) {
                       : "text-foreground bg-tint border-l-2 border-forest"
                     : link.accent
                       ? "text-gold hover:bg-gold/5"
-                      : "text-muted hover:text-foreground hover:bg-tint"
+                      : "text-muted hover:text-foreground hover:bg-ink/10"
                 }`}
               >
                 {link.label}

@@ -197,7 +197,7 @@ export default async function AccessLogPage() {
                       return (
                         <li
                           key={r.id}
-                          className="flex items-center gap-3 px-4 py-2.5 hover:bg-tint transition-colors"
+                          className="flex items-center gap-3 px-4 py-2.5 hover:bg-ink/10 transition-colors"
                         >
                           <div className="w-14 text-xs tabular-nums text-muted shrink-0">
                             {formatTime(r.created_at)}

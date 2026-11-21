@@ -57,6 +57,7 @@
 
 :root {
   color-scheme: light;
+  accent-color: var(--moss); /* native radios, checkboxes, ranges */
 
   /* Paper and ink */
   --ink: #27231d;
@@ -111,7 +112,7 @@ body {
   background-image: repeating-linear-gradient(90deg, rgba(39, 35, 29, 0.022) 0 1px, transparent 1px 26px);
   color: var(--foreground);
   font-family: var(--font-book), "Iowan Old Style", Georgia, serif;
-  font-feature-settings: "onum", "liga", "kern";
+  font-variant-numeric: oldstyle-nums; /* a door code or a price opts into lining figures where it needs them */
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
@@ -120,20 +121,19 @@ h1, h2, h3, h4 { font-weight: 500; letter-spacing: 0; }
 h1 { font-weight: 400; }
 h2 { font-style: italic; font-weight: 400; }
 :is(.font-bold, .font-semibold) { font-weight: 600; }
-code, kbd, pre, samp, .font-mono { font-feature-settings: normal; }
+code, kbd, pre, samp, .font-mono { font-variant-numeric: normal; }
 ::selection { background: rgba(75, 90, 44, 0.22); }
 
-/* ---- Panels: text on the page, no box ---------------------------------------------------------- */
-.glass-panel,
-.glass-panel-strong,
-.glass-panel-subtle {
+/* ---- Panels: text on the page, no box (public pages; the working pages draw sheets, below) ---------
+   Unlayered on purpose: it must beat a component's own `border` / `bg-*` utilities, so no box comes back. */
+:is(.glass-panel, .glass-panel-strong, .glass-panel-subtle):not([data-surface="work"] *) {
   background: transparent;
   border: 0;
   border-radius: 0;
   box-shadow: none;
 }
 /* Rows of things (events, series, members) are separated by a rule, like entries in a book. */
-.glass-panel-subtle { border-top: 1px solid var(--border); }
+.glass-panel-subtle:not([data-surface="work"] *) { border-top: 1px solid var(--border); }
 
 /* ---- Buttons: solid ink or an outline; press feedback only --------------------------------------- */
 .btn-primary-glass,
@@ -172,7 +172,7 @@ code, kbd, pre, samp, .font-mono { font-feature-settings: normal; }
 }
 
 /* ---- Native dialogs (e.g. Cancel membership) sit on a solid leaf over a dimmed page ---------------- */
-dialog:is(.glass-panel, .glass-panel-strong) { background: var(--sheet); border: 1px solid var(--rule-strong); border-radius: 4px; }
+dialog:is(.glass-panel, .glass-panel-strong):not([data-surface="work"] *) { background: var(--sheet); border: 1px solid var(--rule-strong); border-radius: 4px; }
 dialog::backdrop { background: rgba(20, 18, 14, 0.32); }
 
 /* =====================================================================================================
@@ -180,7 +180,7 @@ dialog::backdrop { background: rgba(20, 18, 14, 0.32); }
    ===================================================================================================== */
 [data-surface="work"] {
   font-family: var(--font-work), system-ui, sans-serif;
-  font-feature-settings: "tnum";
+  font-variant-numeric: lining-nums tabular-nums; /* figures line up in tables */
   line-height: 1.5;
   background: var(--background);
 }
@@ -189,20 +189,23 @@ dialog::backdrop { background: rgba(20, 18, 14, 0.32); }
 [data-surface="work"] main h1 { font-family: var(--font-book), Georgia, serif; font-weight: 400; letter-spacing: 0; }
 [data-surface="work"] :is(.btn-primary-glass, .btn-glass) { font-style: normal; font-weight: 500; letter-spacing: 0; border-radius: 4px; }
 
-/* Sheets: a lighter leaf laid on the paper groups each thing; a sheet inside a sheet is just a rule. */
-[data-surface="work"] :is(.glass-panel, .glass-panel-strong) {
-  background: var(--sheet);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+/* Sheets: a lighter leaf laid on the paper groups each thing; a sheet inside a sheet is just a rule. In the
+   components layer, so a panel's own tone utilities (a brick "past due" alert: border-danger/40 bg-danger/10) win. */
+@layer components {
+  [data-surface="work"] :is(.glass-panel, .glass-panel-strong) {
+    background: var(--sheet);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  [data-surface="work"] :where(.glass-panel, .glass-panel-strong, .glass-panel-subtle) :is(.glass-panel, .glass-panel-strong) {
+    background: transparent;
+    border-width: 1px 0 0;
+    border-radius: 0;
+  }
+  [data-surface="work"] dialog:is(.glass-panel, .glass-panel-strong) { background: var(--sheet); border: 1px solid var(--rule-strong); border-radius: 6px; }
+  [data-surface="work"] header nav.glass-panel-subtle { border-bottom: 1px solid var(--border); }
+  [data-surface="work"] header { background: var(--background); }
 }
-[data-surface="work"] .glass-panel-subtle { border-top: 0; }
-[data-surface="work"] :is(.glass-panel, .glass-panel-strong, .glass-panel-subtle) :is(.glass-panel, .glass-panel-strong) {
-  background: transparent;
-  border-width: 1px 0 0;
-  border-radius: 0;
-}
-[data-surface="work"] header nav.glass-panel-subtle { border-bottom: 1px solid var(--border); border-radius: 0; }
-[data-surface="work"] header { background: var(--background); }
 
 /* =====================================================================================================
    Motion

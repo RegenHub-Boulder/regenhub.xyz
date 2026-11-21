@@ -66,7 +66,7 @@ export function ClaimsFilter({ claims }: { claims: FreeDayClaim[] }) {
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
               activeTab === tab
                 ? "bg-sage/20 text-sage border border-sage/30"
-                : "bg-tint text-muted border border-rule hover:bg-tint"
+                : "bg-tint text-muted border border-rule hover:bg-ink/10"
             }`}
           >
             {tab === "all" ? "All" : tab.charAt(0).toUpperCase() + tab.slice(1)}

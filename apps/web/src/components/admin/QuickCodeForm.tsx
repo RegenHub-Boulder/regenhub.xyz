@@ -164,7 +164,7 @@ export function QuickCodeForm({ members }: Props) {
                   className={`px-2 py-1.5 rounded text-xs transition-colors ${
                     selected
                       ? "bg-gold/20 text-gold border border-gold/40"
-                      : "bg-tint text-muted border border-rule hover:bg-tint"
+                      : "bg-tint text-muted border border-rule hover:bg-ink/10"
                   }`}
                 >
                   {p.hours === null ? <Infinity className="w-3.5 h-3.5 inline" /> : p.label}

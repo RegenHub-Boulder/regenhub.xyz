@@ -12,11 +12,12 @@ import { cn } from "@/lib/utils"
  */
 const TONE = /^(?:hover:)?(?:bg|text|border)-(?:ok|warn|danger|note|gold|sage|forest|muted|rule|tint|ink|foreground|transparent)(?:\/[\d.]+)?$/
 
-/** Enum values and Title Case labels, as plain words: "past_due" → "Past due", "Cold Desk" → "Cold desk". */
+/** Enum values, lowercase and Title Case labels, as plain words: "past_due" → "Past due", "no code" → "No code",
+ * "Cold Desk" → "Cold desk". */
 const WORDS: Record<string, string> = { trialing: "Trial", past_due: "Past due", uncollectible: "Uncollectible" }
 export function plainWords(s: string): string {
   if (WORDS[s]) return WORDS[s]
-  if (/^[a-z]+(?:_[a-z]+)*$/.test(s)) {
+  if (/^[a-z]/.test(s)) {
     const w = s.replace(/_/g, " ")
     return w.charAt(0).toUpperCase() + w.slice(1)
   }

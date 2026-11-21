@@ -127,7 +127,7 @@ function AuthUserRow({ u, showMoreCols }: { u: AdminUser; showMoreCols: boolean 
   return (
     <>
       {/* Desktop table row */}
-      <tr className="border-b border-rule hover:bg-tint transition-colors hidden sm:table-row">
+      <tr className="border-b border-rule hover:bg-ink/10 transition-colors hidden sm:table-row">
         <td className="px-4 py-3 font-medium">{nameNode}</td>
         <td className="px-4 py-3 text-muted text-sm">{u.email}</td>
         <td className="px-4 py-3">
@@ -178,7 +178,7 @@ function LegacyMemberRow({ m, showMoreCols }: { m: LegacyMemberWithSub; showMore
 
   return (
     <>
-      <tr className="border-b border-rule hover:bg-tint transition-colors hidden sm:table-row">
+      <tr className="border-b border-rule hover:bg-ink/10 transition-colors hidden sm:table-row">
         <td className="px-4 py-3 font-medium">{nameNode}</td>
         <td className="px-4 py-3 text-muted text-sm">{m.email ?? "—"}</td>
         <td className="px-4 py-3">

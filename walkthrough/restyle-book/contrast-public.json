@@ -21,10 +21,10 @@
   "fails": []
  },
  "/events/did%3Aplc%3Asamplecollective/3n2samplenext3": {
-  "checked": 29,
+  "checked": 32,
   "overImage": 0,
   "disabled": 0,
-  "min": 7.14,
+  "min": 6.02,
   "fails": []
  },
  "/membership": {

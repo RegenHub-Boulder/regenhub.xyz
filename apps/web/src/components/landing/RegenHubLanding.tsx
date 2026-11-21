@@ -87,7 +87,7 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
 
       {/* What We Offer: a two-column list, no cards */}
       <Section title="What We Offer" line="Community. Democracy. Regeneration.">
-        <dl className="grid sm:grid-cols-2 gap-x-10 gap-y-6">
+        <div className="grid sm:grid-cols-2 gap-x-10 gap-y-6">
           {[
             { title: "Community Infrastructure", body: "Affordable co-working and event space for regenerative builders and changemakers." },
             { title: "Economic Democracy", body: "Meaningful ownership and governance through profit-sharing and equity." },
@@ -95,11 +95,11 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
             { title: "Collective Intelligence", body: "Building 'scenius' \u2014 collective intelligence through sustained collaboration." },
           ].map(({ title, body }) => (
             <div key={title}>
-              <dt><h3 className="text-lg font-semibold mb-1">{title}</h3></dt>
-              <dd className="text-muted leading-relaxed">{body}</dd>
+              <h3 className="text-lg font-semibold mb-1">{title}</h3>
+              <p className="text-muted leading-relaxed">{body}</p>
             </div>
           ))}
-        </dl>
+        </div>
       </Section>
 
       {/* How to Co-work With Us: the three ways in, as ruled rows */}

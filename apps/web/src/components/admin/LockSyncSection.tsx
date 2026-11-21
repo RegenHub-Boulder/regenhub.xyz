@@ -135,7 +135,7 @@ export function LockSyncSection({ members, lastRun, nowMs }: Props) {
           </thead>
           <tbody>
             {members.map((m) => (
-              <tr key={m.id} className="border-b border-rule hover:bg-tint transition-colors">
+              <tr key={m.id} className="border-b border-rule hover:bg-ink/10 transition-colors">
                 <td className="px-4 py-3 font-mono text-muted">{m.pin_code_slot}</td>
                 <td className="px-4 py-3 font-medium">{m.name}</td>
                 <td className="px-4 py-3 font-mono text-gold">

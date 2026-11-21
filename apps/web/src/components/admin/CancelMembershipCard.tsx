@@ -140,7 +140,7 @@ export function CancelMembershipCard({ memberId, memberName, subscription, invoi
             <Button
               size="sm"
               onClick={open}
-              className="bg-danger/10 hover:bg-danger/10 text-danger border border-danger/40 text-xs h-7"
+              className="bg-danger/10 hover:bg-danger/20 text-danger border border-danger/40 text-xs h-7"
             >
               Cancel membership
             </Button>
@@ -275,7 +275,7 @@ export function CancelMembershipCard({ memberId, memberName, subscription, invoi
                 size="sm"
                 disabled={busy}
                 onClick={confirm}
-                className="bg-danger/10 hover:bg-danger/10 text-danger border border-danger/40 text-xs h-8 gap-1"
+                className="bg-danger/10 hover:bg-danger/20 text-danger border border-danger/40 text-xs h-8 gap-1"
               >
                 {busy && <Loader2 className="w-3 h-3 animate-spin" />}
                 Confirm cancel

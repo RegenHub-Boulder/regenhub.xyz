@@ -69,7 +69,7 @@ export async function DayPassRedemptionHero({ member }: Props) {
 
   if (activeCode) {
     return (
-      <Card className="glass-panel-strong border border-gold/40 bg-gold/[0.05]">
+      <Card className="glass-panel-strong border border-gold/40">
         <CardContent className="p-6 sm:p-8">
           <div className="flex items-center gap-2 mb-3">
             <Sparkles className="w-4 h-4 text-gold" />
@@ -119,7 +119,7 @@ export async function DayPassRedemptionHero({ member }: Props) {
 
   // Balance > 0, no active code → show the "Get code" CTA.
   return (
-    <Card className="glass-panel border border-gold/30 bg-gold/[0.03]">
+    <Card className="glass-panel border border-gold/30">
       <CardContent className="p-6 sm:p-7">
         <div className="flex items-start gap-4 flex-wrap">
           <Key className="w-9 h-9 text-gold shrink-0" />

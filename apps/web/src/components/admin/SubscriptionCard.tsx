@@ -204,7 +204,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
             <Button
               size="sm"
               onClick={() => setShowRevoke(!showRevoke)}
-              className="bg-danger/10 hover:bg-danger/10 text-danger border border-danger/40 text-xs gap-1 h-7"
+              className="bg-danger/10 hover:bg-danger/20 text-danger border border-danger/40 text-xs gap-1 h-7"
             >
               <Ban className="w-3 h-3" /> Revoke access
             </Button>
@@ -311,7 +311,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
                     className={`px-2 py-1 rounded text-xs border ${
                       planKey === p.key
                         ? "bg-sage/20 border-sage/50 text-sage"
-                        : "bg-tint border-rule text-muted hover:bg-tint"
+                        : "bg-tint border-rule text-muted hover:bg-ink/10"
                     }`}
                   >
                     {p.label} · ${p.defaultDollars}
@@ -537,7 +537,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
                 size="sm"
                 disabled={busy}
                 onClick={revoke}
-                className="bg-danger/10 hover:bg-danger/10 text-danger border border-danger/40 text-xs gap-1 h-7"
+                className="bg-danger/10 hover:bg-danger/20 text-danger border border-danger/40 text-xs gap-1 h-7"
               >
                 {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Ban className="w-3 h-3" />}
                 Confirm revoke

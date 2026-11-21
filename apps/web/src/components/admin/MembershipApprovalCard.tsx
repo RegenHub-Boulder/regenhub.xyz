@@ -134,7 +134,7 @@ export function MembershipApprovalCard({
             className={
               approved
                 ? "btn-glass text-xs h-7 gap-1"
-                : "bg-ok/10 hover:bg-ok/10 text-ok border border-ok/40 text-xs h-7 gap-1"
+                : "bg-ok/10 hover:bg-ok/20 text-ok border border-ok/40 text-xs h-7 gap-1"
             }
           >
             {busy === "toggle" ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}

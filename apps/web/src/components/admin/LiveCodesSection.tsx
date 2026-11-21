@@ -51,7 +51,7 @@ export function LiveCodesSection({ codes, members, recentInactiveCount, nowMs }:
                     : false;
                   const member = c.members;
                   return (
-                    <tr key={c.id} className="border-b border-rule hover:bg-tint transition-colors">
+                    <tr key={c.id} className="border-b border-rule hover:bg-ink/10 transition-colors">
                       <td className="px-4 py-3 font-mono font-bold text-gold">{c.code}</td>
                       <td className="px-4 py-3 text-muted">{c.pin_slot}</td>
                       <td className="px-4 py-3">

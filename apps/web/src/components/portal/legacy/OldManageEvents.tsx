@@ -405,7 +405,7 @@ function EventList({
                 {event.url && event.visibility === "public" && (
                   <Link
                     href={event.url}
-                    className="text-xs text-sage hover:text-sage inline-flex items-center gap-1 mt-1"
+                    className="text-xs text-sage hover:text-foreground inline-flex items-center gap-1 mt-1"
                   >
                     View event page <ArrowRight className="w-3 h-3" />
                   </Link>

@@ -28,7 +28,7 @@ for (const seconds of [30, 120, 121]) {
     expect(markup).toContain("Stuck reservation recovery");
     expect(markup).not.toContain("private-token");
     expect(markup.includes('role="alert"')).toBe(seconds > 120);
-    expect(markup.includes("text-red-600")).toBe(seconds > 120);
+    expect(markup.includes("text-danger")).toBe(seconds > 120);
     expect(service.from.mock.results[1].value.select).toHaveBeenCalledWith("acquired_at, holder_label");
   });
 }

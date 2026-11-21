@@ -127,7 +127,7 @@ export default async function MyCodePage() {
 
       <Link
         href="/portal/passes"
-        className="glass-panel p-5 flex items-center gap-4 hover:bg-tint transition-colors group"
+        className="glass-panel p-5 flex items-center gap-4 hover:bg-ink/10 transition-colors group"
       >
         <Zap className="w-5 h-5 text-gold shrink-0" />
         <div>

@@ -44,7 +44,7 @@ export function ClaimActions({ claimId, currentStatus }: Props) {
             size="sm"
             disabled={busy}
             onClick={() => updateStatus("reserved")}
-            className="bg-ok/10 hover:bg-ok/10 text-ok border border-ok/40 text-xs gap-1 h-7 px-2"
+            className="bg-ok/10 hover:bg-ok/20 text-ok border border-ok/40 text-xs gap-1 h-7 px-2"
           >
             <Check className="w-3 h-3" /> Approve
           </Button>
@@ -52,7 +52,7 @@ export function ClaimActions({ claimId, currentStatus }: Props) {
             size="sm"
             disabled={busy}
             onClick={() => updateStatus("cancelled")}
-            className="bg-danger/10 hover:bg-danger/10 text-danger border border-danger/40 text-xs gap-1 h-7 px-2"
+            className="bg-danger/10 hover:bg-danger/20 text-danger border border-danger/40 text-xs gap-1 h-7 px-2"
           >
             <X className="w-3 h-3" /> Reject
           </Button>
@@ -63,7 +63,7 @@ export function ClaimActions({ claimId, currentStatus }: Props) {
           size="sm"
           disabled={busy}
           onClick={() => updateStatus("cancelled")}
-          className="bg-danger/10 hover:bg-danger/10 text-danger border border-danger/40 text-xs gap-1 h-7 px-2"
+          className="bg-danger/10 hover:bg-danger/20 text-danger border border-danger/40 text-xs gap-1 h-7 px-2"
         >
           <X className="w-3 h-3" /> Cancel
         </Button>
