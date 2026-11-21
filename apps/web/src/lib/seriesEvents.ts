@@ -8,7 +8,7 @@
  */
 
 import { pastWindowStart, fetchCollectiveEvents, formatEventLocation, type CollectiveEvent } from "@/lib/regenos/events";
-import { SERIES, hasEnded, isCancelled, type Series } from "@/lib/series";
+import { SERIES, hasEnded, isCancelled, topicOf, type Series } from "@/lib/series";
 import { HUB_TIMEZONE } from "@/lib/regenos/eventForm";
 import { siteOrigin } from "@/lib/techne/config";
 import { buildIcs, type IcsEvent } from "@/lib/ics";
@@ -45,6 +45,38 @@ export function overviewFor(series: Series, events: CollectiveEvent[], now: Date
 export async function fetchSeriesOverviews(now = new Date()): Promise<SeriesOverview[]> {
   const events = (await fetchCollectiveEvents({ after: pastWindowStart(now) })) ?? [];
   return SERIES.map((s) => overviewFor(s, events, now));
+}
+
+/** How far ahead, and how many, the home page lists (T-482: "this month's nights"). */
+export const HOME_NIGHTS_DAYS = 45;
+export const HOME_NIGHTS_LIMIT = 5;
+
+/**
+ * Pure: the next nights on the collective's calendar, soonest first: posted, not ended, not cancelled,
+ * starting within `days`. Every public event counts, in a series or not; /events lists the same ones.
+ */
+export function nextNights(events: CollectiveEvent[], now: Date, days = HOME_NIGHTS_DAYS, limit = HOME_NIGHTS_LIMIT): CollectiveEvent[] {
+  const until = now.getTime() + days * 86_400_000;
+  return events
+    .filter((e) => e.startAt && !isCancelled(e) && !hasEnded(e, now) && Date.parse(e.startAt) < until)
+    .sort((a, b) => a.startAt!.localeCompare(b.startAt!))
+    .slice(0, limit);
+}
+
+/**
+ * The home page's nights, from the same read as /events' series cards (same query, same 5-minute cache).
+ * Null when Techne couldn't be read, so the page can say "see /events" instead of "nothing on".
+ */
+export async function fetchNextNights(now = new Date()): Promise<CollectiveEvent[] | null> {
+  const events = await fetchCollectiveEvents({ after: pastWindowStart(now) });
+  return events ? nextNights(events, now) : null;
+}
+
+/** A night's title on one line: the series name (and its topic, if any), else the event's own name. */
+export function nightTitle(e: Pick<CollectiveEvent, "name" | "series">): string {
+  if (!e.series) return e.name;
+  const topic = topicOf(e.series, e.name);
+  return topic ? `${e.series.name}: ${topic}` : e.series.name;
 }
 
 /** What a series card says about the next night: its date, or "Next date coming soon". */

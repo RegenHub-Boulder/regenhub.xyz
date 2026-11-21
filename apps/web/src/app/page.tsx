@@ -1,16 +1,18 @@
 import type { Metadata } from "next";
 import { OG_IMAGES } from "@/lib/metadata";
+import { MEMBERSHIP_FROM_CENTS, formatCents } from "@/lib/plans";
 import { createClient } from "@/lib/supabase/server";
 import RegenHubLanding, { type SignedInMember } from "@/components/landing/RegenHubLanding";
 
+const SHARE_LINE = `A co-op of builders in Boulder. Techne Tuesdays are open to everyone; membership from ${formatCents(MEMBERSHIP_FROM_CENTS)} a month.`;
+
 export const metadata: Metadata = {
-  title: "RegenHub Boulder — Regenerative Coworking & Innovation Hub",
-  description:
-    "A cooperative coworking space in Boulder, CO building economic democracy and regenerative livelihoods. Apply for membership, attend events, and join our community of builders and changemakers.",
-  keywords: ["coworking", "Boulder", "cooperative", "regenerative", "innovation hub", "community"],
+  title: "RegenHub Boulder — a co-op of builders",
+  description: `${SHARE_LINE} Your first day is free.`,
+  keywords: ["coworking", "Boulder", "cooperative", "Techne Tuesdays", "community", "events"],
   openGraph: {
     title: "RegenHub Boulder",
-    description: "A regenerative innovation hub in Boulder, CO. Community. Democracy. Regeneration.",
+    description: SHARE_LINE,
     url: "https://regenhub.xyz",
     siteName: "RegenHub Boulder",
     type: "website",
@@ -20,26 +22,12 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "RegenHub Boulder",
-    description: "A regenerative innovation hub in Boulder, CO. Community. Democracy. Regeneration.",
+    description: SHARE_LINE,
     images: OG_IMAGES,
   },
 };
 
-// Homepage v2 prototype ("Co-op broadsheet"). Default OFF; NEXT_PUBLIC_HOME_V2=true
-// is baked at build time like every NEXT_PUBLIC_* var.
-const HOME_V2 = ["true", "1", "yes"].includes((process.env.NEXT_PUBLIC_HOME_V2 ?? "").toLowerCase());
-
-// v2 reads no cookies, so Next prerenders it at build, where the events backends
-// are often unconfigured. Regenerate on the same 5-minute cadence as the events
-// fetch so the list isn't frozen until the next deploy. The default page reads
-// the session and stays dynamic, so this doesn't change it.
-export const revalidate = 300;
-
 export default async function Home() {
-  if (HOME_V2) {
-    const { default: HomeV2 } = await import("@/components/landing/v2/HomeV2");
-    return <HomeV2 />;
-  }
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 

@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
-import Autoplay from "embla-carousel-autoplay";
 import {
   Carousel,
   CarouselContent,
@@ -16,7 +15,6 @@ import { Card } from "@/components/ui/card";
 import { galleryPhotoAlt, type GalleryPhoto } from "./galleryPhotos";
 
 const MAX_PHOTOS = 12;
-const AUTOPLAY_DELAY_MS = 4000;
 
 /** Fisher-Yates — produces a uniform random permutation. */
 function shuffle<T>(arr: T[]): T[] {
@@ -28,34 +26,24 @@ function shuffle<T>(arr: T[]): T[] {
   return out;
 }
 
+const noSubscribe = () => () => {};
+
 export default function CommunityGalleryClient({ photos }: { photos: GalleryPhoto[] }) {
-  // Shuffle on the client after mount — running shuffle() during SSR would
-  // produce a different ordering than the client first paint and trip a
-  // hydration mismatch. The gallery is below-the-fold so the brief empty
-  // render is invisible.
-  const [shuffled, setShuffled] = useState<(GalleryPhoto & { alt: string })[]>([]);
+  // Shuffled on the client only: the server renders nothing (the gallery is below the fold), so a
+  // different order on the server can't trip a hydration mismatch.
+  const mounted = useSyncExternalStore(noSubscribe, () => true, () => false);
+  const [order] = useState(() =>
+    shuffle(photos.map((photo, index) => ({ ...photo, alt: galleryPhotoAlt(photo, index, photos.length) }))).slice(0, MAX_PHOTOS),
+  );
+  const shuffled = mounted ? order : [];
   const [api, setApi] = useState<CarouselApi>();
   const [current, setCurrent] = useState(0);
-  const plugin = useRef(Autoplay({ delay: AUTOPLAY_DELAY_MS, stopOnInteraction: true, playOnInit: false }));
-
-  useEffect(() => {
-    setShuffled(shuffle(photos.map((photo, index) => ({ ...photo, alt: galleryPhotoAlt(photo, index, photos.length) }))).slice(0, MAX_PHOTOS));
-  }, [photos]);
 
   useEffect(() => {
     if (!api) return;
-    setCurrent(api.selectedScrollSnap());
-    api.on("select", () => setCurrent(api.selectedScrollSnap()));
-  }, [api]);
-
-  useEffect(() => {
-    if (!api) return;
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const autoplay = plugin.current;
-    const update = () => { if (media.matches) autoplay.stop(); else autoplay.play(); };
-    update();
-    media.addEventListener("change", update);
-    return () => { media.removeEventListener("change", update); autoplay.stop(); };
+    const onSelect = () => setCurrent(api.selectedScrollSnap());
+    api.on("select", onSelect);
+    return () => { api.off("select", onSelect); };
   }, [api]);
 
   if (shuffled.length === 0) return null;
@@ -64,22 +52,12 @@ export default function CommunityGalleryClient({ photos }: { photos: GalleryPhot
     <section className="relative px-6 py-10">
       <div className="max-w-[40rem] mx-auto">
         <hr className="mx-auto mb-10 w-12 border-ink/40" />
-        <div className="text-center mb-8">
-          <h2 className="text-[1.6rem] leading-tight mb-2 text-forest">
-            Community Moments
-          </h2>
-          <p className="text-[1.05rem] text-muted max-w-2xl mx-auto">
-            Glimpses of our vibrant community in action
-          </p>
-        </div>
+        <h2 className="text-[1.6rem] leading-tight mb-8 text-forest text-center">At the hub</h2>
 
         <Carousel
-          plugins={[plugin.current]}
           opts={{ align: "start", loop: true }}
           setApi={setApi}
           className="w-full"
-          onMouseEnter={plugin.current.stop}
-          onMouseLeave={() => { if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) plugin.current.reset(); }}
         >
           <CarouselContent className="-ml-2 md:-ml-4">
             {shuffled.map((photo) => (

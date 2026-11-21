@@ -17,6 +17,10 @@ Self-hosted on local infrastructure (compute-1), not deployed to cloud providers
   `node scripts/restyle-book-codemod.mjs --check` lists anything still in the old dark-theme vocabulary. Badges are
   one calm skin (`components/ui/badge.tsx`), with sentence-case words from the caller. On public pages a
   `glass-panel` draws no box; a notice that needs its outline adds `panel-tone`. Emails use the same palette inline with a web-safe serif stack.
+- **Home page** (T-482, `components/landing/RegenHubLanding.tsx`): who we are, the next nights, membership as the
+  main offer (day pass, desks and the free day below it), members, one line about the co-op, photos, find us, stay in
+  touch. Prices on `/`, `/membership` and `MemberOffer` come only from `lib/plans.ts` (`MEMBER_DAY_PLANS`,
+  `MEMBERSHIP_FROM_CENTS`, the day-pass cents); `test/home-offer.test.ts` fails on a typed `$` amount or a retired claim.
 
 ## Live URLs
 - `https://regenhub.xyz` — production web app (public domain, via Cloudflare Tunnel)
@@ -43,7 +47,6 @@ The `.dockerignore` has an exception (`!**/.env.production`) so the file is avai
 | `NEXT_PUBLIC_SUPABASE_URL` | Web (build-time) | In `.env.production` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Web (build-time) | In `.env.production` |
 | `NEXT_PUBLIC_SITE_URL` | Web (build-time) | In `.env.production` — used for auth redirects |
-| `NEXT_PUBLIC_HOME_V2` | Web (build-time) | **Default off.** `true` renders the "Co-op broadsheet" homepage prototype (`components/landing/v2`). Hero line is the `HERO_LINE` constant in `copy.ts`. |
 | `HA_URL` | Web + Bot (runtime) | HA base URL — use direct IP (`http://192.168.1.141:8123/api`). `homeassistant.lan` does not resolve from compute-1; mDNS `homeassistant.local` is unreliable from inside Docker bridge networks. |
 | `HA_TOKEN` | Web + Bot (runtime) | Long-lived HA access token |
 | `HA_LOCK_ENTITIES` | Web + Bot (runtime) | Comma-separated Z-Wave entity IDs, e.g. `lock.front_door_lock,lock.back_door_lock` |
@@ -409,8 +412,8 @@ target multiple Z-Wave locks. Update env via Coolify UI for the relevant app and
 [regenOS](https://github.com/irlfund/regenOS) is the atproto commons backend. RegenHub uses it for
 two independently-switchable things. Both degrade to today's behaviour when unconfigured.
 
-**Events (on whenever `REGENOS_BASE_URL` + `REGENOS_COLLECTIVE_DID` are set).** The landing page's
-"Upcoming Events" section renders the collective's public calendar instead of the Luma iframe.
+**Events (on whenever `REGENOS_BASE_URL` + `REGENOS_COLLECTIVE_DID` are set).** The home page's
+"Coming up" and `/events` render the collective's public calendar (the home page never reads Luma).
 
 - `lib/regenos/events.ts` + `lib/techne/query.ts` — reads through **Techne's documented public query**
   (techne.computer/reference.html): `pub.techne.draft.query.listRecords` for the collective's own
@@ -448,8 +451,7 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   pick of that date is still allowed. Nights posted as "Agents Night" (the series' former name, `formerNames`) still match. A series may name `hosts` (Agents Building and Civic Tech: "AG and Benjamin"), shown on the series page and cards. Event keys are TIDs (`mintRkey`), as the
   lexicon declares; old `ev-…` keys still read. Every create/edit sends `timezone: "America/Denver"`.
   `/events/<slug>` is the series page (next posted night, posted nights after it, past nights; with none upcoming
-  it says "Next date coming soon"), built from `lib/seriesEvents.ts`. `/` (right under the hero) and `/events`
-  lead with the series cards. `/admin/events` → **Add the next nights** offers the next 3 rule dates not yet posted
+  it says "Next date coming soon"), built from `lib/seriesEvents.ts`. `/events` leads with the series cards; `/` lists the next nights one line each (below). `/admin/events` → **Add the next nights** offers the next 3 rule dates not yet posted
   (a posted date is skipped, a cancelled one isn't re-offered) plus a date picker for any later night (`lib/seriesNights.ts`), posts them as the collective (below) and shows
   "N going" per event. Below it, **Also on Luma?** (`components/admin/LumaSyncSection.tsx`, `lib/lumaCalendar.ts`)
   checks the next 60 days against Luma's public iCal feed (no API key; Next-cached 15 min; fails soft): each night
@@ -457,9 +459,13 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   Luma-only nights with **Add here** (`?fromLuma=<evt-id>` opens the new-event form prefilled). Read-only toward Luma.
 - **Feeds:** `/events.ics` (everything) and `/events/<slug>.ics` (a rewrite to `/events/<slug>/calendar.ics`),
   built by `lib/ics.ts`; UID = the event's AT-URI. `REGENOS_WEB_URL` is no longer read.
-- `components/landing/UpcomingEvents.tsx` — async server component. **Zero events for any reason
-  (quiet calendar, AppView down, timeout) falls back to the Luma embed.** The site never breaks
-  because regenOS is down.
+- `components/landing/HomeNights.tsx` (T-482) — the home page's "Coming up": `fetchNextNights()`
+  (`lib/seriesEvents.ts`: the same read and 5-minute cache as /events' series cards), at most 5 nights in the
+  next 45 days, posted, not cancelled, one line each (date, series name or the event's own, members-only
+  mark), linked to `/events/<did>/<rkey>`. Nothing posted or Techne unreadable ⇒ the Techne Tuesdays rhythm
+  line and "All events", never an empty calendar and never Luma (`test/home-offer.test.ts`). `/events`'s
+  list of other events still falls back to the Luma embed (`lib/events.ts`). The site never breaks
+  because Techne is down.
 - **`/events` + `/events/<did>/<rkey>` — the whole event experience is in-site.** Per Aaron, an
   event link never leaves regenhub.xyz. The detail page shows only events the collective authored or
   lists, and `notFound()`s anything else — one honest 404. Card/date rendering is shared in

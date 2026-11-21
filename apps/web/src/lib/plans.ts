@@ -99,6 +99,17 @@ export const PLANS = {
   }
 >;
 
+/** The member plans with coworking days, cheapest first: what /membership and the home page sell. */
+export const MEMBER_DAY_PLANS = [PLANS.member_basic, PLANS.member_2day, PLANS.member_5day] as const;
+
+/** "From $30 a month": the cheapest member plan. */
+export const MEMBERSHIP_FROM_CENTS = Math.min(...MEMBER_DAY_PLANS.map((p) => p.defaultMonthlyCents));
+
+/** "1 coworking day", "2 coworking days". */
+export function coworkingDays(n: number): string {
+  return `${n} coworking day${n === 1 ? "" : "s"}`;
+}
+
 export type KnownPlanKey = keyof typeof PLANS;
 
 export interface PlanDef {
