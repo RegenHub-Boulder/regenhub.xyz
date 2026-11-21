@@ -39,7 +39,7 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
         <div className="max-w-4xl mx-auto text-center">
           <div className="glass-panel-strong p-8 md:p-12 hover-lift animate-fade-in-up">
             <HeroArt />
-            <Image data-part="hero-mark" src={regenHubFull} alt="RegenHub" height={160} priority sizes="(min-width: 768px) 294px, 236px" className="h-32 md:h-40 w-auto mx-auto mb-6" />
+            <Image src={regenHubFull} alt="RegenHub" height={160} priority sizes="(min-width: 768px) 294px, 236px" className="h-32 md:h-40 w-auto mx-auto mb-6" data-part="hero-mark" />
             <h1 data-part="hero-title" className="text-xl md:text-2xl mb-3 text-muted max-w-2xl mx-auto leading-relaxed">
               Boulder&apos;s regenerative coworking space
             </h1>

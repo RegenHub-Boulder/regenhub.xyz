@@ -399,3 +399,74 @@ html[data-style="studio"] [data-part="hero-title"] {
 }
 @keyframes rh-line { from { clip-path: inset(0 0 100% 0); transform: translateY(0.25em); } to { clip-path: inset(0 0 -10% 0); } }
 html[data-style="studio"] [data-part="hero"] .max-w-4xl { max-width: 80rem; }
+
+/* =====================================================================================================
+   Below the hero: each direction also lays the home page's sections out in its own way.
+   ===================================================================================================== */
+
+/* Phone: the wordmark keeps the header; "by Techne" waits for a wider screen. */
+@media (max-width: 639px) {
+  html[data-style] span.rh-by-techne[data-direction-only] { display: none; }
+}
+
+/* Book: every section in the one 40rem column, carousel included; no cards, no icon discs, one heading size.
+   Offerings read as a two-column list, the ways in as ruled rows. */
+html[data-style="book"] { font-size: 18px; }
+html[data-style="book"] [data-part="home"] > section > div { max-width: 40rem; }
+html[data-style="book"] [data-part="home"] h2 { font-size: 1.6rem; line-height: 1.25; margin-bottom: 0.5rem; }
+html[data-style="book"] [data-part="home"] h2 + p { font-size: 1.05rem; }
+html[data-style="book"] [data-part="home"] .w-16.h-16.rounded-full,
+html[data-style="book"] [data-part="home"] .grid .w-7.h-7 { display: none; }
+html[data-style="book"] [data-part="home"] :is(.glass-panel, .glass-panel-strong, .glass-panel-subtle, .rounded-lg, .rounded-xl) { box-shadow: none; }
+html[data-style="book"] [data-part="home"] [style*="border-left"] { border-left: 0 !important; }
+html[data-style="book"] [data-part="home"] .grid.md\:grid-cols-3 { grid-template-columns: 1fr; gap: 0; }
+html[data-style="book"] [data-part="home"] .grid.md\:grid-cols-3 > * { border-top: 1px solid var(--border); }
+html[data-style="book"] [data-part="home"] .grid.md\:grid-cols-3 > * > * { padding-left: 0; padding-right: 0; }
+@media (min-width: 640px) {
+  html[data-style="book"] [data-part="home"] .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  html[data-style="book"] [data-part="home"] .grid.md\:grid-cols-3 { grid-template-columns: 1fr; }
+}
+html[data-style="book"] [data-part="home"] .grid :is(.p-6, .p-5) { padding-left: 0; padding-right: 0; }
+
+/* Field: one left edge for every section, each opened like a chapter of a guide: a full-width rule with the
+   heading set against it. Plates stay for the things themselves (nights, offers, ways in, members). */
+html[data-style="field"] [data-part="home"] > section > div,
+html[data-style="field"] [data-part="hero"] .max-w-4xl { max-width: 64rem; }
+html[data-style="field"] [data-part="home"] > section:not([data-part]) :is(.text-center:has(> h2), section > div > h2:first-child) {
+  border-top: 1px solid var(--rh-rule-strong);
+  padding-top: 0.9rem;
+  margin-bottom: 1.5rem;
+}
+html[data-style="field"] [data-part="home"] h2 { font-size: 1.75rem; line-height: 1.2; margin-bottom: 0.25rem; }
+html[data-style="field"] [data-part="home"] h2 + p { font-size: 1.05rem; }
+html[data-style="field"] [data-part="home"] .glass-panel-subtle:has(> .text-center) { border-top: 0; padding: 0; }
+html[data-style="field"] [data-part="home"] .w-16.h-16.rounded-full { margin-left: 0; background: transparent !important; border: 1px solid var(--rh-rule-strong); }
+html[data-style="field"] [data-part="home"] [style*="border-left"] { border-left-width: 1px !important; }
+
+/* Studio: an editorial grid. On a wide screen each section's heading sits in a left column and stays in view
+   while its content scrolls past on the right. */
+html[data-style="studio"] [data-part="home"] h2 { font-size: 1.6rem; line-height: 1.2; font-weight: 500; margin-bottom: 0.35rem; }
+html[data-style="studio"] [data-part="home"] h2 + p { font-size: 1rem; color: var(--muted-foreground); }
+html[data-style="studio"] [data-part="home"] .w-16.h-16.rounded-full { display: none; }
+html[data-style="studio"] [data-part="home"] [style*="border-left"] { border-left: 0 !important; }
+html[data-style="studio"] [data-part="home"] .glass-panel-subtle:has(> .text-center) { padding: 0; }
+html[data-style="studio"] [data-part="home"] .glass-panel-strong:has(h2) > * { padding-left: 0; padding-right: 0; }
+@media (min-width: 1024px) {
+  html[data-style="studio"] [data-part="home"] > section:not([data-part]) div:not(.text-center):has(> :is(h2, .text-center:has(> h2)):first-child) {
+    display: grid;
+    grid-template-columns: 17rem minmax(0, 1fr);
+    column-gap: 3rem;
+    align-items: start;
+  }
+  html[data-style="studio"] [data-part="home"] > section:not([data-part]) div:not(.text-center):has(> :is(h2, .text-center:has(> h2)):first-child) > :first-child {
+    grid-column: 1;
+    grid-row: 1 / span 9;
+    position: sticky;
+    top: 2rem;
+    margin-bottom: 0;
+  }
+  html[data-style="studio"] [data-part="home"] > section:not([data-part]) div:not(.text-center):has(> :is(h2, .text-center:has(> h2)):first-child) > :not(:first-child) { grid-column: 2; }
+}
+
+html[data-style="field"] :is([data-part="page"], [data-part="home"]) p.mx-auto,
+html[data-style="studio"] :is([data-part="page"], [data-part="home"]) p.mx-auto { margin-left: 0; }

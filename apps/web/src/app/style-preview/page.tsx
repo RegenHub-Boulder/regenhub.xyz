@@ -34,7 +34,7 @@ export default function StylePreviewPage() {
           <p className="text-[#4a4a45] leading-relaxed">
             The same real pages (home, an event night, membership, the member directory and the portal), with the
             same words and structure, in three visual directions. Judge the feel: type, colour, room, imagery and how
-            the page arrives. The words and page structure are unchanged on purpose.
+            the page arrives. The words and what each page offers are unchanged on purpose.
           </p>
           <p className="text-sm text-[#4a4a45]">
             Each link below opens the live staging site in that look and remembers it while you click around.{" "}

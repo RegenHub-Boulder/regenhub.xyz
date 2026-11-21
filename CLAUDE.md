@@ -37,6 +37,7 @@ The `.dockerignore` has an exception (`!**/.env.production`) so the file is avai
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Web (build-time) | In `.env.production` |
 | `NEXT_PUBLIC_SITE_URL` | Web (build-time) | In `.env.production` — used for auth redirects |
 | `NEXT_PUBLIC_HOME_V2` | Web (build-time) | **Default off.** `true` renders the "Co-op broadsheet" homepage prototype (`components/landing/v2`). Hero line is the `HERO_LINE` constant in `copy.ts`. |
+| `STYLE_PREVIEW_ENABLED` | Web (runtime) | **Staging only, default off; refused for regenhub.xyz.** Turns on the T-482 visual-direction switch: `?style=book\|field\|studio` on any page (cookie-remembered, `?style=off` clears), the picker at `/style-preview`, and the Google Fonts link. Off = no script, no attribute, no fonts: today's look exactly. Looks live in `app/style-directions.css`, all scoped to `html[data-style]`. `STYLE_PREVIEW_SHOTS_DIR` overrides where the picker reads its screenshots (default `walkthrough/style-directions/`). |
 | `HA_URL` | Web + Bot (runtime) | HA base URL — use direct IP (`http://192.168.1.141:8123/api`). `homeassistant.lan` does not resolve from compute-1; mDNS `homeassistant.local` is unreliable from inside Docker bridge networks. |
 | `HA_TOKEN` | Web + Bot (runtime) | Long-lived HA access token |
 | `HA_LOCK_ENTITIES` | Web + Bot (runtime) | Comma-separated Z-Wave entity IDs, e.g. `lock.front_door_lock,lock.back_door_lock` |
