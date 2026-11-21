@@ -9,7 +9,7 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col">
       <PublicHeader />
-      <main className="flex-1">{children}</main>
+      <main className="flex-1" data-part="page">{children}</main>
       <PublicFooter />
     </div>
   );

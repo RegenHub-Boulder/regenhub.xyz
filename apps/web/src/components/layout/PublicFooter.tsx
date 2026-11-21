@@ -15,7 +15,7 @@ export function PublicFooter() {
     <footer className="relative px-6 py-12 mt-16">
       <div className="max-w-4xl mx-auto">
         <div className="glass-panel p-8 text-center">
-          <div className="flex items-center justify-center gap-2 mb-4">
+          <div className="flex items-center justify-center gap-2 mb-4" data-part="logo">
             <Image src={regenHubLogo} alt="" width={32} height={32} className="animate-sway" />
             <Image src={regenHubText} alt="RegenHub" height={32} className="h-8 w-auto" />
           </div>

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { MobileNav } from "@/components/nav/MobileNav";
 import { PUBLIC_NAV } from "@/components/layout/publicNav";
+import { ByTechne } from "@/components/stylePreview/DirectionArt";
 import regenHubLogo from "@/assets/regenhub-logo.svg";
 import regenHubText from "@/assets/regenhub-text.svg";
 
@@ -19,7 +20,7 @@ export function PublicHeader() {
       <nav className="glass-panel-subtle max-w-7xl mx-auto px-3 sm:px-6 py-3 flex items-center justify-between gap-2 sm:gap-3">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <MobileNav links={PUBLIC_NAV} />
-          <Link href="/" className="flex items-center gap-2 min-w-0" aria-label="RegenHub home">
+          <Link href="/" className="flex items-center gap-2 min-w-0" aria-label="RegenHub home" data-part="logo">
             <Image
               src={regenHubLogo}
               alt=""
@@ -33,6 +34,7 @@ export function PublicHeader() {
               height={32}
               className="h-4 sm:h-7 w-auto shrink-0"
             />
+            <ByTechne />
           </Link>
         </div>
 

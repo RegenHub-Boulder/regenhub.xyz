@@ -70,7 +70,7 @@ export default async function PortalLayout({ children }: { children: React.React
           <SignOutButton className="hidden sm:block" />
         </nav>
       </header>
-      <main className="max-w-7xl mx-auto px-6 py-8">{children}</main>
+      <main className="max-w-7xl mx-auto px-6 py-8" data-part="portal">{children}</main>
     </div>
   );
 }
