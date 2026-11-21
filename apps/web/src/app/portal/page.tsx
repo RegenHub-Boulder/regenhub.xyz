@@ -14,6 +14,8 @@ import { DirectoryAsk } from "@/components/portal/DirectoryAsk";
 import { PAYING_STATUSES } from "@/lib/memberStanding";
 import { isListed } from "@/lib/memberDirectory";
 import { RevealPin } from "@/components/portal/RevealPin";
+import { startOfDayIn } from "@/lib/series";
+import { SCOREBOARD_TZ } from "@/lib/scoreboard";
 import { DayPassRedemptionHero } from "@/components/portal/DayPassRedemptionHero";
 import { MembershipStatusCard } from "@/components/portal/MembershipStatusCard";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
@@ -172,7 +174,7 @@ export default async function PortalPage() {
     .from("access_logs")
     .select("member_id")
     .eq("result", "granted")
-    .gte("created_at", hubMidnightIso())
+    .gte("created_at", startOfDayIn(SCOREBOARD_TZ).toISOString())
     .not("member_id", "is", null);
   const hereNowCount = new Set((hereNowRows ?? []).map((r) => r.member_id)).size;
 
@@ -564,12 +566,3 @@ function HereToday({ count, canSee }: { count: number; canSee: boolean }) {
     : <span className="text-muted" data-testid="here-today">{text}</span>;
 }
 
-/** Midnight today in Boulder (America/Denver), as an instant. */
-function hubMidnightIso(now = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Denver", hourCycle: "h23", hour: "2-digit", minute: "2-digit", second: "2-digit",
-  }).formatToParts(now);
-  const part = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
-  const sinceMidnightMs = ((part("hour") * 60 + part("minute")) * 60 + part("second")) * 1000 + now.getMilliseconds();
-  return new Date(now.getTime() - sinceMidnightMs).toISOString();
-}

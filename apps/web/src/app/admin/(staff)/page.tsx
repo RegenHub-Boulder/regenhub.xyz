@@ -8,6 +8,7 @@ import { ACTION_RULES, type RecommendedAction } from "@/lib/scoreboardActions";
 import { SCOREBOARD_TZ, usd } from "@/lib/scoreboard";
 import { adminQueue } from "@/lib/adminQueue";
 import { readAll } from "@/lib/supabase/readAll";
+import { BILLED_STATUSES } from "@/lib/membershipRevenue";
 
 export const metadata = { title: "Today — Admin" };
 export const dynamic = "force-dynamic";
@@ -28,15 +29,18 @@ export default async function AdminHome() {
 
   // The queue reads stand alone: if the scoreboard can't be read, what's waiting still shows (and the other way round).
   const count = (r: { count: number | null; error: unknown }) => (r.error ? null : r.count ?? 0);
-  const settle = <T,>(p: PromiseLike<T>) => Promise.resolve(p).then((v) => v, () => null);
+  const settle = <T,>(label: string, p: PromiseLike<T>) => Promise.resolve(p).then((v) => v, (err) => {
+    console.error(`[admin home] ${label} read failed:`, err);
+    return null;
+  });
   const [s, apps, freeDays, desks, live, lastSync, quarantine] = await Promise.all([
-    settle(readScoreboard(admin)),
+    settle("scoreboard", readScoreboard(admin)),
     admin.from("applications").select("id", { count: "exact", head: true }).eq("status", "pending"),
     admin.from("free_day_claims").select("id", { count: "exact", head: true }).eq("status", "pending"),
-    settle(readAll<{ id: number }>("desk members", (from, to) => admin.from("members").select("id")
+    settle("desk members", readAll<{ id: number }>("desk members", (from, to) => admin.from("members").select("id")
       .eq("disabled", false).in("member_type", ["cold_desk", "hot_desk"]).order("id").range(from, to))),
-    settle(readAll<{ member_id: number; status: string }>("live subscriptions", (from, to) => admin.from("subscriptions")
-      .select("member_id, status").in("status", ["active", "trialing", "past_due"]).order("id").range(from, to))),
+    settle("billed subscriptions", readAll<{ member_id: number }>("billed subscriptions", (from, to) => admin.from("subscriptions")
+      .select("member_id").in("status", [...BILLED_STATUSES]).order("id").range(from, to))),
     admin.from("lock_sync_runs").select("failed").order("created_at", { ascending: false }).limit(1).maybeSingle(),
     admin.from("lock_slot_quarantine").select("slot", { count: "exact", head: true }),
   ]);
@@ -44,7 +48,8 @@ export default async function AdminHome() {
   const queue = adminQueue({
     lastSyncFailures: lastSync.error ? null : (lastSync.data as { failed: number | null } | null)?.failed ?? 0,
     quarantinedSlots: count(quarantine),
-    pastDue: live && live.filter((r) => r.status === "past_due").length,
+    // The scoreboard's definition (lib/membershipRevenue.ts): members past due and not paying on another subscription.
+    pastDue: s ? s.goal.revenue.pastDue.members : null,
     pendingApplications: count(apps),
     pendingFreeDays: count(freeDays),
     unbilledDesks: desks && billed ? desks.filter((m) => !billed.has(m.id)).length : null,

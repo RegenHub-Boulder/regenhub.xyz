@@ -372,3 +372,8 @@ export function plannedNight(series: Series, date: string): PlannedNight {
     endsAt: zonedTimeToUtc(date, series.endTime, series.timezone).toISOString(),
   };
 }
+
+/** The instant the day `now` falls on starts in `timeZone` (local midnight), DST-correct via zonedTimeToUtc. */
+export function startOfDayIn(timeZone: string, now = new Date()): Date {
+  return zonedTimeToUtc(dateIn(now.toISOString(), timeZone), "00:00", timeZone);
+}

@@ -150,7 +150,7 @@ queries only the stats card used. The "thanks for joining our list" line now sho
 
 **Admin home (`/admin`, "Today").** It opens with one line: date · 6 of 22 paying members · $1,280 of $2,750 a
 month · Scoreboard →. Then **Waiting on you** (`lib/adminQueue.ts`): lock-sync failures, quarantined slots and
-past-due subscriptions first, then applications, free-day requests and unbilled desk members, each linking to where
+members past due first, then applications, free-day requests and unbilled desk members, each linking to where
 it's done. A read that fails shows as "Couldn't check …", never as "Nothing waiting", and the queue still shows if
 the scoreboard can't be read. Then **What
 to do next**, the scoreboard's recommended actions, moved here with the same component, data and Done / Not now /

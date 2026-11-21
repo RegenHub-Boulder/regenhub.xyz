@@ -10,21 +10,18 @@ describe("adminQueue (Waiting on you)", () => {
     expect(adminQueue(none)).toEqual([]);
   });
 
-  it("lists each queue with its count, link and urgency, the door and money first", () => {
-    const q = adminQueue({ lastSyncFailures: 2, quarantinedSlots: 1, pastDue: 1, pendingApplications: 3, pendingFreeDays: 1, unbilledDesks: 2 });
-    expect(q.map((i) => [i.label, i.href, i.urgent])).toEqual([
-      ["The last lock sync failed on 2 codes", "/admin/access?tab=sync", true],
-      ["1 door slot stuck in quarantine", "/admin/access?tab=sync", true],
-      ["1 subscription past due", "/admin/billing", true],
-      ["3 applications to review", "/admin/pipeline?tab=applications", false],
-      ["1 free-day request to review", "/admin/pipeline?tab=freedays", false],
-      ["2 desk members not billed: send a checkout link", "/admin/members?status=no_subscription", false],
+  it("puts the urgent queues (door, money) above the reviews, whatever was passed", () => {
+    const q = adminQueue({ ...none, unbilledDesks: 2, pendingApplications: 1, pastDue: 1, lastSyncFailures: 1 });
+    expect(q.map((i) => [i.key, i.urgent])).toEqual([
+      ["lastSyncFailures", true], ["pastDue", true], ["pendingApplications", false], ["unbilledDesks", false],
     ]);
   });
 
   it("a failed read says it couldn't check, never that nothing is waiting", () => {
-    const q = adminQueue({ ...none, quarantinedSlots: null });
-    expect(q).toEqual([{ key: "quarantinedSlots", urgent: true, href: "/admin/access?tab=sync",
-      label: "Couldn't check quarantined door slots: open the page" }]);
+    const q = adminQueue({ ...none, quarantinedSlots: null, pendingFreeDays: null });
+    expect(q.map((i) => [i.label, i.urgent])).toEqual([
+      ["Couldn't check quarantined door slots: open the page", true],
+      ["Couldn't check free-day requests: open the page", false],
+    ]);
   });
 });

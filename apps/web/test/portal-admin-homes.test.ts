@@ -8,6 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup, renderToReadableStream } from "react-dom/server";
 import { createElement } from "react";
 import { makePgDb, type PgDb } from "./pgDb";
+import { startOfDayIn } from "@/lib/series";
+import { SCOREBOARD_TZ } from "@/lib/scoreboard";
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 120_000 });
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
@@ -29,6 +31,9 @@ const ADMIN = "00000000-0000-4000-8000-00000000000a";
 const ANA = "00000000-0000-4000-8000-0000000000a2";
 const SAM = "00000000-0000-4000-8000-0000000000b5";
 const WRITER = "00000000-0000-4000-8000-000000000482";
+/** A moment earlier today in Boulder: `minutes` ago, but never before midnight (so the test can run at 00:01). */
+const inToday = (minutes: number) => new Date(Math.max(Date.now() - minutes * 60_000,
+  startOfDayIn(SCOREBOARD_TZ).getTime() + minutes * 1000)).toISOString();
 const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
 const ahead = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString();
 
@@ -54,7 +59,7 @@ async function world() {
     insert into applications (email, name, membership_interest, status) values ('olu@example.test', 'Olu Sample', 'hot_desk', 'pending');
     insert into free_day_claims (email, name, status, supabase_user_id, claimed_date) values ('sam@example.test', 'Sam Sample', 'reserved', '${SAM}', current_date);
     insert into lock_sync_runs (synced, failed, partial, results) values (9, 1, 0, '[]');
-    insert into access_logs (member_id, method, result, created_at) values (2, 'pin', 'granted', now() - interval '1 minute'), (1, 'pin', 'granted', now() - interval '2 minutes'),
+    insert into access_logs (member_id, method, result, created_at) values (2, 'pin', 'granted', '${inToday(1)}'), (1, 'pin', 'granted', '${inToday(2)}'),
       (3, 'pin', 'granted', now() - interval '30 hours');
     select set_config('request.headers', '{}', false); select release_lock_writer('${WRITER}');`);
   vi.mocked(createServiceClient).mockReturnValue(db as never);
@@ -144,15 +149,14 @@ describe("admin home (/admin, Today)", () => {
     expect(h).toContain(">Today</h1>");
     expect(h).toMatch(/2<!-- --> of <!-- -->22<\/span> paying members/);
     expect(h).toContain('href="/admin/scoreboard"');
-    // Waiting on you: the lock first (urgent), then the application, then the unbilled desk (Uma).
+    // Waiting on you: the lock and Theo's missed payment first (urgent), then the application, then the unbilled desk.
     const waiting = at(h, 'data-testid="admin-waiting"');
     const lock = at(h, "The last lock sync failed on 1 code");
-    const pastDue = at(h, "1 subscription past due");
+    const pastDue = at(h, "1 member past due");
     const app = at(h, "1 application to review");
     expect(lock).toBeLessThan(pastDue);
     expect(pastDue).toBeLessThan(app);
     const desk = at(h, "1 desk member not billed");
-    expect(lock).toBeLessThan(app);
     expect(app).toBeLessThan(desk);
     expect(h).toContain('href="/admin/access?tab=sync"');
     expect(h).toContain('href="/admin/pipeline?tab=applications"');
