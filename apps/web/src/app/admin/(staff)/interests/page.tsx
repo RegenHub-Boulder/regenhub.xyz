@@ -9,5 +9,5 @@ export default async function InterestsRedirect({
   const q = new URLSearchParams();
   q.set("tab", "interests");
   if (params.linked) q.set("linked", params.linked);
-  redirect(`/admin/pipeline?${q.toString()}`);
+  redirect(`/admin/people?${q.toString()}`);
 }

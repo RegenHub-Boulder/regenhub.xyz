@@ -19,6 +19,7 @@ import {
 } from "./billingTools";
 import { sendApplicationCheckoutEmail } from "@/lib/applicationCheckout";
 import { siteOrigin } from "./metadata";
+import { saveDraft } from "@/lib/newsletterSend";
 import { SCOREBOARD_DESCRIPTIONS, recommendedActionsHandler, scoreboardSummaryHandler } from "./scoreboardTools";
 import {
   listMigrationsHandler,
@@ -51,9 +52,9 @@ function buildServer(auth: McpAuthInfo): McpServer {
 
   server.tool(
     "save_newsletter_draft",
-    "Create or update a RegenHub newsletter draft so an admin can review it and send it from /admin/newsletter. " +
+    "Create or update a RegenHub newsletter draft so an admin can review it and send it from Mail (/admin/mail). " +
       "Upserts by issue_key and always leaves status='draft' — it NEVER sends to anyone. " +
-      "Use an ISO-week issue_key like '2026-W27'. Pass the body as Markdown with no frontmatter. " +
+      "Use an ISO-week issue_key like '2026-W27'. Optional audience 'members' makes it a members-only issue. Pass the body as Markdown with no frontmatter. " +
       "Returns the draft id and the review + web-preview URLs.",
     {
       issue_key: z
@@ -62,35 +63,25 @@ function buildServer(auth: McpAuthInfo): McpServer {
         .describe("ISO-week issue key, e.g. 2026-W27"),
       subject: z.string().min(1).describe("Email subject line (no surrounding quotes)"),
       markdown_body: z.string().min(1).describe("Newsletter body in Markdown, no frontmatter"),
+      audience: z
+        .enum(["public", "members"])
+        .optional()
+        .describe("Who it goes to: 'public' (members + stay-in-touch list; the default) or 'members' (members in standing only; never on the public /news archive). Omit to keep an existing draft's audience."),
     },
-    async ({ issue_key, subject, markdown_body }) => {
-      const sb = createServiceClient();
-      // Never overwrite an already-sent issue.
-      const { data: existing } = await sb
-        .from("newsletter_issues")
-        .select("id, status")
-        .eq("issue_key", issue_key)
-        .maybeSingle();
-      if (existing?.status === "sent") {
-        return {
-          isError: true,
-          content: [{ type: "text" as const, text: `Issue ${issue_key} has already been sent — not overwriting.` }],
-        };
+    async ({ issue_key, subject, markdown_body, audience }) => {
+      const r = await saveDraft(createServiceClient(), { issueKey: issue_key, subject, markdown: markdown_body, audience });
+      if (!r.ok) {
+        const text = r.reason === "error" ? `Failed to save draft: ${r.message}` : r.message;
+        return { isError: true, content: [{ type: "text" as const, text }] };
       }
-      const { data, error } = await sb
-        .from("newsletter_issues")
-        .upsert({ issue_key, subject, markdown_body, status: "draft" }, { onConflict: "issue_key" })
-        .select("id, issue_key, status")
-        .single();
-      if (error) {
-        return { isError: true, content: [{ type: "text" as const, text: `Failed to save draft: ${error.message}` }] };
-      }
+      const data = r.draft;
       const o = siteOrigin();
       return {
         content: [{
           type: "text" as const,
-          text: `Saved draft ${data.issue_key} (id ${data.id}, status ${data.status}).\n` +
-            `Review & send: ${o}/admin/newsletter\nWeb preview: ${o}/news/${data.issue_key}`,
+          text: `Saved draft ${data.issue_key} (id ${data.id}, status ${data.status}, audience ${data.audience}).\n` +
+            `Review & send: ${o}/admin/mail` +
+            (data.audience === "members" ? "\nMembers-only: no public web preview." : `\nWeb preview: ${o}/news/${data.issue_key}`),
         }],
       };
     },
@@ -139,7 +130,7 @@ function buildServer(auth: McpAuthInfo): McpServer {
       if ((apps?.length ?? 0) > 0) {
         lines.push(
           `\nNote: approvals before 2026-07-22 sent NO email (auto-send shipped that day). ` +
-            `'expired' sessions are dead links — use "Email link to applicant" on /admin/applications, ` +
+            `'expired' sessions are dead links — use "Email link to applicant" on People → Applications (/admin/people?tab=applications), ` +
             `which now regenerates expired sessions before emailing.`,
         );
       }

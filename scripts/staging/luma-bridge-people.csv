@@ -1,0 +1,10 @@
+name,first_name,last_name,email,subscription_status,first_seen,user_id,tags,revenue,event_approved_count,event_checked_in_count,membership_name,membership_status
+"Rivera, Sam",Sam,Rivera,sam.rivera@example.test,subscribed,2026-01-02,usr-s1,,0,3,2,,
+Kim Lee,Kim,Lee,kim.lee@example.test,unsubscribed,2026-02-11,usr-s2,,0,1,0,,
+Jo Reader,Jo,Reader,JO.READER@example.test,subscribed,2026-03-05,usr-s3,,0,2,1,,
+Robin Steward,Robin,Steward,steward@regenhub.test,subscribed,2026-03-09,usr-s4,,0,6,6,,
+Left Us,Left,Us,left.us@example.test,subscribed,2026-04-01,usr-s5,,0,1,1,,
+Ola New,Ola,New,ola.new@example.test,subscribed,2026-05-20,usr-s6,,0,1,1,,
+Typo Person,Typo,Person,typo-at-example.test,subscribed,2026-06-02,usr-s7,,0,0,0,,
+Dee Guest,Dee,Guest,dee.guest@example.test,subscribed,2026-07-14,usr-s8,,0,2,2,,
+Sam again,Sam,Rivera,Sam.Rivera@example.test,subscribed,2026-08-01,usr-s9,,0,0,0,,

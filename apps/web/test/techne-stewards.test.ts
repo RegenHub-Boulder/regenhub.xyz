@@ -32,7 +32,7 @@ vi.mock("next/cache", () => ({ revalidateTag: () => {}, revalidatePath: () => {}
 import { POST as signinPOST } from "@/app/techne/signin/route";
 import { GET as callbackGET } from "@/app/techne/callback/route";
 import { POST as stewardsPOST } from "@/app/api/techne/stewards/route";
-import StewardsPage from "@/app/admin/stewards/page";
+import ManageEventsPage from "@/app/admin/events/page";
 import { StewardRoster, type RosterRow } from "@/components/admin/StewardRoster";
 import { MEMBERSHIP_NSID } from "@/lib/techne/roles";
 import { RosterRefusal, claimsFrom, fetchRoster, holdersFrom, rosterBatch, type Claim } from "@/lib/techne/roster";
@@ -272,7 +272,8 @@ describe("end to end (stand-in)", () => {
     if (el.type === StewardRoster) return el.props.rows ?? null;
     return rosterIn(el.props.children);
   }
-  const page = async () => (await StewardsPage()) as ReactElement;
+  // Roles live inside Events (T-482); /admin/stewards redirects to this, opened.
+  const page = async () => (await ManageEventsPage({ searchParams: Promise.resolve({ roles: "open" }) })) as ReactElement;
   const roles = (rows: RosterRow[] | null) => rows?.map((r) => [r.label, r.role]);
 
   it("signed out: the page offers Techne sign-in and the route refuses", async () => {
@@ -311,7 +312,7 @@ describe("end to end (stand-in)", () => {
     // The one door gave Ana her admin portal session.
     expect(portalSessionEmail(browser.jar)).toBe("ana@example.test");
     const html = renderToStaticMarkup(await page());
-    expect(html).toContain("This page is for RegenHub&#x27;s facilitators and managers");
+    expect(html).toContain("Posting events is for RegenHub&#x27;s facilitators and managers");
     expect(html).toContain("doesn&#x27;t change that");
     expect(rosterIn(await page())).toBeNull();
     const before = await fetchRoster(HUB);

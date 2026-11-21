@@ -17,7 +17,7 @@ import { sendCollectiveBatch, writeErrorText } from "@/lib/techne/collectiveWrit
  * sent straight to the steward's PDS (lib/techne/collectiveWrite.ts): Techne decides whether this account may post
  * as RegenHub.
  *
- * Authority is the Techne role, as on /admin/stewards: the caller must be signed in with Techne and hold
+ * Authority is the Techne role, as for Events → Roles: the caller must be signed in with Techne and hold
  * facilitator or above in RegenHub's public membership claims, read fresh here (lib/techne/roster.ts
  * stewardCheck). No portal session is read: a site membership neither grants this nor is needed. Techne checks
  * again on the write. A change that lands expires the cached Techne reads and `/`, so every page shows it.

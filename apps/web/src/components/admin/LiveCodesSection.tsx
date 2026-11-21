@@ -22,7 +22,7 @@ export function LiveCodesSection({ codes, members, recentInactiveCount, nowMs }:
 
       {!codes.length ? (
         <div className="glass-panel p-8 text-center space-y-1">
-          <p className="text-muted">No active codes right now.</p>
+          <p className="text-muted">No guest codes live right now.</p>
           {recentInactiveCount > 0 && (
             <p className="text-xs text-muted">
               {recentInactiveCount} expired or revoked in the last 7 days.

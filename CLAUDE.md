@@ -53,6 +53,7 @@ The `.dockerignore` has an exception (`!**/.env.production`) so the file is avai
 | `TECHNE_PDS_URL` / `TECHNE_PLC_URL` / `TECHNE_HANDLE_DOMAIN` / `TECHNE_PLATFORM_DID` | Web (runtime) | Test deployments only; production leaves them unset (techne-sdk defaults). |
 | `TECHNE_STAGING_STANDIN` / `TECHNE_STANDIN_URL` | Web (runtime) | **Staging only**, never production: the sign-in stand-in. Refused for the regenhub.xyz origin. |
 | `REGENOS_LOGIN_ENABLED` | Web (runtime) | **Default off.** `true`/`1`/`yes` turns on the regenOS login lane + the `/xrpc` proxy. |
+| `LUMA_ICS_URL` | Web (runtime) | Optional. The iCal feed `/admin/events` checks nights against. Unset = RegenHub's public Luma feed (`api.lu.ma/ics/get?entity=calendar&id=cal-ZCWMKx1NMCXGd7v`, no key). |
 | `CRON_SECRET` | Web (runtime) | Bearer token required by every `/api/cron/*` route. |
 | `EMAIL_PROVIDER` | Web (runtime) | Which mail service every web send goes through (`lib/email.ts` `sendEmailDetailed`, the one send function; `sendEmail` wraps it). Default `resend` (needs `RESEND_API_KEY` + `EMAIL_FROM`). `outbox` is the staging preview's stand-in (works only with the Techne stand-in on). Amazon SES later = a new entry in `providers()`, then flip this. The bot (`apps/bot/src/email.ts`) still calls Resend itself. |
 | `NEWSLETTER_UNSUBSCRIBE_SECRET` | Web (runtime) | Signs newsletter unsubscribe links, and (scoped apart) the "no more notes after nights" links. Give it its own value — those links sit in inboxes forever and shouldn't share the cron bearer token. Falls back to `CRON_SECRET` if unset (already-mailed links keep verifying); in production, with neither set, signing throws instead of using a default. |
@@ -190,6 +191,14 @@ the column is missing, the passes page hides "Pay with USDC", the purchase route
   in today" since Denver midnight, → who came in for co-op members); day-pass members get the free-day / day-pass cards there instead.
   Then anything that needs them (past due, next step, directory ask, first-week checklist), their plan, then profile,
   invite and Hub Essentials. Test: `test/portal-admin-homes.test.ts`.
+- **Round 2: the navs and one name per thing.** Admin nav (7): Today · Scoreboard · **People** (`/admin/people`:
+  Applications first, Free days, Interests, then Members = `/admin/members`; link tabs, `components/admin/PeopleTabs.tsx`)
+  · Billing (lists only; totals on the Scoreboard, past-due reminders on Today) · **Door** (`/admin/access`) · Events
+  (with **Roles** at its foot) · **Mail** (`/admin/mail`: the newsletter studio + Send to a group). A Techne steward who
+  isn't a site admin sees only Events. Member nav: Home · Guest passes (a `day_pass` member's says Day passes; same
+  page) · Events (only for a Techne steward of RegenHub) · Admin. Old URLs redirect (`/admin/pipeline`,
+  `/admin/applications|interests|claims`, `/admin/newsletter`, `/admin/communications`, `/admin/stewards`). Test:
+  `test/portal-admin-structure.test.ts` lists every route of the audit's table.
 - Staging for every portal/admin screen: `T482_AUDIT=1 scripts/staging/preview.sh` (the stand-in on the real schema,
   `audit-seed.mjs`), then `scripts/staging/audit-shots.mjs` captures and counts them.
 
@@ -263,7 +272,8 @@ applicant an acknowledgment, and pings the Telegram group with two buttons:
   (+`approved_for_full` for desk interest), copies `applications.telegram` →
   `members.telegram_username` (degrades gracefully on handle conflict), emails the applicant
   to self-serve at `/membership`.
-- **Custom pricing →** — links to `/admin/applications`; approving there generates a Stripe
+- **Custom pricing →** — links to People → Applications (`/admin/people?tab=applications`; the old
+  `/admin/applications` redirects there); approving there generates a Stripe
   checkout session AND auto-emails the link (`approvalCheckoutEmail`), pings the group, and the
   UI has an "Email link to applicant" resend button (`send-checkout-email` route).
 
@@ -352,6 +362,25 @@ that the switch is still pending and due, so a desk given by hand later is left 
 row earlier. On-chain plan edits (member and admin) go through `changeOnchainPlan`, under the same reservation, so
 they are ordered with the sweep.
 
+### Members-only newsletter issues (migration 067)
+`newsletter_issues.audience` is `public` (default: members + the stay-in-touch list) or `members` (only members in
+standing per `lib/memberStanding.ts`, with an email, minus unsubscribes; the interests list is never included).
+`compileAudience(admin, audience)` and `prepareIssue(admin, id, audience)` take it; send, cron, prepare and the
+draft route read it from the issue. Changing a draft's audience (studio or MCP) re-prepares its queue: anyone no
+longer in it is skipped, and anyone an earlier switch skipped comes back (067's `newsletter_prepare`). Skipped rows
+are neither recipients nor failures (`issueProgress.skipped`; 067's `recipients_count`). **Send goes only to the list the steward saw:** status returns
+`progress.queueKey` (a fingerprint of the queued rows); the studio's first Send carries it and the audience on screen
+(`expected_queue`, `expected_audience`; Prepare always saves first). `confirmQueue` calls 067's
+`newsletter_confirm_send`, which in one transaction under the issue lock refuses (409, nothing changed) a queue or
+audience that changed, skips anyone no longer in the audience by standing or unsubscribes (never adds), and freezes
+the issue, so no prepare or draft save can touch the queue after. Studio and MCP saves share `saveDraft`. **Deploy before 067 is
+safe:** every read and write of the column goes through `withAudienceColumn` (`lib/newsletter.ts`); without the
+column all issues are public and a members-only save is refused with a pointer to 067; Send refuses too ("run
+067") rather than send a list it can't confirm. A frozen issue's audience is frozen with it (067's freeze guard). Subtract: drop
+`withAudienceColumn` in the PR after 067 runs in production (owner: whoever runs the 067 migration). A members issue's email says "For RegenHub members" and has no web link; `/news` lists it for nobody and
+`/news/<key>` 404s it. The MCP `save_newsletter_draft` takes an optional `audience`. The scoreboard's list size stays
+the public audience.
+
 ### Add a new member via bot
 Use `/admin → Add member` as an admin in the Telegram bot.
 
@@ -404,13 +433,21 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   a steward posts it, feeds are built from posted records, and with none posted ahead the page still says "Next
   date coming soon". The rules and times (America/Denver) are EDITABLE DATA, used for the
   rhythm line and as suggestions in the portal. Techne has no series type: a night is an ordinary event named after the series ("Agents Building Night", or
-  "Agents Building Night: topic"), or with a `uris` entry ending `/events/<slug>`. Nights posted as "Agents Night" (the series' former name, `formerNames`) still match. A series may name `hosts` (Agents Building and Civic Tech: "AG and Benjamin"), shown on the series page and cards. Event keys are TIDs (`mintRkey`), as the
+  "Agents Building Night: topic"), or with a `uris` entry ending `/events/<slug>`. **Add the next nights writes that
+  `uris` entry** (the stable key; the edit form keeps it), so a renamed night stays in its series. A night posted
+  before the key still matches if the series name appears in it as whole words and it starts in the series' slot
+  (rule date, within 30 min of the start: "Ugly Sweater Party 420 Happy Hour" on a Friday at 4:20); for suggestions
+  only, any night in no series that sits in a series' slot takes that date (`lib/series.ts` `inSeriesSlot`); a hand
+  pick of that date is still allowed. Nights posted as "Agents Night" (the series' former name, `formerNames`) still match. A series may name `hosts` (Agents Building and Civic Tech: "AG and Benjamin"), shown on the series page and cards. Event keys are TIDs (`mintRkey`), as the
   lexicon declares; old `ev-…` keys still read. Every create/edit sends `timezone: "America/Denver"`.
   `/events/<slug>` is the series page (next posted night, posted nights after it, past nights; with none upcoming
   it says "Next date coming soon"), built from `lib/seriesEvents.ts`. `/` (right under the hero) and `/events`
   lead with the series cards. `/admin/events` → **Add the next nights** offers the next 3 rule dates not yet posted
   (a posted date is skipped, a cancelled one isn't re-offered) plus a date picker for any later night (`lib/seriesNights.ts`), posts them as the collective (below) and shows
-  "N going" per event.
+  "N going" per event. Below it, **Also on Luma?** (`components/admin/LumaSyncSection.tsx`, `lib/lumaCalendar.ts`)
+  checks the next 60 days against Luma's public iCal feed (no API key; Next-cached 15 min; fails soft): each night
+  "On Luma" (link) or "Not on Luma" (same Denver date, start within 30 min, not two different series), plus the
+  Luma-only nights with **Add here** (`?fromLuma=<evt-id>` opens the new-event form prefilled). Read-only toward Luma.
 - **Feeds:** `/events.ics` (everything) and `/events/<slug>.ics` (a rewrite to `/events/<slug>/calendar.ics`),
   built by `lib/ics.ts`; UID = the event's AT-URI. `REGENOS_WEB_URL` is no longer read.
 - `components/landing/UpcomingEvents.tsx` — async server component. **Zero events for any reason
@@ -452,14 +489,21 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   `TECHNE_PLC_URL`, `TECHNE_HANDLE_DOMAIN`, `TECHNE_PLATFORM_DID`. **Staging only:** `TECHNE_STAGING_STANDIN=1` +
   `TECHNE_STANDIN_URL` swap the OAuth for a server-side stand-in (`lib/techne/standIn.ts`, `app/staging/techne`,
   `scripts/staging/`); refused for the regenhub.xyz origin. Staging recipe: `scripts/staging/preview.sh`.
-- **RegenHub stewards** (`/admin/stewards`, T-482): RegenHub's facilitators and managers on Techne list, add (by
+- **RegenHub stewards** (Events → **Roles**, the foot of `/admin/events`; `/admin/stewards` redirects there, T-482): RegenHub's facilitators and managers on Techne list, add (by
   handle), change and end roles (`pub.techne.draft.membership` written as the collective via writeAsCollective,
   `lib/techne/roster.ts`, `POST /api/techne/stewards`). Authority is the Techne role (>= 30), never `is_admin`; the
   `is_admin` admin pages live in `app/admin/(staff)/`. Ending sets `validUntil`; nobody-left-at-30 is refused.
   `/admin/events` (Manage Events) uses the same check (`stewardCheck`).
   Details: docs/TECHNE-SIGN-IN.md "Managing RegenHub's roles".
-- Deliberately NOT changed: the newsletter still reads Luma directly (`lib/newsletter.ts:142`). Its
-  copy is Luma-branded end to end; switching it is a product decision, not a plumbing one.
+- **Luma without the API** (the API needs Luma Plus): `/admin/mail` (Newsletter tab) → Audience → **Import Luma CSV…** takes a
+  Luma people export or an event's guests export (`lib/lumaCsv.ts`, `POST /api/admin/newsletter/import-luma`), shows
+  new / already have / skipped (unsubscribed on Luma, guests only invited or declined, unsubscribed from our
+  newsletter, invalid, repeats; "already have" = any member, disabled ones too, + interests), then
+  inserts the new ones into `interests` (`source_path 'luma'`). The old API contact pull is gone.
+- The old Luma-built biweekly newsletter (its "newsletter note", `NEWSLETTER_AUTOSEND_ENABLED` /
+  `NEWSLETTER_INCLUDE_STATS`, `/api/cron/newsletter`, the preview-to-me route) was retired in T-482 round 2 (Aaron,
+  11-20): the studio on `/admin/mail` is the one mail tool. The `digest_notes` table and its rows stay (data kept,
+  nothing reads them); the monthly hub pulse no longer folds in a note.
 
 **One-login (`REGENOS_LOGIN_ENABLED`, default OFF; superseded by the one door).** No page offers this lane any
 more (`/auth/login`, `/apply`, the `/portal` link card and the "Old steward page" link are gone; `/login` redirects
@@ -520,7 +564,7 @@ Both doors land the AppView's session cookie on this origin then call the one sh
 - `/portal/events` — **Manage Events**. **`TECHNE_SIGNIN_ENABLED` off: the old lane's page, unchanged**
   (`components/portal/legacy/`, described below; nav link, card and revalidate ride `isStewardEventsEnabled()` =
   Techne door OR `REGENOS_LOGIN_ENABLED`). **On:** it redirects (portal layout, before the member gate) to
-  **`/admin/events`**, beside `/admin/stewards` and gated the same way (`stewardCheck`, `lib/techne/roster.ts`): a
+  **`/admin/events`** (with RegenHub's Roles at its foot) and gated (`stewardCheck`, `lib/techne/roster.ts`): a
   Techne sign-in at facilitator (30) or above in RegenHub's public membership claims, read fresh. A site membership
   is neither needed nor enough, so a Techne steward who isn't a member can post; anyone else gets an explainer
   naming the managers and no form. `POST /api/portal/events/write` checks the same (no portal session read; per-IP
@@ -587,7 +631,7 @@ MCP changes, just redeploy the web app.
   and `hasScope()` (metadata.ts) treats an empty scope list as a full grant — entry is already
   `is_ops_admin`-only, so an unscoped token is an ops token, and tokens minted before scopes were
   enforced keep working.
-- **Tools:** `ping`; `save_newsletter_draft(issue_key, subject, markdown_body)` (upserts a
+- **Tools:** `ping`; `save_newsletter_draft(issue_key, subject, markdown_body, audience?)` (upserts a
   `newsletter_issues` draft via the server-side service client — the whole point: no secrets on the
   caller's machine); `audit_approvals` / `send_checkout_email`; `list_migrations` and
   `run_migration(filename)` (scope `migrate`, see below); member + billing tools

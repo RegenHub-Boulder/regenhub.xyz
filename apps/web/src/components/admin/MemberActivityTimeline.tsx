@@ -43,7 +43,7 @@ const ACTION_LABELS: Record<string, string> = {
   techne_did_unlinked:    "Techne account unlinked",
   email_sent:             "Email sent",
   batch_email_sent:       "Batch email sent",
-  free_day_approved:      "Free-day claim approved",
+  free_day_approved:      "Free-day request approved",
   application_approved:   "Application approved",
 };
 

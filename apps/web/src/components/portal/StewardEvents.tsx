@@ -12,6 +12,7 @@ import type { PostedNight } from "@/lib/seriesNights";
 import { STEWARD_PATH } from "@/lib/techne/session";
 import { SignOutOfTechne } from "@/components/techne/SignInWithTechne";
 import { ManageEvents, type EventWrite, type ManageableEvent } from "@/components/portal/ManageEvents";
+import type { ParsedLumaEvent } from "@/lib/lumaImport";
 
 export function StewardEvents({
   techne,
@@ -22,6 +23,7 @@ export function StewardEvents({
   posted,
   readFailed,
   editingOff,
+  draft,
   followups,
 }: {
   /** Who this browser is signed in with Techne as (server-side). */
@@ -36,6 +38,8 @@ export function StewardEvents({
   readFailed: boolean;
   /** The calendar read, but not each event's config and listing: editing waits for a reload. */
   editingOff: boolean;
+  /** A Luma night to open the new-event form with ("Add here" on the Luma check). */
+  draft?: ParsedLumaEvent;
   /** The follow-ups after nights (components/portal/NightFollowups.tsx), shown above the calendar. */
   followups?: React.ReactNode;
 }) {
@@ -46,8 +50,8 @@ export function StewardEvents({
         {role ? ` · RegenHub ${role}` : ""}
       </span>
       <SignOutOfTechne next={STEWARD_PATH} />
-      <a href="/admin/stewards" className="text-sage hover:underline" data-testid="stewards-link">
-        RegenHub&apos;s roles →
+      <a href="?roles=open#roles" className="text-sage hover:underline" data-testid="stewards-link">
+        Roles ↓
       </a>
     </div>
   );
@@ -82,7 +86,7 @@ export function StewardEvents({
         </p>
       )}
       {followups}
-      <ManageEvents authority={authority} events={events} nights={nights} posted={posted} write={write} />
+      <ManageEvents authority={authority} events={events} nights={nights} posted={posted} write={write} draft={draft} />
     </div>
   );
 }

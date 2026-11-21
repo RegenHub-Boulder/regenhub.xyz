@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 /**
  * Forwards the requested path to server layouts as `x-pathname`, so an
- * unauthenticated visit to /portal/passes or /admin/newsletter can redirect to
+ * unauthenticated visit to /portal/passes or /admin/mail can redirect to
  * `/auth/login?next=…` and come back after sign-in. Scoped by the matcher to
  * the two gated trees only; public pages are untouched (stay static/ISR).
  */

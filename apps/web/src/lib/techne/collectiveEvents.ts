@@ -47,6 +47,9 @@ export interface EventInput {
   timezone?: string;
   attendance?: string;
   maxAttendees?: number;
+  /** Links on the event (`community.lexicon.calendar.event#uri`): a series night carries its series page, the key
+   *  lib/series.ts `seriesOf` reads. Unset on an edit = keep what the event has. */
+  uris?: { uri: string; name?: string }[];
 }
 
 /** What the page already read about an existing event: its record, its config (null = none), and
@@ -72,6 +75,19 @@ export interface CollectiveBatch {
 
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 
+/** The input's links, https only and at most 10; undefined when it sends none usable (an edit keeps the event's own). */
+function urisOf(raw: unknown): { $type: string; uri: string; name?: string }[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out = raw.flatMap((u: { uri?: unknown; name?: unknown } | null) => {
+    const uri = str(u?.uri);
+    if (!uri || !/^https:\/\//i.test(uri) || uri.length > 2000) return [];
+    const name = str(u?.name);
+    return [{ $type: `${EVENT_NSID}#uri`, uri, ...(name ? { name: name.slice(0, 200) } : {}) }];
+  });
+  // An empty list, or one whose every link is refused, changes nothing: the series key is never wiped by an edit.
+  return out.length ? out.slice(0, 10) : undefined;
+}
+
 /** The event record from the input, on top of what an edit keeps (fields the form doesn't own). */
 export function eventRecord(input: EventInput, now: Date, previous?: Record<string, unknown>): Record<string, unknown> {
   const prev = previous ?? {};
@@ -95,6 +111,7 @@ export function eventRecord(input: EventInput, now: Date, previous?: Record<stri
     ? (prevLocations as { $type?: string }[]).filter((l) => l?.$type !== ADDRESS)
     : [];
   const hasPlace = !!(str(input.placeName) || str(input.street) || str(input.postalCode));
+  const uris = urisOf(input.uris);
   return {
     mode: `${EVENT_NSID}#inperson`,
     status: `${EVENT_NSID}#scheduled`,
@@ -105,6 +122,7 @@ export function eventRecord(input: EventInput, now: Date, previous?: Record<stri
     ...(input.startsAt ? { startsAt: input.startsAt } : {}),
     ...(input.endsAt ? { endsAt: input.endsAt } : {}),
     ...(hasPlace || others.length ? { locations: [...(hasPlace ? [address] : []), ...others] } : {}),
+    ...(uris ? { uris } : {}),
     createdAt: str(prev.createdAt) ?? now.toISOString(),
   };
 }

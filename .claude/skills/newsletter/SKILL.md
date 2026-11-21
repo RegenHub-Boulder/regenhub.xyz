@@ -1,30 +1,28 @@
 ---
 name: newsletter
-description: Compile the RegenHub community newsletter ("dispatch") as a Markdown draft for admin review. Use when asked to draft/write the newsletter, the biweekly dispatch, or the hub update email. Gathers upcoming Luma events + hub source material, writes in the house voice, and saves a draft the admin reviews and sends from /admin/newsletter.
+description: Compile the RegenHub community newsletter ("dispatch") as a Markdown draft for admin review. Use when asked to draft/write the newsletter, the biweekly dispatch, or the hub update email. Gathers upcoming Luma events + hub source material, writes in the house voice, and saves a draft the admin reviews and sends from /admin/mail.
 ---
 
 # RegenHub newsletter skill
 
 You are drafting the **RegenHub dispatch** — the community newsletter. Your job is to
 produce a finished **Markdown draft**, not to send anything. A human admin reviews and
-sends it from the website (`/admin/newsletter`). Never send to the real audience yourself.
+sends it from the website (`/admin/mail`). Never send to the real audience yourself.
 
 Cadence: every other week (open to weekly later). One issue per run.
 
 ## 1. Gather material
 
-**Upcoming events (always include).** Pull the real upcoming events from Luma — don't
-work from memory. Read `LUMA_API_KEY` from `.env.local`, then:
+**Upcoming events (always include).** Pull the real upcoming events — don't work from
+memory. Luma's API needs Luma Plus, which we don't pay for; its public iCal feed needs no key:
 
 ```bash
-KEY=$(grep -E '^LUMA_API_KEY=' .env.local | cut -d= -f2-)
-after=$(node -e 'console.log(new Date().toISOString())')
-before=$(node -e 'console.log(new Date(Date.now()+28*864e5).toISOString())')
-curl -s -H "x-luma-api-key: $KEY" -H "accept: application/json" \
-  "https://api.lu.ma/public/v1/calendar/list-events?after=$after&before=$before"
+curl -s "https://api.lu.ma/ics/get?entity=calendar&id=cal-ZCWMKx1NMCXGd7v" > "${TMPDIR:-/tmp}/regenhub-luma.ics"
+# VEVENTs: DTSTART (UTC), SUMMARY, and the page in DESCRIPTION ("Get up-to-date information at: https://luma.com/…")
 ```
 
-Sort by `start_at`, render dates in `America/Denver`. Highlight 3–6 standouts; link to
+RegenHub's own nights are also on regenhub.xyz/events (Techne) and in `https://regenhub.xyz/events.ics`.
+Keep the next 28 days, sort by start, render dates in `America/Denver`. Highlight 3–6 standouts; link to
 `lu.ma/regenhub` for the full calendar.
 
 **Hub source material.** Ask the admin for "what's happening at the hub" — recent
@@ -68,7 +66,7 @@ subject: "RegenHub dispatch — <short, specific>"
 <body markdown>
 ```
 
-Then tell the admin: paste the subject + body into **`/admin/newsletter`**, hit **Save
+Then tell the admin: paste the subject + body into **`/admin/mail`**, hit **Save
 draft**, **Email preview to me**, and when it looks right, **Prepare audience** →
 **Send**. (Eventually the RegenHub ops MCP will let you save the draft straight to the
 DB; until then the admin loads it.)
