@@ -1,0 +1,184 @@
+{
+ "/portal": {
+  "checked": 26,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 6.6,
+  "fails": []
+ },
+ "/portal/my-code": {
+  "checked": 23,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 7.11,
+  "fails": []
+ },
+ "/portal/passes": {
+  "checked": 25,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 4.91,
+  "fails": []
+ },
+ "/portal/profile": {
+  "checked": 45,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 6.6,
+  "fails": []
+ },
+ "/portal/access-log": {
+  "checked": 58,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 6.25,
+  "fails": []
+ },
+ "/portal/events": {
+  "checked": 54,
+  "overImage": 0,
+  "disabled": 2,
+  "min": 6.02,
+  "fails": []
+ },
+ "/admin": {
+  "checked": 61,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 6.02,
+  "fails": []
+ },
+ "/admin/scoreboard": {
+  "checked": 167,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 6.02,
+  "fails": []
+ },
+ "/admin/pipeline": {
+  "checked": 71,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 4.95,
+  "fails": []
+ },
+ "/admin/members": {
+  "checked": 119,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 6.25,
+  "fails": []
+ },
+ "/admin/members/5": {
+  "checked": 48,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 4.87,
+  "fails": []
+ },
+ "/admin/members/5?tab=billing": {
+  "checked": 38,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 4.87,
+  "fails": []
+ },
+ "/admin/members/5?tab=access": {
+  "checked": 31,
+  "overImage": 0,
+  "disabled": 1,
+  "min": 5.71,
+  "fails": []
+ },
+ "/admin/members/5?tab=activity": {
+  "checked": 26,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 5.71,
+  "fails": []
+ },
+ "/admin/members/new": {
+  "checked": 29,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 7.14,
+  "fails": []
+ },
+ "/admin/billing": {
+  "checked": 132,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 6.25,
+  "fails": []
+ },
+ "/admin/access": {
+  "checked": 45,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 4.87,
+  "fails": []
+ },
+ "/admin/communications": {
+  "checked": 48,
+  "overImage": 0,
+  "disabled": 3,
+  "min": 6.25,
+  "fails": []
+ },
+ "/admin/newsletter": {
+  "checked": 41,
+  "overImage": 0,
+  "disabled": 1,
+  "min": 6.02,
+  "fails": []
+ },
+ "/admin/interests": {
+  "checked": 71,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 4.95,
+  "fails": []
+ },
+ "/admin/applications": {
+  "checked": 79,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 4.53,
+  "fails": []
+ },
+ "/admin/claims": {
+  "checked": 62,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 4.53,
+  "fails": []
+ },
+ "/admin/codes": {
+  "checked": 45,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 4.87,
+  "fails": []
+ },
+ "/admin/lock": {
+  "checked": 83,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 6.02,
+  "fails": []
+ },
+ "/admin/events": {
+  "checked": 54,
+  "overImage": 0,
+  "disabled": 2,
+  "min": 6.02,
+  "fails": []
+ },
+ "/admin/stewards": {
+  "checked": 27,
+  "overImage": 0,
+  "disabled": 1,
+  "min": 6.46,
+  "fails": []
+ }
+}

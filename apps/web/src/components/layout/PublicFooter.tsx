@@ -26,7 +26,7 @@ export function PublicFooter() {
           </p>
           <p className="mt-2 text-sm text-muted">
             <a href={`mailto:${HUB_EMAIL}`} className="hover:text-sage transition-colors">{HUB_EMAIL}</a>
-            <span className="mx-2 text-muted/50">·</span>
+            <span className="mx-2 text-muted">·</span>
             <a
               href={HUB_TELEGRAM}
               target="_blank"
@@ -48,7 +48,7 @@ export function PublicFooter() {
             <Link href="/portal" className="text-muted hover:text-foreground transition-colors">Member Portal</Link>
           </nav>
 
-          <div className="text-xs text-muted/80 space-y-1 mt-6">
+          <div className="text-xs text-muted space-y-1 mt-6">
             <p>&copy; 2026 RegenHub Limited Cooperative Association</p>
             <p>A Colorado public benefit limited cooperative association</p>
           </div>

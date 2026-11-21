@@ -71,7 +71,7 @@ export function ClaimsFilter({ claims }: { claims: FreeDayClaim[] }) {
           >
             {tab === "all" ? "All" : tab.charAt(0).toUpperCase() + tab.slice(1)}
             {(counts[tab] ?? 0) > 0 && (
-              <span className="ml-1.5 opacity-70">{counts[tab]}</span>
+              <span className="ml-1.5 font-normal">{counts[tab]}</span>
             )}
           </button>
         ))}
@@ -132,13 +132,13 @@ export function ClaimsFilter({ claims }: { claims: FreeDayClaim[] }) {
                   {claim.about && (
                     <div>
                       <p className="text-xs text-muted mb-1 font-medium">What are you working on?</p>
-                      <p className="text-sm text-foreground/80">{claim.about}</p>
+                      <p className="text-sm text-muted">{claim.about}</p>
                     </div>
                   )}
                   {claim.why_join && (
                     <div>
                       <p className="text-xs text-muted mb-1 font-medium">Why do you want to visit?</p>
-                      <p className="text-sm text-foreground/80">{claim.why_join}</p>
+                      <p className="text-sm text-muted">{claim.why_join}</p>
                     </div>
                   )}
                 </div>

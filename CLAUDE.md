@@ -10,6 +10,12 @@ Self-hosted on local infrastructure (compute-1), not deployed to cloud providers
 - **Bot**: Node.js + TypeScript Telegram bot (`node-telegram-bot-api`)
 - **Database**: Supabase (self-hosted on compute-1)
 - **Deployment**: Coolify on compute-1, exposed via Cloudflare Tunnels
+- **Look** (T-482, "hand-set book"): ink on laid paper, one moss spot colour, EB Garamond, one centred column, no
+  cards. Tokens and rules live in `apps/web/src/app/globals.css`. The portal and admin are its working variant
+  (`data-surface="work"` on their layouts): Instrument Sans for UI and data, Garamond for page titles, flat sheets.
+  Colour by name (`text-ok/warn/danger/note`, `border-rule`, `bg-tint`), never raw hues or `white/N`;
+  `node scripts/restyle-book-codemod.mjs --check` lists anything still in the old dark-theme vocabulary. Badges are
+  one calm skin (`components/ui/badge.tsx`). Emails use the same palette inline with a web-safe serif stack.
 
 ## Live URLs
 - `https://regenhub.xyz` — production web app (public domain, via Cloudflare Tunnel)
@@ -37,7 +43,6 @@ The `.dockerignore` has an exception (`!**/.env.production`) so the file is avai
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Web (build-time) | In `.env.production` |
 | `NEXT_PUBLIC_SITE_URL` | Web (build-time) | In `.env.production` — used for auth redirects |
 | `NEXT_PUBLIC_HOME_V2` | Web (build-time) | **Default off.** `true` renders the "Co-op broadsheet" homepage prototype (`components/landing/v2`). Hero line is the `HERO_LINE` constant in `copy.ts`. |
-| `STYLE_PREVIEW_ENABLED` | Web (build + runtime) | **Staging only, default off; refused for regenhub.xyz.** Set it for `next build` too: static pages render the switch at build. Turns on the T-482 visual-direction switch: `?style=book\|field\|studio` on any page (cookie-remembered, `?style=off` clears), the picker at `/style-preview`, and the Google Fonts link. Off = no script, no attribute, no fonts: today's look exactly. Looks live in `app/style-directions.css`, all scoped to `html[data-style]`. `STYLE_PREVIEW_SHOTS_DIR` overrides where the picker reads its screenshots (default `walkthrough/style-directions/`). |
 | `HA_URL` | Web + Bot (runtime) | HA base URL — use direct IP (`http://192.168.1.141:8123/api`). `homeassistant.lan` does not resolve from compute-1; mDNS `homeassistant.local` is unreliable from inside Docker bridge networks. |
 | `HA_TOKEN` | Web + Bot (runtime) | Long-lived HA access token |
 | `HA_LOCK_ENTITIES` | Web + Bot (runtime) | Comma-separated Z-Wave entity IDs, e.g. `lock.front_door_lock,lock.back_door_lock` |

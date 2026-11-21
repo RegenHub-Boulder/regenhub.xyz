@@ -257,7 +257,7 @@ export default async function MembershipPage({ searchParams }: PageProps) {
                           <span className="text-sm text-muted">/month</span>
                         </div>
                       </div>
-                      <p className="text-sm text-foreground/80">{def.description}</p>
+                      <p className="text-sm text-muted">{def.description}</p>
                       <div className="border-t border-rule pt-4 space-y-2 flex-1">
                         {def.monthlyDayPasses ? (
                           <div className="flex items-start gap-2 text-sm">
@@ -313,7 +313,7 @@ export default async function MembershipPage({ searchParams }: PageProps) {
                           <span className="text-sm text-muted">/month</span>
                         </div>
                       </div>
-                      <p className="text-sm text-foreground/80">{def.description}</p>
+                      <p className="text-sm text-muted">{def.description}</p>
                       <div className="border-t border-rule pt-4 space-y-2 flex-1">
                         <div className="flex items-start gap-2 text-sm">
                           <Check className="w-4 h-4 text-sage shrink-0 mt-0.5" />

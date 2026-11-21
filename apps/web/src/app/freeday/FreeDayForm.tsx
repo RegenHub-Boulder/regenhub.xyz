@@ -686,8 +686,8 @@ export default function FreeDayForm({
                 ]
             ).map(({ step, text }) => (
 <div key={step}>
-                <div className="w-8 h-8 rounded-full bg-forest/30 border border-sage/30 flex items-center justify-center mx-auto mb-2">
-                  <span className="text-sm font-bold text-sage">{step}</span>
+                <div className="w-8 h-8 rounded-full border border-ink/40 flex items-center justify-center mx-auto mb-2">
+                  <span className="text-sm text-foreground">{step}</span>
                 </div>
                 <p className="text-xs text-muted">{text}</p>
               </div>

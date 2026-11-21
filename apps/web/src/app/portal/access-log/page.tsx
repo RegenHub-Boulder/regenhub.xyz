@@ -186,7 +186,7 @@ export default async function AccessLogPage() {
           {Array.from(groups.entries()).map(([day, dayRows]) => (
             <section key={day} className="space-y-2">
               <h2 className="text-xs text-muted font-medium pl-1">
-                {day} <span className="text-muted/60">· {dayRows.length}</span>
+                {day} <span className="text-muted">· {dayRows.length}</span>
               </h2>
               <Card className="glass-panel">
                 <CardContent className="p-0">
@@ -229,7 +229,7 @@ export default async function AccessLogPage() {
                             <p className="text-xs text-muted truncate">
                               {lockLabel(r.note)}
                               {r.slot != null && r.slot > 0 && (
-                                <span className="ml-1 text-muted/60">· slot {r.slot}</span>
+                                <span className="ml-1 text-muted">· slot {r.slot}</span>
                               )}
                             </p>
                           </div>

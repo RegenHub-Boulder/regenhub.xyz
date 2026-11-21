@@ -63,7 +63,7 @@ export default async function PortalLayout({ children }: { children: React.React
                 <Link href={eventsHref} className="text-muted hover:text-foreground transition-colors">Events</Link>
               )}
               {isAdmin && (
-                <Link href="/admin" className="text-gold hover:text-gold/80 transition-colors">Admin</Link>
+                <Link href="/admin" className="text-gold hover:text-gold transition-colors">Admin</Link>
               )}
             </div>
           </div>

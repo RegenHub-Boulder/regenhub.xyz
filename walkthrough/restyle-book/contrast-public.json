@@ -1,0 +1,107 @@
+{
+ "/": {
+  "checked": 104,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 5.97,
+  "fails": []
+ },
+ "/events": {
+  "checked": 52,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 6.02,
+  "fails": []
+ },
+ "/events/agents-night": {
+  "checked": 32,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 6.02,
+  "fails": []
+ },
+ "/events/did%3Aplc%3Asamplecollective/3n2samplenext3": {
+  "checked": 29,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 7.14,
+  "fails": []
+ },
+ "/membership": {
+  "checked": 55,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 5.97,
+  "fails": []
+ },
+ "/members": {
+  "checked": 47,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 5.22,
+  "fails": []
+ },
+ "/members/ana-sample.techne.town": {
+  "checked": 39,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 6.02,
+  "fails": []
+ },
+ "/news": {
+  "checked": 22,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 6.02,
+  "fails": []
+ },
+ "/freeday": {
+  "checked": 47,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 7.14,
+  "fails": []
+ },
+ "/auth/login": {
+  "checked": 29,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 6.02,
+  "fails": []
+ },
+ "/interest": {
+  "checked": 25,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 7.14,
+  "fails": []
+ },
+ "/interest/success": {
+  "checked": 28,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 6.02,
+  "fails": []
+ },
+ "/no-such-page": {
+  "checked": 20,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 7.14,
+  "fails": []
+ },
+ "/apply": {
+  "checked": 41,
+  "overImage": 0,
+  "disabled": 1,
+  "min": 6.02,
+  "fails": []
+ },
+ "/portal": {
+  "checked": 62,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 6.25,
+  "fails": []
+ }
+}
