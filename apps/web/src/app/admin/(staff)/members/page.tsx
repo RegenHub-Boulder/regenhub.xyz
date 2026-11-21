@@ -332,6 +332,8 @@ export default function UsersPage() {
           )}
         </div>
         <div className="flex items-center gap-3 flex-wrap">
+          {/* Moved here from the old admin home's quick actions (T-482). */}
+          <Link href="/admin/members/stale-links" className="text-sm text-muted hover:text-foreground">Stale auth links</Link>
           <MembershipSyncButton />
           <Link href="/admin/members/new">
             <Button className="btn-primary-glass">Add Member</Button>

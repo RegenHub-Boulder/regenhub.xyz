@@ -7,7 +7,7 @@ import { ACTION_ID } from "@/lib/scoreboardActions";
 /**
  * POST /api/admin/scoreboard/actions { id, fingerprint, state: "done" | "not_now" | "open" }
  *
- * Marks a recommended action on /admin/scoreboard. One admin_actions row per mark; the latest per action wins. The
+ * Marks a recommended action on /admin (Today, the admin home). One admin_actions row per mark; the latest per action wins. The
  * fingerprint is the facts the admin saw: when the facts change the action comes back on its own.
  */
 export async function POST(req: Request) {

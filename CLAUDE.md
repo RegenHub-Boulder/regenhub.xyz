@@ -181,6 +181,19 @@ the next one, if mined within those 5 minutes or reported in the other order).
 Until it runs the code degrades to membership-only (`lib/onchain/invoiceKind.ts`: a `kind` filter is dropped when
 the column is missing, the passes page hides "Pay with USDC", the purchase route answers 503), so billing carries on.
 
+### The two home pages (T-482 audit, `AUDIT-PORTAL-ADMIN.md`)
+- **`/admin` "Today"** (admins): the goals in one line (→ Scoreboard), **Waiting on you** (`lib/adminQueue.ts`, pure +
+  tested: lock-sync failures, quarantined slots, past due, applications, free-day requests, unbilled desks, each a
+  link; a failed read says "Couldn't check", and the queue renders even if the scoreboard read fails), then
+  **What to do next** (the scoreboard's recommended actions), then shortcuts (quick door code, find/add a member).
+  The old stat cards, all-time funnel and recent lists are gone; "Stale auth links" sits on `/admin/members`.
+- **`/portal`** (members): the door first (their code via `RevealPin`, a guest code with the passes left, "N members
+  in today" since Denver midnight, → who came in for co-op members); day-pass members get the free-day / day-pass cards there instead.
+  Then anything that needs them (past due, next step, directory ask, first-week checklist), their plan, then profile,
+  invite and Hub Essentials. Test: `test/portal-admin-homes.test.ts`.
+- Staging for every portal/admin screen: `T482_AUDIT=1 scripts/staging/preview.sh` (the stand-in on the real schema,
+  `audit-seed.mjs`), then `scripts/staging/audit-shots.mjs` captures and counts them.
+
 ### Scoreboard (/admin/scoreboard, T-497)
 Staff page read at the family meeting: paying members (on $30+/mo plans at list price and paying something, so a
 promo code or the USDC discount doesn't drop a $30 member and a full comp doesn't count) and net membership revenue
@@ -198,7 +211,7 @@ membership invoice never started. `compileAudience` (newsletter list) pages past
 read; shared pager: `lib/supabase/readAll.ts`. Staging: `T482_SCOREBOARD=1
 scripts/staging/preview.sh` seeds fictional rows; `scripts/staging/scoreboard-shots.mjs` checks the page against
 the hand-worked numbers.
-**What to do next** (top of the page): recommended actions from `lib/scoreboardActions.ts` (pure, tested), fed by
+**What to do next** (on the admin home `/admin`, "Today", since T-482; the scoreboard links to it): recommended actions from `lib/scoreboardActions.ts` (pure, tested), fed by
 the same rows and counts: past due (one-click payment reminder), set to end, left in the last 90 days (names what's
 new since: `MEMBER_NEWS`), new in the last 30 days (welcome, next Studio Night), day-pass buyers with 2+ passes or a
 visit in 60 days, non-members going to 2+ nights in 60 days, a night this week under half its series' average, and
@@ -588,7 +601,7 @@ MCP changes, just redeploy the web app.
   (`mcp_billing_write`) before acting and its outcome after (no row, no action), and call the same
   code as the admin page and portal (`cancelMembership`, `scheduleDeskToDaily`,
   `changeCardPlanNow`, `changeOnchainPlan`); scoreboard reads `scoreboard_summary` and `recommended_actions`
-  (`lib/mcp/scoreboardTools.ts`, scope `read`, the numbers and actions /admin/scoreboard shows; names and member ids,
+  (`lib/mcp/scoreboardTools.ts`, scope `read`, the numbers /admin/scoreboard shows and the actions on /admin; names and member ids,
   never emails). To add a tool: register it in `server.ts`
   (zod input shape), redeploy web; the client auto-reconnects and picks up the new tool (bump
   `SERVER_VERSION` to confirm the rollout).

@@ -94,6 +94,8 @@ const ident = (name: string) => {
 export async function makePgDb({ before = "\uffff" }: { before?: string } = {}) {
   if (!bases.has(before)) bases.set(before, migrated(before));
   const pg = await (await bases.get(before)!).clone();
+  // A `date` column reads as "YYYY-MM-DD", as PostgREST sends it (PGlite would make it a Date at midnight UTC).
+  (pg as unknown as { parsers: Record<number, (v: string) => unknown> }).parsers[1082] = (v) => v;
   const hooks: WriteHook[] = [];
   let inHook = false;
 

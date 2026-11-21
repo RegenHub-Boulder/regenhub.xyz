@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// "What to do next" on /admin/scoreboard (T-497), on the staging preview (T482_SCOREBOARD=1, fictional rows from
+// "What to do next" on the admin home /admin (T-497; moved there from /admin/scoreboard in T-482), on the staging preview (T482_SCOREBOARD=1, fictional rows from
 // scoreboard-seed.mjs), driven as staff would: sign in as the sample steward, read the ranked list, mark one Done and
 // see it leave (and stay gone after a reload), bring it back, and check Copy as text ends with the top actions.
 // Exits non-zero on any mismatch; saves walkthrough/next-actions/NN-*.png. Expectations are for 2026-11-20.
@@ -21,15 +21,16 @@ const shot = async (p, name, opts = {}) => {
   await p.screenshot({ path: file, ...opts });
   console.log(file);
 };
-const section = () => page.locator("div.glass-panel:has(h2:text-is('What to do next'))").first();
+// On the admin home since T-482 ("Today"); the scoreboard keeps the numbers and the copyable headline.
+const section = () => page.locator("[data-testid=admin-next]");
 const ids = () => section().locator("[data-testid=next-action]").evaluateAll((els) => els.map((e) => e.getAttribute("data-action-id")));
 
-await page.goto(BASE + "/admin/scoreboard", { waitUntil: "networkidle" });
+await page.goto(BASE + "/admin", { waitUntil: "networkidle" });
 await page.waitForURL(/\/auth\/login/);
 await page.click("button:has-text('Sign in with Techne')");
 await page.waitForSelector("text=Pick a sample person");
 await page.click("text=RegenHub steward (sample)");
-await page.waitForURL(/\/admin\/scoreboard$/, { timeout: 20000 });
+await page.waitForURL(/\/admin$/, { timeout: 20000 });
 await page.waitForSelector("[data-testid=next-action]");
 
 const top = await ids();
@@ -59,7 +60,8 @@ await page.waitForTimeout(1500);
 await page.reload({ waitUntil: "networkidle" });
 assert.ok((await ids()).includes(target), "Bring back reopens it");
 
-// Copy as text ends with the top actions, names only.
+// Copy as text (on the scoreboard) ends with the top actions, names only.
+await page.goto(BASE + "/admin/scoreboard", { waitUntil: "networkidle" });
 const pre = await page.innerText("pre");
 const tail = pre.slice(pre.indexOf("What to do next:"));
 assert.ok(tail.startsWith("What to do next:\n- "), "headline carries the actions");
@@ -68,7 +70,7 @@ console.log(tail);
 
 const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, storageState: await ctx.storageState() });
 const m = await mobile.newPage();
-await m.goto(BASE + "/admin/scoreboard", { waitUntil: "networkidle" });
+await m.goto(BASE + "/admin", { waitUntil: "networkidle" });
 await m.waitForSelector("[data-testid=next-action]");
 await shot(m, "next-actions-mobile", { fullPage: false });
 console.log("next actions: all checks passed");
