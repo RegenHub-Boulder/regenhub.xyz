@@ -50,7 +50,8 @@ function transform(src) {
       // a hover fill is a step darker than the resting one, so hover still shows
       if (k === "bg") return `${v}bg-${t}${v.includes("hover:") ? "/20" : o || Number(shade) <= 100 ? "/10" : ""}`;
       if (k.startsWith("border") || k === "divide") return `${v}${k}-${t}/40`;
-      return `${v}${k}-${t}`;
+      // a translucent shadow, underline or caret keeps its opacity
+      return `${v}${k}-${t}${["shadow", "decoration", "accent", "caret", "placeholder"].includes(k) ? o ?? "" : ""}`;
     });
   // faded text: the muted ink is already the quietest tone that reads (AA), so text colours carry no opacity
   s = s.replace(new RegExp(`${B}${V}text-(muted|sage|gold|forest|ok|warn|danger|note)\\/\\[?[\\d.]+\\]?(?![\\w/-])`, "g"),

@@ -127,7 +127,7 @@ export function ProfileForm({ member, extras }: { member: Member; extras: Profil
               type="checkbox"
               checked={form.show_in_directory}
               onChange={toggle("show_in_directory")}
-              className="mt-1 h-4 w-4 accent-[var(--sage)]"
+              className="mt-1 h-4 w-4 accent-sage"
               data-testid="directory-opt-in"
             />
             <span>
@@ -178,7 +178,7 @@ export function ProfileForm({ member, extras }: { member: Member; extras: Profil
               type="checkbox"
               checked={form.show_rsvps}
               onChange={toggle("show_rsvps")}
-              className="mt-1 h-4 w-4 accent-[var(--sage)]"
+              className="mt-1 h-4 w-4 accent-sage"
               data-testid="show-rsvps"
             />
             <span>
