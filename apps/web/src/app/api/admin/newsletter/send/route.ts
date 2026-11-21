@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { normalizeAudience } from "@/lib/newsletter";
-import { sendBatch, retryFailed, prepareIssue } from "@/lib/newsletterSend";
+import { normalizeAudience, withAudienceColumn } from "@/lib/newsletter";
+import { sendBatch, retryFailed, confirmQueue } from "@/lib/newsletterSend";
 
 /**
- * POST { issue_id, retry_failed?, limit? } — send the next batch of recipients.
+ * POST { issue_id, expected_queue?, retry_failed?, limit? } — send the next batch of recipients.
+ * A draft's first Send must carry `expected_queue` (Progress.queueKey from status): it goes only to that list.
  * The studio calls this repeatedly until progress.done. Resumable + rate-limit
  * aware. The shared engine acquires issue/recipient claims and finalizes the
  * issue under its run token.
@@ -18,11 +19,12 @@ export async function POST(request: Request) {
   if (!issueId) return NextResponse.json({ error: "issue_id required" }, { status: 400 });
 
   const admin = createServiceClient();
-  const { data: issue } = await admin
+  const { data } = await withAudienceColumn((col) => admin
     .from("newsletter_issues")
-    .select("id, issue_key, subject, markdown_body, status, audience, delivery_snapshot")
+    .select(`id, issue_key, subject, markdown_body, status, delivery_snapshot${col ? ", audience" : ""}`)
     .eq("id", issueId)
-    .maybeSingle();
+    .maybeSingle());
+  const issue = data as { id: number; issue_key: string; subject: string; markdown_body: string | null; status: string; delivery_snapshot: unknown; audience?: string } | null;
   if (!issue) return NextResponse.json({ error: "issue not found" }, { status: 404 });
   if (!issue.markdown_body || !issue.subject) {
     return NextResponse.json({ error: "draft is missing a subject or body" }, { status: 400 });
@@ -41,12 +43,20 @@ export async function POST(request: Request) {
 
   if (isRetry) await retryFailed(admin, issueId);
 
-  // Until the first batch freezes the issue, the queue is re-matched to the issue's audience, so a changed audience
-  // (studio, MCP, a failed refresh) can never send to people the audience doesn't include. Idempotent.
+  // A draft's first Send goes only to the list the steward saw: refused if it changed since, re-checked against the
+  // audience now (standing, unsubscribes; a changed audience narrows it), never added to.
+  const audience = normalizeAudience(issue.audience);
+  let confirmed: Set<number> | undefined;
   if (issue.status === "draft" && !issue.delivery_snapshot) {
-    await prepareIssue(admin, issueId, normalizeAudience(issue.audience));
+    const check = await confirmQueue(admin, issueId, audience, body.expected_queue);
+    if (!check.ok) {
+      const error = check.reason === "not_prepared"
+        ? "Prepare the audience first."
+        : `The recipient list changed since you looked: it is ${check.progress.total} now. Check it, then Send again.`;
+      return NextResponse.json({ error, progress: check.progress }, { status: 409 });
+    }
+    confirmed = check.confirmed;
   }
-
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
   const result = await sendBatch(admin, issueId, {
@@ -54,7 +64,8 @@ export async function POST(request: Request) {
     subject: issue.subject,
     siteUrl,
     issueKey: issue.issue_key,
-    audience: normalizeAudience(issue.audience),
+    audience,
+    confirmed,
     limit: Number(body.limit) || 20,
   });
 

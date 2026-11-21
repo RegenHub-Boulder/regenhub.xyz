@@ -19,6 +19,8 @@ import {
 } from "./billingTools";
 import { sendApplicationCheckoutEmail } from "@/lib/applicationCheckout";
 import { siteOrigin } from "./metadata";
+import { MEMBERS_AUDIENCE_NEEDS_067, normalizeAudience, withAudienceColumn } from "@/lib/newsletter";
+import { prepareIssue } from "@/lib/newsletterSend";
 import { SCOREBOARD_DESCRIPTIONS, recommendedActionsHandler, scoreboardSummaryHandler } from "./scoreboardTools";
 import {
   listMigrationsHandler,
@@ -70,11 +72,12 @@ function buildServer(auth: McpAuthInfo): McpServer {
     async ({ issue_key, subject, markdown_body, audience }) => {
       const sb = createServiceClient();
       // Never overwrite an already-sent issue.
-      const { data: existing } = await sb
+      const { data: found, audienceColumn } = await withAudienceColumn((col) => sb
         .from("newsletter_issues")
-        .select("id, status, delivery_snapshot")
+        .select(`id, status, delivery_snapshot${col ? ", audience" : ""}`)
         .eq("issue_key", issue_key)
-        .maybeSingle();
+        .maybeSingle());
+      const existing = found as { id: number; status: string; delivery_snapshot: unknown; audience?: string } | null;
       if (existing?.status === "sent") {
         return {
           isError: true,
@@ -87,13 +90,31 @@ function buildServer(auth: McpAuthInfo): McpServer {
           content: [{ type: "text" as const, text: `Issue ${issue_key} has started sending and is frozen — not changing it.` }],
         };
       }
-      const { data, error } = await sb
+      // Before migration 067 every issue is public: save without the column, and refuse a members-only one.
+      if (!audienceColumn && audience === "members") {
+        return { isError: true, content: [{ type: "text" as const, text: MEMBERS_AUDIENCE_NEEDS_067 }] };
+      }
+      const { data: saved, error } = await sb
         .from("newsletter_issues")
-        .upsert({ issue_key, subject, markdown_body, status: "draft", ...(audience ? { audience } : {}) }, { onConflict: "issue_key" })
-        .select("id, issue_key, status, audience")
+        .upsert({ issue_key, subject, markdown_body, status: "draft", ...(audience && audienceColumn ? { audience } : {}) }, { onConflict: "issue_key" })
+        .select(audienceColumn ? "id, issue_key, status, audience" : "id, issue_key, status")
         .single();
       if (error) {
         return { isError: true, content: [{ type: "text" as const, text: `Failed to save draft: ${error.message}` }] };
+      }
+      const row = saved as unknown as { id: number; issue_key: string; status: string; audience?: string };
+      const data = { ...row, audience: normalizeAudience(row.audience) };
+      // As in the studio: a changed audience re-prepares the queue (only if one was prepared), so the count beside
+      // Send is the new list, and a Send confirmed against the old list is refused.
+      if (existing && normalizeAudience(existing.audience) !== data.audience) {
+        const { count } = await sb.from("newsletter_sends").select("id", { count: "exact", head: true }).eq("issue_id", data.id);
+        if (count) {
+          try { await prepareIssue(sb, data.id, data.audience); }
+          catch (e) {
+            console.error("[mcp] re-prepare after audience change failed:", e);
+            return { isError: true, content: [{ type: "text" as const, text: `Saved ${data.issue_key}, but its recipients could not be refreshed for the new audience: click Prepare audience on /admin/mail.` }] };
+          }
+        }
       }
       const o = siteOrigin();
       return {

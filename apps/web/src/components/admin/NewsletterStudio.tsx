@@ -20,7 +20,9 @@ interface Progress {
   sent: number;
   failed: number;
   pending: number;
+  skipped?: number;
   done: boolean;
+  queueKey?: string;
 }
 
 function errMessage(e: unknown): string {
@@ -36,7 +38,7 @@ async function api<T>(path: string, body?: unknown): Promise<T> {
   const text = await res.text();
   let data: unknown = null;
   if (text) { try { data = JSON.parse(text); } catch { /* keep null */ } }
-  if (!res.ok) throw new Error((data as { error?: string })?.error ?? `HTTP ${res.status}`);
+  if (!res.ok) throw Object.assign(new Error((data as { error?: string })?.error ?? `HTTP ${res.status}`), { data });
   return data as T;
 }
 
@@ -135,9 +137,10 @@ export function NewsletterStudio({
       // Loop one batch at a time until the ledger is drained (or stopped).
       // Each batch self-paces (rate-limit back-off lives server-side).
       while (!stopRef.current) {
+        // The first call names the list shown beside Send: the server sends to that list only.
         const r = await api<{ processed: number; quotaReached?: boolean; progress: Progress }>(
           "/api/admin/newsletter/send",
-          { issue_id: id, retry_failed: first && retry },
+          { issue_id: id, retry_failed: first && retry, expected_queue: progress.queueKey },
         );
         first = false;
         setProgress(r.progress);
@@ -149,7 +152,12 @@ export function NewsletterStudio({
         if (r.processed === 0) { setMsg("Nothing left to send."); break; }
       }
       if (stopRef.current) setMsg("Paused. Click Send to resume — already-sent recipients are skipped.");
-    } catch (e) { setErr(errMessage(e)); }
+    } catch (e) {
+      // A list that changed since it was shown comes back with the new numbers: show them, send nothing.
+      const fresh = (e as { data?: { progress?: Progress } }).data?.progress;
+      if (fresh) setProgress(fresh);
+      setErr(errMessage(e));
+    }
     finally { setSending(false); onMutate?.(); }
   }
 
@@ -258,6 +266,7 @@ export function NewsletterStudio({
                 <span>{progress.pending} pending</span>
                 {progress.failed > 0 && <span className="text-red-400">{progress.failed} failed</span>}
                 <span>of {progress.total}</span>
+                {!!progress.skipped && <span title="Unsubscribed, or no longer in this audience">{progress.skipped} left out</span>}
                 {sending && <span className="text-sage">· sending…</span>}
               </div>
             </div>

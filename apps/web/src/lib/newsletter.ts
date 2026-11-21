@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { readAll } from "@/lib/supabase/readAll";
+import { isMissingColumn } from "@/lib/onchain/invoiceKind";
 import { isMemberInStanding, PAYING_STATUSES, type StandingSubscription } from "@/lib/memberStanding";
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -119,6 +120,24 @@ export interface Recipient {
 
 export type NewsletterAudience = "public" | "members";
 export const NEWSLETTER_AUDIENCES: readonly NewsletterAudience[] = ["public", "members"];
+
+/**
+ * Migration 067 adds `newsletter_issues.audience`. The code ships before `run_migration` can apply it, so until then
+ * every reader runs without the column (every issue is public then) and a members-only issue is refused.
+ * `query(true)` reads/writes the column; on "no such column" it runs once more as `query(false)`.
+ *
+ * Subtract: once 067 is applied in production, callers can use the column directly and this can go.
+ */
+export async function withAudienceColumn<R extends { error: { code?: string } | null }>(
+  query: (audienceColumn: boolean) => PromiseLike<R>,
+): Promise<R & { audienceColumn: boolean }> {
+  const result = await query(true);
+  if (!isMissingColumn(result.error)) return { ...result, audienceColumn: true };
+  return { ...(await query(false)), audienceColumn: false };
+}
+
+/** What a members-only save says before 067 is applied. */
+export const MEMBERS_AUDIENCE_NEEDS_067 = "Members-only issues need migration 067 (newsletter audience); run it, then save again.";
 
 /** Anything that isn't exactly "members" is public: the default for every issue before 067. */
 export function normalizeAudience(value: unknown): NewsletterAudience {

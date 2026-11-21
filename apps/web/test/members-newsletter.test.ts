@@ -1,7 +1,8 @@
 /**
  * Members-only newsletter issues (T-482), on a real Postgres (PGlite) with every migration applied (067 adds
  * newsletter_issues.audience): who a members issue reaches, that a public issue is unchanged, that the public archive
- * hides members issues, the email's "For RegenHub members" header, and the MCP tool's audience parameter.
+ * hides members issues, the email's "For RegenHub members" header, the MCP tool's audience parameter, and the review
+ * fixes: an audience switched and back, skipped rows in the numbers, and Send going only to the confirmed list.
  * Faked: nothing but the database engine (PGlite); no mail is sent.
  */
 import { renderToStaticMarkup } from "react-dom/server";
@@ -17,11 +18,13 @@ vi.mock("next/navigation", () => ({ notFound: () => { throw new Error("NEXT_NOT_
 
 import { createServiceClient } from "@/lib/supabase/admin";
 import { compileAudience } from "@/lib/newsletter";
-import { prepareIssue } from "@/lib/newsletterSend";
+import { issueProgress, prepareIssue } from "@/lib/newsletterSend";
 import { renderDraftEmail } from "@/lib/newsletterMarkdown";
 import { handleMcpRequest } from "@/lib/mcp/server";
 import type { McpAuthInfo } from "@/lib/mcp/oauth";
 import { POST as adminSend } from "@/app/api/admin/newsletter/send/route";
+import { POST as adminDraft } from "@/app/api/admin/newsletter/draft/route";
+import { GET as adminStatus } from "@/app/api/admin/newsletter/status/route";
 import NewsIndexPage from "@/app/news/page";
 import NewsIssuePage from "@/app/news/[key]/page";
 
@@ -132,12 +135,92 @@ it("MCP save_newsletter_draft takes an optional audience and keeps an existing d
   expect((await call({ issue_key: "2026-W53", subject: "P", markdown_body: "x", audience: "everyone" })).isError).toBe(true);
 });
 
-it("Send re-matches the queue to the issue's audience: a draft prepared as public then switched to members mails only members", async () => {
+it("Send narrows the confirmed queue to the issue's audience: a draft prepared as public then switched to members mails only members", async () => {
   const [{ id }] = await db.sql<{ id: number }>("insert into newsletter_issues (issue_key, subject, markdown_body, status, audience) values ('2026-W54', 'S', 'B', 'draft', 'public') returning id");
   await prepareIssue(db as never, id, "public");
   // The audience changes without anyone re-preparing (the MCP tool, or a failed refresh).
   await db.sql("update newsletter_issues set audience = 'members' where id = $1", [id]);
-  const res = await adminSend(new Request("http://localhost/api/admin/newsletter/send", { method: "POST", body: JSON.stringify({ issue_id: id, limit: 50 }) }));
+  const { progress } = (await (await adminStatus(new Request(`http://localhost/api/admin/newsletter/status?issue_id=${id}`))).json()) as { progress: { queueKey: string } };
+  const res = await adminSend(new Request("http://localhost/api/admin/newsletter/send", { method: "POST", body: JSON.stringify({ issue_id: id, limit: 50, expected_queue: progress.queueKey }) }));
   expect(res.status).toBe(200);
   expect(mail.to.map((e) => e.toLowerCase()).sort()).toEqual(["desk@example.test", "friend@example.test", "paid30@example.test", "trial@example.test"]);
+});
+
+// ---- Review fixes (T-482 round 2): each test below failed before its fix. ----
+
+const post = (body: unknown) => ({ method: "POST", body: JSON.stringify(body) });
+async function saveDraft(key: string, audience: string) {
+  const res = await adminDraft(new Request("http://localhost/api/admin/newsletter/draft", post({ issue_key: key, subject: "S", markdown: "B", audience })));
+  expect(res.status).toBe(200);
+  return ((await res.json()) as { draft: { id: number } }).draft.id;
+}
+async function status(id: number) {
+  const res = await adminStatus(new Request(`http://localhost/api/admin/newsletter/status?issue_id=${id}`));
+  return (await res.json()) as { progress: { total: number; failed: number; skipped: number; queueKey: string } };
+}
+const send = (body: Record<string, unknown>) =>
+  adminSend(new Request("http://localhost/api/admin/newsletter/send", post({ limit: 50, ...body })));
+const queued = async (id: number) => (await db.sql<{ email: string }>(
+  "select email from newsletter_sends where issue_id = $1 and status = 'pending' order by email", [id])).map((r) => r.email);
+
+it("bug 1: switching Everyone → Members only → Everyone brings back everyone the switch skipped", async () => {
+  const id = await saveDraft("2026-W60", "public");
+  await prepareIssue(db as never, id, "public");
+  const everyone = await queued(id);
+  await saveDraft("2026-W60", "members");
+  expect(await queued(id)).toHaveLength(4);
+  await saveDraft("2026-W60", "public");
+  expect(await queued(id)).toEqual(everyone);
+});
+
+it("bug 2: people skipped by an audience switch are neither recipients nor failures in the studio's numbers", async () => {
+  const id = await saveDraft("2026-W61", "public");
+  await prepareIssue(db as never, id, "public");
+  const everyone = (await queued(id)).length;
+  await saveDraft("2026-W61", "members");
+  const p = await issueProgress(db as never, id);
+  expect(p).toMatchObject({ total: 4, failed: 0, pending: 4, skipped: everyone - 4 });
+  expect((await status(id)).progress).toMatchObject({ total: 4, failed: 0 });
+});
+
+it("bug 3: Send mails only the list the steward saw: it re-checks standing and unsubscribes but never adds anyone", async () => {
+  const id = await saveDraft("2026-W62", "members");
+  await prepareIssue(db as never, id, "members");
+  const seen = await status(id);
+  expect(seen.progress.total).toBe(4);
+  // After the steward looked: a new member in standing appears, one member lapses and one unsubscribes.
+  await db.exec(`insert into members (name, email, member_type, disabled) values ('Newbie', 'newbie@example.test', 'hub_friend', false);
+    update members set member_type = 'day_pass' where email = 'friend@example.test';
+    insert into email_unsubscribes (email) values ('trial@example.test');`);
+  mail.to.length = 0;
+  const res = await send({ issue_id: id, expected_queue: seen.progress.queueKey });
+  expect(res.status).toBe(200);
+  expect(mail.to.map((e) => e.toLowerCase()).sort()).toEqual(["desk@example.test", "paid30@example.test"]);
+  await db.exec(`update members set member_type = 'hub_friend' where email = 'friend@example.test';
+    delete from email_unsubscribes where email = 'trial@example.test'; delete from members where email = 'newbie@example.test';`);
+});
+
+it("bug 3: a list that grew after the steward looked is refused, and Send with no confirmed list sends nothing", async () => {
+  const id = await saveDraft("2026-W63", "members");
+  await prepareIssue(db as never, id, "members");
+  const seen = await status(id);
+  await saveDraft("2026-W63", "public"); // another tab or the MCP widens it
+  mail.to.length = 0;
+  const stale = await send({ issue_id: id, expected_queue: seen.progress.queueKey });
+  expect(stale.status).toBe(409);
+  expect((await send({ issue_id: id })).status).toBe(409);
+  expect(mail.to).toEqual([]);
+});
+
+it("bug 3: a prepare that lands between the check and the first batch still reaches nobody new", async () => {
+  const id = await saveDraft("2026-W64", "members");
+  await prepareIssue(db as never, id, "members");
+  const seen = await status(id);
+  // Another tab widens the queue just before this Send freezes the issue.
+  db.beforeNextWrite("rpc:newsletter_begin_run", () => prepareIssue(db as never, id, "public"));
+  mail.to.length = 0;
+  expect((await send({ issue_id: id, expected_queue: seen.progress.queueKey })).status).toBe(200);
+  expect(mail.to.map((e) => e.toLowerCase()).sort()).toEqual(["desk@example.test", "friend@example.test", "paid30@example.test", "trial@example.test"]);
+  const late = await db.sql<{ n: number }>("select count(*)::int n from newsletter_sends where issue_id = $1 and last_error = 'Added after Send was confirmed'", [id]);
+  expect(late[0].n).toBeGreaterThan(0);
 });

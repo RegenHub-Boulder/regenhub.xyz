@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import type { Metadata } from "next";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { NewsletterManager } from "@/components/admin/NewsletterManager";
+import { withAudienceColumn } from "@/lib/newsletter";
+import { NewsletterManager, type Issue as NewsletterIssue } from "@/components/admin/NewsletterManager";
 import { CommunicationsComposer } from "@/components/admin/CommunicationsComposer";
 import { AdminTabs } from "@/components/admin/AdminTabs";
 
@@ -21,10 +22,10 @@ type MailTab = "newsletter" | "group";
 export default async function MailPage() {
   if (!await requireAdmin()) redirect("/portal");
   const supabase = createServiceClient();
-  const { data: issues } = await supabase
+  const { data: issues } = await withAudienceColumn((col) => supabase
     .from("newsletter_issues")
-    .select("id, issue_key, subject, markdown_body, status, created_at, updated_at, recipients_count, sent_count, audience")
-    .order("updated_at", { ascending: false });
+    .select(`id, issue_key, subject, markdown_body, status, created_at, updated_at, recipients_count, sent_count${col ? ", audience" : ""}`)
+    .order("updated_at", { ascending: false }));
 
   return (
     <div className="space-y-6">
@@ -42,7 +43,7 @@ export default async function MailPage() {
         ]}
       >
         {{
-          newsletter: <NewsletterManager initialIssues={issues ?? []} />,
+          newsletter: <NewsletterManager initialIssues={(issues ?? []) as unknown as NewsletterIssue[]} />,
           group: (
             <div className="max-w-3xl">
               <CommunicationsComposer />

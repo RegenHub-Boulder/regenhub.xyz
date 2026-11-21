@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Plus, FileText, CheckCircle2, Send as SendIcon } from "lucide-react";
 import { NewsletterStudio } from "./NewsletterStudio";
 
-interface Issue {
+export interface Issue {
   id: number;
   issue_key: string;
   subject: string;

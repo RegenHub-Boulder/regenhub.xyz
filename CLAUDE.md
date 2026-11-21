@@ -366,8 +366,15 @@ they are ordered with the sweep.
 `newsletter_issues.audience` is `public` (default: members + the stay-in-touch list) or `members` (only members in
 standing per `lib/memberStanding.ts`, with an email, minus unsubscribes; the interests list is never included).
 `compileAudience(admin, audience)` and `prepareIssue(admin, id, audience)` take it; send, cron, prepare and the
-draft route read it from the issue. Changing a draft's audience re-prepares its queue (anyone no longer in it is
-skipped). A members issue's email says "For RegenHub members" and has no web link; `/news` lists it for nobody and
+draft route read it from the issue. Changing a draft's audience (studio or MCP) re-prepares its queue: anyone no
+longer in it is skipped, and anyone an earlier switch skipped comes back (067's `newsletter_prepare`). Skipped rows
+are neither recipients nor failures (`issueProgress.skipped`; 067's `recipients_count`). **Send goes only to the list
+the steward saw:** status returns `progress.queueKey` (a fingerprint of the queued rows), the studio's first Send
+carries it as `expected_queue`, and `confirmQueue` refuses (409) a queue that changed since, re-checks standing and
+unsubscribes (skipping, never adding), and `sendBatch` skips anything queued after that once the issue is frozen.
+**Deploy before 067 is safe:** every read and write of the column goes through `withAudienceColumn`
+(`lib/newsletter.ts`); without the column all issues are public and a members-only save is refused with a pointer
+to 067. Subtract: drop `withAudienceColumn` once 067 is applied in production. A members issue's email says "For RegenHub members" and has no web link; `/news` lists it for nobody and
 `/news/<key>` 404s it. The MCP `save_newsletter_draft` takes an optional `audience`. The scoreboard's list size stays
 the public audience.
 
@@ -621,7 +628,7 @@ MCP changes, just redeploy the web app.
   and `hasScope()` (metadata.ts) treats an empty scope list as a full grant — entry is already
   `is_ops_admin`-only, so an unscoped token is an ops token, and tokens minted before scopes were
   enforced keep working.
-- **Tools:** `ping`; `save_newsletter_draft(issue_key, subject, markdown_body)` (upserts a
+- **Tools:** `ping`; `save_newsletter_draft(issue_key, subject, markdown_body, audience?)` (upserts a
   `newsletter_issues` draft via the server-side service client — the whole point: no secrets on the
   caller's machine); `audit_approvals` / `send_checkout_email`; `list_migrations` and
   `run_migration(filename)` (scope `migrate`, see below); member + billing tools

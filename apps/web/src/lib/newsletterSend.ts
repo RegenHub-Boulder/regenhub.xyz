@@ -1,5 +1,5 @@
 import { defaultEmailFrom, defaultEmailReplyTo } from "@regenhub/shared";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import type { createServiceClient } from "@/lib/supabase/admin";
 import { compileAudience, type NewsletterAudience } from "@/lib/newsletter";
 import { readAll } from "@/lib/supabase/readAll";
@@ -14,13 +14,21 @@ const RATE_LIMIT_BACKOFF_MS = 2500;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export interface Progress {
-  total: number;
+  total: number;        // recipients: every queued row except skipped ones
   sent: number;
   failed: number;       // definitive provider rejection; explicit retry only
   pending: number;      // includes active claims and unknown delivery
   sending: number;
   unknown: number;
+  skipped: number;      // left out (unsubscribed, or no longer in the audience): not recipients, not failures
   done: boolean;
+  /** Names exactly which rows `total` counts. The studio sends it back with Send, so Send goes to that list only. */
+  queueKey: string;
+}
+
+/** A short fingerprint of a set of queue row ids. */
+function queueKeyOf(ids: number[]): string {
+  return createHash("sha256").update([...ids].sort((a, b) => a - b).join(",")).digest("hex").slice(0, 16);
 }
 
 /** Materialize the audience into pending ledger rows. Idempotent. */
@@ -36,14 +44,17 @@ export async function prepareIssue(admin: Admin, issueId: number, issueAudience:
 /** Count the ledger by status. */
 export async function issueProgress(admin: Admin, issueId: number): Promise<Progress> {
   // Every row: PostgREST's default row cap must not mark a large issue done early.
-  const rows = await readAll<{ status: string; attempts: number }>("newsletter_sends", (f, t) =>
+  const rows = await readAll<{ id: number; status: string; attempts: number }>("newsletter_sends", (f, t) =>
     admin.from("newsletter_sends").select("id, status, attempts").eq("issue_id", issueId)
       .order("id", { ascending: true }).range(f, t));
-  const p: Progress = { total: 0, sent: 0, failed: 0, pending: 0, sending: 0, unknown: 0, done: false };
+  const p: Progress = { total: 0, sent: 0, failed: 0, pending: 0, sending: 0, unknown: 0, skipped: 0, done: false, queueKey: "" };
+  const live: number[] = [];
   for (const r of rows) {
+    if (r.status === "skipped") { p.skipped++; continue; }
     p.total++;
+    live.push(Number(r.id));
     if (r.status === "sent") p.sent++;
-    else if (r.status === "failed" || r.status === "skipped") p.failed++;
+    else if (r.status === "failed") p.failed++;
     else {
       p.pending++;
       if (r.status === "sending") p.sending++;
@@ -51,7 +62,42 @@ export async function issueProgress(admin: Admin, issueId: number): Promise<Prog
     }
   }
   p.done = p.total > 0 && p.pending === 0;
+  p.queueKey = queueKeyOf(live);
   return p;
+}
+
+export type ConfirmResult =
+  | { ok: true; confirmed: Set<number> }
+  | { ok: false; reason: "not_prepared" | "changed"; progress: Progress };
+
+/**
+ * Before a draft's first batch: check the queue is still the one the steward saw (`expectedKey`, from Progress),
+ * then re-check it against the issue's audience now (standing, unsubscribes), skipping anyone who left it.
+ * Never adds anyone. Returns the confirmed row ids, which `sendBatch` enforces once the issue is frozen, so a
+ * prepare that slips in between can't reach anyone either.
+ */
+export async function confirmQueue(admin: Admin, issueId: number, audience: NewsletterAudience, expectedKey: unknown): Promise<ConfirmResult> {
+  const rows = await readAll<{ id: number; email: string; status: string; first_attempt_at: string | null }>("newsletter_sends", (f, t) =>
+    admin.from("newsletter_sends").select("id, email, status, first_attempt_at").eq("issue_id", issueId)
+      .order("id", { ascending: true }).range(f, t));
+  const live = rows.filter((r) => r.status !== "skipped");
+  if (live.length === 0) return { ok: false, reason: "not_prepared", progress: await issueProgress(admin, issueId) };
+  if (typeof expectedKey !== "string" || expectedKey !== queueKeyOf(live.map((r) => Number(r.id)))) {
+    return { ok: false, reason: "changed", progress: await issueProgress(admin, issueId) };
+  }
+  const inAudience = new Set((await compileAudience(admin, audience)).map((r) => r.email.toLowerCase()));
+  const leaving = live.filter((r) => r.status === "pending" && !r.first_attempt_at && !inAudience.has(r.email.toLowerCase())).map((r) => Number(r.id));
+  await skipRows(admin, issueId, leaving, "No longer in audience");
+  return { ok: true, confirmed: new Set(live.map((r) => Number(r.id)).filter((id) => !leaving.includes(id))) };
+}
+
+/** Mark not-yet-tried pending rows skipped, in chunks (a URL-length-safe `in`). */
+async function skipRows(admin: Admin, issueId: number, ids: number[], reason: string): Promise<void> {
+  for (let i = 0; i < ids.length; i += 200) {
+    const { error } = await admin.from("newsletter_sends").update({ status: "skipped", last_error: reason })
+      .eq("issue_id", issueId).eq("status", "pending").is("first_attempt_at", null).in("id", ids.slice(i, i + 200));
+    if (error) throw error;
+  }
 }
 
 /** Reset terminal failures back to pending so they can be retried. */
@@ -79,7 +125,11 @@ export interface BatchResult {
 export async function sendBatch(
   admin: Admin,
   issueId: number,
-  opts: { markdown: string; subject: string; siteUrl: string; issueKey?: string; limit?: number; audience?: NewsletterAudience },
+  opts: {
+    markdown: string; subject: string; siteUrl: string; issueKey?: string; limit?: number; audience?: NewsletterAudience;
+    /** From confirmQueue: once this run has frozen the issue, any other queued row is skipped before anything goes. */
+    confirmed?: Set<number>;
+  },
 ): Promise<BatchResult> {
   const token = randomUUID();
   const { data: snapshots, error } = await admin.rpc("newsletter_begin_run", {
@@ -91,6 +141,12 @@ export async function sendBatch(
   if (!snapshots?.length) return { processed, sent, failed, rateLimited, quotaReached, progress: await issueProgress(admin, issueId) };
   const snapshot = snapshots[0];
   try {
+    if (opts.confirmed) {
+      // The issue is frozen now (begin_run), so nothing more can be prepared: drop anything added since Send was confirmed.
+      const queued = await readAll<{ id: number }>("newsletter_sends", (f, t) => admin.from("newsletter_sends").select("id")
+        .eq("issue_id", issueId).eq("status", "pending").order("id", { ascending: true }).range(f, t));
+      await skipRows(admin, issueId, queued.map((r) => Number(r.id)).filter((id) => !opts.confirmed!.has(id)), "Added after Send was confirmed");
+    }
     const { data: rows, error: readError } = await admin.from("newsletter_sends")
       .select("id, email, name, attempts").eq("issue_id", issueId)
       .in("status", ["pending", "sending"]).order("id", { ascending: true }).limit(100);
