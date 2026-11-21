@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdminMember } from "@/lib/admin";
 import { renderDraftEmail } from "@/lib/newsletterMarkdown";
-import { unsubscribeUrl } from "@/lib/newsletter";
+import { normalizeAudience, unsubscribeUrl } from "@/lib/newsletter";
 import { sendEmail } from "@/lib/email";
 
 /**
@@ -22,8 +22,9 @@ export async function POST(request: Request) {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
   const issueKey = String(body.issue_key ?? "").trim();
   const base = siteUrl.replace(/\/$/, "");
-  const archiveHref = issueKey ? `${base}/news/${issueKey}` : `${base}/news`;
-  const { html, text } = renderDraftEmail(markdown, unsubscribeUrl(user.email, siteUrl), archiveHref);
+  const audience = normalizeAudience(body.audience);
+  const archiveHref = audience === "members" ? undefined : issueKey ? `${base}/news/${issueKey}` : `${base}/news`;
+  const { html, text } = renderDraftEmail(markdown, unsubscribeUrl(user.email, siteUrl), archiveHref, audience);
   const ok = await sendEmail({ to: user.email, subject: `[PREVIEW] ${subject}`, html, text });
   return NextResponse.json({ ok, sent_to: user.email });
 }

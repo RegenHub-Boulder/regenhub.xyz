@@ -48,7 +48,7 @@ export default async function AdminHome() {
   const queue = adminQueue({
     lastSyncFailures: lastSync.error ? null : (lastSync.data as { failed: number | null } | null)?.failed ?? 0,
     quarantinedSlots: count(quarantine),
-    // Counted as /admin/billing lists them (the page it links to): every past-due subscription.
+    // Every past-due subscription, as Billing counts them; the item opens Members filtered to overdue (per member).
     pastDue: live && live.filter((r) => r.status === "past_due").length,
     pendingApplications: count(apps),
     pendingFreeDays: count(freeDays),

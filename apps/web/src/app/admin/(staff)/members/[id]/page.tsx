@@ -5,7 +5,6 @@ import { redirect, notFound } from "next/navigation";
 import { MemberForm } from "@/components/admin/MemberForm";
 import { AddPassesCard } from "@/components/admin/AddPassesCard";
 import { SubscriptionCard } from "@/components/admin/SubscriptionCard";
-import { CancelMembershipCard } from "@/components/admin/CancelMembershipCard";
 import { MembershipApprovalCard } from "@/components/admin/MembershipApprovalCard";
 import { AdminRevokeCodeButton } from "@/components/admin/AdminRevokeCodeButton";
 import { MemberDetailTabs } from "@/components/admin/MemberDetailTabs";
@@ -16,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Key, AlertCircle, ShieldCheck, Mail, AtSign } from "lucide-react";
 import { planLabel } from "@/lib/plans";
+import { memberTypeLabel } from "@/lib/memberTypeLabel";
 import { isLiveSubscription } from "@/lib/subscriptionStatus";
 import { membershipInvoices } from "@/lib/onchain/invoiceKind";
 
@@ -95,7 +95,7 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
       .eq("target_id", String(member.id))
       .order("created_at", { ascending: false })
       .limit(50),
-    // The cancel card's invoices are membership periods; USDC day passes show under purchases and activity.
+    // The subscription box's invoices are membership periods; USDC day passes show under purchases and activity.
     membershipInvoices((kindColumn) => {
       const query = adminClient
         .from("onchain_invoices")
@@ -122,11 +122,7 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
     created_at: r.created_at,
   }));
 
-  const memberTypeLabel =
-    member.member_type === "cold_desk" ? "Cold desk"
-    : member.member_type === "hot_desk" ? "Hot desk"
-    : member.member_type === "hub_friend" ? "Hub friend"
-    : "Day pass";
+  const typeLabel = memberTypeLabel(member.member_type);
 
   const memberTypeColor =
     member.member_type === "cold_desk" ? "bg-ok/10 text-ok border-ok/40"
@@ -172,7 +168,7 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
           </div>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
-          <Badge className={`text-xs ${memberTypeColor}`}>{memberTypeLabel}</Badge>
+          <Badge className={`text-xs ${memberTypeColor}`}>{typeLabel}</Badge>
           {activeSubscription && (
             <Badge className={`text-xs ${
               activeSubscription.status === "past_due"
@@ -237,12 +233,8 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
                 memberId={member.id}
                 memberName={member.name}
                 activeSubscription={activeSubscription ?? null}
-                recentPurchases={purchases ?? []}
-              />
-              <CancelMembershipCard
-                memberId={member.id}
-                memberName={member.name}
                 subscription={activeSubscription ?? subscriptions?.find((s) => isLiveSubscription(s.status)) ?? subscriptions?.[0] ?? null}
+                recentPurchases={purchases ?? []}
                 invoices={onchainInvoices ?? []}
               />
             </>

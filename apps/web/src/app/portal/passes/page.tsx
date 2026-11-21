@@ -16,7 +16,7 @@ import { Ticket, Clock, ShoppingCart, Key, ArrowRight, CheckCircle, XCircle, Rec
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
-export const metadata = { title: "Live Codes — RegenHub" };
+export const metadata = { title: "Guest passes — RegenHub" };
 
 interface PageProps {
   searchParams: Promise<{ session_id?: string; checkout?: string; onchain?: string }>;
@@ -124,7 +124,7 @@ export default async function PassesPage({ searchParams }: PageProps) {
     <div className="space-y-8 max-w-3xl">
       <div>
         <h1 className="text-3xl font-bold text-forest">
-          {isFullMember ? "Guest Day Passes" : "Day Passes"}
+          {isFullMember ? "Guest passes" : "Day passes"}
         </h1>
         <p className="text-muted mt-1">
           {isFullMember

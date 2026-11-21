@@ -141,7 +141,7 @@ export function CommunicationsComposer() {
               <Input id="signup" type="number" min="1" value={signupWindowDays} onChange={(e) => setSignupWindowDays(e.target.value)} placeholder="e.g. 7" className="glass-input mt-1 text-sm" />
             </div>
             <div>
-              <Label htmlFor="balance" className="text-xs">Day-pass balance ≥</Label>
+              <Label htmlFor="balance" className="text-xs">Guest passes left ≥</Label>
               <Input id="balance" type="number" min="0" value={balanceAtLeast} onChange={(e) => setBalanceAtLeast(e.target.value)} placeholder="e.g. 1" className="glass-input mt-1 text-sm" />
             </div>
             <div>
@@ -190,14 +190,14 @@ export function CommunicationsComposer() {
           <h3 className="text-sm font-semibold">Message</h3>
 
           <div>
-            <Label htmlFor="batch_id" className="text-xs">Batch ID (idempotency key)</Label>
+            <Label htmlFor="batch_id" className="text-xs">Batch name</Label>
             <Input id="batch_id" value={batchId} onChange={(e) => setBatchId(e.target.value)} placeholder="e.g. 2026-06-15-summer-event" className="glass-input mt-1 text-sm font-mono" />
-            <p className="text-[10px] text-muted mt-1">Re-running with the same batch ID will skip anyone who already received this batch.</p>
+            <p className="text-[10px] text-muted mt-1">Sending again under the same name skips anyone who already got it.</p>
           </div>
 
           <div>
             <Label htmlFor="subject" className="text-xs">Subject (supports {`{firstName}`} / {`{name}`})</Label>
-            <Input id="subject" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="e.g. {firstName}, your monthly day passes are ready" className="glass-input mt-1 text-sm" />
+            <Input id="subject" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="e.g. {firstName}, your guest passes are ready" className="glass-input mt-1 text-sm" />
           </div>
 
           <div>
@@ -267,7 +267,7 @@ export function CommunicationsComposer() {
               </ul>
             )}
             <p className="text-[10px] text-muted italic mt-2">
-              Anyone who failed can be re-targeted by hitting Send again with the same batch ID — successful sends are skipped.
+              To retry anyone who failed, press Send again with the same batch name: those already sent are skipped.
             </p>
           </CardContent>
         </Card>

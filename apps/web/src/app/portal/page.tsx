@@ -19,6 +19,7 @@ import { DayPassRedemptionHero } from "@/components/portal/DayPassRedemptionHero
 import { MembershipStatusCard } from "@/components/portal/MembershipStatusCard";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { planLabel, getPlan } from "@/lib/plans";
+import { memberTypeLabel } from "@/lib/memberTypeLabel";
 import { isSyntheticEmail } from "@/lib/regenos/syntheticEmail";
 import { OnchainBillingCard } from "@/components/portal/OnchainBillingCard";
 import { RemoveWalletButton } from "@/components/portal/RemoveWalletButton";
@@ -281,7 +282,7 @@ export default async function PortalPage() {
   }
 
   const isFullMember = member.member_type !== "day_pass";
-  const typeLabel = member.member_type === "cold_desk" ? "Cold Desk" : member.member_type === "hot_desk" ? "Hot Desk" : member.member_type === "hub_friend" ? "Hub Friend" : "Day Pass";
+  const typeLabel = memberTypeLabel(member.member_type);
 
   // Show onboarding expanded for new members (no pin code set or account < 7 days old).
   // Day-pass folks see it too — the checklist is about orienting people to the
@@ -300,6 +301,24 @@ export default async function PortalPage() {
         year: "numeric",
       })
     : null;
+
+  // Hub Essentials (address, hours, Wi-Fi, keypad) opens by itself only on a newcomer's visit day: a free day booked
+  // or activated for today in Boulder, or a day-pass code live right now (the same code the day-pass hero shows).
+  // Every other day it starts closed, one click away, so the first-week page stays short.
+  const todayInBoulder = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Denver" }).format(new Date());
+  let visitingToday = !!freeDayClaim && ["reserved", "activated"].includes(freeDayClaim.status) &&
+    freeDayClaim.claimed_date === todayInBoulder;
+  if (isNewMember && !visitingToday && !isFullMember) {
+    const { data: liveCode } = await adminClient
+      .from("day_codes")
+      .select("id")
+      .eq("member_id", member.id)
+      .eq("is_active", true)
+      .gt("expires_at", new Date().toISOString())
+      .limit(1)
+      .maybeSingle();
+    visitingToday = !!liveCode;
+  }
 
   const coopView = !!member.is_coop_member || !!member.is_admin;
   const passesLeft = member.day_passes_balance ?? 0;
@@ -552,7 +571,7 @@ export default async function PortalPage() {
 
       {member.is_coop_member && <InviteCard />}
 
-      <HubEssentials defaultExpanded={isNewMember} />
+      <HubEssentials defaultExpanded={isNewMember && visitingToday} />
     </div>
   );
 }

@@ -121,7 +121,9 @@ export function renderDraftEmail(
   markdown: string,
   unsubscribeHref: string,
   archiveHref?: string,
+  audience: "public" | "members" = "public",
 ): { html: string; text: string } {
+  const members = audience === "members";
   const body = markdownToEmailHtml(markdown);
   const archiveHtml = archiveHref
     ? `<a href="${archiveHref}" style="color:#6b6152;">Read on the web</a> · `
@@ -132,15 +134,18 @@ export function renderDraftEmail(
   const html = `
     <div style="font-family:'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif;max-width:560px;margin:0 auto;padding:24px; background: #f4f0e6;color:#27231d;line-height:1.55;">
       ${browserLink}
-      <p style="font-size:13px;font-style: italic;color:#4b5a2c;margin-bottom:12px;">RegenHub dispatch</p>
+      <p style="font-size:13px;font-style: italic;color:#4b5a2c;margin-bottom:${members ?"2px" : "12px"};">RegenHub dispatch</p>
+      ${members ? `<p style="font-size:13px;color:#514939;margin:0 0 12px;">For RegenHub members</p>` : ""}
       ${body}
       <hr style="border:none;border-top:1px solid #ddd5c4;margin:24px 0 12px;" />
       <p style="font-size:11px;color:#6b6152;">
-        ${archiveHtml}You're receiving this because you're part of the RegenHub community —
-        maybe you've co-worked with us, joined us on Luma, or signed up at RegenHub.xyz.
+        ${archiveHtml}${members
+          ? "You're receiving this because you're a RegenHub member."
+          : `You're receiving this because you're part of the RegenHub community —
+        maybe you've co-worked with us, joined us on Luma, or signed up at RegenHub.xyz.`}
         <a href="${unsubscribeHref}" style="color:#6b6152;">Unsubscribe</a> anytime.
       </p>
     </div>`;
-  const text = `${stripFrontmatter(markdown).trim()}\n\n—\n${archiveHref ? `Read on the web: ${archiveHref}\n` : ""}Unsubscribe: ${unsubscribeHref}`;
+  const text = `${members ? "For RegenHub members\n\n" : ""}${stripFrontmatter(markdown).trim()}\n\n—\n${archiveHref ? `Read on the web: ${archiveHref}\n` : ""}Unsubscribe: ${unsubscribeHref}`;
   return { html, text };
 }

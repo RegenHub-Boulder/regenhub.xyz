@@ -12,7 +12,7 @@ import { didForHandle } from "@/lib/techne/did";
 import { TECHNE_READS_TAG } from "@/lib/techne/query";
 
 /**
- * POST /api/techne/stewards — add, change or end a role in RegenHub on Techne (/admin/stewards).
+ * POST /api/techne/stewards — add, change or end a role in RegenHub on Techne (Events → Roles).
  *   { op: "add", handle, role } | { op: "change", did, role } | { op: "end", did }
  *   → { ok: true } | { ok: false, error }
  *

@@ -7,32 +7,28 @@ import { regenosCollectiveDid } from "@/lib/regenos/config";
 
 export const metadata = { title: "Admin — RegenHub" };
 
-const staffLinks: NavLink[] = [
+// Seven, in the order an admin's week runs. Events sits sixth and only shows while the Techne door is on (its page
+// answers to the Techne role, not this site's admin flag); a steward who isn't a site admin sees just Events.
+const before: NavLink[] = [
   { href: "/admin", label: "Today" },
   { href: "/admin/scoreboard", label: "Scoreboard" },
-  { href: "/admin/pipeline", label: "Pipeline" },
-  { href: "/admin/members", label: "Members" },
+  { href: "/admin/people", label: "People" },
   { href: "/admin/billing", label: "Billing" },
-  { href: "/admin/access", label: "Access" },
-  { href: "/admin/communications", label: "Comms" },
-  { href: "/admin/newsletter", label: "Newsletter" },
+  { href: "/admin/access", label: "Door" },
 ];
-// The stewards' pages: they answer to the Techne role in RegenHub, so they show with the door on for anyone.
-const stewardLinks: NavLink[] = [
-  { href: "/admin/events", label: "Events" },
-  { href: "/admin/stewards", label: "Stewards" },
-];
+const eventsLink: NavLink = { href: "/admin/events", label: "Events" };
+const after: NavLink[] = [{ href: "/admin/mail", label: "Mail" }];
 const portalLink: NavLink = { href: "/portal", label: "Portal", accent: true };
 
 /**
  * The admin area's frame. Who may see what is decided below it: the portal admin pages by `members.is_admin`
- * ((staff)/layout.tsx), /admin/events and /admin/stewards by the Techne role in RegenHub. This only chooses which
- * links to show: a RegenHub admin sees them all, anyone else just Events and Stewards (while the Techne door is on).
+ * ((staff)/layout.tsx), /admin/events (with its Roles section) by the Techne role in RegenHub. This only chooses
+ * which links to show: a RegenHub admin sees them all, anyone else just Events (while the Techne door is on).
  */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, isAdmin } = await portalViewer();
-  const stewards = techneConfig() && regenosCollectiveDid() ? stewardLinks : [];
-  const links = [...(isAdmin ? staffLinks : []), ...stewards, ...(user ? [portalLink] : [])];
+  const events = techneConfig() && regenosCollectiveDid() ? [eventsLink] : [];
+  const links = [...(isAdmin ? [...before, ...events, ...after] : events), ...(user ? [portalLink] : [])];
 
   return (
     <div className="min-h-screen" data-surface="work">

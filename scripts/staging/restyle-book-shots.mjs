@@ -3,7 +3,7 @@
 // at desktop (1280x800) and phone (390x844). Two sets, because two previews hold the data:
 //   public  (scripts/staging/member-pages-preview.sh): home, events, a series page, an event night, membership,
 //           members and a member page, news, apply (signed in as Ana), free day, sign-in, interest, 404, Ana's portal
-//   work    (T482_AUDIT=1 scripts/staging/preview.sh): every /portal screen as Ana, every /admin screen as the steward
+//   work    (T482_AUDIT=1 scripts/staging/preview.sh): every /portal screen as Ana, every /admin screen (and tab) as the steward
 // Saves <outdir>/<set>/NN-<name>-<desktop|phone>.png (first screen) and NN-<name>-desktop-full.png (whole page).
 // Shot with reduced motion, so the arrival never leaves a half-faded page; that also proves the reduced path shows
 // everything.
@@ -44,21 +44,21 @@ const WORK = [
   ["portal-events", "/portal/events", "RegenHub steward (sample)"],
   ["admin", "/admin", "RegenHub steward (sample)"],
   ["admin-scoreboard", "/admin/scoreboard", "RegenHub steward (sample)"],
-  ["admin-pipeline", "/admin/pipeline", "RegenHub steward (sample)"],
+  ["admin-people", "/admin/people?tab=applications", "RegenHub steward (sample)"],
+  ["admin-people-freedays", "/admin/people?tab=freedays", "RegenHub steward (sample)"],
+  ["admin-people-interests", "/admin/people?tab=interests", "RegenHub steward (sample)"],
   ["admin-members", "/admin/members", "RegenHub steward (sample)"],
   ["admin-member-detail", "/admin/members/5", "RegenHub steward (sample)"],
   ["admin-member-billing", "/admin/members/5?tab=billing", "RegenHub steward (sample)"],
   ["admin-members-new", "/admin/members/new", "RegenHub steward (sample)"],
   ["admin-billing", "/admin/billing", "RegenHub steward (sample)"],
-  ["admin-access", "/admin/access", "RegenHub steward (sample)"],
-  ["admin-communications", "/admin/communications", "RegenHub steward (sample)"],
-  ["admin-newsletter", "/admin/newsletter", "RegenHub steward (sample)"],
-  ["admin-interests", "/admin/interests", "RegenHub steward (sample)"],
-  ["admin-applications", "/admin/applications", "RegenHub steward (sample)"],
-  ["admin-codes", "/admin/codes", "RegenHub steward (sample)"],
-  ["admin-lock", "/admin/lock", "RegenHub steward (sample)"],
+  ["admin-door", "/admin/access", "RegenHub steward (sample)"],
+  ["admin-door-codes", "/admin/access?tab=codes", "RegenHub steward (sample)"],
+  ["admin-door-sync", "/admin/access?tab=sync", "RegenHub steward (sample)"],
+  ["admin-mail", "/admin/mail", "RegenHub steward (sample)"],
+  ["admin-mail-group", "/admin/mail?tab=group", "RegenHub steward (sample)"],
   ["admin-events", "/admin/events", "RegenHub steward (sample)"],
-  ["admin-stewards", "/admin/stewards", "RegenHub steward (sample)"],
+  ["admin-events-roles", "/admin/events?roles=open", "RegenHub steward (sample)"],
 ];
 const PAGES = SET === "work" ? WORK : PUBLIC;
 const sizes = { desktop: { width: 1280, height: 800 }, phone: { width: 390, height: 844 } };

@@ -9,12 +9,23 @@ import { Badge } from "@/components/ui/badge";
 import { CreditCard, Ban, Loader2, Link2, Copy, ExternalLink, Gift, Wallet } from "lucide-react";
 import type { Subscription, Purchase } from "@/lib/supabase/types";
 import { getAllPlansSorted, planLabel } from "@/lib/plans";
+import { isLiveSubscription } from "@/lib/subscriptionStatus";
+import type { CancelMembershipResult } from "@/lib/membershipCancel";
+import { CancelMembershipButton, CryptoInvoices, cancelResultSummary, type InvoiceRow } from "@/components/admin/CancelMembership";
+import { SendPaymentReminderButton } from "@/components/admin/SendPaymentReminderButton";
 
+// The member page's Billing tab: one box for the member's subscription (status, the controls that act on it, its
+// invoices and purchases), so a subscription shows once with one status.
 interface Props {
   memberId: number;
   memberName: string;
+  /** The active, trialing or past-due subscription: the one that bills and gives access. */
   activeSubscription: Subscription | null;
+  /** The subscription the box is about: the active one, else a live one (an unpaid checkout), else the latest. */
+  subscription: Subscription | null;
   recentPurchases: Purchase[];
+  /** Recent crypto membership invoices, newest first. */
+  invoices: InvoiceRow[];
 }
 
 // Sourced from lib/plans (most-expensive-first to match the historical layout)
@@ -30,7 +41,11 @@ const statusStyle: Record<string, string> = {
   active: "bg-ok/10 text-ok border-ok/40",
   trialing: "bg-note/10 text-note border-note/40",
   past_due: "bg-danger/10 text-danger border-danger/40",
+  incomplete: "bg-warn/10 text-warn border-warn/40",
   canceled: "bg-tint text-muted border-rule",
+};
+const statusWord: Record<string, string> = {
+  active: "Active", trialing: "Trial", past_due: "Past due", incomplete: "Not paid yet",
 };
 
 function fmtDate(iso: string | null) {
@@ -43,7 +58,24 @@ function fmtDate(iso: string | null) {
   });
 }
 
-export function SubscriptionCard({ memberId, memberName, activeSubscription, recentPurchases }: Props) {
+/** The one status badge: live (with a scheduled cancel folded in) or canceled. */
+function StatusBadge({ subscription }: { subscription: Subscription }) {
+  if (!isLiveSubscription(subscription.status)) {
+    return <Badge className={`text-xs ${statusStyle.canceled}`}>Canceled {fmtDate(subscription.canceled_at)}</Badge>;
+  }
+  const canceling = subscription.cancel_at_period_end;
+  const style = canceling && subscription.status !== "past_due"
+    ? "bg-warn/10 text-warn border-warn/40"
+    : statusStyle[subscription.status] ?? "border-rule";
+  return (
+    <Badge className={`text-xs ${style}`} data-testid="subscription-status">
+      {statusWord[subscription.status] ?? subscription.status}
+      {canceling && ` · cancels ${fmtDate(subscription.current_period_end)}`}
+    </Badge>
+  );
+}
+
+export function SubscriptionCard({ memberId, memberName, activeSubscription, subscription, recentPurchases, invoices }: Props) {
   // Only a card purchase can be refunded from here (the revoke route refunds
   // through Stripe); a USDC pass is refunded by hand from the treasury.
   const lastCardPurchase = recentPurchases.find((p) => p.stripe_payment_intent) ?? null;
@@ -73,6 +105,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
   const [creditDollars, setCreditDollars] = useState("25");
   const [creditNote, setCreditNote] = useState("");
   const [creditApplied, setCreditApplied] = useState<{ applied_cents: number; balance_cents: number } | null>(null);
+  const [cancelResult, setCancelResult] = useState<CancelMembershipResult | null>(null);
 
   function selectPlan(key: string) {
     setPlanKey(key);
@@ -186,14 +219,24 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
   }
 
   return (
-    <Card className="glass-panel">
+    <Card className="glass-panel" data-testid="subscription-box">
       <CardContent className="p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
             <CreditCard className="w-5 h-5 text-sage" />
-            <h3 className="font-semibold">Billing</h3>
+            <h3 className="font-semibold">Membership</h3>
+            {subscription && (
+              <>
+                <StatusBadge subscription={subscription} />
+                <Badge className="text-xs bg-tint border-rule text-muted">
+                  {subscription.payment_rail === "onchain" ? "Crypto · USDC" : "Card · Stripe"}
+                </Badge>
+                <span className="text-xs text-muted">{planLabel(subscription.plan_key)}</span>
+              </>
+            )}
           </div>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-start">
+            {subscription?.status === "past_due" && <SendPaymentReminderButton memberId={memberId} />}
             {activeSubscription?.payment_rail !== "onchain" && <Button
               size="sm"
               onClick={() => { setShowCredit(!showCredit); setCreditApplied(null); }}
@@ -208,22 +251,30 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
             >
               <Ban className="w-3 h-3" /> Revoke access
             </Button>
+            {subscription && isLiveSubscription(subscription.status) && (
+              <CancelMembershipButton
+                memberId={memberId}
+                memberName={memberName}
+                subscription={subscription}
+                onResult={setCancelResult}
+              />
+            )}
           </div>
         </div>
+
+        {cancelResult && (
+          <div className="text-xs space-y-1" role="status">
+            <p className="text-sage">{cancelResultSummary(cancelResult)}</p>
+            {cancelResult.warnings.map((w) => (
+              <p key={w} className="text-warn">{w}</p>
+            ))}
+          </div>
+        )}
 
         {activeSubscription?.payment_rail === "onchain" && <OnchainPlanEditor memberId={memberId} />}
         {activeSubscription ? (
           <div className="space-y-2 text-sm">
             <div className="flex items-center gap-2 flex-wrap">
-              <Badge className={`text-xs ${statusStyle[activeSubscription.status] ?? "border-rule"}`}>
-                {activeSubscription.status}
-              </Badge>
-              <Badge className="text-xs bg-tint border-rule text-muted">
-                {activeSubscription.payment_rail === "onchain" ? "OP · USDC" : "Stripe"}
-              </Badge>
-              <span className="text-muted">·</span>
-              <span>{planLabel(activeSubscription.plan_key)}</span>
-              <span className="text-muted">·</span>
               <span className="text-foreground">
                 ${((typeof activeSubscription.net_cents === "number" ? activeSubscription.net_cents : activeSubscription.monthly_cents) / 100)}/mo
               </span>
@@ -233,11 +284,6 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
                     ${activeSubscription.monthly_cents / 100}
                   </span>
                 )}
-              {activeSubscription.cancel_at_period_end && (
-                <Badge className="text-xs bg-warn/10 text-warn border-warn/40">
-                  cancels {fmtDate(activeSubscription.current_period_end)}
-                </Badge>
-              )}
               {activeSubscription.pending_plan_key && (
                 <Badge className="text-xs bg-note/10 text-note border-note/40">
                   → {planLabel(activeSubscription.pending_plan_key)} on {fmtDate(activeSubscription.pending_plan_at ?? null)}
@@ -412,6 +458,8 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, rec
             </Button>
           </div>
         )}
+
+        <CryptoInvoices invoices={invoices} />
 
         {recentPurchases.length > 0 && (
           <div className="pt-3 border-t border-rule">

@@ -237,7 +237,7 @@ export default async function ScoreboardPage() {
               <p><span className="text-2xl font-bold tabular-nums">{s.newsletter.listSize}</span> <span className="text-muted">on the list (members and stay-in-touch, minus unsubscribes)</span></p>
               {s.newsletter.lastIssue ? (
                 <p>
-                  Last issue, <Link href="/admin/newsletter" className="text-sage hover:underline">{s.newsletter.lastIssue.subject}</Link>{" "}
+                  Last issue, <Link href="/admin/mail" className="text-sage hover:underline">{s.newsletter.lastIssue.subject}</Link>{" "}
                   <span className="text-muted">({day(s.newsletter.lastIssue.createdAt)})</span>: sent to{" "}
                   <span className="font-semibold tabular-nums">{s.newsletter.lastIssue.sent}</span> of {s.newsletter.lastIssue.total}
                   {s.newsletter.lastIssue.failed > 0 && <span className="text-warn"> · {s.newsletter.lastIssue.failed} failed or skipped</span>}
@@ -284,12 +284,15 @@ export default async function ScoreboardPage() {
         </div>
       </Section>
 
-      <p className="text-xs text-muted">
-        Paying = an active or trialing subscription, either rail, counted once per member; the goal counts members whose
-        plans come to {usd(SCOREBOARD_GOALS.minMemberCents)} or more a month at list price and who pay something (a promo
-        code or the USDC discount doesn&apos;t take them off; a full comp isn&apos;t paying). Revenue is net of discounts (list until Stripe has synced it, never above
-        list). Past due is shown apart. The dashboard, Billing and the MCP billing summary use the same definition.
-      </p>
+      <details data-testid="how-we-count">
+        <summary className="text-xs text-muted cursor-pointer hover:text-foreground">How we count</summary>
+        <p className="text-xs text-muted mt-2">
+          Paying = an active or trialing subscription, either rail, counted once per member; the goal counts members whose
+          plans come to {usd(SCOREBOARD_GOALS.minMemberCents)} or more a month at list price and who pay something (a promo
+          code or the USDC discount doesn&apos;t take them off; a full comp isn&apos;t paying). Revenue is net of discounts (list until Stripe has synced it, never above
+          list). Past due is shown apart. The dashboard, Billing and the MCP billing summary use the same definition.
+        </p>
+      </details>
     </div>
   );
 }

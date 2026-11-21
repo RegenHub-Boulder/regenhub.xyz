@@ -62,7 +62,7 @@ export async function sendCollectiveBatch(session: Session, config: TechneConfig
 }
 
 /** What the steward reads when a write doesn't land: a plain line first, then Techne's own words. `about` says which
- *  page wrote: the calendar (/admin/events) or RegenHub's roles (/admin/stewards). */
+ *  page wrote: the calendar (/admin/events) or RegenHub's roles (Events → Roles). */
 export function writeErrorText(out: Exclude<WriteOutcome, { ok: true }>, about: "calendar" | "roles" = "calendar"): string {
   const what = about === "calendar" ? "a post as RegenHub" : "a change to RegenHub's roles";
   const list = about === "calendar" ? "the calendar" : "the list";

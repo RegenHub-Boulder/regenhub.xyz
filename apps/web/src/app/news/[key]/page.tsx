@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { markdownToEmailHtml } from "@/lib/newsletterMarkdown";
+import { normalizeAudience, withAudienceColumn } from "@/lib/newsletter";
 
 // Public, no auth — shareable. Renders any issue by key (draft or sent) so a
 // draft link can be passed around in chat before it goes out. The /news index
@@ -12,19 +13,24 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: Promise<{ key: string }> }): Promise<Metadata> {
   const { key } = await params;
   const admin = createServiceClient();
-  const { data } = await admin.from("newsletter_issues").select("subject").eq("issue_key", key).maybeSingle();
-  return { title: data?.subject ? `${data.subject} — RegenHub` : "RegenHub Dispatch" };
+  const { data } = await withAudienceColumn((col) =>
+    admin.from("newsletter_issues").select(col ? "subject, audience" : "subject").eq("issue_key", key).maybeSingle());
+  const row = data as { subject: string | null; audience?: string } | null;
+  if (row && normalizeAudience(row.audience) !== "public") return { title: "RegenHub Dispatch" };
+  return { title: row?.subject ? `${row.subject} — RegenHub` : "RegenHub Dispatch" };
 }
 
 export default async function NewsIssuePage({ params }: { params: Promise<{ key: string }> }) {
   const { key } = await params;
   const admin = createServiceClient();
-  const { data: issue } = await admin
+  const { data } = await withAudienceColumn((col) => admin
     .from("newsletter_issues")
-    .select("issue_key, subject, markdown_body, status, created_at")
+    .select(`issue_key, subject, markdown_body, status, created_at${col ? ", audience" : ""}`)
     .eq("issue_key", key)
-    .maybeSingle();
-  if (!issue || !issue.markdown_body) notFound();
+    .maybeSingle());
+  const issue = data as { issue_key: string; subject: string; markdown_body: string | null; status: string; created_at: string | null; audience?: string } | null;
+  // Members-only issues are never public: the same 404 as an unknown key. (Before 067 every issue is public.)
+  if (!issue || !issue.markdown_body || normalizeAudience(issue.audience) !== "public") notFound();
 
   const dateLabel = issue.created_at
     ? new Date(issue.created_at).toLocaleDateString("en-US", { timeZone: "America/Denver", year: "numeric", month: "long", day: "numeric" })

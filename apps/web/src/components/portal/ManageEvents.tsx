@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { CalendarPlus, Loader2, Lock, Globe, Pencil, Trash2, X, ArrowRight } from "lucide-react";
+import { CalendarPlus, CalendarRange, Loader2, Lock, Globe, Pencil, Trash2, X, ArrowRight } from "lucide-react";
 import {
   EMPTY_EVENT_FORM,
   HUB_TIMEZONE,
@@ -23,6 +23,7 @@ import {
 import { AddSeriesNights } from "@/components/portal/AddSeriesNights";
 import type { PlannedNight } from "@/lib/series";
 import type { PostedNight } from "@/lib/seriesNights";
+import { lumaEventToFormValues, type ParsedLumaEvent } from "@/lib/lumaImport";
 
 export interface ManageableEvent {
   uri: string;
@@ -77,6 +78,7 @@ export function ManageEvents({
   nights = [],
   posted = [],
   write,
+  draft,
 }: {
   authority: string;
   events: ManageableEvent[];
@@ -85,6 +87,8 @@ export function ManageEvents({
   nights?: PlannedNight[];
   /** Each posted event's series and start, so a hand-picked night isn't posted twice. */
   posted?: PostedNight[];
+  /** Open the new-event form with this filled in (a Luma night, from the Luma check's "Add here"). */
+  draft?: ParsedLumaEvent;
 }) {
   // `null` = no form open; a string = the rkey being edited; "" = the new-event form.
   const [editing, setEditing] = useState<string | null>(null);
@@ -92,7 +96,31 @@ export function ManageEvents({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyRkey, setBusyRkey] = useState<string | null>(null);
+  // "Add the next nights" is monthly work: behind a button, so this week's nights lead (T-482).
+  const [addingNights, setAddingNights] = useState(false);
   const router = useRouter();
+
+  // After mount, so the times fill in the browser's own zone, as the form reads them. Each "Add here" is a
+  // navigation that sends a new draft object, so the same night can be opened again after a Cancel. The address
+  // then loses its `?fromLuma=`, so a refresh after posting (or a reload) doesn't open the form again.
+  // A refresh that lands before the replace still carries the same draft: opened once until the address drops it.
+  const openedDraft = useRef<string | null>(null);
+  useEffect(() => {
+    if (!draft) {
+      openedDraft.current = null;
+      return;
+    }
+    const key = `${draft.url}|${draft.startAt}`;
+    if (openedDraft.current === key) return;
+    openedDraft.current = key;
+    setForm(lumaEventToFormValues(draft));
+    setError(null);
+    setEditing("");
+    // Through the router, so its own idea of the address (what a refresh re-requests) drops the draft too.
+    const url = new URL(window.location.href);
+    url.searchParams.delete("fromLuma");
+    router.replace(url.pathname + url.search + url.hash, { scroll: false });
+  }, [draft, router]);
 
   function set<K extends keyof EventFormValues>(key: K) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
@@ -176,16 +204,28 @@ export function ManageEvents({
               <CalendarPlus className="w-4 h-4" />
               New event
             </Button>
+            <Button
+              type="button"
+              onClick={() => setAddingNights((v) => !v)}
+              aria-expanded={addingNights}
+              className="btn-glass gap-2 px-6"
+              data-testid="add-nights-toggle"
+            >
+              <CalendarRange className="w-4 h-4" />
+              {addingNights ? "Close the next nights" : "Add the next nights"}
+            </Button>
           </div>
-          <AddSeriesNights
-            authority={authority}
-            nights={nights}
-            posted={posted}
-            post={async (body) => {
-              await write("create", body);
-              await refresh();
-            }}
-          />
+          {addingNights && (
+            <AddSeriesNights
+              authority={authority}
+              nights={nights}
+              posted={posted}
+              post={async (body) => {
+                await write("create", body);
+                await refresh();
+              }}
+            />
+          )}
         </>
       ) : (
         <Card className="glass-panel">

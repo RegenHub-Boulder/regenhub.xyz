@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { fmtBoulderDateTime } from "@/lib/boulderTime";
 
 export interface QuarantinedSlot {
   slot: number;
@@ -33,7 +34,7 @@ export function QuarantinedSlots({ slots }: { slots: QuarantinedSlot[] }) {
       {error && <p role="alert" className="text-danger text-sm">{error}</p>}
       {slots.map(row => (
         <div key={row.slot} className="flex items-center justify-between gap-4 text-sm">
-          <div>Slot {row.slot} · {row.reason}<p className="text-xs text-muted">{row.quarantined_at}</p></div>
+          <div>Slot {row.slot} · {row.reason}<p className="text-xs text-muted">Since {fmtBoulderDateTime(row.quarantined_at)}</p></div>
           <button className="text-sage disabled:opacity-50" disabled={busy !== null} onClick={() => retry(row.slot)}>
             {busy === row.slot ? "Clearing…" : "Retry clear"}
           </button>

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { withAudienceColumn } from "@/lib/newsletter";
 
 // Public archive of sent dispatches.
 export const metadata: Metadata = { title: "Dispatches — RegenHub" };
@@ -14,11 +15,11 @@ interface IssueRow {
 
 export default async function NewsIndexPage() {
   const admin = createServiceClient();
-  const { data } = await admin
-    .from("newsletter_issues")
-    .select("issue_key, subject, created_at")
-    .eq("status", "sent")
-    .order("created_at", { ascending: false });
+  // Before migration 067 there is no audience column and every issue is public.
+  const { data } = await withAudienceColumn((col) => {
+    const q = admin.from("newsletter_issues").select("issue_key, subject, created_at").eq("status", "sent");
+    return (col ? q.eq("audience", "public") : q).order("created_at", { ascending: false });
+  });
   const issues = (data ?? []) as IssueRow[];
 
   return (

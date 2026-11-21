@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * The roster on /admin/stewards for RegenHub's facilitators and managers: everyone holding a role on Techne, with
+ * The roster in Events → Roles (/admin/events) for RegenHub's facilitators and managers: everyone holding a role on Techne, with
  * change and end, and an add form (a Techne handle and a role). Each action is one POST /api/techne/stewards, which
  * reads the roster again, checks the caller's role and writes as RegenHub; Techne's or the server's refusal shows
  * above the list in its own words.

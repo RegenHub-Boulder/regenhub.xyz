@@ -53,7 +53,7 @@ export default function HubEssentials({
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-ink/10 transition-colors"
       >
-        <h3 className="text-lg font-semibold text-forest">Hub essentials</h3>
+        <h3 className="text-lg font-semibold text-forest">Hub Essentials</h3>
         <ChevronDown
           className={`w-5 h-5 text-muted transition-transform duration-200 ${
             expanded ? "rotate-180" : ""
