@@ -19,8 +19,9 @@ export const dynamic = "force-dynamic";
 async function agentsNightHref(): Promise<string> {
   const series = getSeries("agents-night");
   if (!series) return "/events";
-  const events = (await fetchCollectiveEvents()) ?? [];
-  return overviewFor(series, events, new Date()).next?.url ?? `/events/${series.slug}`;
+  const now = new Date();
+  const events = (await fetchCollectiveEvents({ after: now.toISOString() })) ?? [];
+  return overviewFor(series, events, now).next?.url ?? `/events/${series.slug}`;
 }
 
 const shot = (style: string, file: string) => `/style-preview/shots/${style}/${file}`;

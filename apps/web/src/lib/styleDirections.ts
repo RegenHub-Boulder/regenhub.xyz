@@ -96,7 +96,7 @@ export const DIRECTION_CARDS: DirectionCard[] = [
       { name: "Tile", hex: "#eae8e1" },
     ],
     spacing: "Left aligned on an 80rem page; flat tiles with 6px corners and no frame; the home hero in two columns (line, photo).",
-    motion: "The big line is drawn up from its baseline (a 900ms clip reveal); its line and the actions fade up 4px at 120 and 220ms. Other pages: a short 700ms settle.",
+    motion: "The big line is drawn up from its baseline (a 900ms clip reveal); its line and the actions fade up a few pixels at 120 and 220ms. Other pages: a short 700ms settle.",
     strong: "The easiest to live with every day, and the easiest to extend to the portal and admin. The big line gives the home page a voice.",
     risk: "Closest to a familiar modern-studio template; without the photo and the serif line it would turn bland. It leans less on the handmade side of the taste.",
     learnedFrom: "Kinfolk, Stripe Press, Robin Sloan",

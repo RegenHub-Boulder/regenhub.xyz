@@ -115,7 +115,8 @@ html[data-style] .glass-input:focus { border-color: var(--sage); box-shadow: 0 0
   from { opacity: 0; transform: translateY(var(--rh-rise, 8px)); }
 }
 html[data-style] .animate-fade-in-up { animation: none; }
-html[data-style] :is([data-part="page"] > div > div > *, [data-part="hero"] > div > div > :not(.rh-landscape, .rh-enso-wrap)) {
+/* :where() keeps this rule light, so the per-element rules below win by their own selectors. */
+html[data-style] :where([data-part="page"] > div > div > *, [data-part="hero"] > div > div > :not(.rh-landscape, .rh-enso-wrap)) {
   animation: rh-rise var(--rh-enter) var(--rh-ease) both;
   --rh-rise: 4px;
   animation-delay: 300ms;
@@ -124,10 +125,10 @@ html[data-style] [data-part="page"] > div > div > :nth-child(1) { --rh-rise: var
 html[data-style] [data-part="page"] > div > div > :nth-child(2) { --rh-rise: 8px; animation-delay: 110ms; }
 html[data-style] [data-part="page"] > div > div > :nth-child(3) { --rh-rise: 6px; animation-delay: 200ms; }
 html[data-style] [data-part="page"] > div > div > :nth-child(4) { --rh-rise: 5px; animation-delay: 260ms; }
-/* Home: the title leads (selectors match the shared rule's weight above and come after it, so they win), its line follows, the actions arrive together after. */
-html[data-style] [data-part="hero"] > div > div > [data-part="hero-title"] { --rh-rise: var(--rh-lead-rise); animation-delay: var(--rh-hero-at, 0ms); }
-html[data-style] [data-part="hero"] > div > div > [data-part="hero-title"] + p { --rh-rise: 8px; animation-delay: calc(var(--rh-hero-at, 0ms) + 120ms); }
-html[data-style] [data-part="hero"] > div > div > [data-part="hero-title"] ~ :not([data-part="hero-title"] + p) { animation-delay: calc(var(--rh-hero-at, 0ms) + 220ms); }
+/* Home: the title leads, its line follows, the actions arrive together after. */
+html[data-style] [data-part="hero-title"] { --rh-rise: var(--rh-lead-rise); animation-delay: var(--rh-hero-at, 0ms); }
+html[data-style] [data-part="hero-title"] + p { --rh-rise: 8px; animation-delay: calc(var(--rh-hero-at, 0ms) + 120ms); }
+html[data-style] [data-part="hero-title"] ~ :not([data-part="hero-title"] + p) { animation-delay: calc(var(--rh-hero-at, 0ms) + 220ms); }
 
 @media (prefers-reduced-motion: reduce) {
   html[data-style] *, html[data-style] *::before, html[data-style] *::after { transition: none !important; }
@@ -385,7 +386,7 @@ html[data-style="studio"] .rh-studio-photo img { width: 100%; height: auto; bord
   html[data-style="studio"] .rh-studio-photo { grid-column: 2 !important; grid-row: 1 / span 6; margin-top: 0.75rem; }
 }
 html[data-style="studio"] [data-part="hero"] .glass-panel-strong { padding-left: 0; padding-right: 0; }
-html[data-style="studio"] [data-part="hero"] > div > div > [data-part="hero-title"] {
+html[data-style="studio"] [data-part="hero-title"] {
   font-family: "Instrument Serif", Georgia, serif;
   color: var(--foreground);
   font-size: clamp(3rem, 6.4vw, 6rem);
@@ -395,7 +396,7 @@ html[data-style="studio"] [data-part="hero"] > div > div > [data-part="hero-titl
   margin: 0 0 1.5rem;
   animation: rh-line 900ms var(--rh-ease) both;
 }
-@keyframes rh-line { from { clip-path: inset(0 0 100% 0); transform: translateY(0.25em); } to { clip-path: inset(-25% -5% -25% -5%); } }
+@keyframes rh-line { from { clip-path: inset(0 -5% 100% -5%); transform: translateY(0.25em); } to { clip-path: inset(-25% -5% -25% -5%); } }
 html[data-style="studio"] [data-part="hero"] .max-w-4xl { max-width: 80rem; }
 
 /* =====================================================================================================
