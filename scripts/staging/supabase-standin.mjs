@@ -14,7 +14,7 @@
 // --audit (T-482 portal/admin audit) builds the REAL schema instead (every migration in supabase/migrations, on a
 // small stub of Supabase's auth schema) and fills every portal and admin screen with sample rows (audit-seed.mjs);
 // the steward is an admin there. It stands alone: don't combine it with the other flags.
-// Usage: node supabase-standin.mjs --port 18604 --state <dir> [--scoreboard] [--member-pages] [--followups] | [--audit]
+// Usage: node supabase-standin.mjs --port 18604 --state <dir> [--scoreboard] [--member-pages] [--followups] [--luma-bridge] | [--audit]
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { readFileSync, readdirSync } from "node:fs";
@@ -122,6 +122,11 @@ if (process.argv.includes("--scoreboard")) {
   await seedScoreboard(pg);
 }
 
+// --luma-bridge (T-482): the interests list, unsubscribes and a draft issue for the Luma CSV import, the steward as admin.
+if (process.argv.includes("--luma-bridge")) {
+  const { seedLumaBridge } = await import(join(ROOT, "scripts/staging/luma-bridge-seed.mjs"));
+  await seedLumaBridge(pg);
+}
 // --audit (T-482): sample rows for every portal and admin screen.
 if (AUDIT) {
   const { seedAudit } = await import(join(ROOT, "scripts/staging/audit-seed.mjs"));

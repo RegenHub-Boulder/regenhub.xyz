@@ -1,6 +1,8 @@
 /**
  * Minimal Luma (lu.ma) API client for pulling upcoming events into the
  * newsletter. Requires a Luma Plus/Pro plan API key in LUMA_API_KEY.
+ * (Contacts come from a CSV export now, lib/lumaCsv.ts; the calendar check on
+ * /admin/events reads the public iCal feed, lib/lumaCalendar.ts.)
  *
  * GRACEFUL DEGRADATION IS THE CONTRACT HERE: Aaron isn't sure how long
  * they'll keep the paid Luma plan. If the key is missing, revoked, or the
@@ -33,61 +35,6 @@ interface LumaApiEntry {
 
 export function isLumaConfigured(): boolean {
   return !!process.env.LUMA_API_KEY;
-}
-
-export interface LumaContact {
-  email: string;
-  name: string | null;
-}
-
-interface LumaPersonEntry {
-  email?: string;
-  user?: { email?: string; name?: string | null };
-  name?: string | null;
-}
-
-/**
- * Pull every person on the RegenHub Luma calendar (people who subscribed to the
- * calendar OR registered for any event). Paginates, dedupes by email. Used to
- * seed the newsletter audience from our warm Luma community. Returns [] on any
- * failure — never throws.
- */
-export async function fetchLumaContacts(): Promise<LumaContact[]> {
-  const key = process.env.LUMA_API_KEY;
-  if (!key) return [];
-
-  const out: LumaContact[] = [];
-  const seen = new Set<string>();
-  let cursor: string | undefined;
-
-  try {
-    for (let page = 0; page < 40; page++) {
-      const url = new URL("https://api.lu.ma/public/v1/calendar/list-people");
-      url.searchParams.set("pagination_limit", "50");
-      if (cursor) url.searchParams.set("pagination_cursor", cursor);
-
-      const res = await fetch(url, {
-        headers: { "x-luma-api-key": key, accept: "application/json" },
-        signal: AbortSignal.timeout(15_000),
-      });
-      if (!res.ok) {
-        console.warn(`[Luma] list-people returned ${res.status} — stopping at ${out.length} contacts`);
-        break;
-      }
-      const data = (await res.json()) as { entries?: LumaPersonEntry[]; has_more?: boolean; next_cursor?: string };
-      for (const p of data.entries ?? []) {
-        const email = (p.email ?? p.user?.email ?? "").trim().toLowerCase();
-        if (!email || seen.has(email)) continue;
-        seen.add(email);
-        out.push({ email, name: p.user?.name ?? p.name ?? null });
-      }
-      if (!data.has_more || !data.next_cursor) break;
-      cursor = data.next_cursor;
-    }
-  } catch (err) {
-    console.warn("[Luma] fetchLumaContacts failed:", err);
-  }
-  return out;
 }
 
 /**
