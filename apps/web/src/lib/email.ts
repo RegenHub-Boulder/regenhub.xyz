@@ -747,8 +747,6 @@ export interface HubDigestStats {
 
 export function hubHealthDigestEmail(args: {
   stats: HubDigestStats;
-  note: string | null;
-  noteAuthor: string | null;
   siteUrl: string;
 }) {
   const { stats } = args;
@@ -758,13 +756,6 @@ export function hubHealthDigestEmail(args: {
     .map((t) => `<tr><td style="padding: 4px 12px 4px 0; color: #555;">${t.label}</td><td style="padding: 4px 0; font-weight: 600;">${t.count}</td></tr>`)
     .join("");
   const tierText = stats.tierCounts.map((t) => `  ${t.label}: ${t.count}`).join("\n");
-  const noteHtml = args.note
-    ? `<div style="background: #f0f4f1; border-left: 3px solid #2d5e3e; padding: 14px 18px; margin: 22px 0; border-radius: 0 8px 8px 0;">
-        <p style="margin: 0; white-space: pre-wrap;">${args.note}</p>
-        ${args.noteAuthor ? `<p style="margin: 8px 0 0; font-size: 13px; color: #555;">— ${args.noteAuthor}</p>` : ""}
-      </div>`
-    : "";
-  const noteText = args.note ? `\n${args.note}${args.noteAuthor ? `\n— ${args.noteAuthor}` : ""}\n` : "";
 
   return {
     subject: `RegenHub pulse — ${stats.monthLabel}`,
@@ -773,7 +764,6 @@ export function hubHealthDigestEmail(args: {
         <p style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: #2d5e3e; margin-bottom: 4px;">Hub pulse · ${stats.monthLabel}</p>
         <h2 style="margin: 0 0 16px;">How the cooperative is doing</h2>
         <p>As a cooperative, we believe everyone who's part of RegenHub should see how it's going — the numbers below are the same ones we look at.</p>
-        ${noteHtml}
         <table style="width: 100%; border-collapse: collapse; margin: 18px 0;">
           <tr><td style="padding: 4px 12px 4px 0; color: #555;">Monthly recurring revenue</td><td style="padding: 4px 0; font-weight: 600;">${mrr}</td></tr>
           <tr><td style="padding: 4px 12px 4px 0; color: #555;">Paying members</td><td style="padding: 4px 0; font-weight: 600;">${stats.payingMembers}</td></tr>
@@ -789,7 +779,7 @@ export function hubHealthDigestEmail(args: {
         <p>With gratitude,<br>RegenHub</p>
       </div>
     `,
-    text: `HUB PULSE — ${stats.monthLabel}\n\nAs a cooperative, we believe everyone who's part of RegenHub should see how it's going — these are the same numbers we look at.\n${noteText}\nMonthly recurring revenue: ${mrr}\nPaying members: ${stats.payingMembers}\nNew members this month: ${stats.newMembers}\nDoor entries: ${stats.totalVisits}\nDistinct visitors: ${stats.distinctVisitors}\nDay codes issued: ${stats.dayCodesIssued}\nFree-day signups: ${stats.freeDaySignups}\n\nMembers by tier:\n${tierText}\n\nQuestions, ideas, or want to get more involved in the cooperative? Just reply — it goes straight to a human.\n\nWith gratitude,\nRegenHub\n\n${base}`,
+    text: `HUB PULSE — ${stats.monthLabel}\n\nAs a cooperative, we believe everyone who's part of RegenHub should see how it's going — these are the same numbers we look at.\n\nMonthly recurring revenue: ${mrr}\nPaying members: ${stats.payingMembers}\nNew members this month: ${stats.newMembers}\nDoor entries: ${stats.totalVisits}\nDistinct visitors: ${stats.distinctVisitors}\nDay codes issued: ${stats.dayCodesIssued}\nFree-day signups: ${stats.freeDaySignups}\n\nMembers by tier:\n${tierText}\n\nQuestions, ideas, or want to get more involved in the cooperative? Just reply — it goes straight to a human.\n\nWith gratitude,\nRegenHub\n\n${base}`,
   };
 }
 

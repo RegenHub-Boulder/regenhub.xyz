@@ -9,9 +9,9 @@ import { hasBearerSecret } from "@/lib/secretAuth";
  * POST /api/cron/hub-health-digest
  *
  * Monthly "hub pulse" to ALL members — radical transparency lite. Compiles
- * last calendar month's stats (MRR, members by tier, visits, signups), folds
- * in the latest unconsumed digest_note (the human voice — written by an admin
- * via /admin/communications any time during the month), and emails everyone.
+ * last calendar month's stats (MRR, members by tier, visits, signups) and
+ * emails everyone. (Its admin-written note was retired with the old newsletter
+ * note in T-482; a human word now goes in a newsletter issue on /admin/mail.)
  *
  * Designed to be scheduled on the 1st of each month. Safe to re-run: an
  * idempotency key `digest:<YYYY-MM>` in admin_actions means the second run
@@ -67,7 +67,6 @@ export async function POST(req: Request) {
     { data: monthVisits },
     { count: dayCodesIssued },
     { count: freeDaySignups },
-    { data: noteRow },
     { data: recipients },
   ] = await Promise.all([
     admin.from("subscriptions").select(REVENUE_COLUMNS).in("status", [...GOOD_STANDING_STATUSES]).returns<RevenueRow[]>(),
@@ -79,7 +78,6 @@ export async function POST(req: Request) {
     admin.from("access_logs").select("member_id").eq("result", "granted").gte("created_at", startIso).lt("created_at", endIso),
     admin.from("day_codes").select("*", { count: "exact", head: true }).gte("issued_at", startIso).lt("issued_at", endIso),
     admin.from("free_day_claims").select("*", { count: "exact", head: true }).gte("created_at", startIso).lt("created_at", endIso),
-    admin.from("digest_notes").select("id, note, author_member_id").is("consumed_at", null).order("created_at", { ascending: false }).limit(1).maybeSingle(),
     admin.from("members").select("id, name, email").eq("disabled", false).not("email", "is", null),
   ]);
 
@@ -102,26 +100,7 @@ export async function POST(req: Request) {
     freeDaySignups: freeDaySignups ?? 0,
   };
 
-  // Resolve the note + author name, mark the note consumed.
-  let note: string | null = null;
-  let noteAuthor: string | null = null;
-  if (noteRow) {
-    note = noteRow.note;
-    if (noteRow.author_member_id) {
-      const { data: author } = await admin
-        .from("members")
-        .select("name")
-        .eq("id", noteRow.author_member_id)
-        .maybeSingle();
-      noteAuthor = author?.name ?? null;
-    }
-    await admin
-      .from("digest_notes")
-      .update({ consumed_at: new Date().toISOString() })
-      .eq("id", noteRow.id);
-  }
-
-  const tpl = hubHealthDigestEmail({ stats, note, noteAuthor, siteUrl });
+  const tpl = hubHealthDigestEmail({ stats, siteUrl });
 
   let sent = 0;
   let failed = 0;
@@ -136,7 +115,6 @@ export async function POST(req: Request) {
   return NextResponse.json({
     month: monthKey,
     stats,
-    note_included: !!note,
     recipients: (recipients ?? []).length,
     sent,
     failed,

@@ -4,14 +4,11 @@ vi.mock("@/lib/admin", () => ({ requireAdmin: vi.fn(async () => true) }));
 vi.mock("@/lib/supabase/admin", () => ({ createServiceClient: () => services.client }));
 vi.mock("@/lib/newsletter", async (original) => ({
   ...await original<typeof import("@/lib/newsletter")>(),
-  compileIssue: vi.fn(async () => ({ issueKey: "test", subject: "Cron", note: null, events: [] })),
-  renderNewsletterText: vi.fn(() => "Cron body"),
   compileAudience: vi.fn(async () => [{ email: "a@example.com", name: null }]),
 }));
 vi.mock("@/lib/email", () => ({ sendEmailDetailed: vi.fn() }));
 import { sendEmailDetailed } from "@/lib/email";
 import { POST as adminSend } from "@/app/api/admin/newsletter/send/route";
-import { POST as cronSend } from "@/app/api/cron/newsletter/route";
 import { sendBatch, retryFailed, prepareIssue } from "./newsletterSend";
 
 const provider = vi.mocked(sendEmailDetailed);
@@ -134,25 +131,15 @@ it("uses frozen revision rather than caller content", async () => {
   expect(provider.mock.calls[0][0].text).not.toContain("Untrusted");
 });
 
-it("admin and cron coexist through the shared claim", async () => {
+it("two sends of one issue at once reach each recipient once, through the shared claim", async () => {
   const db = database(); services.client = db.admin;
-  vi.stubEnv("CRON_SECRET", "test-cron-auth"); vi.stubEnv("NEWSLETTER_AUTOSEND_ENABLED", "true");
-  const a = adminSend(new Request("https://example.com/api/admin/newsletter/send", {
+  const send = () => adminSend(new Request("https://example.com/api/admin/newsletter/send", {
     method: "POST", body: JSON.stringify({ issue_id: 1 }),
   }));
-  const b = cronSend(new Request("https://example.com/api/cron/newsletter", {
-    method: "POST", headers: { authorization: "Bearer test-cron-auth" }, body: JSON.stringify({ force: true }),
-  }));
+  const a = send(); const b = send();
   await vi.runAllTimersAsync(); expect((await a).status).toBe(200); expect((await b).status).toBe(200);
   expect(provider).toHaveBeenCalledTimes(1);
   expect(db.admin.rpc).toHaveBeenCalledWith("newsletter_claim_recipient", expect.objectContaining({ p_issue: 1 }));
-});
-it("force does not bypass the disabled autosend gate", async () => {
-  vi.stubEnv("CRON_SECRET", "test-cron-auth"); vi.stubEnv("NEWSLETTER_AUTOSEND_ENABLED", "false");
-  const response = await cronSend(new Request("https://example.com", {
-    method: "POST", headers: { authorization: "Bearer test-cron-auth" }, body: JSON.stringify({ force: true }),
-  }));
-  expect(await response.json()).toMatchObject({ skipped: true }); expect(provider).not.toHaveBeenCalled();
 });
 it.each(["sending", "unknown", "sent", "pending"])("retry excludes %s recipients", async (status) => {
   const db = database(); db.row.status = status;

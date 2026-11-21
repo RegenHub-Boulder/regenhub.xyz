@@ -50,8 +50,8 @@ export function StewardEvents({
         {role ? ` · RegenHub ${role}` : ""}
       </span>
       <SignOutOfTechne next={STEWARD_PATH} />
-      <a href="/admin/stewards" className="text-sage hover:underline" data-testid="stewards-link">
-        RegenHub&apos;s roles →
+      <a href="?roles=open#roles" className="text-sage hover:underline" data-testid="stewards-link">
+        Roles ↓
       </a>
     </div>
   );

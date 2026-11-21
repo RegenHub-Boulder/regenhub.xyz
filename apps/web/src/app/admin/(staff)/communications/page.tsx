@@ -1,24 +1,6 @@
-import type { Metadata } from "next";
-import { CommunicationsComposer } from "@/components/admin/CommunicationsComposer";
-import { DigestNoteCard } from "@/components/admin/DigestNoteCard";
-import { NewsletterCard } from "@/components/admin/NewsletterCard";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Communications — Admin" };
-
-export default function CommunicationsPage() {
-  return (
-    <div className="space-y-6 max-w-3xl">
-      <div>
-        <h1 className="text-2xl font-bold text-forest">Communications</h1>
-        <p className="text-muted text-sm mt-1">
-          Send a personalized email to a filtered subset of members. Idempotent
-          per <code className="text-foreground">batch_id</code> — re-running with the same id
-          only targets members who haven&apos;t already received this batch.
-        </p>
-      </div>
-      <DigestNoteCard />
-      <NewsletterCard />
-      <CommunicationsComposer />
-    </div>
-  );
+/** "Comms" became Mail's "Send to a group" tab; its old newsletter note and auto-send were retired (T-482). */
+export default function CommunicationsRedirect() {
+  redirect("/admin/mail?tab=group");
 }

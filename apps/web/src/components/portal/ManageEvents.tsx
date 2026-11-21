@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { CalendarPlus, Loader2, Lock, Globe, Pencil, Trash2, X, ArrowRight } from "lucide-react";
+import { CalendarPlus, CalendarRange, Loader2, Lock, Globe, Pencil, Trash2, X, ArrowRight } from "lucide-react";
 import {
   EMPTY_EVENT_FORM,
   HUB_TIMEZONE,
@@ -96,6 +96,8 @@ export function ManageEvents({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyRkey, setBusyRkey] = useState<string | null>(null);
+  // "Add the next nights" is monthly work: behind a button, so this week's nights lead (T-482).
+  const [addingNights, setAddingNights] = useState(false);
   const router = useRouter();
 
   // After mount, so the times fill in the browser's own zone, as the form reads them. Each "Add here" is a
@@ -202,16 +204,28 @@ export function ManageEvents({
               <CalendarPlus className="w-4 h-4" />
               New event
             </Button>
+            <Button
+              type="button"
+              onClick={() => setAddingNights((v) => !v)}
+              aria-expanded={addingNights}
+              className="btn-glass gap-2 px-6"
+              data-testid="add-nights-toggle"
+            >
+              <CalendarRange className="w-4 h-4" />
+              {addingNights ? "Close the next nights" : "Add the next nights"}
+            </Button>
           </div>
-          <AddSeriesNights
-            authority={authority}
-            nights={nights}
-            posted={posted}
-            post={async (body) => {
-              await write("create", body);
-              await refresh();
-            }}
-          />
+          {addingNights && (
+            <AddSeriesNights
+              authority={authority}
+              nights={nights}
+              posted={posted}
+              post={async (body) => {
+                await write("create", body);
+                await refresh();
+              }}
+            />
+          )}
         </>
       ) : (
         <Card className="glass-panel">
