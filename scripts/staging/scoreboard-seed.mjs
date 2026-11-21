@@ -59,7 +59,7 @@ export async function seedScoreboard(pg) {
       cancel_at_period_end boolean not null default false, admin_canceled_at timestamptz, admin_cancel_mode text,
       past_due_since timestamptz, current_period_end timestamptz,
       created_at timestamptz not null default now(), updated_at timestamptz not null default now());
-    create table interests (id serial primary key, email text not null, name text, created_at timestamptz not null default now());
+    create table if not exists interests (id serial primary key, email text not null, name text, created_at timestamptz not null default now());
     create table applications (id serial primary key, email text not null, name text not null, created_at timestamptz not null default now());
     create table purchases (id serial primary key, member_id integer, email text, onchain_invoice_id integer,
       amount_cents integer not null default 3000, passes_granted integer not null default 1, created_at timestamptz not null default now());
@@ -67,7 +67,7 @@ export async function seedScoreboard(pg) {
       created_at timestamptz not null default now());
     create table onchain_invoices (id serial primary key, subscription_id integer not null, status text not null,
       kind text not null default 'membership');
-    create table email_unsubscribes (email text primary key, created_at timestamptz not null default now());
+    create table if not exists email_unsubscribes (email text primary key, created_at timestamptz not null default now());
     create table newsletter_issues (id serial primary key, issue_key text not null unique, subject text not null,
       status text not null default 'sent', created_at timestamptz not null default now());
     create table newsletter_sends (id bigserial primary key, issue_id integer not null, email text not null,

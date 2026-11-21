@@ -14,10 +14,10 @@
  */
 export const FOLLOWUP_COPY = {
   guest: {
-    subject: "{night}, and what's next",
+    subject: "Thanks for coming to {night}",
     paragraphs: [
       "Hi {first},",
-      "Thanks for signing up for {night} on {weekday}. We hope you could make it.",
+      "Thanks for coming to {night} on {weekday}.",
       "The next {series} is [{nextWhen}]({nextUrl}).",
       "See what else is coming up at [regenhub.xyz/events]({eventsUrl}).",
       "420 Happy Hour is every Friday and open to everyone. Come say hi.",
@@ -26,10 +26,10 @@ export const FOLLOWUP_COPY = {
     ],
   },
   member: {
-    subject: "{night}, and what's next",
+    subject: "Thanks for coming to {night}",
     paragraphs: [
       "Hi {first},",
-      "Thanks for signing up for {night} on {weekday}. Hope it was a good one.",
+      "Thanks for coming to {night} on {weekday}.",
       "The next Studio Night is [{studioWhen}]({studioUrl}). Bring whatever you're stuck on.",
       "Your member page isn't up yet. It takes a few minutes and helps the people you met find you again: [fill it in]({profileUrl}).",
     ],

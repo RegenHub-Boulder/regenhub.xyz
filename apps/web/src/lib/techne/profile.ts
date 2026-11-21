@@ -31,14 +31,14 @@ export function parseProfile(base: string, did: string, body: unknown): TechnePr
   return { displayName: text(b.displayName, 64), bio: text(b.bio, 500), avatarUrl };
 }
 
-export async function fetchTechneProfile(did: string, opts: { revalidate?: number } = {}): Promise<TechneProfile | null> {
+export async function fetchTechneProfile(did: string, opts: { revalidate?: number; timeoutMs?: number } = {}): Promise<TechneProfile | null> {
   const base = regenosBaseUrl();
   if (!base || !isPlcDid(did)) return null;
   const revalidate = opts.revalidate ?? 600;
   try {
     const res = await fetch(`${base}/xrpc/social.scenius.getProfile?${new URLSearchParams({ did })}`, {
       headers: { accept: "application/json" },
-      signal: AbortSignal.timeout(REGENOS_TIMEOUT_MS),
+      signal: AbortSignal.timeout(opts.timeoutMs ?? REGENOS_TIMEOUT_MS),
       ...(revalidate > 0 ? { next: { revalidate, tags: [TECHNE_READS_TAG] } } : { cache: "no-store" as const }),
     });
     if (!res.ok) return null;

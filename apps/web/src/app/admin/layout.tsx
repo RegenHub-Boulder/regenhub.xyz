@@ -7,7 +7,7 @@ import { regenosCollectiveDid } from "@/lib/regenos/config";
 export const metadata = { title: "Admin — RegenHub" };
 
 const staffLinks: NavLink[] = [
-  { href: "/admin", label: "Overview" },
+  { href: "/admin", label: "Today" },
   { href: "/admin/scoreboard", label: "Scoreboard" },
   { href: "/admin/pipeline", label: "Pipeline" },
   { href: "/admin/members", label: "Members" },

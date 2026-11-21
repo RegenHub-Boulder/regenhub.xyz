@@ -1,0 +1,378 @@
+{
+ "member/desktop/portal": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership· Hot Desk · $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 993,
+  "navLinks": 6,
+  "status": 200
+ },
+ "member/desktop/admin": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership· Hot Desk · $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 993,
+  "navLinks": 6,
+  "status": 200
+ },
+ "member/desktop/admin-scoreboard": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership· Hot Desk · $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 993,
+  "navLinks": 6,
+  "status": 200
+ },
+ "member/desktop/admin-members": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership· Hot Desk · $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 993,
+  "navLinks": 6,
+  "status": 200
+ },
+ "member/phone/portal": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership· Hot Desk · $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 1171,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/admin": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership· Hot Desk · $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 1171,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/admin-scoreboard": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership· Hot Desk · $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 1171,
+  "navLinks": 1,
+  "status": 200
+ },
+ "member/phone/admin-members": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Ana",
+   "Your door code",
+   "Membership· Hot Desk · $250/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 1,
+  "buttons": 6,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 58,
+  "height": 1171,
+  "navLinks": 1,
+  "status": 200
+ },
+ "newcomer/desktop/portal": {
+  "url": "/portal",
+  "headings": 6,
+  "h": [
+   "Hi, Sam",
+   "Free Day Reserved",
+   "Day passes",
+   "Ready to become a member?",
+   "Get oriented",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 0,
+  "buttons": 3,
+  "links": 10,
+  "fields": 0,
+  "tabs": 0,
+  "words": 357,
+  "height": 1967,
+  "navLinks": 6,
+  "status": 200
+ },
+ "newcomer/phone/portal": {
+  "url": "/portal",
+  "headings": 6,
+  "h": [
+   "Hi, Sam",
+   "Free Day Reserved",
+   "Day passes",
+   "Ready to become a member?",
+   "Get oriented",
+   "Hub Essentials"
+  ],
+  "boxes": 5,
+  "nested": 0,
+  "buttons": 3,
+  "links": 10,
+  "fields": 0,
+  "tabs": 0,
+  "words": 357,
+  "height": 2621,
+  "navLinks": 1,
+  "status": 200
+ },
+ "admin/desktop/portal": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Robin",
+   "Your door code",
+   "Membership· Cold Desk · $0/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 6,
+  "nested": 1,
+  "buttons": 8,
+  "links": 6,
+  "fields": 0,
+  "tabs": 0,
+  "words": 94,
+  "height": 1155,
+  "navLinks": 7,
+  "status": 200
+ },
+ "admin/desktop/admin": {
+  "url": "/admin",
+  "headings": 3,
+  "h": [
+   "Today",
+   "Waiting on you",
+   "What to do next"
+  ],
+  "boxes": 0,
+  "nested": 0,
+  "buttons": 9,
+  "links": 12,
+  "fields": 0,
+  "tabs": 0,
+  "words": 225,
+  "height": 1025,
+  "navLinks": 12,
+  "status": 200
+ },
+ "admin/desktop/admin-scoreboard": {
+  "url": "/admin/scoreboard",
+  "headings": 9,
+  "h": [
+   "Scoreboard",
+   "Headline",
+   "Subscriptions per month",
+   "Funnel per month",
+   "Event turnout",
+   "Newsletter",
+   "People to follow up",
+   "Cancelled since Jul 1, 2026 (1)",
+   "Bought a day pass, never subscribed (0)"
+  ],
+  "boxes": 8,
+  "nested": 0,
+  "buttons": 1,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 630,
+  "height": 1971,
+  "navLinks": 12,
+  "status": 200
+ },
+ "admin/desktop/admin-members": {
+  "url": "/admin/members",
+  "headings": 1,
+  "h": [
+   "Users"
+  ],
+  "boxes": 1,
+  "nested": 0,
+  "buttons": 16,
+  "links": 15,
+  "fields": 3,
+  "tabs": 0,
+  "words": 195,
+  "height": 1380,
+  "navLinks": 12,
+  "status": 200
+ },
+ "admin/phone/portal": {
+  "url": "/portal",
+  "headings": 5,
+  "h": [
+   "Hi, Robin",
+   "Your door code",
+   "Membership· Cold Desk · $0/mo",
+   "Invite a Friend",
+   "Hub Essentials"
+  ],
+  "boxes": 6,
+  "nested": 1,
+  "buttons": 8,
+  "links": 6,
+  "fields": 0,
+  "tabs": 0,
+  "words": 94,
+  "height": 1421,
+  "navLinks": 1,
+  "status": 200
+ },
+ "admin/phone/admin": {
+  "url": "/admin",
+  "headings": 3,
+  "h": [
+   "Today",
+   "Waiting on you",
+   "What to do next"
+  ],
+  "boxes": 0,
+  "nested": 0,
+  "buttons": 9,
+  "links": 12,
+  "fields": 0,
+  "tabs": 0,
+  "words": 225,
+  "height": 1363,
+  "navLinks": 2,
+  "status": 200
+ },
+ "admin/phone/admin-scoreboard": {
+  "url": "/admin/scoreboard",
+  "headings": 9,
+  "h": [
+   "Scoreboard",
+   "Headline",
+   "Subscriptions per month",
+   "Funnel per month",
+   "Event turnout",
+   "Newsletter",
+   "People to follow up",
+   "Cancelled since Jul 1, 2026 (1)",
+   "Bought a day pass, never subscribed (0)"
+  ],
+  "boxes": 8,
+  "nested": 0,
+  "buttons": 1,
+  "links": 5,
+  "fields": 0,
+  "tabs": 0,
+  "words": 630,
+  "height": 3350,
+  "navLinks": 2,
+  "status": 200
+ },
+ "admin/phone/admin-members": {
+  "url": "/admin/members",
+  "headings": 1,
+  "h": [
+   "Users"
+  ],
+  "boxes": 13,
+  "nested": 0,
+  "buttons": 16,
+  "links": 15,
+  "fields": 3,
+  "tabs": 0,
+  "words": 233,
+  "height": 2717,
+  "navLinks": 2,
+  "status": 200
+ }
+}

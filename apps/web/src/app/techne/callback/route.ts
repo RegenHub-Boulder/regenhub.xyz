@@ -10,6 +10,7 @@ import { cookieOptions, currentTechne, startWebSession, stillSignedIn } from "@/
 import { createClient } from "@/lib/supabase/server";
 import { memberForDid } from "@/lib/techne/portalDoor";
 import { loginUrlFor } from "@/lib/safeNext";
+import { NEWS_NOTE_COOKIE, rememberPerson } from "@/lib/techne/person";
 
 /**
  * GET /techne/callback — where the PDS sends the browser back after "Sign in with Techne". This server finishes
@@ -21,6 +22,11 @@ import { loginUrlFor } from "@/lib/safeNext";
  * that DID, the portal session. A visitor who isn't a member goes back where they started; a portal page sends
  * them to /auth/login, which offers the link. The PDS handing a person back to their own server (ePDS) starts
  * sign-in there, at most twice.
+ *
+ * Every sign-in is also recorded as a person (T-497, lib/techne/person.ts): their email from their PDS, the member
+ * they are, and the stay-in-touch list unless they're on it, unsubscribed, or said no. A sign-in that just put them on
+ * the list leaves a one-time cookie for the "We'll send you RegenHub news. No thanks" line. None of it can fail the
+ * sign-in, and none of it opens the portal.
  */
 export const dynamic = "force-dynamic";
 
@@ -43,8 +49,10 @@ export async function GET(req: NextRequest) {
 
   let did: string;
   let app;
+  let signedIn;
   try {
     const out = await oauth.callback(req.nextUrl.searchParams);
+    signedIn = out;
     did = out.did;
     app = unpackState(out.appState);
   } catch (err) {
@@ -73,13 +81,21 @@ export async function GET(req: NextRequest) {
   // its grant revoked.
   const live = await currentTechne(admin);
   const before = live ?? (await currentTechne(admin, { evenExpired: true }));
+  let handle: string | null = null;
   try {
     // Replaces this browser's previous Techne sign-in (webSession.ts) once the new one is written. A fresh handle
     // read (not the display cache): it is stored with the sign-in.
-    await startWebSession(admin, { did, handle: await handleFor(did, resolver()) });
+    handle = await handleFor(did, resolver());
+    await startWebSession(admin, { did, handle });
   } catch (err) {
     return fail(app.next, "web session", err);
   }
+
+  // Who this is, with their email (best-effort; never fails the sign-in). Runs alongside the portal work below.
+  const remembered = rememberPerson(admin, { did, handle, session: signedIn.session ?? null, homeAccount: signedIn.homeAccount });
+  const noteIfAdded = async () => {
+    if ((await remembered)?.newsletterAdded) jar.set(NEWS_NOTE_COOKIE, "1", { ...cookieOptions(600), httpOnly: false });
+  };
 
   // A portal session for a member linked to a different Techne account ends here (in this browser only), and so does
   // any portal session when this browser switches from one Techne account to another: the browser is never
@@ -115,7 +131,9 @@ export async function GET(req: NextRequest) {
   if (portalFailed && needsPortal) {
     const u = new URL(loginUrlFor(app.next), siteOrigin());
     u.searchParams.set("error", "techne_portal");
+    await noteIfAdded();
     return NextResponse.redirect(u, 303);
   }
+  await noteIfAdded();
   return NextResponse.redirect(new URL(app.next, siteOrigin()), 303);
 }

@@ -63,7 +63,7 @@ export const AuditAction = {
   /** A write tool of the RegenHub MCP (lib/mcp/billingTools.ts): written before it acts, outcome filled in after. */
   MCP_BILLING_WRITE: "mcp_billing_write",
   // Scoreboard
-  /** "Done", "Not now" or reopen on a /admin/scoreboard recommended action; target_id is the action id, payload has
+  /** "Done", "Not now" or reopen on a recommended action (/admin, Today); target_id is the action id, payload has
    *  { state, fingerprint }. lib/scoreboardData.ts reads the latest per action. */
   SCOREBOARD_ACTION_MARKED: "scoreboard_action_marked",
 } as const;

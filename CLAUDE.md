@@ -83,7 +83,8 @@ supabase/
     ├── 010_fix_member_types.sql      # day_pass slot range fix
     ├── 011_hub_friend.sql            # hub_friend member type
     ├── …
-    └── 066_night_followups.sql       # night follow-ups: decisions, sends, opt-outs
+    ├── 066_night_followups.sql       # night follow-ups: decisions, sends, opt-outs
+    └── 068_techne_people.sql         # every Techne sign-in: the person, their email, the stay-in-touch list
 DEPLOYMENT.md               # Full infra guide for agents + humans
 ```
 
@@ -92,7 +93,18 @@ DEPLOYMENT.md               # Full infra guide for agents + humans
 - `day_passes` — pool of N-use guest passes per member
 - `day_codes` — temporary door codes (PIN slots 125-249) issued against a pass
 - `access_logs` — every door access event
-- `interests` — public "stay in touch" signups from `/interest`. Linked to `members` via `member_id` (nullable FK). The funnel runs `interests → application → member → auth.users`; whichever events fire first, triggers backfill the linkage so admins can see who came from where.
+- `interests` — public "stay in touch" signups from `/interest`. Linked to `members` via `member_id` (nullable FK). The funnel runs `interests → application → member → auth.users`; whichever events fire first, triggers backfill the linkage so admins can see who came from where. A Techne sign-in adds rows with `source_path = 'techne'` (below).
+- `techne_people` (migration 068, T-497) — one row per Techne account that ever signed in here: DID, handle, display
+  name, email + `email_confirmed` (read from the person's PDS at sign-in, scope `transition:email`; "confirmed" is
+  taken only from the home PDS, techne.town, whose sign-up proves the email: another server's is kept unconfirmed,
+  since anyone can run a PDS that claims an address), `member_id` (by
+  `members.did`, or a CONFIRMED email matching one member with no Techne account; never writes `members.did`, never
+  opens the portal, door or billing), and the stay-in-touch decision (`added` / `already` / `unsubscribed` /
+  `declined`). `record_techne_sign_in` runs in `/techne/callback` (`lib/techne/person.ts`); a confirmed email not on the
+  list, not a member's and not unsubscribed is added to `interests` once, and the browser gets the one-time line "We'll
+  send you RegenHub news. No thanks" (`components/techne/NewsNote.tsx`; No thanks = `POST /api/techne/newsletter`,
+  `decline_techne_newsletter`: removes only that row and is remembered; a new email on the PDS moves the entry). Accounts that signed in before 068 get their
+  email at their next sign-in (no backfill); a grant without the email scope still signs in.
 
 - Member page fields on `members` (migration 065): `show_in_directory` (the opt-in: null = not asked, false = no, true = listed while in standing; co-op owners defaulted on), `working_on`, `links` (≤5 URLs), `show_rsvps`. See "Member pages and the directory" below.
 
@@ -169,6 +181,19 @@ the next one, if mined within those 5 minutes or reported in the other order).
 Until it runs the code degrades to membership-only (`lib/onchain/invoiceKind.ts`: a `kind` filter is dropped when
 the column is missing, the passes page hides "Pay with USDC", the purchase route answers 503), so billing carries on.
 
+### The two home pages (T-482 audit, `AUDIT-PORTAL-ADMIN.md`)
+- **`/admin` "Today"** (admins): the goals in one line (→ Scoreboard), **Waiting on you** (`lib/adminQueue.ts`, pure +
+  tested: lock-sync failures, quarantined slots, past due, applications, free-day requests, unbilled desks, each a
+  link; a failed read says "Couldn't check", and the queue renders even if the scoreboard read fails), then
+  **What to do next** (the scoreboard's recommended actions), then shortcuts (quick door code, find/add a member).
+  The old stat cards, all-time funnel and recent lists are gone; "Stale auth links" sits on `/admin/members`.
+- **`/portal`** (members): the door first (their code via `RevealPin`, a guest code with the passes left, "N members
+  in today" since Denver midnight, → who came in for co-op members); day-pass members get the free-day / day-pass cards there instead.
+  Then anything that needs them (past due, next step, directory ask, first-week checklist), their plan, then profile,
+  invite and Hub Essentials. Test: `test/portal-admin-homes.test.ts`.
+- Staging for every portal/admin screen: `T482_AUDIT=1 scripts/staging/preview.sh` (the stand-in on the real schema,
+  `audit-seed.mjs`), then `scripts/staging/audit-shots.mjs` captures and counts them.
+
 ### Scoreboard (/admin/scoreboard, T-497)
 Staff page read at the family meeting: paying members (on $30+/mo plans at list price and paying something, so a
 promo code or the USDC discount doesn't drop a $30 member and a full comp doesn't count) and net membership revenue
@@ -186,7 +211,7 @@ membership invoice never started. `compileAudience` (newsletter list) pages past
 read; shared pager: `lib/supabase/readAll.ts`. Staging: `T482_SCOREBOARD=1
 scripts/staging/preview.sh` seeds fictional rows; `scripts/staging/scoreboard-shots.mjs` checks the page against
 the hand-worked numbers.
-**What to do next** (top of the page): recommended actions from `lib/scoreboardActions.ts` (pure, tested), fed by
+**What to do next** (on the admin home `/admin`, "Today", since T-482; the scoreboard links to it): recommended actions from `lib/scoreboardActions.ts` (pure, tested), fed by
 the same rows and counts: past due (one-click payment reminder), set to end, left in the last 90 days (names what's
 new since: `MEMBER_NEWS`), new in the last 30 days (welcome, next Studio Night), day-pass buyers with 2+ passes or a
 visit in 60 days, non-members going to 2+ nights in 60 days, a night this week under half its series' average, and
@@ -197,7 +222,8 @@ target = action id, via `POST /api/admin/scoreboard/actions`), and a dismissal h
 matches. "Copy as text" ends with the top 5 (names only). The MCP reads the same: `scoreboard_summary`,
 `recommended_actions`. Staging: `scripts/staging/next-actions-shots.mjs` drives the list (Done, reload, Bring back).
 The funnel ends with **Followed up after a night → joined within 30 days** (`followupFunnel`: guest notes sent, by
-month, and how many of those people started their first subscription within 30 days); a dash until migration 066 runs.
+month, and how many of those people started their first subscription within 30 days; a Techne-only note counts by its
+email, and as the member with that email once they join); a dash until migration 066 runs.
 
 ### Night follow-ups (/admin/events, T-497)
 The day after a night, the people who RSVP'd going get one short note: guests (not members in standing) are thanked,
@@ -205,9 +231,11 @@ told the next night of that series, invited to a Friday member demo as a guest a
 pointed at `/membership`; members are thanked, told the next Studio Night, and (if their member page is unasked,
 `show_in_directory` null) asked to fill it in. Copy is data: `lib/nightFollowupCopy.ts`. Rules are pure in
 `lib/nightFollowups.ts`; reads and the send in `lib/nightFollowupData.ts`.
-- **Who:** RSVP'd going (Techne, `fetchAttendance`) AND linked to a members row with an email (`members.did`). That is
-  the only email the site holds for an RSVP; Techne-only attendees are counted on the page ("no email to write to"),
-  never mailed. Held, with the reason shown: unsubscribed (`email_unsubscribes`), opted out
+- **Who:** RSVP'd going (Techne, `fetchAttendance`) AND an email the site holds for that DID: the linked member's
+  (`members.did`), else what their Techne sign-in recorded (`techne_people`: the member a confirmed email matched, or
+  their own confirmed email; guest note, "Hi there," without a display name). Rows are keyed by DID (`keep: [did]`);
+  `night_followups.member_id` is null for a Techne-only person. RSVPs with no email (never signed in since 068) are
+  counted on the page, never mailed; an unconfirmed email is never used. Held, with the reason shown: unsubscribed (`email_unsubscribes`), opted out
   (`night_followup_optouts`, the "No more notes after nights" link, `/api/followups/optout`: GET shows a button, its
   POST opts out, so a mail scanner opening links changes nothing), a follow-up in the last 7 days (across nights), or a
   disabled account. The hold rule is one SQL function (`night_followup_hold`); the page's preview
@@ -586,7 +614,7 @@ MCP changes, just redeploy the web app.
   (`mcp_billing_write`) before acting and its outcome after (no row, no action), and call the same
   code as the admin page and portal (`cancelMembership`, `scheduleDeskToDaily`,
   `changeCardPlanNow`, `changeOnchainPlan`); scoreboard reads `scoreboard_summary` and `recommended_actions`
-  (`lib/mcp/scoreboardTools.ts`, scope `read`, the numbers and actions /admin/scoreboard shows; names and member ids,
+  (`lib/mcp/scoreboardTools.ts`, scope `read`, the numbers /admin/scoreboard shows and the actions on /admin; names and member ids,
   never emails). To add a tool: register it in `server.ts`
   (zod input shape), redeploy web; the client auto-reconnects and picks up the new tool (bump
   `SERVER_VERSION` to confirm the rollout).

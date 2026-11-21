@@ -298,9 +298,10 @@ export interface FollowupMonth {
 /**
  * Guest notes sent (`night_followups`, status sent) → first subscriptions within 30 days, by the month of the note.
  * A person counts once per month they were followed up; a join counts once, in the month of the last note before it.
+ * A note to someone with no member row (a Techne sign-in, T-497) counts as followed up by its email.
  */
 export function followupFunnel(
-  followups: readonly { member_id: number | null; sent_at: string | null }[],
+  followups: readonly { member_id: number | null; email?: string; sent_at: string | null }[],
   subs: readonly SubRow[],
   months: readonly string[],
 ): FollowupMonth[] {
@@ -315,14 +316,16 @@ export function followupFunnel(
   const seen = new Set<string>();
   const lastBeforeJoin = new Map<number, number>();
   for (const f of followups) {
-    if (f.member_id == null || !f.sent_at) continue;
+    const who = f.member_id != null ? `m${f.member_id}` : f.email ? `e${f.email}` : null;
+    if (!who || !f.sent_at) continue;
     const sent = Date.parse(f.sent_at);
     const month = monthOf(f.sent_at);
     const row = rows.get(month);
-    if (row && !seen.has(`${month}:${f.member_id}`)) {
-      seen.add(`${month}:${f.member_id}`);
+    if (row && !seen.has(`${month}:${who}`)) {
+      seen.add(`${month}:${who}`);
       row.followedUp += 1;
     }
+    if (f.member_id == null) continue;
     const joinedAt = first.get(f.member_id);
     if (joinedAt !== undefined && joinedAt > sent && joinedAt <= sent + FOLLOWUP_JOIN_DAYS * 86_400_000) {
       lastBeforeJoin.set(f.member_id, Math.max(lastBeforeJoin.get(f.member_id) ?? 0, sent));

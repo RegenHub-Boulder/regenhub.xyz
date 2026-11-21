@@ -4,11 +4,9 @@ import { requireAdmin } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import { CopyTextBlock } from "@/components/admin/CopyTextBlock";
-import { NextActions, type NextAction } from "@/components/admin/NextActions";
 import { planLabel } from "@/lib/plans";
 import { SCOREBOARD_GOALS, SCOREBOARD_TZ, usd, type MonthFlow, type TurnoutEvent } from "@/lib/scoreboard";
 import { readScoreboard } from "@/lib/scoreboardData";
-import { ACTION_RULES, type RecommendedAction } from "@/lib/scoreboardActions";
 
 export const metadata = { title: "Scoreboard — Admin" };
 export const dynamic = "force-dynamic";
@@ -20,10 +18,6 @@ const day = (iso: string | null) =>
 const dayShort = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: SCOREBOARD_TZ }) : "—";
 const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`);
-const forList = (a: RecommendedAction & { rank: number }): NextAction => ({
-  id: a.id, rank: a.rank, kind: a.kind, who: a.who, href: a.href, reason: a.reason, step: a.step, quick: a.quick, contact: a.contact ?? null,
-  priority: a.priority, fingerprint: a.fingerprint,
-});
 const pct = (part: number, whole: number) => (whole > 0 ? Math.min(100, Math.round((part / whole) * 100)) : 0);
 
 function Section({ title, note, children }: { title: string; note?: React.ReactNode; children: React.ReactNode }) {
@@ -116,16 +110,9 @@ export default async function ScoreboardPage() {
         </p>
       </div>
 
-      <Section
-        title="What to do next"
-        note={`Ranked by what it does for the goals, then by how soon. Done hides one until its facts change; Not now hides it ${ACTION_RULES.notNowDays} days.`}
-      >
-        <NextActions
-          open={s.actions.open.map(forList)}
-          hidden={s.actions.hidden.map((a) => ({ ...forList(a), mark: a.mark.state }))}
-          top={ACTION_RULES.showTop}
-        />
-      </Section>
+      <p className="text-sm text-muted" data-testid="actions-moved">
+        What to do next ({s.actions.open.length} open) is on <Link href="/admin" className="text-sage hover:underline">Today</Link>, the admin home.
+      </p>
 
       <div className="grid md:grid-cols-2 gap-4">
         <Card className="glass-panel">

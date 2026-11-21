@@ -28,6 +28,11 @@ export interface SignedIn {
   did: string;
   /** The app state the sign-in started with (./appState.ts). */
   appState: string | null;
+  /** The new session, for the callback's own reads (the account's email). */
+  session?: Session;
+  /** The account lives on the home PDS (techne.town, or TECHNE_PDS_URL), whose sign-up proves the email with a code.
+   *  Another server's word that an email is confirmed is not taken (T-497): anyone can run a PDS that says so. */
+  homeAccount: boolean;
 }
 
 export interface TechneOAuth {
@@ -79,6 +84,14 @@ export async function clientKey(jwk = techneClientKey()): Promise<JoseKey> {
 
 const REVOKE_WAIT_MS = 3000;
 
+function sameOrigin(a: string, b: string): boolean {
+  try {
+    return new URL(a).origin === new URL(b).origin;
+  } catch {
+    return false;
+  }
+}
+
 class RealTechneOAuth implements TechneOAuth {
   constructor(
     readonly config: TechneConfig,
@@ -101,7 +114,12 @@ class RealTechneOAuth implements TechneOAuth {
       await this.revoke(session.did).catch(() => {});
       throw err;
     }
-    return { did: session.did, appState: state };
+    return {
+      did: session.did,
+      appState: state,
+      session: { did: session.did, fetchHandler: (path, init) => session.fetchHandler(path, init) },
+      homeAccount: sameOrigin(session.serverMetadata.issuer, homePds(this.config)),
+    };
   }
 
   async restore(did: string): Promise<Session | null> {
