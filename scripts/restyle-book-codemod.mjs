@@ -5,7 +5,7 @@
 //   white/black overlays  border-white/10 → border-rule, bg-white/5 → bg-tint (bg-ink/10 above 10%)
 //   status hues           red/rose → danger, amber/yellow/orange → warn, emerald/green/lime/teal → ok,
 //                         sky/blue/indigo/purple/violet/cyan → note; text keeps the tone, fills become a /10 tint
-//                         (a solid fill, e.g. a status dot, stays solid; a hover fill /20), borders /40
+//                         (a solid or ≥50% fill, e.g. a status dot, stays solid; a hover fill /20), borders /40
 //   faded text            text-muted/60 → text-muted, text-foreground/70 → text-muted (≥85% stays ink)
 //   capitals              `uppercase` and its letter-spacing go: labels are sentence case
 // --check exits 1 if anything is left to change (for CI or a reviewer).
@@ -48,7 +48,7 @@ function transform(src) {
     (_, v, k, fam, shade, o) => {
       const t = TONE[fam];
       // a hover fill is a step darker than the resting one, so hover still shows
-      if (k === "bg") return `${v}bg-${t}${v.includes("hover:") ? "/20" : o || Number(shade) <= 100 ? "/10" : ""}`;
+      if (k === "bg") return `${v}bg-${t}${v.includes("hover:") ? "/20" : (o && (opacity(o) ?? 0) < 50) || Number(shade) <= 100 ? "/10" : ""}`;
       if (k.startsWith("border") || k === "divide") return `${v}${k}-${t}/40`;
       // what draws a glyph (text, placeholder, icon fill/stroke, checkbox, caret) carries no opacity, for AA;
       // a translucent ring, outline, shadow, underline or gradient keeps it

@@ -23,12 +23,12 @@ const PUBLIC = [
 const S = "RegenHub steward (sample)";
 const WORK = [
   ["/portal", "Ana (sample)"], ["/portal/my-code", "Ana (sample)"], ["/portal/passes", "Ana (sample)"],
-  ["/portal/profile", "Ana (sample)"], ["/portal/access-log", "Ana (sample)"], ["/portal/events", S], ["/admin", S],
+  ["/portal/profile", "Ana (sample)"], ["/portal/access-log", "Ana (sample)"], ["/admin", S],
   ["/admin/scoreboard", S], ["/admin/people?tab=applications", S], ["/admin/people?tab=freedays", S],
   ["/admin/people?tab=interests", S], ["/admin/members", S], ["/admin/members/5", S],
-  ["/admin/members/5?tab=billing", S], ["/admin/members/5?tab=access", S],
-  ["/admin/members/new", S], ["/admin/billing", S], ["/admin/access", S],
-  ["/admin/access?tab=codes", S], ["/admin/access?tab=sync", S], ["/admin/mail", S], ["/admin/mail?tab=group", S],
+  ["/admin/members/5?tab=billing", S], ["/admin/members/5?tab=access", S], ["/admin/members/5?tab=activity", S],
+  ["/admin/members/new", S], ["/admin/members/stale-links", S], ["/admin/billing", S], ["/admin/access", S],
+  ["/admin/access?tab=sync", S], ["/admin/mail", S], ["/admin/mail?tab=group", S],
   ["/admin/events", S], ["/admin/events?roles=open", S],
 ];
 

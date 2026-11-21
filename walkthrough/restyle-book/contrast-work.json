@@ -34,13 +34,6 @@
   "min": 6.25,
   "fails": []
  },
- "/portal/events": {
-  "checked": 49,
-  "overImage": 0,
-  "disabled": 0,
-  "min": 6.02,
-  "fails": []
- },
  "/admin": {
   "checked": 58,
   "overImage": 0,
@@ -104,8 +97,22 @@
   "min": 5.59,
   "fails": []
  },
+ "/admin/members/5?tab=activity": {
+  "checked": 23,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 5.59,
+  "fails": []
+ },
  "/admin/members/new": {
   "checked": 26,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 7.14,
+  "fails": []
+ },
+ "/admin/members/stale-links": {
+  "checked": 13,
   "overImage": 0,
   "disabled": 0,
   "min": 7.14,
@@ -119,13 +126,6 @@
   "fails": []
  },
  "/admin/access": {
-  "checked": 42,
-  "overImage": 0,
-  "disabled": 0,
-  "min": 4.87,
-  "fails": []
- },
- "/admin/access?tab=codes": {
   "checked": 42,
   "overImage": 0,
   "disabled": 0,

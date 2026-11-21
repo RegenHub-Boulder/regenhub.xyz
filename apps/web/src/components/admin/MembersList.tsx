@@ -503,19 +503,19 @@ export function MembersList() {
 
       <div className="flex flex-wrap gap-4 text-xs text-muted">
         <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-ok/10 inline-block" />
+          <span className="w-2 h-2 rounded-full bg-ok inline-block" />
           Cold Desk / Hot Desk — linked
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-note/10 inline-block" />
+          <span className="w-2 h-2 rounded-full bg-note inline-block" />
           Hub Friend
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-note/10 inline-block" />
+          <span className="w-2 h-2 rounded-full bg-muted inline-block" />
           Day Pass
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-warn/10 inline-block" />
+          <span className="w-2 h-2 rounded-full bg-warn inline-block" />
           No Profile — needs setup
         </span>
       </div>

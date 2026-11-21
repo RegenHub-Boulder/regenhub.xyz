@@ -11,7 +11,8 @@ pick "Ana (sample)" or "RegenHub steward (sample)"). Build:
 Screens: `node scripts/staging/restyle-book-shots.mjs <base> walkthrough/restyle-book/after public|work`.
 
 Screens in `walkthrough/restyle-book/` (`before/` and `after/`, every page at 1280x800 and 390x844; `compare-*.png`
-puts them side by side).
+puts them side by side). The admin "before" shots were taken before #139 (People, Door, Mail) landed, so those
+comparisons also show that restructure; the "after" shots are main's new screens in the book look.
 
 1. **Home arrives** (`motion-home.webm`, `compare-01-home.png`). *"The dark forest is gone. Home is one book column:
    a brush circle is drawn once around the mark, then the title settles in."*
