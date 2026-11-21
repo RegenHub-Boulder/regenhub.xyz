@@ -4,7 +4,8 @@
  * Three candidate looks for the site ("book", "field", "studio") live as scoped CSS in app/style-directions.css,
  * every rule under `html[data-style=…]`. Nothing sets that attribute in production: the switch below is emitted by
  * the root layout only when `STYLE_PREVIEW_ENABLED` is truthy, and it is refused for the regenhub.xyz origin (the
- * same rule as the Techne stand-in). With the switch off the HTML, the fonts and the look are exactly today's.
+ * same rule as the Techne stand-in). With the switch off the look is exactly today's: no script, no font link, no
+ * attribute. What production does gain: a few inert data-part attributes, and the scoped stylesheet in its CSS bundle.
  *
  * On staging, `?style=book|field|studio` picks a look and remembers it in a cookie; `?style=off` forgets it.
  * Inside an iframe the param applies to that frame only (no cookie), so a picker can show several at once.
@@ -40,7 +41,7 @@ export function isStyleDirection(v: unknown): v is StyleDirection {
 export const STYLE_FONTS_HREF =
   "https://fonts.googleapis.com/css2" +
   "?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500" +
-  "&family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..600" +
+  "&family=Fraunces:ital,opsz,wght,SOFT@0,9..144,300..600,0..100;1,9..144,300..600,0..100" +
   "&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400" +
   "&family=Public+Sans:wght@400;500;600" +
   "&family=Instrument+Sans:wght@400;500;600" +

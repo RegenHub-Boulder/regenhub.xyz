@@ -56,6 +56,11 @@ export default async function StylePreviewPage() {
             </a>
             .
           </p>
+          <p className="text-sm text-[#4a4a45]">
+            Tuned and checked page by page: home, an event night, membership, members and the portal home, plus
+            events, sign-in, the free day and the phone menu. Other pages take each look&apos;s colours and type but
+            weren&apos;t checked one by one.
+          </p>
           <div className="rounded-md bg-white border border-[#d9d7ce] p-4" data-testid="style-recommendation">
             <p className="font-semibold mb-1">Recommendation</p>
             <p className="text-sm leading-relaxed text-[#33332f]">{RECOMMENDATION}</p>

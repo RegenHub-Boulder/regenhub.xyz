@@ -27,10 +27,10 @@ export const DIRECTION_CARDS: DirectionCard[] = [
     name: "Hand-set book",
     idea: "The site as a small-press book: one column, set in Garamond, ink and one spot colour on laid paper.",
     choices: [
-      { choice: "Everything in EB Garamond, small and quiet", because: "reading should feel like an old book, but alive" },
-      { choice: "No cards or boxes; space and a short rule between sections", because: "calm order with room; boxy grids feel off" },
-      { choice: "Ink plus one moss spot colour", because: "one earthy tone, never shifting colour" },
-      { choice: "A brush ensō drawn once around the mark", because: "handmade and analog; alive as the page opens" },
+      { choice: "Everything in EB Garamond, small and quiet", because: "long reading in a quiet book face, with a little life in it" },
+      { choice: "No cards or boxes; space and a short rule between sections", because: "space does the separating, instead of boxes" },
+      { choice: "Ink plus one moss spot colour", because: "a single natural colour that stays put" },
+      { choice: "A brush ensō drawn once around the mark", because: "a mark made by hand, moving once as you arrive" },
     ],
     type: [
       { role: "Reading and interface", family: "EB Garamond", css: '"EB Garamond", serif', sample: "Come work beside people who build.", size: "1.15rem" },
@@ -53,10 +53,10 @@ export const DIRECTION_CARDS: DirectionCard[] = [
     name: "Field guide",
     idea: "A naturalist's guide to the place: a painted view of the Flatirons, entries on framed plates, moss and ochre.",
     choices: [
-      { choice: "A painted Flatirons landscape opens the home page", because: "evocative imagery in balance with text; painted landscapes appeal" },
-      { choice: "Fraunces (soft, light) for headings, Source Serif for reading, Public Sans for labels", because: "a quiet book serif with a clean sans alongside" },
-      { choice: "Moss and ochre only", because: "one or two earthy, ecological tones" },
-      { choice: "Content on framed plates, left aligned like guide entries", because: "ordered and calm, presenting information in its own way" },
+      { choice: "A painted Flatirons landscape opens the home page", because: "a picture of the place sets the mood and still leaves room for words" },
+      { choice: "Fraunces (soft, light) for headings, Source Serif for reading, Public Sans for labels", because: "a serif for reading, a plain sans for the working parts" },
+      { choice: "Moss and ochre only", because: "two colours taken from the land around Boulder" },
+      { choice: "Content on framed plates, left aligned like guide entries", because: "each thing on its own mounted page, so the order is easy to see" },
     ],
     type: [
       { role: "Headings", family: "Fraunces 300, soft", css: '"Fraunces", serif', sample: "Agents Building Night", size: "1.9rem", weight: 300 },
@@ -80,10 +80,10 @@ export const DIRECTION_CARDS: DirectionCard[] = [
     name: "Studio",
     idea: "A calm working studio: one clean grotesk, flat tiles, ink and pine, and one very large serif line.",
     choices: [
-      { choice: "Instrument Sans for everything", because: "a quiet clean grotesk, plain words in labels" },
-      { choice: "One oversized Instrument Serif line per page", because: "oversized type only to land one message" },
-      { choice: "A real photo of the place beside the line", because: "evocative photos in balance with text" },
-      { choice: "Ink and pine, flat warm-grey tiles, left aligned on a wide page", because: "bold, never bland, without clutter" },
+      { choice: "Instrument Sans for everything", because: "one unfussy sans keeps every label plain" },
+      { choice: "One oversized Instrument Serif line per page", because: "size is saved for a single sentence per page" },
+      { choice: "A real photo of the place beside the line", because: "a real view from the roof, sharing the screen with the words" },
+      { choice: "Ink and pine, flat warm-grey tiles, left aligned on a wide page", because: "contrast and empty space carry the boldness, not decoration" },
     ],
     type: [
       { role: "The one big line", family: "Instrument Serif", css: '"Instrument Serif", serif', sample: "Boulder's regenerative coworking space", size: "2.4rem" },
