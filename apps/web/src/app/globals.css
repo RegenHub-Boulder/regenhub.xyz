@@ -130,15 +130,15 @@ code, kbd, pre, samp, .font-mono { font-variant-numeric: normal; }
 
 /* ---- Panels: text on the page, no box (public pages; the working pages draw sheets, below) ---------
    Unlayered on purpose: it must beat a component's own `border` / `bg-*` utilities, so no box comes back. A panel
-   that carries a resting tone (a notice: border-warn/40, border-sage/30 …) keeps its outline; a hover: or md: tone doesn't count. */
-:is(.glass-panel, .glass-panel-strong, .glass-panel-subtle):not([data-surface="work"] *):not([class^="border-warn"], [class*=" border-warn"], [class^="border-danger"], [class*=" border-danger"], [class^="border-ok"], [class*=" border-ok"], [class^="border-note"], [class*=" border-note"], [class^="border-sage"], [class*=" border-sage"], [class^="border-gold"], [class*=" border-gold"]) {
+   that carries a tone (a notice, the featured plan) says so with .panel-tone and keeps its own outline. */
+:is(.glass-panel, .glass-panel-strong, .glass-panel-subtle):not([data-surface="work"] *):not(.panel-tone) {
   background: transparent;
   border: 0;
   border-radius: 0;
   box-shadow: none;
 }
 /* Rows of things (events, series, members) are separated by a rule, like entries in a book. */
-.glass-panel-subtle:not([data-surface="work"] *):not([class^="border-warn"], [class*=" border-warn"], [class^="border-danger"], [class*=" border-danger"], [class^="border-ok"], [class*=" border-ok"], [class^="border-note"], [class*=" border-note"], [class^="border-sage"], [class*=" border-sage"], [class^="border-gold"], [class*=" border-gold"]) { border-top: 1px solid var(--border); }
+.glass-panel-subtle:not([data-surface="work"] *):not(.panel-tone) { border-top: 1px solid var(--border); }
 
 /* ---- Buttons: solid ink or an outline; press feedback only --------------------------------------- */
 .btn-primary-glass,

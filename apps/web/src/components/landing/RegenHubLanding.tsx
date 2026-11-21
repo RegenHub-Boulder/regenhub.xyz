@@ -36,7 +36,7 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
     <div className="min-h-screen overflow-x-hidden">
       <PublicHeader />
 
-      {/* Hero: the ensō is drawn, then the title, its line, the actions. */}
+      {/* Hero: the ensō starts drawing; the title, its line and the actions settle in while it draws. */}
       <section className="px-6 pt-8 pb-6 md:pt-12">
         <div className="max-w-[40rem] mx-auto text-center">
           <BrushEnso />

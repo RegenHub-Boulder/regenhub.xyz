@@ -134,7 +134,7 @@ export default async function MembershipPage({ searchParams }: PageProps) {
         )}
 
         {hasActiveSub && (
-          <div className="glass-panel p-5 border border-sage/30 max-w-2xl mx-auto text-center space-y-3">
+          <div className="glass-panel panel-tone p-5 border border-sage/30 max-w-2xl mx-auto text-center space-y-3">
             <p className="font-medium">You already have an active membership.</p>
             <p className="text-sm text-muted">Manage your subscription, switch plans, or update your card in the portal.</p>
             <Link href="/portal">
@@ -146,7 +146,7 @@ export default async function MembershipPage({ searchParams }: PageProps) {
         )}
 
         {showNotApprovedBanner && (
-          <div className="glass-panel p-5 border border-warn/40 max-w-2xl mx-auto text-center space-y-3">
+          <div className="glass-panel panel-tone p-5 border border-warn/40 max-w-2xl mx-auto text-center space-y-3">
             <p className="font-medium">Apply to join first</p>
             <p className="text-sm text-muted">
               We approve membership signups manually so we can welcome each member personally.
@@ -166,7 +166,7 @@ export default async function MembershipPage({ searchParams }: PageProps) {
         )}
 
         {showDeskGate && (
-          <div className="glass-panel p-5 border border-gold/30 max-w-2xl mx-auto text-center space-y-3">
+          <div className="glass-panel panel-tone p-5 border border-gold/30 max-w-2xl mx-auto text-center space-y-3">
             <p className="font-medium">Full Access needs one more step</p>
             <p className="text-sm text-muted">
               You&apos;re cleared for the member plans below. Full Access
@@ -239,7 +239,7 @@ export default async function MembershipPage({ searchParams }: PageProps) {
                 return (
                   <Card
                     key={key}
-                    className={`glass-panel relative ${isFeatured ? "border border-sage/40" : ""}`}
+                    className={`glass-panel relative ${isFeatured ? "panel-tone border border-sage/40" : ""}`}
                   >
                     {isFeatured && (
                       <span
