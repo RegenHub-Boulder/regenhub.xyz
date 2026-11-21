@@ -1,7 +1,7 @@
 /**
  * Deploy-then-migrate (T-482 review #4): the code ships before migration 067 (newsletter_issues.audience) runs, so
- * /news, the studio's draft, list, status, prepare and send and the MCP draft tool must work on the old schema,
- * treating every issue as public. Real Postgres (PGlite) with migrations 001-066 only. No mail leaves.
+ * /news, the studio's draft, list, status and prepare and the MCP draft tool must work on the old schema, treating
+ * every issue as public; Send (which confirms the list with 067's function) refuses plainly until 067 runs. Real Postgres (PGlite) with migrations 001-066 only. No mail leaves.
  */
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
@@ -52,7 +52,7 @@ it("/news lists and opens issues as public", async () => {
   await expect(NewsIssuePage({ params: Promise.resolve({ key: "2026-W40" }) })).resolves.toBeTruthy();
 });
 
-it("the studio saves, lists, prepares and sends a draft as public; a members draft is refused plainly", async () => {
+it("the studio saves, lists and prepares a draft as public; a members draft and Send are refused plainly", async () => {
   const saved = await draftPost(new Request("http://x/api/admin/newsletter/draft", post({ issue_key: "2026-W41", subject: "S", markdown: "B" })));
   expect(saved.status).toBe(200);
   const { draft } = (await saved.json()) as { draft: { id: number } };
@@ -66,9 +66,11 @@ it("the studio saves, lists, prepares and sends a draft as public; a members dra
   expect((await preparePost(new Request("http://x/api/admin/newsletter/prepare", post({ issue_id: draft.id })))).status).toBe(200);
   const st = (await (await statusGet(new Request(`http://x/api/admin/newsletter/status?issue_id=${draft.id}`))).json()) as { progress: { total: number; queueKey: string } };
   expect(st.progress.total).toBe(2);
+  // Send can't confirm the list without 067's function: it refuses plainly and mails nobody (run 067, then Send).
   const sent = await sendPost(new Request("http://x/api/admin/newsletter/send", post({ issue_id: draft.id, expected_queue: st.progress.queueKey, expected_audience: "public" })));
-  expect(sent.status).toBe(200);
-  expect(mail.to.sort()).toEqual(["desk@example.test", "lead@example.test"]);
+  expect(sent.status).toBe(409);
+  expect(((await sent.json()) as { error: string }).error).toMatch(/067/);
+  expect(mail.to).toEqual([]);
 });
 
 it("MCP save_newsletter_draft saves a public draft and refuses a members one", async () => {

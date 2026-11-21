@@ -57,8 +57,10 @@ export async function POST(request: Request) {
         audience: "The issue's audience changed since you looked. Reload, check the recipients, then Send.",
         empty: "draft is missing a subject or body",
         not_found: "issue not found",
+        needs_067: "Sending needs migration 067 (newsletter audience). Run it, then Send.",
       }[check.reason];
-      return NextResponse.json({ error, progress: check.progress }, { status: check.reason === "not_found" ? 404 : 409 });
+      const code = check.reason === "not_found" ? 404 : check.reason === "empty" ? 400 : 409;
+      return NextResponse.json({ error, progress: check.progress }, { status: code });
     }
   }
   const result = await sendBatch(admin, issueId, {

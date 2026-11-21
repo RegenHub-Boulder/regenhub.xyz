@@ -69,7 +69,7 @@ export async function issueProgress(admin: Admin, issueId: number): Promise<Prog
   return p;
 }
 
-export type ConfirmReason = "stale_page" | "not_prepared" | "changed" | "audience" | "empty" | "not_found";
+export type ConfirmReason = "stale_page" | "not_prepared" | "changed" | "audience" | "empty" | "not_found" | "needs_067";
 export type ConfirmResult = { ok: true } | { ok: false; reason: ConfirmReason; progress: Progress };
 
 /**
@@ -77,7 +77,7 @@ export type ConfirmResult = { ok: true } | { ok: false; reason: ConfirmReason; p
  * and `expectedAudience` the audience the studio showed. 067's newsletter_confirm_send, in one transaction under the
  * issue's lock, refuses a changed audience or queue (changing nothing), skips anyone no longer in the audience
  * (standing, unsubscribes; never adds), and freezes the issue, so nothing can be prepared into it afterwards.
- * Before 067 (no function) the same checks run here, without the lock: every issue is public then.
+ * Before 067 (no function) a first Send is refused: run 067, then Send.
  */
 export async function confirmQueue(
   admin: Admin, issueId: number, expectedKey: unknown, expectedAudience: unknown, siteUrl: string,
@@ -90,19 +90,9 @@ export async function confirmQueue(
     p_issue: issueId, p_key: expectedKey, p_audience: audience, p_rows: reach.map((r) => ({ email: r.email })), p_site: siteUrl,
   });
   if (!error) return data === "ok" ? { ok: true } : refuse(data as ConfirmReason);
-  if (!isMissingFunction(error)) throw error;
-
-  // Pre-067: no audience column (every issue is public), no function.
-  if (audience !== "public") return refuse("audience");
-  const progress = await issueProgress(admin, issueId);
-  if (progress.total === 0) return refuse("not_prepared");
-  if (progress.queueKey !== expectedKey) return refuse("changed");
-  const inAudience = new Set(reach.map((r) => r.email.toLowerCase()));
-  const pending = await readAll<{ id: number; email: string; first_attempt_at: string | null }>("newsletter_sends", (f, t) =>
-    admin.from("newsletter_sends").select("id, email, first_attempt_at").eq("issue_id", issueId).eq("status", "pending")
-      .order("id", { ascending: true }).range(f, t));
-  await skipRows(admin, issueId, pending.filter((r) => !r.first_attempt_at && !inAudience.has(r.email.toLowerCase())).map((r) => Number(r.id)), "No longer in audience");
-  return { ok: true };
+  // Before 067 there is nothing to confirm the list with: refuse rather than send unchecked. Drafts, /news and prepare work.
+  if (isMissingFunction(error)) return refuse("needs_067");
+  throw error;
 }
 
 /** A changed audience re-prepares the queue, if one was prepared (studio and MCP alike): the count beside Send is then
@@ -111,15 +101,6 @@ export async function reprepareIfQueued(admin: Admin, issueId: number, audience:
   const { count, error } = await admin.from("newsletter_sends").select("id", { count: "exact", head: true }).eq("issue_id", issueId);
   if (error) throw error;
   if (count) await prepareIssue(admin, issueId, audience);
-}
-
-/** Mark not-yet-tried pending rows skipped, in chunks (a URL-length-safe `in`). */
-async function skipRows(admin: Admin, issueId: number, ids: number[], reason: string): Promise<void> {
-  for (let i = 0; i < ids.length; i += 200) {
-    const { error } = await admin.from("newsletter_sends").update({ status: "skipped", last_error: reason })
-      .eq("issue_id", issueId).eq("status", "pending").is("first_attempt_at", null).in("id", ids.slice(i, i + 200));
-    if (error) throw error;
-  }
 }
 
 /** Reset terminal failures back to pending so they can be retried. */

@@ -60,7 +60,7 @@ begin
   select * into i from newsletter_issues where id = p_issue for update;
   if not found then return 'not_found'; end if;
   if i.delivery_snapshot is not null or i.status <> 'draft' then return 'ok'; end if;
-  if i.markdown_body is null or i.subject = '' then return 'empty'; end if;
+  if coalesce(i.markdown_body, '') = '' or coalesce(i.subject, '') = '' then return 'empty'; end if;
   if i.audience is distinct from p_audience then return 'audience'; end if;
   select left(md5(coalesce(string_agg(id::text, ',' order by id), '')), 16), count(*) into k, n
     from newsletter_sends where issue_id = p_issue and status <> 'skipped';
@@ -75,3 +75,17 @@ begin
 end $$;
 revoke all on function public.newsletter_confirm_send(integer, text, text, jsonb, text) from public, anon, authenticated;
 grant execute on function public.newsletter_confirm_send(integer, text, text, jsonb, text) to service_role;
+
+-- A frozen issue's audience is frozen with it: every later batch renders from it (header, web link) and /news reads it.
+create or replace function public.newsletter_freeze_guard() returns trigger
+language plpgsql set search_path = public as $$
+begin
+  if old.delivery_snapshot is not null or old.status = 'sent' then
+    if new.subject is distinct from old.subject or new.markdown_body is distinct from old.markdown_body
+       or new.issue_key is distinct from old.issue_key or new.delivery_snapshot is distinct from old.delivery_snapshot
+       or new.audience is distinct from old.audience or new.status = 'draft' then
+      raise exception 'Newsletter revision is frozen' using errcode = '55000';
+    end if;
+  end if;
+  return new;
+end $$;
