@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { isStylePreviewEnabled } from "@/lib/stylePreview";
 import { DIRECTION_CARDS, RECOMMENDATION, REFERENCES } from "@/lib/styleDirections";
+import { getSeries } from "@/lib/series";
+import { fetchCollectiveEvents } from "@/lib/regenos/events";
+import { overviewFor } from "@/lib/seriesEvents";
 
 /**
  * STAGING ONLY (T-482): the picker. The three visual directions side by side, each with its case, its tokens and
@@ -12,19 +15,26 @@ import { DIRECTION_CARDS, RECOMMENDATION, REFERENCES } from "@/lib/styleDirectio
 export const metadata: Metadata = { title: "Three looks — RegenHub (staging)", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
-const PAGES = [
-  ["Home", "/"],
-  ["Agents Building Night", "/events/agents-night"],
-  ["Membership", "/membership"],
-  ["Members", "/members"],
-  ["Portal", "/portal"],
-] as const;
+/** The next Agents Building Night's own page (the one in the screenshots), or the series page if none is posted. */
+async function agentsNightHref(): Promise<string> {
+  const series = getSeries("agents-night");
+  if (!series) return "/events";
+  const events = (await fetchCollectiveEvents()) ?? [];
+  return overviewFor(series, events, new Date()).next?.url ?? `/events/${series.slug}`;
+}
 
 const shot = (style: string, file: string) => `/style-preview/shots/${style}/${file}`;
 const withStyle = (href: string, style: string) => `${href}${href.includes("?") ? "&" : "?"}style=${style}`;
 
-export default function StylePreviewPage() {
+export default async function StylePreviewPage() {
   if (!isStylePreviewEnabled()) notFound();
+  const pages = [
+    ["Home", "/"],
+    ["Agents Building Night", await agentsNightHref()],
+    ["Membership", "/membership"],
+    ["Members", "/members"],
+    ["Portal", "/portal"],
+  ] as const;
 
   return (
     <div className="min-h-screen bg-[#f3f2ed] text-[#1d1d1b] font-sans" data-testid="style-picker">
@@ -88,7 +98,7 @@ export default function StylePreviewPage() {
 
               <p className="text-sm">
                 <span className="text-[#4a4a45]">Open live: </span>
-                {PAGES.map(([label, href], i) => (
+                {pages.map(([label, href], i) => (
                   <span key={href}>
                     {i > 0 && ", "}
                     <a className="underline" href={withStyle(href, d.key)}>

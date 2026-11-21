@@ -8,7 +8,8 @@
  *
  * On staging, `?style=book|field|studio` picks a look and remembers it in a cookie; `?style=off` forgets it.
  * Inside an iframe the param applies to that frame only (no cookie), so a picker can show several at once.
- * /style-preview is the picker. Read at request time (not NEXT_PUBLIC_*), like the stand-in.
+ * /style-preview is the picker. Not a NEXT_PUBLIC_* var, but the layout reads it while rendering, and static pages
+ * render at `next build`: set it for the build and at runtime alike (WALKTHROUGH.md), or static pages won't switch.
  */
 
 import { siteOrigin } from "@/lib/techne/config";

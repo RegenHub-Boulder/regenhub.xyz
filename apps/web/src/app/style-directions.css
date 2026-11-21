@@ -77,7 +77,6 @@ html[data-style] .rh-by-techne {
   align-self: flex-end;
   padding-bottom: 0.1rem;
 }
-@media (max-width: 639px) { html[data-style] .rh-by-techne { display: none; } }
 
 /* Content first: the first screen carries the hero and the start of the nights, not padding. */
 html[data-style] [data-part="hero"] { padding-top: 1.5rem; padding-bottom: 1rem; }
@@ -125,10 +124,10 @@ html[data-style] [data-part="page"] > div > div > :nth-child(1) { --rh-rise: var
 html[data-style] [data-part="page"] > div > div > :nth-child(2) { --rh-rise: 8px; animation-delay: 110ms; }
 html[data-style] [data-part="page"] > div > div > :nth-child(3) { --rh-rise: 6px; animation-delay: 200ms; }
 html[data-style] [data-part="page"] > div > div > :nth-child(4) { --rh-rise: 5px; animation-delay: 260ms; }
-/* Home: the title leads, its line follows, the actions arrive together after. */
-html[data-style] [data-part="hero-title"] { --rh-rise: var(--rh-lead-rise); animation-delay: var(--rh-hero-at, 0ms); }
-html[data-style] [data-part="hero-title"] + p { --rh-rise: 8px; animation-delay: calc(var(--rh-hero-at, 0ms) + 120ms); }
-html[data-style] [data-part="hero-title"] ~ :not([data-part="hero-title"] + p) { animation-delay: calc(var(--rh-hero-at, 0ms) + 220ms); }
+/* Home: the title leads (selectors match the shared rule's weight above and come after it, so they win), its line follows, the actions arrive together after. */
+html[data-style] [data-part="hero"] > div > div > [data-part="hero-title"] { --rh-rise: var(--rh-lead-rise); animation-delay: var(--rh-hero-at, 0ms); }
+html[data-style] [data-part="hero"] > div > div > [data-part="hero-title"] + p { --rh-rise: 8px; animation-delay: calc(var(--rh-hero-at, 0ms) + 120ms); }
+html[data-style] [data-part="hero"] > div > div > [data-part="hero-title"] ~ :not([data-part="hero-title"] + p) { animation-delay: calc(var(--rh-hero-at, 0ms) + 220ms); }
 
 @media (prefers-reduced-motion: reduce) {
   html[data-style] *, html[data-style] *::before, html[data-style] *::after { transition: none !important; }
@@ -143,7 +142,6 @@ html[data-style] [data-part="hero-title"] ~ :not([data-part="hero-title"] + p) {
    ===================================================================================================== */
 
 html[data-style="book"] {
-  font-size: 17.5px; /* Garamond's small x-height reads like 16px at 17.5 */
   --background: #ebe6d9;
   --foreground: #27231d;
   --muted-foreground: #5f5749;
@@ -283,7 +281,7 @@ html[data-style="field"] :is(.btn-primary-glass, .btn-glass) { border-radius: 99
 
 /* Entries read left to right, like a guide. */
 html[data-style="field"] :is([data-part="page"], [data-part="home"]) .text-center { text-align: left; }
-html[data-style="field"] :is([data-part="page"], [data-part="home"]) :is(.justify-center):not(.rounded-full) { justify-content: flex-start; }
+html[data-style="field"] :is([data-part="page"], [data-part="home"]) :is(.justify-center):not(.rounded-full, .inline-flex, button, .w-full) { justify-content: flex-start; }
 html[data-style="field"] :is([data-part="page"], [data-part="home"]) :is(.mx-auto):not(.max-w-7xl, .max-w-6xl, .max-w-5xl, .max-w-4xl, .max-w-3xl) { margin-left: 0; }
 
 /* The painting: the hero plate's frontispiece, full bleed inside the plate. */
@@ -365,7 +363,7 @@ html[data-style="studio"] :is(.btn-primary-glass, .btn-glass) { border-radius: 4
 
 /* Left aligned, on a wider page. */
 html[data-style="studio"] :is([data-part="page"], [data-part="home"]) .text-center { text-align: left; }
-html[data-style="studio"] :is([data-part="page"], [data-part="home"]) .justify-center:not(.rounded-full) { justify-content: flex-start; }
+html[data-style="studio"] :is([data-part="page"], [data-part="home"]) .justify-center:not(.rounded-full, .inline-flex, button, .w-full) { justify-content: flex-start; }
 html[data-style="studio"] :is([data-part="page"], [data-part="home"]) :is(.mx-auto):not(.max-w-7xl, .max-w-6xl, .max-w-5xl, .max-w-4xl, .max-w-3xl) { margin-left: 0; }
 html[data-style="studio"] [data-part="page"] > div > .max-w-3xl { max-width: 56rem; }
 
@@ -387,7 +385,7 @@ html[data-style="studio"] .rh-studio-photo img { width: 100%; height: auto; bord
   html[data-style="studio"] .rh-studio-photo { grid-column: 2 !important; grid-row: 1 / span 6; margin-top: 0.75rem; }
 }
 html[data-style="studio"] [data-part="hero"] .glass-panel-strong { padding-left: 0; padding-right: 0; }
-html[data-style="studio"] [data-part="hero-title"] {
+html[data-style="studio"] [data-part="hero"] > div > div > [data-part="hero-title"] {
   font-family: "Instrument Serif", Georgia, serif;
   color: var(--foreground);
   font-size: clamp(3rem, 6.4vw, 6rem);
@@ -397,7 +395,7 @@ html[data-style="studio"] [data-part="hero-title"] {
   margin: 0 0 1.5rem;
   animation: rh-line 900ms var(--rh-ease) both;
 }
-@keyframes rh-line { from { clip-path: inset(0 0 100% 0); transform: translateY(0.25em); } to { clip-path: inset(0 0 -10% 0); } }
+@keyframes rh-line { from { clip-path: inset(0 0 100% 0); transform: translateY(0.25em); } to { clip-path: inset(-25% -5% -25% -5%); } }
 html[data-style="studio"] [data-part="hero"] .max-w-4xl { max-width: 80rem; }
 
 /* =====================================================================================================
@@ -411,7 +409,7 @@ html[data-style="studio"] [data-part="hero"] .max-w-4xl { max-width: 80rem; }
 
 /* Book: every section in the one 40rem column, carousel included; no cards, no icon discs, one heading size.
    Offerings read as a two-column list, the ways in as ruled rows. */
-html[data-style="book"] { font-size: 18px; }
+html[data-style="book"] { font-size: 18px; } /* Garamond's small x-height reads like a 16px sans at 18 */
 html[data-style="book"] [data-part="home"] > section > div { max-width: 40rem; }
 html[data-style="book"] [data-part="home"] h2 { font-size: 1.6rem; line-height: 1.25; margin-bottom: 0.5rem; }
 html[data-style="book"] [data-part="home"] h2 + p { font-size: 1.05rem; }
