@@ -89,3 +89,6 @@ begin
   end if;
   return new;
 end $$;
+
+-- PostgREST picks up the new function now, not at its next restart.
+notify pgrst, 'reload schema';

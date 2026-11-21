@@ -8,6 +8,7 @@ import { sendBatch, retryFailed, confirmQueue } from "@/lib/newsletterSend";
  * POST { issue_id, expected_queue, expected_audience, retry_failed?, limit? } — send the next batch of recipients.
  * A draft's first Send must carry `expected_queue` (Progress.queueKey from status) and `expected_audience` (the
  * audience shown): it goes only to that list (lib/newsletterSend confirmQueue). Later batches don't need them.
+ * Before migration 067 a first Send is refused (503): the list can only be confirmed by 067's function.
  * The studio calls this repeatedly until progress.done. Resumable + rate-limit
  * aware. The shared engine acquires issue/recipient claims and finalizes the
  * issue under its run token.
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
         not_found: "issue not found",
         needs_067: "Sending needs migration 067 (newsletter audience). Run it, then Send.",
       }[check.reason];
-      const code = check.reason === "not_found" ? 404 : check.reason === "empty" ? 400 : 409;
+      const code = check.reason === "not_found" ? 404 : check.reason === "empty" ? 400 : check.reason === "needs_067" ? 503 : 409;
       return NextResponse.json({ error, progress: check.progress }, { status: code });
     }
   }

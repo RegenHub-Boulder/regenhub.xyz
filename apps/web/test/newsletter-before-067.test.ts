@@ -68,9 +68,12 @@ it("the studio saves, lists and prepares a draft as public; a members draft and 
   expect(st.progress.total).toBe(2);
   // Send can't confirm the list without 067's function: it refuses plainly and mails nobody (run 067, then Send).
   const sent = await sendPost(new Request("http://x/api/admin/newsletter/send", post({ issue_id: draft.id, expected_queue: st.progress.queueKey, expected_audience: "public" })));
-  expect(sent.status).toBe(409);
+  expect(sent.status).toBe(503);
   expect(((await sent.json()) as { error: string }).error).toMatch(/067/);
   expect(mail.to).toEqual([]);
+  // Nothing changed: still an editable draft with its queue as prepared, ready to Send once 067 runs.
+  expect(await db.sql("select status, delivery_snapshot is null unfrozen from newsletter_issues where id = $1", [draft.id])).toEqual([{ status: "draft", unfrozen: true }]);
+  expect(await db.sql("select count(*)::int n from newsletter_sends where issue_id = $1 and status = 'pending'", [draft.id])).toEqual([{ n: 2 }]);
 });
 
 it("MCP save_newsletter_draft saves a public draft and refuses a members one", async () => {
