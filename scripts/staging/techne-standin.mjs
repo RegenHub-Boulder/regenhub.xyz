@@ -19,6 +19,8 @@
 //   - GET  /xrpc/pub.techne.draft.query.getRecords   the AppView's answer with the stand-in's writes applied
 //   - GET  /xrpc/com.atproto.identity.resolveHandle   a sample person's handle → their DID (a typed handle on
 //          /admin/stewards; the sample handles have no domain to resolve)
+//   - GET  /xrpc/com.atproto.server.getSession  the signed-in person's account: did, handle, and their `email` /
+//          `emailConfirmed` from people.json when set (what a PDS answers a session granted transition:email)
 //   - GET  /plc/<did>                    that person's DID document, for their handle (the app reads DIDs here on
 //          staging: TECHNE_STANDIN_URL/plc, lib/techne/did.ts)
 //   - everything else under /xrpc is passed to the AppView unchanged.
@@ -156,6 +158,14 @@ li a:hover{background:#eef4f0}span{color:#666;font-size:.9rem}</style>
       const h = (url.searchParams.get("handle") ?? "").toLowerCase();
       const p = people().find((x) => x.handle && x.handle.replace(/^@/, "").toLowerCase() === h);
       return p ? json(res, 200, { did: p.did }) : json(res, 400, { error: "InvalidRequest", message: "Unable to resolve handle" });
+    }
+    if (path === "/xrpc/com.atproto.server.getSession") {
+      const p = did && people().find((x) => x.did === did);
+      if (!p) return json(res, 401, { error: "AuthenticationRequired" });
+      return json(res, 200, {
+        did: p.did, handle: (p.handle ?? "").replace(/^@/, ""),
+        ...(p.email ? { email: p.email, emailConfirmed: p.emailConfirmed !== false } : {}),
+      });
     }
     // Like a stock PDS: repo methods are the PDS's own; the atproto-proxy header changes nothing for them.
     if (req.headers["x-standin-expired"] && req.method === "POST") return json(res, 401, { error: "ExpiredToken", message: "Token has expired" });

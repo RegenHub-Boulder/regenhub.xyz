@@ -184,6 +184,8 @@ describe("the one sign-in", () => {
     }
     expect(scope).toContain("rpc:pub.techne.draft.sync.indexRecord?aud=did:web:techne.computer%23atproto_appview");
     expect(scope).toContain("rpc:pub.techne.draft.identity.writeAsCollective?aud=did:web:techne.computer%23atproto_appview");
+    // T-497: the person's email, read at sign-in (pds.techne.town lists transition:email in scopes_supported).
+    expect(scope).toContain("transition:email");
     // building-an-app.md *Permissions*: authRead, authWrite or any space: but the app's own is the red warning.
     expect(scope.join(" ")).not.toMatch(/authRead|authWrite|applyWrites/);
     expect(scope.filter((x) => x.startsWith("space:"))).toEqual([expect.stringMatching(/^space:pub\.techne\.draft\.space\.private\?skey=/)]);

@@ -3,11 +3,13 @@
  * are in lib/nightFollowupData.ts; the words are data in lib/nightFollowupCopy.ts; the limits that matter at the
  * moment of sending are also enforced in SQL (migration 066, decide_night_followups).
  *
- * Who: the people whose latest RSVP to the night says going (lib/techne/rsvp.ts countGoing) and whose Techne account
- * is linked to a members row with an email (members.did). That is the only email this site holds for an RSVP; it
- * never guesses one. Left out, with the reason shown to the steward: unsubscribed from the newsletter, asked for no
- * follow-ups, already sent one in the last 7 days, or a disabled account. People who RSVP'd with a Techne account
- * not linked to a member are counted (`noEmail`), never mailed.
+ * Who: the people whose latest RSVP to the night says going (lib/techne/rsvp.ts countGoing), reached by the email this
+ * site holds for their Techne account: the member it is linked to (members.did), else the person their Techne sign-in
+ * recorded (techne_people, migration 068: the member a confirmed email matched, or their own confirmed email). It never
+ * guesses one and never mails an unconfirmed address. Left out, with the reason shown to the steward: unsubscribed
+ * from the newsletter, asked for no follow-ups, already sent one in the last 7 days, or a disabled account. People
+ * going with no confirmed email on file (not signed in here since T-497, or an email their PDS can't vouch for) are counted
+ * (`noEmail`), never mailed.
  * Which note: `member` for a member in standing (lib/memberStanding.ts), `guest` for everyone else.
  */
 
@@ -42,9 +44,30 @@ export interface FollowupMember {
   show_in_directory: boolean | null;
 }
 
+/** A Techne account as its sign-ins here recorded it (migration 068 techne_people). */
+export interface FollowupTechnePerson {
+  did: string;
+  handle: string | null;
+  name: string | null;
+  email: string | null;
+  email_confirmed: boolean;
+  member_id: number | null;
+}
+
+/** How a Techne-only person is named to a steward: their display name, else @handle (never part of their email). */
+export function techneName(p: { name: string | null; handle: string | null }): string {
+  return p.name || (p.handle ? `@${p.handle}` : "(Techne sign-in)");
+}
+
 export interface FollowupPerson {
-  memberId: number;
+  /** The RSVP's Techne account: the key a steward's ticks are sent back by. */
+  did: string;
+  /** Null for someone known only by their Techne sign-in. */
+  memberId: number | null;
+  /** Shown to the steward. */
   name: string;
+  /** For "Hi {first},"; empty = "Hi there,". */
+  greetName: string;
   email: string;
   variant: FollowupVariant;
   /** A member who hasn't set up their member page (not listed, and hasn't said no): their note asks them to. */
@@ -57,7 +80,7 @@ export interface FollowupBatch {
   send: FollowupPerson[];
   /** Left out, with why. */
   held: FollowupPerson[];
-  /** Going, but with no member email on file (a Techne account not linked to a member). */
+  /** Going, but with no email on file (no member link and no confirmed email from a Techne sign-in). */
   noEmail: number;
 }
 
@@ -69,32 +92,50 @@ export interface FollowupBatch {
 export function followupBatch(input: {
   goingDids: readonly string[];
   members: readonly FollowupMember[];
+  /** Techne sign-ins recorded for the going DIDs (techne_people). */
+  people?: readonly FollowupTechnePerson[];
   subs: readonly (StandingSubscription & { member_id: number })[];
   holds: ReadonlyMap<string, HeldReason>;
 }): FollowupBatch {
   const byDid = new Map(input.members.flatMap((m) => (m.did ? [[m.did, m] as const] : [])));
+  const byId = new Map(input.members.map((m) => [m.id, m] as const));
+  const techne = new Map((input.people ?? []).map((p) => [p.did, p] as const));
   const out: FollowupBatch = { send: [], held: [], noEmail: 0 };
-  const seen = new Set<string>();
+  const found: FollowupPerson[] = [];
   for (const did of new Set(input.goingDids)) {
-    const m = byDid.get(did);
-    const email = m?.email?.trim().toLowerCase();
-    if (!m || !email) {
+    const t = techne.get(did);
+    const ownEmail = t?.email_confirmed ? t.email?.trim().toLowerCase() : undefined;
+    // The member: linked by DID, else the one this account's confirmed email matched at sign-in, while the two
+    // addresses still match (a member row whose email changed since is someone else's now).
+    const byEmailLink = t?.member_id != null ? byId.get(t.member_id) : undefined;
+    const m = byDid.get(did) ?? (byEmailLink && byEmailLink.email?.trim().toLowerCase() === ownEmail ? byEmailLink : undefined);
+    const memberEmail = m?.email?.trim().toLowerCase();
+    const email = memberEmail || ownEmail;
+    if (!email) {
       out.noEmail += 1;
       continue;
     }
-    if (seen.has(email)) continue;
-    seen.add(email);
-    const member = isMemberInStanding(m, input.subs.filter((s) => s.member_id === m.id));
-    const held: HeldReason | null = m.disabled ? "disabled" : (input.holds.get(email) ?? null);
-    const person: FollowupPerson = {
-      memberId: m.id,
-      name: m.name,
-      email,
-      variant: member ? "member" : "guest",
-      askForPage: member && m.show_in_directory == null,
-      held,
-    };
-    (held ? out.held : out.send).push(person);
+    if (m) {
+      const member = isMemberInStanding(m, input.subs.filter((s) => s.member_id === m.id));
+      found.push({
+        did, memberId: m.id, name: m.name, greetName: m.name, email,
+        variant: member ? "member" : "guest",
+        askForPage: member && m.show_in_directory == null,
+        held: m.disabled ? "disabled" : (input.holds.get(email) ?? null),
+      });
+    } else {
+      found.push({
+        did, memberId: null, name: techneName(t!), greetName: t!.name ?? "",
+        email, variant: "guest", askForPage: false, held: input.holds.get(email) ?? null,
+      });
+    }
+  }
+  // One note per email, and a member's own entry wins over a Techne-only account claiming the same address.
+  const seen = new Set<string>();
+  for (const person of [...found.filter((p) => p.memberId != null), ...found.filter((p) => p.memberId == null)]) {
+    if (seen.has(person.email)) continue;
+    seen.add(person.email);
+    (person.held ? out.held : out.send).push(person);
   }
   const byName = (a: FollowupPerson, b: FollowupPerson) => a.name.localeCompare(b.name);
   out.send.sort(byName);
@@ -192,11 +233,11 @@ export function nightValues(
 
 /** The values for one person. */
 export function personValues(
-  person: Pick<FollowupPerson, "name" | "askForPage">,
+  person: Pick<FollowupPerson, "greetName" | "askForPage">,
   night: Omit<NoteValues, "first" | "profileUrl">,
   siteUrl: string,
 ): NoteValues {
-  const first = person.name.trim().split(/\s+/)[0] || "there";
+  const first = person.greetName.trim().split(/\s+/)[0] || "there";
   return { ...night, first, profileUrl: person.askForPage ? `${siteUrl.replace(/\/+$/, "")}/portal/profile` : undefined };
 }
 
