@@ -5,7 +5,7 @@ import { portalViewer } from "@/lib/admin";
 
 /**
  * The portal admin pages (members, billing, access…): RegenHub admins only (`members.is_admin`, not disabled).
- * /admin/stewards sits outside this group: its authority is the Techne role, not this flag.
+ * /admin/events (and /admin/stewards, which redirects there) sits outside this group: its authority is the Techne role, not this flag.
  */
 export default async function StaffLayout({ children }: { children: React.ReactNode }) {
   const { user, isAdmin } = await portalViewer();

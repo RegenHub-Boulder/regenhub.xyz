@@ -29,6 +29,8 @@ await page.waitForSelector("text=Pick a sample person");
 await shot("sign-in");
 await page.click("text=RegenHub steward (sample)");
 // 3. The steward's calendar: Agents Building Night posted, Civic Tech Night confirmed but not posted.
+// "Add the next nights" sits behind a button (T-482 round 2).
+await page.click("[data-testid=add-nights-toggle]");
 await page.waitForSelector("[data-testid=add-series-nights]");
 await page.waitForTimeout(500);
 console.log("who:", await page.textContent("[data-testid=steward-who]"));

@@ -50,7 +50,7 @@ export function platformProxy(config: { platform?: string }): string {
   return `${config.platform ?? DEFAULT_PLATFORM}#atproto_appview`;
 }
 
-/** The stewards' events page (beside /admin/stewards; /portal/events redirects here). */
+/** The stewards' events page (with RegenHub's Roles at its foot; /portal/events and /admin/stewards redirect here). */
 export const STEWARD_PATH = "/admin/events";
 
 /**

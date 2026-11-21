@@ -317,12 +317,12 @@ export function adminDigestEmail(d: DigestData): { subject: string; html: string
     lines.push(`<h3 style="color:#cb904d;margin-top:24px;margin-bottom:8px;">Needs attention</h3><ul style="line-height:1.7;padding-left:20px;">`);
     textLines.push("NEEDS ATTENTION");
     if (d.pendingApplications) {
-      lines.push(`<li><strong>${d.pendingApplications}</strong> membership application${d.pendingApplications === 1 ? "" : "s"} pending — <a href="${base}/admin/pipeline?tab=applications">review →</a></li>`);
-      textLines.push(`- ${d.pendingApplications} membership applications pending: ${base}/admin/pipeline?tab=applications`);
+      lines.push(`<li><strong>${d.pendingApplications}</strong> membership application${d.pendingApplications === 1 ? "" : "s"} pending — <a href="${base}/admin/people?tab=applications">review →</a></li>`);
+      textLines.push(`- ${d.pendingApplications} membership applications pending: ${base}/admin/people?tab=applications`);
     }
     if (d.pendingFreeDays) {
-      lines.push(`<li><strong>${d.pendingFreeDays}</strong> free-day claim${d.pendingFreeDays === 1 ? "" : "s"} pending — <a href="${base}/admin/pipeline?tab=freedays">review →</a></li>`);
-      textLines.push(`- ${d.pendingFreeDays} free-day claims pending: ${base}/admin/pipeline?tab=freedays`);
+      lines.push(`<li><strong>${d.pendingFreeDays}</strong> free-day request${d.pendingFreeDays === 1 ? "" : "s"} pending — <a href="${base}/admin/people?tab=freedays">review →</a></li>`);
+      textLines.push(`- ${d.pendingFreeDays} free-day requests pending: ${base}/admin/people?tab=freedays`);
     }
     if (d.pastDueSubs) {
       lines.push(`<li><strong>${d.pastDueSubs}</strong> subscription${d.pastDueSubs === 1 ? "" : "s"} past due — <a href="${base}/admin/billing">review →</a></li>`);

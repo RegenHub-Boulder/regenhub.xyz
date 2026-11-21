@@ -27,7 +27,7 @@ export default async function PortalLayout({ children }: { children: React.React
 
   const { data: member } = await supabase
     .from("members")
-    .select("is_admin, disabled")
+    .select("is_admin, disabled, member_type")
     .eq("supabase_user_id", user.id)
     .single();
 
@@ -36,7 +36,8 @@ export default async function PortalLayout({ children }: { children: React.React
 
   const links: NavLink[] = [
     { href: "/portal", label: "Home" },
-    { href: "/portal/passes", label: "Guest passes" },
+    // One page, named for what it holds: passes for your guests, or a daily member's own day passes.
+    { href: "/portal/passes", label: member?.member_type === "day_pass" ? "Day passes" : "Guest passes" },
     ...((await showEvents(door)) ? [{ href: door ? STEWARD_PATH : "/portal/events", label: "Events" }] : []),
     ...(isAdmin ? [{ href: "/admin", label: "Admin", accent: true }] : []),
   ];

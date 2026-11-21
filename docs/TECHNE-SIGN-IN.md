@@ -248,11 +248,11 @@ shipped.
 - Limit: a claim the collective placed in its member space is invisible to this read and to the default scopes
   ("The platform narrows the queries to public data and the app's own space", building-an-app.md *Permissions*).
 - Since 11-19 this read is the gate, not a hint: `stewardCheck` (the whole roster, read fresh) decides who gets
-  `/admin/events` and `/admin/stewards` and who their write routes accept (facilitator, 30, or above). Techne
+  `/admin/events` (its Roles section included; `/admin/stewards` redirects there) and who their write routes accept (facilitator, 30, or above). Techne
   still checks every write itself. The old hint route (`GET /api/portal/events/standing`, `lib/techne/standing.ts`)
   is gone.
 
-### Managing RegenHub's roles: /admin/stewards (T-482, Aaron 11-19)
+### Managing RegenHub's roles: Events → Roles (T-482, Aaron 11-19; was /admin/stewards)
 
 - With the admin pages, but its authority is the Techne role: a Techne sign-in at facilitator (30) or above in
   RegenHub's public membership claims. `members.is_admin` neither grants it nor is needed (the admin pages moved

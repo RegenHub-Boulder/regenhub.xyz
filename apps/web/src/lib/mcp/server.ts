@@ -51,7 +51,7 @@ function buildServer(auth: McpAuthInfo): McpServer {
 
   server.tool(
     "save_newsletter_draft",
-    "Create or update a RegenHub newsletter draft so an admin can review it and send it from /admin/newsletter. " +
+    "Create or update a RegenHub newsletter draft so an admin can review it and send it from Mail (/admin/mail). " +
       "Upserts by issue_key and always leaves status='draft' — it NEVER sends to anyone. " +
       "Use an ISO-week issue_key like '2026-W27'. Optional audience 'members' makes it a members-only issue. Pass the body as Markdown with no frontmatter. " +
       "Returns the draft id and the review + web-preview URLs.",
@@ -100,7 +100,7 @@ function buildServer(auth: McpAuthInfo): McpServer {
         content: [{
           type: "text" as const,
           text: `Saved draft ${data.issue_key} (id ${data.id}, status ${data.status}, audience ${data.audience}).\n` +
-            `Review & send: ${o}/admin/newsletter` +
+            `Review & send: ${o}/admin/mail` +
             (data.audience === "members" ? "\nMembers-only: no public web preview." : `\nWeb preview: ${o}/news/${data.issue_key}`),
         }],
       };
@@ -150,7 +150,7 @@ function buildServer(auth: McpAuthInfo): McpServer {
       if ((apps?.length ?? 0) > 0) {
         lines.push(
           `\nNote: approvals before 2026-07-22 sent NO email (auto-send shipped that day). ` +
-            `'expired' sessions are dead links — use "Email link to applicant" on /admin/applications, ` +
+            `'expired' sessions are dead links — use "Email link to applicant" on People → Applications (/admin/people?tab=applications), ` +
             `which now regenerates expired sessions before emailing.`,
         );
       }

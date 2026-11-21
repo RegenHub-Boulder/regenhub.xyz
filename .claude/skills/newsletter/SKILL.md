@@ -1,13 +1,13 @@
 ---
 name: newsletter
-description: Compile the RegenHub community newsletter ("dispatch") as a Markdown draft for admin review. Use when asked to draft/write the newsletter, the biweekly dispatch, or the hub update email. Gathers upcoming Luma events + hub source material, writes in the house voice, and saves a draft the admin reviews and sends from /admin/newsletter.
+description: Compile the RegenHub community newsletter ("dispatch") as a Markdown draft for admin review. Use when asked to draft/write the newsletter, the biweekly dispatch, or the hub update email. Gathers upcoming Luma events + hub source material, writes in the house voice, and saves a draft the admin reviews and sends from /admin/mail.
 ---
 
 # RegenHub newsletter skill
 
 You are drafting the **RegenHub dispatch** — the community newsletter. Your job is to
 produce a finished **Markdown draft**, not to send anything. A human admin reviews and
-sends it from the website (`/admin/newsletter`). Never send to the real audience yourself.
+sends it from the website (`/admin/mail`). Never send to the real audience yourself.
 
 Cadence: every other week (open to weekly later). One issue per run.
 
@@ -66,7 +66,7 @@ subject: "RegenHub dispatch — <short, specific>"
 <body markdown>
 ```
 
-Then tell the admin: paste the subject + body into **`/admin/newsletter`**, hit **Save
+Then tell the admin: paste the subject + body into **`/admin/mail`**, hit **Save
 draft**, **Email preview to me**, and when it looks right, **Prepare audience** →
 **Send**. (Eventually the RegenHub ops MCP will let you save the draft straight to the
 DB; until then the admin loads it.)

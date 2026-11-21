@@ -191,6 +191,14 @@ the column is missing, the passes page hides "Pay with USDC", the purchase route
   in today" since Denver midnight, → who came in for co-op members); day-pass members get the free-day / day-pass cards there instead.
   Then anything that needs them (past due, next step, directory ask, first-week checklist), their plan, then profile,
   invite and Hub Essentials. Test: `test/portal-admin-homes.test.ts`.
+- **Round 2: the navs and one name per thing.** Admin nav (7): Today · Scoreboard · **People** (`/admin/people`:
+  Applications first, Free days, Interests, then Members = `/admin/members`; link tabs, `components/admin/PeopleTabs.tsx`)
+  · Billing (lists only; totals on the Scoreboard, past-due reminders on Today) · **Door** (`/admin/access`) · Events
+  (with **Roles** at its foot) · **Mail** (`/admin/mail`: the newsletter studio + Send to a group). A Techne steward who
+  isn't a site admin sees only Events. Member nav: Home · Guest passes (a `day_pass` member's says Day passes; same
+  page) · Events (only for a Techne steward of RegenHub) · Admin. Old URLs redirect (`/admin/pipeline`,
+  `/admin/applications|interests|claims`, `/admin/newsletter`, `/admin/communications`, `/admin/stewards`). Test:
+  `test/portal-admin-structure.test.ts` lists every route of the audit's table.
 - Staging for every portal/admin screen: `T482_AUDIT=1 scripts/staging/preview.sh` (the stand-in on the real schema,
   `audit-seed.mjs`), then `scripts/staging/audit-shots.mjs` captures and counts them.
 
@@ -264,7 +272,8 @@ applicant an acknowledgment, and pings the Telegram group with two buttons:
   (+`approved_for_full` for desk interest), copies `applications.telegram` →
   `members.telegram_username` (degrades gracefully on handle conflict), emails the applicant
   to self-serve at `/membership`.
-- **Custom pricing →** — links to `/admin/applications`; approving there generates a Stripe
+- **Custom pricing →** — links to People → Applications (`/admin/people?tab=applications`; the old
+  `/admin/applications` redirects there); approving there generates a Stripe
   checkout session AND auto-emails the link (`approvalCheckoutEmail`), pings the group, and the
   UI has an "Email link to applicant" resend button (`send-checkout-email` route).
 
@@ -470,19 +479,21 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   `TECHNE_PLC_URL`, `TECHNE_HANDLE_DOMAIN`, `TECHNE_PLATFORM_DID`. **Staging only:** `TECHNE_STAGING_STANDIN=1` +
   `TECHNE_STANDIN_URL` swap the OAuth for a server-side stand-in (`lib/techne/standIn.ts`, `app/staging/techne`,
   `scripts/staging/`); refused for the regenhub.xyz origin. Staging recipe: `scripts/staging/preview.sh`.
-- **RegenHub stewards** (`/admin/stewards`, T-482): RegenHub's facilitators and managers on Techne list, add (by
+- **RegenHub stewards** (Events → **Roles**, the foot of `/admin/events`; `/admin/stewards` redirects there, T-482): RegenHub's facilitators and managers on Techne list, add (by
   handle), change and end roles (`pub.techne.draft.membership` written as the collective via writeAsCollective,
   `lib/techne/roster.ts`, `POST /api/techne/stewards`). Authority is the Techne role (>= 30), never `is_admin`; the
   `is_admin` admin pages live in `app/admin/(staff)/`. Ending sets `validUntil`; nobody-left-at-30 is refused.
   `/admin/events` (Manage Events) uses the same check (`stewardCheck`).
   Details: docs/TECHNE-SIGN-IN.md "Managing RegenHub's roles".
-- **Luma without the API** (the API needs Luma Plus): `/admin/newsletter` → Audience → **Import Luma CSV…** takes a
+- **Luma without the API** (the API needs Luma Plus): `/admin/mail` (Newsletter tab) → Audience → **Import Luma CSV…** takes a
   Luma people export or an event's guests export (`lib/lumaCsv.ts`, `POST /api/admin/newsletter/import-luma`), shows
   new / already have / skipped (unsubscribed on Luma, guests only invited or declined, unsubscribed from our
   newsletter, invalid, repeats; "already have" = any member, disabled ones too, + interests), then
   inserts the new ones into `interests` (`source_path 'luma'`). The old API contact pull is gone.
-- Deliberately NOT changed: the newsletter still reads Luma directly (`lib/newsletter.ts:142`). Its
-  copy is Luma-branded end to end; switching it is a product decision, not a plumbing one.
+- The old Luma-built biweekly newsletter (its "newsletter note", `NEWSLETTER_AUTOSEND_ENABLED` /
+  `NEWSLETTER_INCLUDE_STATS`, `/api/cron/newsletter`, the preview-to-me route) was retired in T-482 round 2 (Aaron,
+  11-20): the studio on `/admin/mail` is the one mail tool. The `digest_notes` table and its rows stay (data kept,
+  nothing reads them); the monthly hub pulse no longer folds in a note.
 
 **One-login (`REGENOS_LOGIN_ENABLED`, default OFF; superseded by the one door).** No page offers this lane any
 more (`/auth/login`, `/apply`, the `/portal` link card and the "Old steward page" link are gone; `/login` redirects
@@ -543,7 +554,7 @@ Both doors land the AppView's session cookie on this origin then call the one sh
 - `/portal/events` — **Manage Events**. **`TECHNE_SIGNIN_ENABLED` off: the old lane's page, unchanged**
   (`components/portal/legacy/`, described below; nav link, card and revalidate ride `isStewardEventsEnabled()` =
   Techne door OR `REGENOS_LOGIN_ENABLED`). **On:** it redirects (portal layout, before the member gate) to
-  **`/admin/events`**, beside `/admin/stewards` and gated the same way (`stewardCheck`, `lib/techne/roster.ts`): a
+  **`/admin/events`** (with RegenHub's Roles at its foot) and gated (`stewardCheck`, `lib/techne/roster.ts`): a
   Techne sign-in at facilitator (30) or above in RegenHub's public membership claims, read fresh. A site membership
   is neither needed nor enough, so a Techne steward who isn't a member can post; anyone else gets an explainer
   naming the managers and no form. `POST /api/portal/events/write` checks the same (no portal session read; per-IP

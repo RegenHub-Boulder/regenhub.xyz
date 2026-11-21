@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Screenshots of the Luma bridge (T-482) on scripts/staging/luma-bridge-preview.sh (sample data only):
 // the steward posts nights, sees which are on Luma, renames a Happy Hour and "Add the next nights" doesn't offer its
-// date again, opens a Luma-only night with "Add here"; then imports a sample Luma people CSV on /admin/newsletter.
+// date again, opens a Luma-only night with "Add here"; then imports a sample Luma people CSV on /admin/mail.
 // Usage: PLAYWRIGHT_DIR=<dir holding node_modules/playwright> node scripts/staging/luma-bridge-shots.mjs [base] [outdir]
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -31,6 +31,8 @@ const happyHourDates = async () =>
 await page.goto(BASE + "/admin/events", { waitUntil: "networkidle" });
 await page.click("button:has-text('Sign in with Techne')");
 await page.click("text=RegenHub steward (sample)");
+// "Add the next nights" sits behind a button (T-482 round 2).
+await page.click("[data-testid=add-nights-toggle]");
 await page.waitForSelector("[data-testid=add-series-nights]");
 const hh = page.locator("[data-testid=add-series-nights] fieldset:has(legend:text-is('420 Happy Hour')) input[type=checkbox]");
 await hh.nth(0).check();
@@ -79,7 +81,7 @@ if (stillOpen) throw new Error("the new-event form opened again after Create");
 console.log("luma check after create:", (await page.locator("[data-testid=luma-sync]").innerText()).replace(/\s+/g, " "));
 
 // 4. Newsletter → Audience → Import Luma CSV: the dry run, then the import.
-await page.goto(BASE + "/admin/newsletter", { waitUntil: "networkidle" });
+await page.goto(BASE + "/admin/mail", { waitUntil: "networkidle" });
 await page.waitForSelector("[data-testid=luma-csv-import]");
 await page.setInputFiles("[data-testid=luma-csv-import] input[type=file]", CSV);
 await page.waitForSelector("[data-testid=luma-csv-summary]");

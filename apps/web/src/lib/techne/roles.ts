@@ -7,7 +7,7 @@
 /** RegenHub's role claims about people: authored only by the collective, public by default. */
 export const MEMBERSHIP_NSID = "pub.techne.draft.membership";
 
-/** The roles /admin/stewards offers, lowest first. */
+/** The roles Events → Roles offers, lowest first. */
 export const ROLES = [
   { role: 20, name: "member" },
   { role: 30, name: "facilitator" },

@@ -1,4 +1,4 @@
-// STAGING ONLY. Fictional rows for the Luma CSV import on /admin/newsletter (T-482), loaded by
+// STAGING ONLY. Fictional rows for the Luma CSV import on /admin/mail (T-482), loaded by
 // supabase-standin.mjs --luma-bridge: the interests list (019's columns), our unsubscribes, one draft issue, and the
 // sample steward as an admin. luma-bridge-shots.mjs uploads luma-bridge-people.csv against them.
 // Nobody here is a real person; every email is @example.test.

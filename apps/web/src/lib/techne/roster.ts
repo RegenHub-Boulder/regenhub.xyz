@@ -1,5 +1,5 @@
 /**
- * RegenHub's roles on Techne, read and changed from /admin/stewards. Pure (tested in node) apart from
+ * RegenHub's roles on Techne, read and changed in Events → Roles (/admin/events). Pure (tested in node) apart from
  * `fetchRoster`: it reads the collective's public `pub.techne.draft.membership` claims and builds the one
  * `writeAsCollective` batch (lib/techne/collectiveWrite.ts sends it) that adds, changes or ends a role.
  *
@@ -121,7 +121,7 @@ export interface StewardCheck {
   steward: boolean;
 }
 
-/** Facilitator and up steward RegenHub on this site: its roles (/admin/stewards) and its calendar (/admin/events). */
+/** Facilitator and up steward RegenHub on this site: its calendar and its roles (both on /admin/events). */
 export const isSteward = (h: Holder | null | undefined): boolean => !!h && h.role >= MANAGE_ROLE;
 
 /** The one steward check for RegenHub's pages and routes: the roster read fresh, and this DID's place in it. Null

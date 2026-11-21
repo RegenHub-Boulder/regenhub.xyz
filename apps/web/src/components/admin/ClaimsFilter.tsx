@@ -99,7 +99,7 @@ export function ClaimsFilter({ claims }: { claims: FreeDayClaim[] }) {
       {/* Claims list */}
       {filtered.length === 0 ? (
         <div className="glass-panel p-8 text-center text-muted">
-          {search || activeTab !== "all" ? "No matching claims." : "No free day claims yet."}
+          {search || activeTab !== "all" ? "No matching requests." : "No free-day requests yet."}
         </div>
       ) : (
         <div className="space-y-3">

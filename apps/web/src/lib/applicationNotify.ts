@@ -42,7 +42,7 @@ export async function notifyApplicationApproved(args: {
 
   const emailNote = args.emailSent
     ? `checkout link emailed to ${args.email}`
-    : `⚠️ checkout email didn't send — share the link from /admin/applications`;
+    : `⚠️ checkout email didn't send — share the link from People → Applications`;
   const text = `✅ *Application approved* (admin panel)\n\n*${args.name}* — ${args.planLabel} at $${args.monthlyDollars}/mo · ${emailNote}`;
 
   try {
@@ -99,12 +99,12 @@ export async function notifyNewApplication(app: ApplicationNotice): Promise<void
         inline_keyboard: [
           [
             { text: "✅ Approve (standard rate)", callback_data: `app_approve_${app.id}` },
-            { text: "Custom pricing →", url: "https://regenhub.xyz/admin/applications" },
+            { text: "Custom pricing →", url: "https://regenhub.xyz/admin/people?tab=applications" },
           ],
         ],
       }
     : undefined;
-  if (!app.id) lines.push(``, `[Review →](https://regenhub.xyz/admin/applications)`);
+  if (!app.id) lines.push(``, `[Review →](https://regenhub.xyz/admin/people?tab=applications)`);
 
   try {
     await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
