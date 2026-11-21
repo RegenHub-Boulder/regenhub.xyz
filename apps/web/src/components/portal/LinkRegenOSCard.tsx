@@ -107,7 +107,7 @@ export function LinkRegenOSCard() {
                 {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2 className="w-3.5 h-3.5" />}
                 Link {handle}
               </Button>
-              {err && <p className="text-xs text-red-400">{err}</p>}
+              {err && <p className="text-xs text-danger">{err}</p>}
             </div>
           ) : (
             <Link href="/auth/login">

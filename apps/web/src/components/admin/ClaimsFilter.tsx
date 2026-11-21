@@ -21,11 +21,11 @@ type FreeDayClaim = {
 const statusTabs = ["all", "pending", "reserved", "activated", "expired", "cancelled"] as const;
 
 const statusStyle: Record<string, string> = {
-  pending: "border-amber-400/50 text-amber-400",
-  reserved: "border-blue-400/50 text-blue-400",
-  activated: "border-emerald-400/50 text-emerald-400",
+  pending: "border-warn/40 text-warn",
+  reserved: "border-note/40 text-note",
+  activated: "border-ok/40 text-ok",
   expired: "border-muted text-muted",
-  cancelled: "border-red-400/50 text-red-400",
+  cancelled: "border-danger/40 text-danger",
 };
 
 export function ClaimsFilter({ claims }: { claims: FreeDayClaim[] }) {
@@ -66,12 +66,12 @@ export function ClaimsFilter({ claims }: { claims: FreeDayClaim[] }) {
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
               activeTab === tab
                 ? "bg-sage/20 text-sage border border-sage/30"
-                : "bg-white/5 text-muted border border-white/10 hover:bg-white/10"
+                : "bg-tint text-muted border border-rule hover:bg-ink/10"
             }`}
           >
             {tab === "all" ? "All" : tab.charAt(0).toUpperCase() + tab.slice(1)}
             {(counts[tab] ?? 0) > 0 && (
-              <span className="ml-1.5 opacity-70">{counts[tab]}</span>
+              <span className="ml-1.5 font-normal">{counts[tab]}</span>
             )}
           </button>
         ))}
@@ -132,13 +132,13 @@ export function ClaimsFilter({ claims }: { claims: FreeDayClaim[] }) {
                   {claim.about && (
                     <div>
                       <p className="text-xs text-muted mb-1 font-medium">What are you working on?</p>
-                      <p className="text-sm text-foreground/80">{claim.about}</p>
+                      <p className="text-sm text-muted">{claim.about}</p>
                     </div>
                   )}
                   {claim.why_join && (
                     <div>
                       <p className="text-xs text-muted mb-1 font-medium">Why do you want to visit?</p>
-                      <p className="text-sm text-foreground/80">{claim.why_join}</p>
+                      <p className="text-sm text-muted">{claim.why_join}</p>
                     </div>
                   )}
                 </div>

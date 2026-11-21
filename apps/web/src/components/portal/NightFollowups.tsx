@@ -25,7 +25,7 @@ export function NightFollowups({ nights }: { nights: NightFollowupView[] }) {
   return (
     <section className="space-y-3" data-testid="night-followups">
       <div>
-        <h2 className="text-sm font-medium text-muted uppercase tracking-wide">Follow-ups after nights</h2>
+        <h2 className="text-sm font-medium text-muted">Follow-ups after nights</h2>
         <p className="text-sm text-muted mt-1">
           A short thank-you to the people who RSVP&apos;d, the day after. Nothing goes out until you click Send.
         </p>
@@ -100,7 +100,7 @@ function Night({ night }: { night: NightFollowupView }) {
               <p className="text-sm text-sage">{done}</p>
             ) : (
               <div className="pt-2 space-y-2">
-                {error && <p className="text-sm text-red-400" role="alert">{error}</p>}
+                {error && <p className="text-sm text-danger" role="alert">{error}</p>}
                 <Button onClick={() => decide("retry")} disabled={busy !== null} className="btn-glass gap-2 px-5">
                   {busy === "retry" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
                   Try the {night.retryable} that didn&apos;t go again
@@ -119,7 +119,7 @@ function Night({ night }: { night: NightFollowupView }) {
       <CardContent className="p-5 space-y-4">
         {header}
         {night.rsvpsUnread ? (
-          <p className="text-sm text-red-300" role="alert">Couldn&apos;t read this night&apos;s RSVPs from Techne. Reload to try again.</p>
+          <p className="text-sm text-danger" role="alert">Couldn&apos;t read this night&apos;s RSVPs from Techne. Reload to try again.</p>
         ) : (
           <>
             {night.send.length === 0 ? (
@@ -131,7 +131,7 @@ function Night({ night }: { night: NightFollowupView }) {
                     <label className="flex items-center gap-2 text-sm cursor-pointer">
                       <input
                         type="checkbox"
-                        className="accent-[var(--color-sage,#7fb069)] w-4 h-4"
+                        className="accent-sage w-4 h-4"
                         checked={keep.has(p.did)}
                         onChange={(e) =>
                           setKeep((k) => {
@@ -175,8 +175,8 @@ function Night({ night }: { night: NightFollowupView }) {
                   )}
                 </div>
                 {shown && (
-                  <div className="rounded border border-white/10 overflow-hidden" data-testid="followup-preview">
-                    <p className="text-xs text-muted px-3 py-2 bg-white/5">
+                  <div className="rounded border border-rule overflow-hidden" data-testid="followup-preview">
+                    <p className="text-xs text-muted px-3 py-2 bg-tint">
                       To {shown.name} · <span className="text-foreground">{shown.subject}</span>
                     </p>
                     <iframe title={`${VARIANT_LABEL[preview!]} preview`} srcDoc={shown.html} sandbox="" className="w-full h-[420px] bg-white" />
@@ -184,7 +184,7 @@ function Night({ night }: { night: NightFollowupView }) {
                 )}
               </div>
             )}
-            {error && <p className="text-sm text-red-400" role="alert">{error}</p>}
+            {error && <p className="text-sm text-danger" role="alert">{error}</p>}
             {done ? (
               <p className="text-sm text-sage">{done}</p>
             ) : (

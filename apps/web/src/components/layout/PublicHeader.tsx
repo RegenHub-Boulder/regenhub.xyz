@@ -15,8 +15,8 @@ import regenHubText from "@/assets/regenhub-text.svg";
  */
 export function PublicHeader() {
   return (
-    <header className="relative z-50 px-3 sm:px-6 py-4">
-      <nav className="glass-panel-subtle max-w-7xl mx-auto px-3 sm:px-6 py-3 flex items-center justify-between gap-2 sm:gap-3">
+    <header className="relative z-50 px-3 sm:px-6 pt-4">
+      <nav className="max-w-7xl mx-auto px-1 sm:px-2 pb-3 border-b border-rule flex items-center justify-between gap-2 sm:gap-3">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <MobileNav links={PUBLIC_NAV} />
           <Link href="/" className="flex items-center gap-2 min-w-0" aria-label="RegenHub home">
@@ -25,7 +25,7 @@ export function PublicHeader() {
               alt=""
               width={32}
               height={32}
-              className="h-6 w-6 sm:h-8 sm:w-8 shrink-0 animate-sway"
+              className="h-6 w-6 sm:h-8 sm:w-8 shrink-0"
             />
             <Image
               src={regenHubText}

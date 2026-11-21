@@ -1,6 +1,25 @@
 @import "tailwindcss";
 
+/* =====================================================================================================
+   RegenHub: the hand-set book (T-482)
+
+   The site reads like a small-press book: ink on laid paper, one moss spot colour, EB Garamond, one centred
+   column, no boxes (space and a short rule separate things). The portal and admin are the same book's working
+   pages ([data-surface="work"] on their layouts): the same paper, ink and moss, but Instrument Sans for the
+   interface and the data, Garamond only for the page title, and things grouped on flat sheets so daily screens
+   stay quick to scan.
+
+   Colour has one meaning each. Moss: the spot colour (links, icons, "ok"). Walnut: prices. Ochre: needs you.
+   Brick: something went wrong. Slate: a neutral note. Badges are one calm tone with a word, never colour alone.
+
+   Class names .glass-* and .btn-*-glass are historical (the old dark glass theme); they now draw the book.
+   Motion: one curve, one entrance per page; nothing moves on the working pages; reduced motion = none at all.
+   ===================================================================================================== */
+
 @theme inline {
+  --font-sans: var(--font-work), system-ui, sans-serif;
+  --font-serif: var(--font-book), Georgia, serif;
+
   --color-forest: var(--forest);
   --color-sage: var(--sage);
   --color-gold: var(--gold);
@@ -14,178 +33,196 @@
   --color-card: var(--card);
   --color-border: var(--border);
   --color-ring: var(--ring);
-  /* Shared UI tokens are paired with existing palette colours in :root.
-     Destructive tokens stay unmapped (no palette colour yet), preserving prior behaviour. */
   --color-input: var(--input);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-card-foreground: var(--card-foreground);
   --color-muted: var(--muted-foreground);
-}
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: var(--primary-foreground);
 
-/* =====================================================
-   RegenHub Design System — Forest Through Glass
-   ===================================================== */
+  /* The book's named tones (scripts/restyle-book-codemod.mjs maps the old dark-theme utilities onto these). */
+  --color-ink: var(--ink);
+  --color-moss: var(--moss);
+  --color-walnut: var(--walnut);
+  --color-paper: var(--background);
+  --color-sheet: var(--sheet);
+  --color-rule: var(--border);
+  --color-tint: var(--tint);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --color-note: var(--note);
+}
 
 :root {
-  /* Core palette */
-  --forest: #2d5a3d;
-  --forest-light: #3d7a55;
-  --forest-deep: #1a3a28;
-  --sage: #a8c09a;
-  --sage-light: #c8dcc0;
-  --gold: #e8b04b;
-  --gold-light: #f0c87a;
+  color-scheme: light;
+  accent-color: var(--moss); /* native radios, checkboxes, ranges */
 
-  /* Semantic tokens */
-  --background: #1a2e22;
-  --foreground: #e8f0e4;
-  --muted-foreground: #b7c9ad;
-  --primary: var(--forest);
-  /* Heading colour. `--forest-light` (#3d7a55) renders 2.8:1 on --background
-     and fails WCAG AA for any text size; sage is the same family at 7.3:1.
-     Everything that reads as a heading goes through .text-forest below. */
-  --heading: var(--sage);
-  --primary-foreground: #f0f7ec;
-  --secondary: var(--sage);
-  --accent: var(--gold);
-  --card: rgba(30, 55, 36, 0.6);
-  --border: rgba(168, 192, 154, 0.2);
-  --ring: var(--sage);
-  /* Foregrounds for the light accent/secondary fills: dark text, from the existing palette. */
-  --accent-foreground: var(--forest-deep);
-  --secondary-foreground: var(--forest-deep);
+  /* Paper and ink */
+  --ink: #27231d;
+  --background: #ebe6d9;    /* laid paper */
+  --sheet: #f4f0e6;         /* a lighter leaf: fields, the working pages' sheets */
+  --foreground: var(--ink);
+  --muted-foreground: #514939;
+  --heading: var(--ink);
+  --border: rgba(39, 35, 29, 0.16);
+  --rule-strong: rgba(39, 35, 29, 0.42);
+  --tint: rgba(39, 35, 29, 0.05);
+
+  /* The spot colour and its few companions */
+  --moss: #4b5a2c;
+  --walnut: #6e4f2f;
+  --ok: var(--moss);
+  --warn: #7a4f10;          /* ochre */
+  --danger: #8e2f1d;        /* brick */
+  --note: #3d4956;          /* slate */
+
+  /* The old names, now the book's */
+  --forest: var(--moss);
+  --forest-light: var(--moss);
+  --forest-deep: var(--ink);
+  --sage: var(--moss);
+  --sage-light: var(--moss);
+  --gold: var(--walnut);
+  --gold-light: var(--walnut);
+
+  --primary: var(--ink);
+  --primary-foreground: #f6f2e8;
+  --secondary: var(--moss);
+  --secondary-foreground: var(--primary-foreground);
+  --accent: var(--walnut);
+  --accent-foreground: var(--primary-foreground);
+  --card: transparent;
   --card-foreground: var(--foreground);
-  --input: var(--border);
+  --ring: var(--moss);
+  --input: var(--rule-strong);
 
-  /* Glass effect values */
-  --glass-bg: rgba(30, 55, 36, 0.45);
-  --glass-bg-strong: rgba(20, 40, 26, 0.75);
-  --glass-bg-subtle: rgba(30, 55, 36, 0.25);
-  --glass-border: rgba(168, 192, 154, 0.25);
-  --glass-blur: 12px;
+  /* One curve for all motion: a strong ease-out, settling like ink. */
+  --ease: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-/* ---- Base ---- */
+/* Garamond's small x-height reads like a 16px sans at 18px. The working pages keep 16px for dense tables. */
+html { font-size: 18px; }
+html:has([data-surface="work"]) { font-size: 16px; }
+
 body {
   background-color: var(--background);
+  /* laid paper: faint chain lines, nothing louder */
+  background-image: repeating-linear-gradient(90deg, rgba(39, 35, 29, 0.022) 0 1px, transparent 1px 26px);
   color: var(--foreground);
-  font-family: Inter, system-ui, sans-serif;
+  font-family: var(--font-book), "Iowan Old Style", Georgia, serif;
+  font-variant-numeric: oldstyle-nums; /* a door code or a price opts into lining figures where it needs them */
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
 
-/* ---- Glass panels ---- */
-.glass-panel {
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border: 1px solid var(--glass-border);
-  border-radius: 16px;
+/* Headings in the base layer, so a heading's own utilities (font-medium, not-italic, tracking-*) still apply. */
+@layer base {
+  h1, h2, h3, h4 { font-weight: 500; letter-spacing: 0; }
+  h1 { font-weight: 400; }
+  h2 { font-style: italic; font-weight: 400; }
+  [data-surface="work"] :is(h2, h3, h4) { font-family: inherit; font-style: normal; font-weight: 600; }
 }
+:is(.font-bold, .font-semibold) { font-weight: 600; }
+code, kbd, pre, samp, .font-mono { font-variant-numeric: normal; }
+::selection { background: rgba(75, 90, 44, 0.22); }
 
-.glass-panel-strong {
-  background: var(--glass-bg-strong);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(168, 192, 154, 0.3);
-  border-radius: 16px;
+/* ---- Panels: text on the page, no box (public pages; the working pages draw sheets, below) ---------
+   Unlayered on purpose: it must beat a component's own `border` / `bg-*` utilities, so no box comes back. A panel
+   that carries a tone (a notice, the featured plan) says so with .panel-tone and keeps its own outline. */
+:is(.glass-panel, .glass-panel-strong, .glass-panel-subtle):not([data-surface="work"] *):not(.panel-tone) {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
+/* Rows of things (events, series, members) are separated by a rule, like entries in a book. */
+.glass-panel-subtle:not([data-surface="work"] *):not(.panel-tone) { border-top: 1px solid var(--border); }
 
-.glass-panel-subtle {
-  background: var(--glass-bg-subtle);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(168, 192, 154, 0.15);
-  border-radius: 12px;
-}
-
-/* ---- Buttons ---- */
-.btn-primary-glass {
-  background: linear-gradient(135deg, var(--forest-light), var(--forest-deep));
-  color: var(--primary-foreground);
-  border: 1px solid rgba(168, 192, 154, 0.3);
-  backdrop-filter: blur(8px);
-  transition: all 0.3s ease;
-}
-
-.btn-primary-glass:hover {
-  background: linear-gradient(135deg, var(--forest), var(--forest-light));
-  box-shadow: 0 8px 24px rgba(45, 90, 61, 0.4);
-  transform: translateY(-1px);
-}
-
+/* ---- Buttons: solid ink or an outline; press feedback only --------------------------------------- */
+.btn-primary-glass,
 .btn-glass {
-  background: var(--glass-bg-subtle);
-  color: var(--foreground);
-  border: 1px solid var(--glass-border);
-  backdrop-filter: blur(8px);
-  transition: all 0.2s ease;
+  border-radius: 2px;
+  font-style: italic;
+  letter-spacing: 0.01em;
+  box-shadow: none;
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease, transform 160ms var(--ease);
 }
-
-.btn-glass:hover {
-  background: var(--glass-bg);
-  border-color: rgba(168, 192, 154, 0.4);
+.btn-primary-glass { background: var(--ink); color: var(--primary-foreground); border: 1px solid var(--ink); }
+.btn-glass { background: transparent; color: var(--foreground); border: 1px solid var(--rule-strong); }
+@media (hover: hover) and (pointer: fine) {
+  .btn-primary-glass:hover { background: var(--moss); border-color: var(--moss); }
+  .btn-glass:hover { background: var(--tint); border-color: var(--ink); }
 }
+:is(.btn-primary-glass, .btn-glass):active { transform: scale(0.97); }
 
-/* ---- Form inputs ---- */
+/* ---- Fields --------------------------------------------------------------------------------------- */
 .glass-input {
-  background: var(--glass-bg-subtle);
-  border: 1px solid var(--glass-border);
+  background: var(--sheet);
+  border: 1px solid var(--rule-strong);
   color: var(--foreground);
-  backdrop-filter: blur(8px);
-  transition: border-color 0.2s ease;
+  transition: border-color 150ms ease;
 }
-
-.glass-input:focus {
-  outline: none;
-  border-color: rgba(168, 192, 154, 0.5);
-  box-shadow: 0 0 0 2px rgba(168, 192, 154, 0.1);
-}
-
-.glass-input::placeholder {
-  color: var(--muted-foreground);
-  opacity: 0.6;
-}
+.glass-input:focus { outline: none; border-color: var(--moss); box-shadow: 0 0 0 2px rgba(75, 90, 44, 0.18); }
+::placeholder { color: var(--muted-foreground); opacity: 0.85; }
 
 /* ---- Utility ---- */
 .text-forest { color: var(--heading); }
 
-.hover-lift {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-.hover-lift:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+/* Things you can open (cards, rows): hover is a quiet change of rule, never a lift. */
+.hover-lift { transition: border-color 150ms ease; }
+@media (hover: hover) and (pointer: fine) {
+  .hover-lift:hover { border-color: var(--rule-strong); }
 }
 
-.hover-glow:hover {
-  box-shadow: 0 0 20px rgba(45, 90, 61, 0.5);
+/* ---- Native dialogs (e.g. Cancel membership) sit on a solid leaf over a dimmed page ---------------- */
+dialog:is(.glass-panel, .glass-panel-strong):not([data-surface="work"] *) { background: var(--sheet); border: 1px solid var(--rule-strong); border-radius: 4px; }
+dialog::backdrop { background: rgba(20, 18, 14, 0.32); }
+
+/* =====================================================================================================
+   The working pages: portal and admin
+   ===================================================================================================== */
+[data-surface="work"] {
+  font-family: var(--font-work), system-ui, sans-serif;
+  font-variant-numeric: lining-nums tabular-nums; /* figures line up in tables */
+  line-height: 1.5;
+  background: var(--background);
+}
+/* The page's title is the one Garamond line. */
+[data-surface="work"] main h1 { font-family: var(--font-book), Georgia, serif; font-weight: 400; letter-spacing: 0; }
+[data-surface="work"] :is(.btn-primary-glass, .btn-glass) { font-style: normal; font-weight: 500; letter-spacing: 0; border-radius: 4px; }
+
+/* Sheets: a lighter leaf laid on the paper groups each thing; a sheet inside a sheet is just a rule. In the
+   components layer, so a panel's own tone utilities (a brick "past due" alert: border-danger/40 bg-danger/10) win. */
+@layer components {
+  [data-surface="work"] :is(.glass-panel, .glass-panel-strong) {
+    background: var(--sheet);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  [data-surface="work"] :where(.glass-panel, .glass-panel-strong, .glass-panel-subtle) :is(.glass-panel, .glass-panel-strong) {
+    background: transparent;
+    border-width: 1px 0 0;
+    border-radius: 0;
+  }
+  [data-surface="work"] dialog:is(.glass-panel, .glass-panel-strong) { background: var(--sheet); border: 1px solid var(--rule-strong); border-radius: 6px; }
+  [data-surface="work"] header nav.glass-panel-subtle { border-bottom: 1px solid var(--border); }
+  [data-surface="work"] header { background: var(--background); }
 }
 
-/* ---- Animations ---- */
-@keyframes sway {
-  0%, 100% { transform: rotate(-3deg); }
-  50%       { transform: rotate(3deg); }
-}
+/* =====================================================================================================
+   Motion
+   ===================================================================================================== */
 
-@keyframes fade-in-up {
-  from { opacity: 0; transform: translateY(20px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
+/* The page's arrival, when a page (or a section of pages sharing a layout) loads: the content rises a few pixels as it appears. The working
+   pages never move. On home the ensō starts drawing first; the title, its line and the actions settle in while it draws. */
+@keyframes arrive { from { opacity: 0; transform: translateY(var(--arrive-rise, 6px)); } }
+/* backwards, not both: once arrived nothing is left applied (a held transform would trap fixed children). */
+.arrive { animation: arrive 900ms var(--ease) backwards; animation-delay: var(--arrive-at, 0ms); }
 
-@keyframes hop {
-  0%, 100% { transform: translateY(0); }
-  50%       { transform: translateY(-8px); }
-}
-
-@keyframes float-particles {
-  0%, 100% { background-position: 0% 0%; }
-  50%       { background-position: 5% 5%; }
-}
-
-.animate-sway       { animation: sway 3s ease-in-out infinite; }
-.animate-fade-in-up { animation: fade-in-up 0.6s ease forwards; }
-.animate-hop        { animation: hop 0.6s ease-in-out infinite; }
+@keyframes ink { from { stroke-dashoffset: 1; } }
+.enso path { stroke-dasharray: 1; stroke-dashoffset: 0; animation: ink 1.6s var(--ease) 200ms both; }
 
 /* Keyboard focus also covers custom controls and overrides input resets. */
 :is(a[href], button, input, select, textarea, summary, [tabindex], [contenteditable="true"]):focus-visible {
@@ -193,8 +230,10 @@ body {
   outline-offset: 3px;
 }
 
+/* Calm means still: no animation and no transition at all. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation: none !important;
+    transition: none !important;
   }
 }

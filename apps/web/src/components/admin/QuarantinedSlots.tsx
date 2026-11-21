@@ -31,7 +31,7 @@ export function QuarantinedSlots({ slots }: { slots: QuarantinedSlot[] }) {
     <div className="glass-panel p-5 space-y-3">
       <h2 className="font-semibold">Quarantined slots ({slots.length})</h2>
       <p className="text-sm text-muted">These slots cannot be allocated. Retry clear removes the PIN and releases its assignment only when every configured door reports success.</p>
-      {error && <p role="alert" className="text-red-400 text-sm">{error}</p>}
+      {error && <p role="alert" className="text-danger text-sm">{error}</p>}
       {slots.map(row => (
         <div key={row.slot} className="flex items-center justify-between gap-4 text-sm">
           <div>Slot {row.slot} · {row.reason}<p className="text-xs text-muted">Since {fmtBoulderDateTime(row.quarantined_at)}</p></div>

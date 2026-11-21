@@ -218,10 +218,10 @@ export default async function PortalPage() {
   if (!member) {
     if (application) {
       const statusColor = application.status === "approved"
-        ? "text-green-400"
+        ? "text-ok"
         : application.status === "rejected"
-          ? "text-red-400"
-          : "text-yellow-400";
+          ? "text-danger"
+          : "text-warn";
       const StatusIcon = application.status === "approved" ? CheckCircle : Clock;
       return (
         <div className="glass-panel p-8 text-center max-w-md mx-auto mt-16">
@@ -270,7 +270,7 @@ export default async function PortalPage() {
               <p className="text-sm font-medium mb-1">Already a member via Telegram?</p>
               <p className="text-xs text-muted leading-relaxed">
                 If you have an existing account through our Telegram bot, send{" "}
-                <code className="bg-white/10 px-1.5 py-0.5 rounded text-foreground">/email {user.email}</code>{" "}
+                <code className="bg-tint px-1.5 py-0.5 rounded text-foreground">/email {user.email}</code>{" "}
                 to the bot to link your account. Then refresh this page.
               </p>
             </div>
@@ -329,10 +329,10 @@ export default async function PortalPage() {
     <div className="max-w-3xl space-y-8">
       {/* Top-priority banner: payment failed needs attention */}
       {activeSubscription?.status === "past_due" && (
-        <div className="glass-panel p-4 border border-red-500/40 bg-red-500/5 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+        <div className="glass-panel p-4 border border-danger/40 bg-danger/10 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-danger shrink-0 mt-0.5" />
           <div className="flex-1">
-            <p className="text-sm font-medium text-red-400">Your payment is past due</p>
+            <p className="text-sm font-medium text-danger">Your payment is past due</p>
             <p className="text-xs text-muted mt-0.5">
               {activeSubscription.payment_rail === "onchain"
                 ? "Complete the USDC renewal below. Door access continues for seven days while you sort it out."
@@ -365,7 +365,7 @@ export default async function PortalPage() {
             {member.pin_code ? (
               <RevealPin code={member.pin_code} slot={null} />
             ) : (
-              <p className="text-sm text-amber-400 mt-3">
+              <p className="text-sm text-warn mt-3">
                 No code yet. <Link href="/portal/my-code" className="underline">Set your door code</Link> to get in.
               </p>
             )}
@@ -388,13 +388,13 @@ export default async function PortalPage() {
                     {freeDayClaim.status === "activated" ? (
                       <>
                         <Zap className="w-8 h-8 text-gold mb-3" />
-                        <h3 className="font-semibold mb-1">Free Day Active</h3>
+                        <h3 className="font-semibold mb-1">Free day active</h3>
                         <p className="text-sm text-muted">View your door code</p>
                       </>
                     ) : freeDayClaim.status === "reserved" ? (
                       <>
                         <Calendar className="w-8 h-8 text-gold mb-3" />
-                        <h3 className="font-semibold mb-1">Free Day Reserved</h3>
+                        <h3 className="font-semibold mb-1">Free day reserved</h3>
                         <p className="text-sm text-muted">
                           {!freeDayClaim.claimed_date || freeDayClaim.claimed_date === new Intl.DateTimeFormat("en-CA", { timeZone: "America/Denver" }).format(new Date())
                             ? "Tap to get your door code — visit any weekday"
@@ -404,7 +404,7 @@ export default async function PortalPage() {
                     ) : (
                       <>
                         <Clock className="w-8 h-8 text-sage mb-3" />
-                        <h3 className="font-semibold mb-1">Application Pending</h3>
+                        <h3 className="font-semibold mb-1">Application pending</h3>
                         <p className="text-sm text-muted">Your free day is being reviewed</p>
                       </>
                     )}
@@ -466,7 +466,7 @@ export default async function PortalPage() {
                   )}
                 </h3>
                 {activeSubscription.cancel_at_period_end && activeSubscription.current_period_end && (
-                  <p className="text-sm text-amber-400 flex items-center gap-1.5">
+                  <p className="text-sm text-warn flex items-center gap-1.5">
                     <AlertCircle className="w-4 h-4" />
                     Cancelling on{" "}
                     {new Date(activeSubscription.current_period_end).toLocaleDateString("en-US", {
@@ -477,19 +477,19 @@ export default async function PortalPage() {
                   </p>
                 )}
                 {activeSubscription.status === "past_due" && (
-                  <p className="text-sm text-red-400 flex items-center gap-1.5">
+                  <p className="text-sm text-danger flex items-center gap-1.5">
                     <AlertCircle className="w-4 h-4" />
                     {activeSubscription.payment_rail === "onchain" ? "USDC renewal past due" : "Payment failed — update your card to keep access"}
                   </p>
                 )}
                 {activeSubscription.status === "incomplete" && (
-                  <p className="text-sm text-amber-400 flex items-center gap-1.5">
+                  <p className="text-sm text-warn flex items-center gap-1.5">
                     <AlertCircle className="w-4 h-4" />
                     Awaiting your first USDC payment — access starts after confirmation
                   </p>
                 )}
                 {pendingSwitch && (
-                  <p className="text-sm text-amber-300 flex items-start gap-1.5 max-w-md">
+                  <p className="text-sm text-warn flex items-start gap-1.5 max-w-md">
                     <CalendarClock className="w-4 h-4 mt-0.5 shrink-0" />
                     <span>
                       Switching to <strong className="text-foreground">{pendingSwitch.label}</strong> on{" "}
@@ -564,7 +564,7 @@ export default async function PortalPage() {
         </Card>
       )}
 
-      <nav aria-label="More" className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted border-t border-white/5 pt-4" data-testid="portal-more">
+      <nav aria-label="More" className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted border-t border-rule pt-4" data-testid="portal-more">
         <Link href="/portal/profile" className="hover:text-foreground">Your profile</Link>
         {coopView && <Link href="/portal/access-log" className="hover:text-foreground">Who came in</Link>}
       </nav>

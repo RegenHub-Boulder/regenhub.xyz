@@ -25,7 +25,7 @@ const offered = (role: number) => (role >= 40 ? 40 : role >= 30 ? 30 : 20);
 const day = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Denver" }) : null;
 
-const selectClass = "rounded-md border border-white/10 bg-black/20 px-2 py-1.5 text-sm text-foreground";
+const selectClass = "rounded-md border border-rule bg-ink/10 px-2 py-1.5 text-sm text-foreground";
 
 export function StewardRoster({ rows, me }: { rows: RosterRow[]; me: string }) {
   const router = useRouter();
@@ -65,7 +65,7 @@ export function StewardRoster({ rows, me }: { rows: RosterRow[]; me: string }) {
   return (
     <div className="space-y-6 max-w-3xl">
       {error && (
-        <p className="text-sm text-red-300" role="alert" data-testid="stewards-error">
+        <p className="text-sm text-danger" role="alert" data-testid="stewards-error">
           {error}
         </p>
       )}
@@ -88,7 +88,7 @@ export function StewardRoster({ rows, me }: { rows: RosterRow[]; me: string }) {
           <span className="text-muted">Techne handle</span>
           <input
             id="steward-handle"
-            className="w-full rounded-md border border-white/10 bg-black/20 px-3 py-1.5 text-sm text-foreground"
+            className="w-full rounded-md border border-rule bg-ink/10 px-3 py-1.5 text-sm text-foreground"
             placeholder="name.techne.town"
             autoComplete="off"
             value={handle}
@@ -110,7 +110,7 @@ export function StewardRoster({ rows, me }: { rows: RosterRow[]; me: string }) {
         </Button>
       </form>
 
-      <ul className="glass-panel divide-y divide-white/5" data-testid="stewards-list">
+      <ul className="glass-panel divide-y divide-rule" data-testid="stewards-list">
         {rows.map((r) => {
           const choice = picked[r.did] ?? offered(r.role);
           const changed = choice !== offered(r.role);
@@ -157,7 +157,7 @@ export function StewardRoster({ rows, me }: { rows: RosterRow[]; me: string }) {
                 type="button"
                 size="sm"
                 variant="ghost"
-                className="text-muted hover:text-red-300"
+                className="text-muted hover:text-danger"
                 disabled={!!busy}
                 onClick={() => {
                   if (!window.confirm(`End ${r.label}'s role in RegenHub? Their claim gets an end date; what they did while they held it still counts.`)) return;

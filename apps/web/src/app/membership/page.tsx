@@ -114,7 +114,7 @@ export default async function MembershipPage({ searchParams }: PageProps) {
     <div className="px-6 py-12">
       <div className="max-w-5xl mx-auto space-y-12">
         <header className="text-center space-y-3">
-          <p className="text-sm text-sage uppercase tracking-wider flex items-center justify-center gap-2">
+          <p className="text-sm text-sage flex items-center justify-center gap-2">
             <Sparkles className="w-4 h-4" />
             RegenHub Membership
           </p>
@@ -128,13 +128,13 @@ export default async function MembershipPage({ searchParams }: PageProps) {
         <MemberOffer />
 
         {wasCancelled && (
-          <div className="glass-panel p-4 border border-white/10 text-center">
+          <div className="glass-panel p-4 border border-rule text-center">
             <p className="text-sm text-muted">Checkout cancelled — no charge made. Come back any time.</p>
           </div>
         )}
 
         {hasActiveSub && (
-          <div className="glass-panel p-5 border border-sage/30 max-w-2xl mx-auto text-center space-y-3">
+          <div className="glass-panel panel-tone p-5 border border-sage/30 max-w-2xl mx-auto text-center space-y-3">
             <p className="font-medium">You already have an active membership.</p>
             <p className="text-sm text-muted">Manage your subscription, switch plans, or update your card in the portal.</p>
             <Link href="/portal">
@@ -146,7 +146,7 @@ export default async function MembershipPage({ searchParams }: PageProps) {
         )}
 
         {showNotApprovedBanner && (
-          <div className="glass-panel p-5 border border-amber-500/30 max-w-2xl mx-auto text-center space-y-3">
+          <div className="glass-panel panel-tone p-5 border border-warn/40 max-w-2xl mx-auto text-center space-y-3">
             <p className="font-medium">Apply to join first</p>
             <p className="text-sm text-muted">
               We approve membership signups manually so we can welcome each member personally.
@@ -166,7 +166,7 @@ export default async function MembershipPage({ searchParams }: PageProps) {
         )}
 
         {showDeskGate && (
-          <div className="glass-panel p-5 border border-gold/30 max-w-2xl mx-auto text-center space-y-3">
+          <div className="glass-panel panel-tone p-5 border border-gold/30 max-w-2xl mx-auto text-center space-y-3">
             <p className="font-medium">Full Access needs one more step</p>
             <p className="text-sm text-muted">
               You&apos;re cleared for the member plans below. Full Access
@@ -194,7 +194,7 @@ export default async function MembershipPage({ searchParams }: PageProps) {
               {LADDER.map(({ step, title, price, body }) => (
                 <Card key={title} className="glass-panel">
                   <CardContent className="p-6 space-y-2">
-                    <p className="text-xs uppercase tracking-wider text-sage">Step {step}</p>
+                    <p className="text-xs text-sage">Step {step}</p>
                     <h2 className="text-xl font-semibold text-forest">{title}</h2>
                     <p className="text-2xl font-bold text-gold">{price}</p>
                     <p className="text-sm text-muted leading-relaxed">{body}</p>
@@ -239,7 +239,7 @@ export default async function MembershipPage({ searchParams }: PageProps) {
                 return (
                   <Card
                     key={key}
-                    className={`glass-panel relative ${isFeatured ? "border border-sage/40" : ""}`}
+                    className={`glass-panel relative ${isFeatured ? "panel-tone border border-sage/40" : ""}`}
                   >
                     {isFeatured && (
                       <span
@@ -257,8 +257,8 @@ export default async function MembershipPage({ searchParams }: PageProps) {
                           <span className="text-sm text-muted">/month</span>
                         </div>
                       </div>
-                      <p className="text-sm text-foreground/80">{def.description}</p>
-                      <div className="border-t border-white/10 pt-4 space-y-2 flex-1">
+                      <p className="text-sm text-muted">{def.description}</p>
+                      <div className="border-t border-rule pt-4 space-y-2 flex-1">
                         {def.monthlyDayPasses ? (
                           <div className="flex items-start gap-2 text-sm">
                             <Check className="w-4 h-4 text-sage shrink-0 mt-0.5" />
@@ -313,8 +313,8 @@ export default async function MembershipPage({ searchParams }: PageProps) {
                           <span className="text-sm text-muted">/month</span>
                         </div>
                       </div>
-                      <p className="text-sm text-foreground/80">{def.description}</p>
-                      <div className="border-t border-white/10 pt-4 space-y-2 flex-1">
+                      <p className="text-sm text-muted">{def.description}</p>
+                      <div className="border-t border-rule pt-4 space-y-2 flex-1">
                         <div className="flex items-start gap-2 text-sm">
                           <Check className="w-4 h-4 text-sage shrink-0 mt-0.5" />
                           <span className="text-foreground font-medium">

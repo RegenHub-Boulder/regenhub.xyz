@@ -13,7 +13,7 @@ export const PEOPLE_TABS: { key: PeopleTab; label: string; href: string }[] = [
 function PendingBadge({ count }: { count?: number }) {
   if (!count || count <= 0) return null;
   return (
-    <span className="text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-full">
+    <span className="text-xs bg-warn/10 text-warn border border-warn/40 px-1.5 py-0.5 rounded-full">
       {count}
     </span>
   );
@@ -33,7 +33,7 @@ export function PeopleTabs({
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold text-forest">People</h1>
-      <nav aria-label="People" className="flex gap-1 border-b border-white/10 -mb-px overflow-x-auto">
+      <nav aria-label="People" className="flex gap-1 border-b border-rule -mb-px overflow-x-auto">
         {PEOPLE_TABS.map((t) => (
           <Link
             key={t.key}

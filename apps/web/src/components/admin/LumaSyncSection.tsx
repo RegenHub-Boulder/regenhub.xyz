@@ -43,7 +43,7 @@ export function LumaSyncSection({ sync, now }: { sync: LumaSync | null; now: Dat
       </div>
 
       {sync === null ? (
-        <p className="text-sm text-red-300" role="alert">Couldn&apos;t read Luma&apos;s calendar just now. Reload to try again.</p>
+        <p className="text-sm text-danger" role="alert">Couldn&apos;t read Luma&apos;s calendar just now. Reload to try again.</p>
       ) : (
         <>
           {nights.length === 0 ? (
@@ -53,7 +53,7 @@ export function LumaSyncSection({ sync, now }: { sync: LumaSync | null; now: Dat
               <p className="text-xs text-muted">
                 {missing === 0 ? "Every night here is on Luma." : `${missing} of ${nights.length} not on Luma yet.`}
               </p>
-              <ul className="divide-y divide-white/5 text-sm">
+              <ul className="divide-y divide-rule text-sm">
                 {nights.map(({ night, luma }) => (
                   <li key={night.uri} className="flex items-center justify-between gap-3 py-2" data-testid="luma-sync-night">
                     <span className="min-w-0">
@@ -82,7 +82,7 @@ export function LumaSyncSection({ sync, now }: { sync: LumaSync | null; now: Dat
           {lumaOnly.length > 0 && (
             <div className="space-y-1">
               <h3 className="text-sm font-semibold">Only on Luma</h3>
-              <ul className="divide-y divide-white/5 text-sm">
+              <ul className="divide-y divide-rule text-sm">
                 {lumaOnly.map((e) => (
                   <li key={e.id} className="flex items-center justify-between gap-3 py-2" data-testid="luma-only">
                     <span className="min-w-0">

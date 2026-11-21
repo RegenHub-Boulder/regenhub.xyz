@@ -289,17 +289,17 @@ export function renderFollowup(
     .map(
       (ps) =>
         `<p style="margin: 0 0 14px;">${ps
-          .map((p) => ("text" in p ? esc(p.text) : `<a href="${esc(p.url)}" style="color: #2f6b3a;">${esc(p.link)}</a>`))
+          .map((p) => ("text" in p ? esc(p.text) : `<a href="${esc(p.url)}" style="color: #4b5a2c;">${esc(p.link)}</a>`))
           .join("")}</p>`,
     )
     .join("\n");
   const textParas = paras.map((ps) => ps.map((p) => ("text" in p ? p.text : `${p.link} (${p.url})`)).join("")).join("\n\n");
-  const html = `<!doctype html><html><body style="margin: 0; background: #ffffff;">
-<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15px; line-height: 1.55; color: #1f2a22; max-width: 560px; margin: 0 auto; padding: 24px 20px;">
+  const html = `<!doctype html><html><body style="margin: 0; background: #f4f0e6;">
+<div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; font-size: 15px; line-height: 1.55; color: #27231d; max-width: 560px; margin: 0 auto; padding: 24px 20px;">
 ${htmlParas}
 <p style="margin: 18px 0 0;">${esc(FOLLOWUP_COPY.signoff)}</p>
-<p style="margin: 28px 0 0; font-size: 12px; color: #7a857d;">${esc(FOLLOWUP_COPY.address)}<br>
-<a href="${esc(footer.optOutUrl)}" style="color: #7a857d;">${esc(FOLLOWUP_COPY.noMoreFollowups)}</a> · <a href="${esc(footer.unsubscribeUrl)}" style="color: #7a857d;">${esc(FOLLOWUP_COPY.unsubscribe)}</a></p>
+<p style="margin: 28px 0 0; font-size: 12px; color: #6b6152;">${esc(FOLLOWUP_COPY.address)}<br>
+<a href="${esc(footer.optOutUrl)}" style="color: #6b6152;">${esc(FOLLOWUP_COPY.noMoreFollowups)}</a> · <a href="${esc(footer.unsubscribeUrl)}" style="color: #6b6152;">${esc(FOLLOWUP_COPY.unsubscribe)}</a></p>
 </div></body></html>`;
   const text = `${textParas}\n\n${FOLLOWUP_COPY.signoff}\n\n${FOLLOWUP_COPY.address}\n${FOLLOWUP_COPY.noMoreFollowups}: ${footer.optOutUrl}\n${FOLLOWUP_COPY.unsubscribe}: ${footer.unsubscribeUrl}`;
   return { subject, html, text };

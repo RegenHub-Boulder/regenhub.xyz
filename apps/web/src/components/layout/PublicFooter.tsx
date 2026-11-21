@@ -12,12 +12,12 @@ import regenHubText from "@/assets/regenhub-text.svg";
  */
 export function PublicFooter() {
   return (
-    <footer className="relative px-6 py-12 mt-16">
+    <footer className="relative px-6 py-10 mt-10">
       <div className="max-w-4xl mx-auto">
-        <div className="glass-panel p-8 text-center">
+        <div className="border-t border-rule pt-10 text-center">
           <div className="flex items-center justify-center gap-2 mb-4">
-            <Image src={regenHubLogo} alt="" width={32} height={32} className="animate-sway" />
-            <Image src={regenHubText} alt="RegenHub" height={32} className="h-8 w-auto" />
+            <Image src={regenHubLogo} alt="" width={32} height={32} className="h-7 w-auto" />
+            <Image src={regenHubText} alt="RegenHub" height={32} className="h-6 w-auto" />
           </div>
 
           <p className="flex items-center justify-center gap-2 text-base font-medium">
@@ -26,7 +26,7 @@ export function PublicFooter() {
           </p>
           <p className="mt-2 text-sm text-muted">
             <a href={`mailto:${HUB_EMAIL}`} className="hover:text-sage transition-colors">{HUB_EMAIL}</a>
-            <span className="mx-2 text-muted/50">·</span>
+            <span className="mx-2 text-muted">·</span>
             <a
               href={HUB_TELEGRAM}
               target="_blank"
@@ -48,7 +48,7 @@ export function PublicFooter() {
             <Link href="/portal" className="text-muted hover:text-foreground transition-colors">Member Portal</Link>
           </nav>
 
-          <div className="text-xs text-muted/80 space-y-1 mt-6">
+          <div className="text-xs text-muted space-y-1 mt-6">
             <p>&copy; 2026 RegenHub Limited Cooperative Association</p>
             <p>A Colorado public benefit limited cooperative association</p>
           </div>

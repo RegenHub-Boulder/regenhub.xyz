@@ -50,7 +50,7 @@ export default function InviteCard() {
     <Card className="glass-panel">
       <CardContent className="p-6">
         <UserPlus className="w-8 h-8 text-sage mb-3" />
-        <h3 className="font-semibold mb-1">Invite a Friend</h3>
+        <h3 className="font-semibold mb-1">Invite a friend</h3>
         <p className="text-sm text-muted mb-4">
           Share your personal link to give someone a free day at RegenHub
         </p>

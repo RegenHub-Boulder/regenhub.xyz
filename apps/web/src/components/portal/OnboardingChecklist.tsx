@@ -77,7 +77,7 @@ export function OnboardingChecklist({ hasPinCode, hasPhoto, hasBio, hasTelegram,
   if (doneCount === items.length) return null;
 
   return (
-    <Card className="glass-panel border border-gold/30 bg-gold/[0.03]">
+    <Card className="glass-panel border border-gold/30">
       <CardContent className="p-5">
         <div className="flex items-center justify-between gap-3 mb-1">
           <div className="flex items-center gap-2">
@@ -105,7 +105,7 @@ export function OnboardingChecklist({ hasPinCode, hasPhoto, hasBio, hasTelegram,
                 ) : (
                   <Link
                     {...linkProps}
-                    className="flex items-start gap-2.5 px-2 py-1.5 text-sm rounded hover:bg-white/5 transition-colors"
+                    className="flex items-start gap-2.5 px-2 py-1.5 text-sm rounded hover:bg-ink/10 transition-colors"
                   >
                     <Circle className="w-4 h-4 text-muted shrink-0 mt-0.5" />
                     <div className="flex-1 min-w-0">

@@ -341,10 +341,10 @@ export default function FreeDayForm({
 
           <Card className="glass-panel-strong">
             <CardContent className="p-8 text-center">
-              <p className="text-sm text-muted mb-2 uppercase tracking-wider">
+              <p className="text-sm text-muted mb-2">
                 Your Door Code
               </p>
-              <p className="text-5xl md:text-6xl font-mono font-bold text-gold tracking-[0.2em] mb-4">
+              <p className="text-5xl md:text-6xl font-serif font-normal text-foreground lining-nums tabular-nums tracking-[0.14em] mb-4">
                 {doorCode}
               </p>
               {expiresAt && (
@@ -356,7 +356,7 @@ export default function FreeDayForm({
                 </p>
               )}
               {lockStatus && (
-                <p className={`text-sm mt-2 ${lockStatus.includes("didn't respond") ? "text-amber-400" : "text-emerald-400"}`}>
+                <p className={`text-sm mt-2 ${lockStatus.includes("didn't respond") ? "text-warn" : "text-ok"}`}>
                   {lockStatus}
                 </p>
               )}
@@ -451,7 +451,7 @@ export default function FreeDayForm({
             </p>
 
             {error && (
-              <p className="text-sm text-red-400 mb-4">{error}</p>
+              <p className="text-sm text-danger mb-4">{error}</p>
             )}
 
             <Button
@@ -635,7 +635,7 @@ export default function FreeDayForm({
                 />
               </div>
 
-              {error && <p className="text-sm text-red-400">{error}</p>}
+              {error && <p className="text-sm text-danger">{error}</p>}
 
               <Button
                 type="submit"
@@ -686,8 +686,8 @@ export default function FreeDayForm({
                 ]
             ).map(({ step, text }) => (
 <div key={step}>
-                <div className="w-8 h-8 rounded-full bg-forest/30 border border-sage/30 flex items-center justify-center mx-auto mb-2">
-                  <span className="text-sm font-bold text-sage">{step}</span>
+                <div className="w-8 h-8 rounded-full border border-ink/40 flex items-center justify-center mx-auto mb-2">
+                  <span className="text-sm text-foreground">{step}</span>
                 </div>
                 <p className="text-xs text-muted">{text}</p>
               </div>

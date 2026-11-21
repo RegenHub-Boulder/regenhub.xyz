@@ -165,8 +165,9 @@ Door off: `/auth/login` and `/apply` are the email link form, as before; the rou
 
 **No scenius anywhere:** the regenOS panel is gone from `/auth/login` and `/apply`, the "Link regenOS" card from
 `/portal`, the "Old steward page" link from `/portal/events`. The lane's code stays behind `REGENOS_LOGIN_ENABLED`
-(off in production) until it is deleted (below). Two landing strings use "scenius" as a concept, unchanged from main
-(`ForestMascot.tsx`, `RegenHubLanding.tsx`): copy, not sign-in; left for Aaron.
+(off in production) until it is deleted (below). A landing string uses "scenius" as a concept, unchanged from main
+(`RegenHubLanding.tsx`; the hopping mascot that also said it went in the T-482 book restyle): copy, not sign-in; left
+for Aaron.
 
 **Subtract.** This replaces the browser client (techne-sdk/auth `signIn`/`restore`, `useTechneSession`), the
 service-auth door (`/api/auth/techne/session`, `serviceAuth.ts`, `portalAuth.ts`, the `rpc:xyz.regenhub.portal.signIn`

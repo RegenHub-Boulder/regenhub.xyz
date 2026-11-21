@@ -125,18 +125,18 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
   const typeLabel = memberTypeLabel(member.member_type);
 
   const memberTypeColor =
-    member.member_type === "cold_desk" ? "bg-green-500/20 text-green-400 border-green-500/30"
-    : member.member_type === "hot_desk" ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-    : member.member_type === "hub_friend" ? "bg-purple-500/20 text-purple-400 border-purple-500/30"
-    : "bg-blue-500/20 text-blue-400 border-blue-500/30";
+    member.member_type === "cold_desk" ? "bg-ok/10 text-ok border-ok/40"
+    : member.member_type === "hot_desk" ? "bg-ok/10 text-ok border-ok/40"
+    : member.member_type === "hub_friend" ? "bg-note/10 text-note border-note/40"
+    : "bg-note/10 text-note border-note/40";
 
   return (
     <div className="space-y-6 max-w-3xl">
       {pastDue && (
-        <div className="glass-panel p-4 border border-red-500/40 bg-red-500/5 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+        <div className="glass-panel p-4 border border-danger/40 bg-danger/10 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-danger shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-medium text-red-400">Payment past due</p>
+            <p className="text-sm font-medium text-danger">Payment past due</p>
             <p className="text-xs text-muted mt-0.5">
               {member.name}&apos;s {planLabel(activeSubscription!.plan_key)} subscription has a failed payment
               {activeSubscription!.past_due_since && (
@@ -172,7 +172,7 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
           {activeSubscription && (
             <Badge className={`text-xs ${
               activeSubscription.status === "past_due"
-                ? "bg-red-500/20 text-red-400 border-red-500/30"
+                ? "bg-danger/10 text-danger border-danger/40"
                 : "bg-sage/20 text-sage border-sage/30"
             }`}>
               ${(typeof activeSubscription.net_cents === "number" ? activeSubscription.net_cents : activeSubscription.monthly_cents) / 100}/mo {planLabel(activeSubscription.plan_key)}
@@ -181,7 +181,7 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
             </Badge>
           )}
           {member.approved_for_daily && !member.approved_for_full && !activeSubscription && (
-            <Badge className="text-xs bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+            <Badge className="text-xs bg-ok/10 text-ok border-ok/40">
               <ShieldCheck className="w-3 h-3 mr-0.5 inline" />
               Approved (Daily)
             </Badge>
@@ -193,7 +193,7 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
             </Badge>
           )}
           {member.disabled && (
-            <Badge className="text-xs bg-red-500/20 text-red-400 border-red-500/30">Disabled</Badge>
+            <Badge className="text-xs bg-danger/10 text-danger border-danger/40">Disabled</Badge>
           )}
           {member.is_admin && (
             <Badge className="text-xs bg-gold/20 text-gold border-gold/30">Admin</Badge>
@@ -259,7 +259,7 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="border-b border-white/10 text-left text-muted text-xs">
+                          <tr className="border-b border-rule text-left text-muted text-xs">
                             <th className="pb-2 pr-4 font-medium">Code</th>
                             <th className="pb-2 pr-4 font-medium">Slot</th>
                             <th className="pb-2 pr-4 font-medium">Status</th>
@@ -270,16 +270,16 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
                         </thead>
                         <tbody>
                           {codeHistory.map((c) => (
-                            <tr key={c.id} className="border-b border-white/5">
+                            <tr key={c.id} className="border-b border-rule">
                               <td className="py-2 pr-4 font-mono text-gold">{c.code}</td>
                               <td className="py-2 pr-4 text-muted">{c.pin_slot}</td>
                               <td className="py-2 pr-4">
                                 {c.is_active ? (
-                                  <Badge className="text-xs bg-emerald-500/20 text-emerald-400 border-emerald-500/30">Active</Badge>
+                                  <Badge className="text-xs bg-ok/10 text-ok border-ok/40">Active</Badge>
                                 ) : c.revoked_at ? (
-                                  <Badge className="text-xs bg-red-500/20 text-red-400 border-red-500/30">Revoked</Badge>
+                                  <Badge className="text-xs bg-danger/10 text-danger border-danger/40">Revoked</Badge>
                                 ) : (
-                                  <Badge className="text-xs bg-white/10 text-muted border-white/20">Expired</Badge>
+                                  <Badge className="text-xs bg-tint text-muted border-rule">Expired</Badge>
                                 )}
                               </td>
                               <td className="py-2 pr-4 text-xs text-muted">

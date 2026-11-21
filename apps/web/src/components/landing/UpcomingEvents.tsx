@@ -69,8 +69,8 @@ export async function NextNights() {
   const overviews = await fetchSeriesOverviews();
   return (
     <section className="relative px-6 pb-4" aria-label="Community nights">
-      <div className="max-w-4xl mx-auto space-y-3">
-        <h2 className="text-xl font-semibold text-forest text-center">Come to a night</h2>
+      <div className="max-w-[40rem] mx-auto space-y-3">
+        <h2 className="text-[1.6rem] leading-tight text-forest text-center">Come to a night</h2>
         <SeriesCards overviews={overviews} />
       </div>
     </section>

@@ -61,13 +61,14 @@ export default function CommunityGalleryClient({ photos }: { photos: GalleryPhot
   if (shuffled.length === 0) return null;
 
   return (
-    <section className="relative px-6 py-16">
-      <div className="max-w-6xl mx-auto">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4 text-forest">
+    <section className="relative px-6 py-10">
+      <div className="max-w-[40rem] mx-auto">
+        <hr className="mx-auto mb-10 w-12 border-ink/40" />
+        <div className="text-center mb-8">
+          <h2 className="text-[1.6rem] leading-tight mb-2 text-forest">
             Community Moments
           </h2>
-          <p className="text-xl text-muted max-w-2xl mx-auto">
+          <p className="text-[1.05rem] text-muted max-w-2xl mx-auto">
             Glimpses of our vibrant community in action
           </p>
         </div>
@@ -84,9 +85,9 @@ export default function CommunityGalleryClient({ photos }: { photos: GalleryPhot
             {shuffled.map((photo) => (
               <CarouselItem
                 key={photo.src}
-                className="pl-2 md:pl-4 basis-full md:basis-1/2 lg:basis-1/3"
+                className="pl-2 md:pl-4 basis-full sm:basis-1/2"
               >
-                <Card className="glass-panel hover-lift overflow-hidden">
+                <Card className="overflow-hidden rounded-sm border-0">
                   <div className="aspect-square relative">
                     <Image
                       src={photo.src}
@@ -108,10 +109,10 @@ export default function CommunityGalleryClient({ photos }: { photos: GalleryPhot
           {shuffled.map((photo, index) => (
             <button
               key={photo.src}
-              className={`transition-all ${
+              className={`transition-colors ${
                 index === current
                   ? "w-8 h-2 rounded-full bg-sage"
-                  : "w-2 h-2 rounded-full bg-white/20 hover:bg-white/40"
+                  : "w-2 h-2 rounded-full bg-ink/20 hover:bg-ink/40"
               }`}
               aria-label={`Go to slide ${index + 1}`}
               onClick={() => api?.scrollTo(index)}

@@ -57,7 +57,7 @@ export default function StaleLinksPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-forest">Stale Auth Links</h1>
+        <h1 className="text-2xl font-bold text-forest">Stale auth links</h1>
         <p className="text-muted text-sm mt-1">
           Members whose supabase_user_id points at an auth identity that no longer exists (migration 050) —
           usually from a deleted account whose email later moved onto this row. Relinking points them at
@@ -65,7 +65,7 @@ export default function StaleLinksPage() {
         </p>
       </div>
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && <p className="text-danger text-sm">{error}</p>}
 
       {!members ? (
         <div className="glass-panel-subtle p-8 rounded-xl text-center text-muted">Loading…</div>
@@ -76,7 +76,7 @@ export default function StaleLinksPage() {
       ) : (
         <div className="glass-panel rounded-xl overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="text-left text-xs uppercase tracking-wider text-muted border-b border-white/10">
+            <thead className="text-left text-xs text-muted border-b border-rule">
               <tr>
                 <th className="px-4 py-3 font-medium">Member</th>
                 <th className="px-4 py-3 font-medium">Name</th>
@@ -88,7 +88,7 @@ export default function StaleLinksPage() {
             </thead>
             <tbody>
               {members.map((m) => (
-                <tr key={m.member_id} className="border-b border-white/5 last:border-0">
+                <tr key={m.member_id} className="border-b border-rule last:border-0">
                   <td className="px-4 py-3">
                     <Link href={`/admin/members/${m.member_id}`} className="text-sage hover:underline">
                       #{m.member_id}

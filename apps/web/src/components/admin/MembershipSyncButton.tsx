@@ -93,7 +93,7 @@ export function MembershipSyncButton() {
           Sync claims to regenOS
         </Button>
         {msg && <p className="text-xs text-sage">{msg}</p>}
-        {err && <p className="text-xs text-red-400">{err}</p>}
+        {err && <p className="text-xs text-danger">{err}</p>}
       </div>
 
       {pending && (
@@ -101,7 +101,7 @@ export function MembershipSyncButton() {
           <p className="text-sm font-medium text-forest">
             {pending.length} member{pending.length === 1 ? "" : "s"} would change
           </p>
-          <div className="glass-panel-subtle rounded-lg divide-y divide-white/5 max-h-64 overflow-y-auto">
+          <div className="glass-panel-subtle rounded-lg divide-y divide-rule max-h-64 overflow-y-auto">
             {pending.map((p) => (
               <div key={p.member_id} className="px-3 py-2 flex items-center justify-between text-xs gap-2">
                 <span className="text-foreground">{p.name}</span>

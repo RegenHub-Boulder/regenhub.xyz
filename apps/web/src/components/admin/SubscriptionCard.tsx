@@ -38,11 +38,11 @@ const PLAN_OPTIONS = getAllPlansSorted()
   }));
 
 const statusStyle: Record<string, string> = {
-  active: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-  trialing: "bg-sky-500/20 text-sky-400 border-sky-500/30",
-  past_due: "bg-red-500/20 text-red-400 border-red-500/30",
-  incomplete: "bg-amber-500/20 text-amber-400 border-amber-500/30",
-  canceled: "bg-white/10 text-muted border-white/20",
+  active: "bg-ok/10 text-ok border-ok/40",
+  trialing: "bg-note/10 text-note border-note/40",
+  past_due: "bg-danger/10 text-danger border-danger/40",
+  incomplete: "bg-warn/10 text-warn border-warn/40",
+  canceled: "bg-tint text-muted border-rule",
 };
 const statusWord: Record<string, string> = {
   active: "Active", trialing: "Trial", past_due: "Past due", incomplete: "Not paid yet",
@@ -65,8 +65,8 @@ function StatusBadge({ subscription }: { subscription: Subscription }) {
   }
   const canceling = subscription.cancel_at_period_end;
   const style = canceling && subscription.status !== "past_due"
-    ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
-    : statusStyle[subscription.status] ?? "border-white/20";
+    ? "bg-warn/10 text-warn border-warn/40"
+    : statusStyle[subscription.status] ?? "border-rule";
   return (
     <Badge className={`text-xs ${style}`} data-testid="subscription-status">
       {statusWord[subscription.status] ?? subscription.status}
@@ -228,7 +228,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, sub
             {subscription && (
               <>
                 <StatusBadge subscription={subscription} />
-                <Badge className="text-xs bg-white/5 border-white/15 text-muted">
+                <Badge className="text-xs bg-tint border-rule text-muted">
                   {subscription.payment_rail === "onchain" ? "Crypto · USDC" : "Card · Stripe"}
                 </Badge>
                 <span className="text-xs text-muted">{planLabel(subscription.plan_key)}</span>
@@ -247,7 +247,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, sub
             <Button
               size="sm"
               onClick={() => setShowRevoke(!showRevoke)}
-              className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 text-xs gap-1 h-7"
+              className="bg-danger/10 hover:bg-danger/20 text-danger border border-danger/40 text-xs gap-1 h-7"
             >
               <Ban className="w-3 h-3" /> Revoke access
             </Button>
@@ -266,7 +266,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, sub
           <div className="text-xs space-y-1" role="status">
             <p className="text-sage">{cancelResultSummary(cancelResult)}</p>
             {cancelResult.warnings.map((w) => (
-              <p key={w} className="text-amber-400">{w}</p>
+              <p key={w} className="text-warn">{w}</p>
             ))}
           </div>
         )}
@@ -285,7 +285,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, sub
                   </span>
                 )}
               {activeSubscription.pending_plan_key && (
-                <Badge className="text-xs bg-sky-500/15 text-sky-300 border-sky-500/30">
+                <Badge className="text-xs bg-note/10 text-note border-note/40">
                   → {planLabel(activeSubscription.pending_plan_key)} on {fmtDate(activeSubscription.pending_plan_at ?? null)}
                 </Badge>
               )}
@@ -303,7 +303,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, sub
               Next renewal: {fmtDate(activeSubscription.current_period_end)}
             </p>
             {activeSubscription.past_due_since && (
-              <p className="text-xs text-red-400">
+              <p className="text-xs text-danger">
                 Past due since {fmtDate(activeSubscription.past_due_since)}
               </p>
             )}
@@ -328,13 +328,13 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, sub
             <div>
               <p className="text-xs text-muted mb-1.5 font-medium">Plan</p>
               <div className="flex gap-1.5 flex-wrap">{PLAN_OPTIONS.map((p) => (
-                <button key={p.key} type="button" onClick={() => selectPlan(p.key)} className={`px-2 py-1 rounded text-xs border ${planKey === p.key ? "bg-sage/20 border-sage/50 text-sage" : "bg-white/5 border-white/10 text-muted"}`}>{p.label} · ${p.defaultDollars}</button>
+                <button key={p.key} type="button" onClick={() => selectPlan(p.key)} className={`px-2 py-1 rounded text-xs border ${planKey === p.key ? "bg-sage/20 border-sage/50 text-sage" : "bg-tint border-rule text-muted"}`}>{p.label} · ${p.defaultDollars}</button>
               ))}</div>
             </div>
             <div className="grid sm:grid-cols-3 gap-3">
-              <label className="text-xs text-muted">Monthly list rate ($)<input type="number" min="1" value={monthlyDollars} onChange={(e) => setMonthlyDollars(e.target.value)} className="mt-1 w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-sm text-foreground" /></label>
-              <label className="text-xs text-muted">Paid through<input type="date" value={paidThrough} onChange={(e) => setPaidThrough(e.target.value)} className="mt-1 w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-sm text-foreground" /></label>
-              <label className="text-xs text-muted sm:col-span-3">Existing wallet<input value={walletAddress} onChange={(e) => setWalletAddress(e.target.value)} placeholder="0x…" className="mt-1 w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-sm text-foreground font-mono" /></label>
+              <label className="text-xs text-muted">Monthly list rate ($)<input type="number" min="1" value={monthlyDollars} onChange={(e) => setMonthlyDollars(e.target.value)} className="mt-1 w-full bg-tint border border-rule rounded px-2 py-1.5 text-sm text-foreground" /></label>
+              <label className="text-xs text-muted">Paid through<input type="date" value={paidThrough} onChange={(e) => setPaidThrough(e.target.value)} className="mt-1 w-full bg-tint border border-rule rounded px-2 py-1.5 text-sm text-foreground" /></label>
+              <label className="text-xs text-muted sm:col-span-3">Existing wallet<input value={walletAddress} onChange={(e) => setWalletAddress(e.target.value)} placeholder="0x…" className="mt-1 w-full bg-tint border border-rule rounded px-2 py-1.5 text-sm text-foreground font-mono" /></label>
             </div>
             <p className="text-xs text-sage">Member crypto rate: ${(Math.round((parseFloat(monthlyDollars || "0") || 0) * 100) / 100).toFixed(2)} USDC/mo</p>
             <div className="flex gap-2"><Button size="sm" disabled={busy} onClick={createOnchainSubscription} className="bg-sage/20 hover:bg-sage/40 text-sage border border-sage/30 text-xs gap-1 h-7">{busy && <Loader2 className="w-3 h-3 animate-spin" />} Create crypto membership</Button><Button size="sm" variant="ghost" onClick={() => setShowOnchain(false)} className="text-xs">Cancel</Button></div>
@@ -357,7 +357,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, sub
                     className={`px-2 py-1 rounded text-xs border ${
                       planKey === p.key
                         ? "bg-sage/20 border-sage/50 text-sage"
-                        : "bg-white/5 border-white/10 text-muted hover:bg-white/10"
+                        : "bg-tint border-rule text-muted hover:bg-ink/10"
                     }`}
                   >
                     {p.label} · ${p.defaultDollars}
@@ -375,7 +375,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, sub
                     min="1"
                     value={monthlyDollars}
                     onChange={(e) => setMonthlyDollars(e.target.value)}
-                    className="w-20 bg-white/5 border border-white/10 rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
+                    className="w-20 bg-tint border border-rule rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
                   />
                   <span className="text-xs text-muted">/mo</span>
                 </div>
@@ -389,7 +389,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, sub
                     max="730"
                     value={trialDays}
                     onChange={(e) => setTrialDays(e.target.value)}
-                    className="w-16 bg-white/5 border border-white/10 rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
+                    className="w-16 bg-tint border border-rule rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
                   />
                   <span className="text-xs text-muted">days</span>
                 </div>
@@ -402,7 +402,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, sub
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="e.g. Migrating from Xero $300/mo"
-                className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
+                className="w-full bg-tint border border-rule rounded px-2 py-1 text-sm focus:outline-none focus:border-sage/50"
               />
             </div>
             <div className="flex gap-2">
@@ -418,14 +418,14 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, sub
         )}
 
         {generated && (
-          <div className="glass-panel p-3 border border-emerald-500/30 space-y-3 text-sm">
-            <p className="text-xs text-emerald-400 font-medium">
+          <div className="glass-panel p-3 border border-ok/40 space-y-3 text-sm">
+            <p className="text-xs text-ok font-medium">
               ✓ Link generated. Copy + send to {memberName}.
             </p>
             <div className="space-y-2">
               <p className="text-xs text-muted">Checkout URL</p>
               <div className="flex gap-1.5">
-                <code className="flex-1 bg-white/5 px-2 py-1.5 rounded text-xs truncate font-mono">
+                <code className="flex-1 bg-tint px-2 py-1.5 rounded text-xs truncate font-mono">
                   {generated.url}
                 </code>
                 <Button size="sm" onClick={() => copy(generated.url, "url")} className="btn-glass text-xs h-7 gap-1">
@@ -450,7 +450,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, sub
                 onChange={() => { /* read-only for the suggested template; admin should copy + edit in their mail client */ }}
                 readOnly
                 rows={11}
-                className="w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-xs font-mono focus:outline-none"
+                className="w-full bg-tint border border-rule rounded px-2 py-1.5 text-xs font-mono focus:outline-none"
               />
             </div>
             <Button size="sm" variant="ghost" onClick={() => { setGenerated(null); setShowGenerate(false); }} className="text-muted text-xs h-7">
@@ -462,7 +462,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, sub
         <CryptoInvoices invoices={invoices} />
 
         {recentPurchases.length > 0 && (
-          <div className="pt-3 border-t border-white/10">
+          <div className="pt-3 border-t border-rule">
             <p className="text-xs text-muted mb-2 font-medium">Recent purchases</p>
             <ul className="text-xs space-y-1">
               {recentPurchases.map((p) => (
@@ -519,7 +519,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, sub
                         step="1"
                         value={creditDollars}
                         onChange={(e) => setCreditDollars(e.target.value)}
-                        className="w-20 bg-white/5 border border-white/10 rounded px-2 py-1 text-sm focus:outline-none focus:border-gold/50"
+                        className="w-20 bg-tint border border-rule rounded px-2 py-1 text-sm focus:outline-none focus:border-gold/50"
                       />
                     </div>
                   </div>
@@ -530,7 +530,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, sub
                       value={creditNote}
                       onChange={(e) => setCreditNote(e.target.value)}
                       placeholder="e.g. 3-day Xero/Stripe overlap"
-                      className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-sm focus:outline-none focus:border-gold/50"
+                      className="w-full bg-tint border border-rule rounded px-2 py-1 text-sm focus:outline-none focus:border-gold/50"
                     />
                   </div>
                 </div>
@@ -559,7 +559,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, sub
         )}
 
         {showRevoke && (
-          <div className="glass-panel p-3 border border-red-500/20 space-y-2">
+          <div className="glass-panel p-3 border border-danger/40 space-y-2">
             <p className="text-sm">
               Revoke <span className="font-semibold">{memberName}</span>&apos;s access?
               This sets <code>disabled = true</code> on the member record
@@ -585,7 +585,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, sub
                 size="sm"
                 disabled={busy}
                 onClick={revoke}
-                className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 text-xs gap-1 h-7"
+                className="bg-danger/10 hover:bg-danger/20 text-danger border border-danger/40 text-xs gap-1 h-7"
               >
                 {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Ban className="w-3 h-3" />}
                 Confirm revoke
@@ -603,7 +603,7 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, sub
           </div>
         )}
 
-        {error && <p className="text-xs text-red-400">{error}</p>}
+        {error && <p className="text-xs text-danger">{error}</p>}
       </CardContent>
     </Card>
   );

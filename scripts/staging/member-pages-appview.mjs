@@ -34,13 +34,17 @@ const NIGHTS = [
   ["3n2samplepast4", "Agents Building Night", -13],
   ["3n2samplenext1", "Civic Tech Night", 6],
   ["3n2samplenext2", "Studio Night", 13],
-].map(([rkey, name, offset]) => ({
+  // T-482 style previews: one upcoming Agents Building Night with a description, so the event page has a body.
+  ["3n2samplenext3", "Agents Building Night", 3,
+    "Bring what you're building with agents: a half-finished tool, a stuck eval, a question. We start with " +
+    "short demos, then pair up and work.\n\nSample night for the staging preview."],
+].map(([rkey, name, offset, description]) => ({
   uri: `at://${COLLECTIVE}/${EV}/${rkey}`,
   cid: `bafy${rkey}`,
   author: COLLECTIVE,
   collection: EV,
   source: "public",
-  value: { $type: EV, name, startsAt: at(offset), endsAt: new Date(Date.parse(at(offset)) + 2 * 3600_000).toISOString() },
+  value: { $type: EV, name, ...(description ? { description } : {}), startsAt: at(offset), endsAt: new Date(Date.parse(at(offset)) + 2 * 3600_000).toISOString() },
 }));
 writeFileSync(
   join(STATE, "seed.json"),

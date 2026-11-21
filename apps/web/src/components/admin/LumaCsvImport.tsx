@@ -123,7 +123,7 @@ export function LumaCsvImport({ disabled }: { disabled?: boolean }) {
           )}
         </div>
       )}
-      {err && <p className="text-xs text-red-400" role="alert">{err}</p>}
+      {err && <p className="text-xs text-danger" role="alert">{err}</p>}
     </div>
   );
 }

@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import {
   RainbowKitProvider,
-  darkTheme,
+  lightTheme,
   getDefaultConfig,
 } from "@rainbow-me/rainbowkit";
 import {
@@ -35,12 +35,13 @@ export const regenHubWalletConfig = getDefaultConfig({
   }],
 });
 
-const theme = darkTheme({
-  accentColor: "#7ca889",
-  accentColorForeground: "#102118",
-  borderRadius: "medium",
+// The wallet sheet in the book's colours: ink buttons on paper (globals.css :root).
+const theme = lightTheme({
+  accentColor: "#27231d",
+  accentColorForeground: "#f4efe3",
+  borderRadius: "small",
   fontStack: "system",
-  overlayBlur: "small",
+  overlayBlur: "none",
 });
 
 export function RegenHubWalletProvider({ children }: { children: ReactNode }) {

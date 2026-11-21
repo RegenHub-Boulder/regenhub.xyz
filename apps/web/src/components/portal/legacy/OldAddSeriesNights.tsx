@@ -143,9 +143,9 @@ export function OldAddSeriesNights({
           <Button type="button" variant="outline" onClick={addNight} disabled={!date} className="gap-1">
             <Plus className="w-4 h-4" /> Add night
           </Button>
-          {pickError && <span className="text-sm text-red-400">{pickError}</span>}
+          {pickError && <span className="text-sm text-danger">{pickError}</span>}
         </div>
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
         <Button onClick={() => void postPicked()} disabled={busy || picked.size === 0} className="btn-primary-glass gap-2 px-6">
           {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarPlus className="w-4 h-4" />}
           {picked.size === 0 ? "Post nights" : `Post ${picked.size} night${picked.size === 1 ? "" : "s"}`}

@@ -67,7 +67,7 @@ export function LinkMembershipForm() {
         {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Email me a link"}
       </Button>
       {error && (
-        <p className="text-sm text-red-300" role="alert">
+        <p className="text-sm text-danger" role="alert">
           {error}
         </p>
       )}

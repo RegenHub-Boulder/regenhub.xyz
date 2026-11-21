@@ -18,14 +18,14 @@ function subBadge(sub: AdminUserSubscription | null) {
   const dollars = `$${(effectiveMonthlyCents(sub) / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}/mo`;
   if (sub.status === "past_due") {
     return (
-      <Badge className="text-sm bg-red-500/20 text-red-400 border-red-500/30" title="Payment failed">
+      <Badge className="text-sm bg-danger/10 text-danger border-danger/40" title="Payment failed">
         {dollars} · past due{sub.payment_rail === "onchain" ? " · crypto" : ""}
       </Badge>
     );
   }
   if (sub.cancel_at_period_end) {
     return (
-      <Badge className="text-sm bg-amber-500/20 text-amber-400 border-amber-500/30" title="Cancelling at period end">
+      <Badge className="text-sm bg-warn/10 text-warn border-warn/40" title="Cancelling at period end">
         {dollars} · canceling
       </Badge>
     );
@@ -54,21 +54,21 @@ type LegacyMemberWithSub = Member & { subscription: AdminUserSubscription | null
 
 function memberStatusBadge(member: Member | null) {
   if (!member) {
-    return <Badge className="text-sm bg-yellow-500/20 text-yellow-400 border-yellow-500/30">No Profile</Badge>;
+    return <Badge className="text-sm bg-warn/10 text-warn border-warn/40">No Profile</Badge>;
   }
   if (member.disabled) {
     return <Badge variant="destructive" className="text-sm">Disabled</Badge>;
   }
   if (member.member_type === "cold_desk") {
-    return <Badge className="text-sm bg-green-500/20 text-green-400 border-green-500/30">Cold Desk</Badge>;
+    return <Badge className="text-sm bg-ok/10 text-ok border-ok/40">Cold Desk</Badge>;
   }
   if (member.member_type === "hot_desk") {
-    return <Badge className="text-sm bg-emerald-500/20 text-emerald-400 border-emerald-500/30">Hot Desk</Badge>;
+    return <Badge className="text-sm bg-ok/10 text-ok border-ok/40">Hot Desk</Badge>;
   }
   if (member.member_type === "hub_friend") {
-    return <Badge className="text-sm bg-purple-500/20 text-purple-400 border-purple-500/30">Hub Friend</Badge>;
+    return <Badge className="text-sm bg-note/10 text-note border-note/40">Hub Friend</Badge>;
   }
-  return <Badge className="text-sm bg-blue-500/20 text-blue-400 border-blue-500/30">Day Pass</Badge>;
+  return <Badge className="text-sm bg-note/10 text-note border-note/40">Day Pass</Badge>;
 }
 
 // ── Mobile card view ──
@@ -127,7 +127,7 @@ function AuthUserRow({ u, showMoreCols }: { u: AdminUser; showMoreCols: boolean 
   return (
     <>
       {/* Desktop table row */}
-      <tr className="border-b border-white/5 hover:bg-white/5 transition-colors hidden sm:table-row">
+      <tr className="border-b border-rule hover:bg-ink/10 transition-colors hidden sm:table-row">
         <td className="px-4 py-3 font-medium">{nameNode}</td>
         <td className="px-4 py-3 text-muted text-sm">{u.email}</td>
         <td className="px-4 py-3">
@@ -178,7 +178,7 @@ function LegacyMemberRow({ m, showMoreCols }: { m: LegacyMemberWithSub; showMore
 
   return (
     <>
-      <tr className="border-b border-white/5 hover:bg-white/5 transition-colors hidden sm:table-row">
+      <tr className="border-b border-rule hover:bg-ink/10 transition-colors hidden sm:table-row">
         <td className="px-4 py-3 font-medium">{nameNode}</td>
         <td className="px-4 py-3 text-muted text-sm">{m.email ?? "—"}</td>
         <td className="px-4 py-3">
@@ -213,13 +213,13 @@ function SkeletonTable() {
     <div className="glass-panel overflow-hidden">
       <div className="space-y-px">
         {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="grid grid-cols-12 gap-3 px-4 py-3.5 border-b border-white/5 last:border-0">
-            <div className="col-span-3 h-3.5 rounded bg-white/5 animate-pulse" />
-            <div className="col-span-3 h-3.5 rounded bg-white/5 animate-pulse" />
-            <div className="col-span-2 h-3.5 rounded bg-white/5 animate-pulse" />
-            <div className="col-span-1 h-3.5 rounded bg-white/5 animate-pulse" />
-            <div className="col-span-1 h-3.5 rounded bg-white/5 animate-pulse" />
-            <div className="col-span-2 h-3.5 rounded bg-white/5 animate-pulse" />
+          <div key={i} className="grid grid-cols-12 gap-3 px-4 py-3.5 border-b border-rule last:border-0">
+            <div className="col-span-3 h-3.5 rounded bg-tint animate-pulse" />
+            <div className="col-span-3 h-3.5 rounded bg-tint animate-pulse" />
+            <div className="col-span-2 h-3.5 rounded bg-tint animate-pulse" />
+            <div className="col-span-1 h-3.5 rounded bg-tint animate-pulse" />
+            <div className="col-span-1 h-3.5 rounded bg-tint animate-pulse" />
+            <div className="col-span-2 h-3.5 rounded bg-tint animate-pulse" />
           </div>
         ))}
       </div>
@@ -326,7 +326,7 @@ export function MembersList() {
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           {noProfileCount > 0 && (
-            <p className="text-sm text-yellow-400">
+            <p className="text-sm text-warn">
               {noProfileCount} {noProfileCount === 1 ? "person" : "people"} waiting for a profile
             </p>
           )}
@@ -392,7 +392,7 @@ export function MembersList() {
         </div>
       )}
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && <p className="text-danger text-sm">{error}</p>}
 
       {!data ? (
         <SkeletonTable />
@@ -430,7 +430,7 @@ export function MembersList() {
             <div className="glass-panel overflow-x-auto hidden sm:block">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-white/10 text-left text-muted whitespace-nowrap">
+                  <tr className="border-b border-rule text-left text-muted whitespace-nowrap">
                     <th className="px-4 py-3 font-medium">Name</th>
                     <th className="px-4 py-3 font-medium">Email</th>
                     <th className="px-4 py-3 font-medium">Status</th>
@@ -503,19 +503,19 @@ export function MembersList() {
 
       <div className="flex flex-wrap gap-4 text-xs text-muted">
         <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-green-400/60 inline-block" />
+          <span className="w-2 h-2 rounded-full bg-ok inline-block" />
           Cold Desk / Hot Desk — linked
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-purple-400/60 inline-block" />
+          <span className="w-2 h-2 rounded-full bg-note inline-block" />
           Hub Friend
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-blue-400/60 inline-block" />
+          <span className="w-2 h-2 rounded-full bg-muted inline-block" />
           Day Pass
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-yellow-400/60 inline-block" />
+          <span className="w-2 h-2 rounded-full bg-warn inline-block" />
           No Profile — needs setup
         </span>
       </div>

@@ -25,7 +25,7 @@ export default async function MyCodePage() {
     // their auth user hasn't been reconciled with an existing member record.
     return (
       <div className="glass-panel p-8 text-center max-w-md mx-auto mt-8">
-        <AlertCircle className="w-8 h-8 text-amber-400 mx-auto mb-3" />
+        <AlertCircle className="w-8 h-8 text-warn mx-auto mb-3" />
         <h2 className="font-semibold mb-2">Account not linked yet</h2>
         <p className="text-sm text-muted mb-5">
           We didn&apos;t find a member record for this sign-in. If you have an existing
@@ -48,7 +48,7 @@ export default async function MyCodePage() {
     // has no door access, so don't show them the PIN either.
     return (
       <div className="glass-panel p-8 text-center max-w-md mx-auto mt-8">
-        <AlertCircle className="w-8 h-8 text-amber-400 mx-auto mb-3" />
+        <AlertCircle className="w-8 h-8 text-warn mx-auto mb-3" />
         <h2 className="font-semibold mb-2">Your membership is inactive</h2>
         <p className="text-sm text-muted mb-5">
           Door codes are paused while a membership is inactive. Reactivate from the
@@ -87,7 +87,7 @@ export default async function MyCodePage() {
   return (
     <div className="space-y-8 max-w-2xl">
       <div>
-        <h1 className="text-3xl font-bold text-forest">My Door Code</h1>
+        <h1 className="text-3xl font-bold text-forest">My door code</h1>
         <p className="text-muted mt-1">Your permanent PIN for the RegenHub smart lock</p>
       </div>
 
@@ -127,7 +127,7 @@ export default async function MyCodePage() {
 
       <Link
         href="/portal/passes"
-        className="glass-panel p-5 flex items-center gap-4 hover:bg-white/5 transition-colors group"
+        className="glass-panel p-5 flex items-center gap-4 hover:bg-ink/10 transition-colors group"
       >
         <Zap className="w-5 h-5 text-gold shrink-0" />
         <div>

@@ -119,7 +119,7 @@ describe("member home (/portal)", () => {
     // Everything else: profile, invite, hub essentials.
     const more = at(h, 'data-testid="portal-more"');
     expect(h).toContain('href="/portal/profile"');
-    expect(h).toContain("Invite a Friend");
+    expect(h).toContain("Invite a friend");
     expect(door).toBeLessThan(plan);
     expect(plan).toBeLessThan(more);
     // Gone from the home: the stats card and the stewards' card (Events stays in the menu).
@@ -131,7 +131,7 @@ describe("member home (/portal)", () => {
     signIn(SAM, "sam@example.test");
     const h = await html(PortalPage);
     const door = at(h, 'data-testid="portal-door"');
-    expect(h).toContain("Free Day Reserved");
+    expect(h).toContain("Free day reserved");
     expect(h).toContain("Tap to get your door code");
     expect(h).toContain('href="/freeday"');
     expect(h).toMatch(/href="\/portal\/passes"/);

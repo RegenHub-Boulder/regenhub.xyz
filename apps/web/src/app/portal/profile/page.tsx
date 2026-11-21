@@ -24,7 +24,7 @@ export default async function ProfilePage() {
   if (!member) {
     return (
       <div className="glass-panel p-8 text-center max-w-md mx-auto mt-16">
-        <h2 className="text-xl font-semibold mb-2">Account Not Found</h2>
+        <h2 className="text-xl font-semibold mb-2">Account not found</h2>
         <p className="text-muted text-sm">
           Your login isn&apos;t linked to a member profile yet. Contact an admin to get set up.
         </p>

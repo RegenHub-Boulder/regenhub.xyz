@@ -54,10 +54,10 @@ function AudienceTag({ audience }: { audience?: string }) {
 function StatusBadge({ issue }: { issue: Issue }) {
   if (issue.status === "sent") {
     const detail = issue.recipients_count > 0 ? ` · ${issue.sent_count}/${issue.recipients_count}` : "";
-    return <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400"><CheckCircle2 className="w-3 h-3" />Sent{detail}</span>;
+    return <span className="inline-flex items-center gap-1 text-[11px] text-ok"><CheckCircle2 className="w-3 h-3" />Sent{detail}</span>;
   }
   if (issue.status === "sending") {
-    return <span className="inline-flex items-center gap-1 text-[11px] text-amber-400"><SendIcon className="w-3 h-3" />Sending</span>;
+    return <span className="inline-flex items-center gap-1 text-[11px] text-warn"><SendIcon className="w-3 h-3" />Sending</span>;
   }
   return <span className="inline-flex items-center gap-1 text-[11px] text-muted"><FileText className="w-3 h-3" />Draft</span>;
 }
@@ -104,7 +104,7 @@ export function NewsletterManager({ initialIssues }: { initialIssues: Issue[] })
         </Button>
         <div className="space-y-1.5 max-h-[70vh] overflow-auto pr-1">
           {selectedId === "new" && (
-            <div className="rounded-lg border border-sage/40 bg-white/5 px-3 py-2.5 text-left">
+            <div className="rounded-lg border border-sage/40 bg-tint px-3 py-2.5 text-left">
               <div className="text-sm font-medium text-foreground truncate">Untitled draft</div>
               <div className="flex items-center justify-between mt-1">
                 <span className="text-[11px] text-muted font-mono">{seedKey}</span>
@@ -119,7 +119,7 @@ export function NewsletterManager({ initialIssues }: { initialIssues: Issue[] })
                 key={i.id}
                 onClick={() => setSelectedId(i.id)}
                 className={`w-full rounded-lg border px-3 py-2.5 text-left transition-colors ${
-                  active ? "border-sage/50 bg-white/10" : "border-white/10 hover:bg-white/5"
+                  active ? "border-sage/50 bg-tint" : "border-rule hover:bg-ink/10"
                 }`}
               >
                 <div className="flex items-center gap-1.5">

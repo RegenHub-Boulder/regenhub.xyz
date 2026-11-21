@@ -103,11 +103,11 @@ export function LoginForm({ initialBanner = null, next = "/portal" }: Props = {}
               value={otp}
               onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
               placeholder="123456"
-              className="bg-white/10 border-white/20 text-foreground placeholder:text-muted text-center text-lg tracking-widest"
+              className="bg-tint border-rule text-foreground placeholder:text-muted text-center text-lg tracking-widest"
               autoFocus
             />
           </div>
-          {error && <p className="text-red-400 text-sm">{error}</p>}
+          {error && <p className="text-danger text-sm">{error}</p>}
           <Button type="submit" disabled={loading || otp.length !== 6} className="btn-primary-glass w-full">
             {loading ? "Verifying…" : "Sign in"}
           </Button>
@@ -154,10 +154,10 @@ export function LoginForm({ initialBanner = null, next = "/portal" }: Props = {}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
           required
-          className="bg-white/10 border-white/20 text-foreground placeholder:text-muted"
+          className="bg-tint border-rule text-foreground placeholder:text-muted"
         />
       </div>
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && <p className="text-danger text-sm">{error}</p>}
       <Button type="submit" disabled={loading} className="btn-primary-glass w-full">
         {loading ? "Sending…" : "Send Magic Link"}
       </Button>

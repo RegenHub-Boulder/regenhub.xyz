@@ -32,7 +32,7 @@ export function stripFrontmatter(md: string): string {
 function inline(s: string): string {
   let out = escapeHtml(s);
   out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,
-    (_m, t, u) => `<a href="${u}" style="color:#2d5e3e;text-decoration:underline;">${t}</a>`);
+    (_m, t, u) => `<a href="${u}" style="color:#4b5a2c;text-decoration:underline;">${t}</a>`);
   out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   out = out.replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>");
   return out;
@@ -85,7 +85,7 @@ export function markdownToEmailHtml(md: string): string {
     let br = false;
     if (t.endsWith("\\")) { br = true; t = t.replace(/\\+$/, "").trimEnd(); }
 
-    if (/^---+$/.test(t)) { flushAll(); out.push(`<hr style="border:none;border-top:1px solid #e5e5e5;margin:24px 0;" />`); continue; }
+    if (/^---+$/.test(t)) { flushAll(); out.push(`<hr style="border:none;border-top:1px solid #ddd5c4;margin:24px 0;" />`); continue; }
 
     if ((m = t.match(/^(#{1,3})\s+(.*)$/))) {
       flushAll();
@@ -126,24 +126,24 @@ export function renderDraftEmail(
   const members = audience === "members";
   const body = markdownToEmailHtml(markdown);
   const archiveHtml = archiveHref
-    ? `<a href="${archiveHref}" style="color:#999;">Read on the web</a> · `
+    ? `<a href="${archiveHref}" style="color:#6b6152;">Read on the web</a> · `
     : "";
   const browserLink = archiveHref
-    ? `<p style="text-align:right;font-size:11px;color:#999;margin:0 0 10px;"><a href="${archiveHref}" style="color:#999;">View in browser&nbsp;→</a></p>`
+    ? `<p style="text-align:right;font-size:11px;color:#6b6152;margin:0 0 10px;"><a href="${archiveHref}" style="color:#6b6152;">View in browser&nbsp;→</a></p>`
     : "";
   const html = `
-    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1a1a1a;line-height:1.55;">
+    <div style="font-family:'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif;max-width:560px;margin:0 auto;padding:24px; background: #f4f0e6;color:#27231d;line-height:1.55;">
       ${browserLink}
-      <p style="font-size:13px;text-transform:uppercase;letter-spacing:0.08em;color:#2d5e3e;margin-bottom:${members ? "2px" : "12px"};">RegenHub dispatch</p>
-      ${members ? `<p style="font-size:13px;color:#555;margin:0 0 12px;">For RegenHub members</p>` : ""}
+      <p style="font-size:13px;font-style: italic;color:#4b5a2c;margin-bottom:${members ?"2px" : "12px"};">RegenHub dispatch</p>
+      ${members ? `<p style="font-size:13px;color:#514939;margin:0 0 12px;">For RegenHub members</p>` : ""}
       ${body}
-      <hr style="border:none;border-top:1px solid #e5e5e5;margin:24px 0 12px;" />
-      <p style="font-size:11px;color:#999;">
+      <hr style="border:none;border-top:1px solid #ddd5c4;margin:24px 0 12px;" />
+      <p style="font-size:11px;color:#6b6152;">
         ${archiveHtml}${members
           ? "You're receiving this because you're a RegenHub member."
           : `You're receiving this because you're part of the RegenHub community —
         maybe you've co-worked with us, joined us on Luma, or signed up at RegenHub.xyz.`}
-        <a href="${unsubscribeHref}" style="color:#999;">Unsubscribe</a> anytime.
+        <a href="${unsubscribeHref}" style="color:#6b6152;">Unsubscribe</a> anytime.
       </p>
     </div>`;
   const text = `${members ? "For RegenHub members\n\n" : ""}${stripFrontmatter(markdown).trim()}\n\n—\n${archiveHref ? `Read on the web: ${archiveHref}\n` : ""}Unsubscribe: ${unsubscribeHref}`;

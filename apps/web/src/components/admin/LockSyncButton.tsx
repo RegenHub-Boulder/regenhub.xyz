@@ -34,14 +34,14 @@ export function LockSyncButton() {
     <div className="flex items-center gap-3">
       {result && (
         <div className="flex items-center gap-2 text-sm">
-          <CheckCircle2 className="w-4 h-4 text-green-400" />
-          <span className="text-green-400">{result.synced} synced</span>
+          <CheckCircle2 className="w-4 h-4 text-ok" />
+          <span className="text-ok">{result.synced} synced</span>
           {result.failed > 0 && (
-            <span className="text-red-400">, {result.failed} failed</span>
+            <span className="text-danger">, {result.failed} failed</span>
           )}
         </div>
       )}
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
       <Button onClick={handleSync} disabled={loading} className="btn-primary-glass gap-2">
         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
         {loading ? "Syncing…" : "Sync all to lock"}

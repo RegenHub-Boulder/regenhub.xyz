@@ -36,7 +36,7 @@ function Section({ title, note, children }: { title: string; note?: React.ReactN
 
 function Bar({ value, goal, marker }: { value: number; goal: number; marker?: { at: number; label: string } }) {
   return (
-    <div className="relative h-2 rounded-full bg-white/10 mt-3">
+    <div className="relative h-2 rounded-full bg-tint mt-3">
       <div className="absolute inset-y-0 left-0 rounded-full bg-sage" style={{ width: `${pct(value, goal)}%` }} />
       {marker && (
         <div className="absolute -top-1 -bottom-1 w-px bg-gold" style={{ left: `${pct(marker.at, goal)}%` }} title={marker.label} />
@@ -50,14 +50,14 @@ function MonthTable({ months, rows }: { months: string[]; rows: { label: string;
     <div className="overflow-x-auto">
       <table className="w-full text-sm tabular-nums">
         <thead>
-          <tr className="text-xs text-muted border-b border-white/10">
+          <tr className="text-xs text-muted border-b border-rule">
             <th className="py-1.5 pr-4 text-left font-medium" />
             {months.map((m) => <th key={m} className="py-1.5 px-2 text-right font-medium">{monthShort(m)}</th>)}
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.label} className={`border-b border-white/5 ${r.sub ? "text-xs text-muted" : ""}`}>
+            <tr key={r.label} className={`border-b border-rule ${r.sub ? "text-xs text-muted" : ""}`}>
               <td className={`py-1.5 pr-4 ${r.sub ? "pl-3" : ""} ${r.strong ? "font-semibold" : ""}`}>{r.label}</td>
               {r.values.map((v, i) => (
                 <td key={months[i]} className={`py-1.5 px-2 text-right ${r.strong ? "font-semibold" : ""}`}>{v}</td>
@@ -129,15 +129,15 @@ export default async function ScoreboardPage() {
             <p className="text-xs text-muted mt-1" data-testid="members-pace">
               On the straight line: {pace.expectedMembers.toFixed(1)} today ·{" "}
               {pace.membersBehind > 0.05
-                ? <span className="text-amber-400">{pace.membersBehind.toFixed(1)} behind</span>
+                ? <span className="text-warn">{pace.membersBehind.toFixed(1)} behind</span>
                 : <span className="text-sage">on pace</span>}
             </p>
             <p className="text-xs text-muted mt-1">
               {r.members} in good standing at any rate ({r.card} card, {r.onchain} USDC subscriptions)
-              {r.pastDue.members > 0 && <span className="text-red-400"> · {r.pastDue.members} past due, not counted</span>}
+              {r.pastDue.members > 0 && <span className="text-danger"> · {r.pastDue.members} past due, not counted</span>}
             </p>
             {goal.ending.members > 0 && (
-              <p className="text-xs text-amber-400 mt-1">
+              <p className="text-xs text-warn mt-1">
                 {goal.ending.members} set to end with their paid period ({usd(goal.ending.netCents)}/mo), still counted
               </p>
             )}
@@ -154,7 +154,7 @@ export default async function ScoreboardPage() {
             <p className="text-xs text-muted mt-3">
               {usd(r.listCents)} at list ·{" "}
               {goal.rentGapCents > 0
-                ? <span className="text-amber-400">{usd(goal.rentGapCents)} short of rent ({usd(goal.rentCents)})</span>
+                ? <span className="text-warn">{usd(goal.rentGapCents)} short of rent ({usd(goal.rentCents)})</span>
                 : <span className="text-sage">rent ({usd(goal.rentCents)}) covered</span>}
               {" "}· {usd(goal.revenueToGoCents)} to the goal
             </p>
@@ -164,11 +164,11 @@ export default async function ScoreboardPage() {
             <p className="text-xs text-muted mt-1" data-testid="revenue-pace">
               On the straight line: {usd(pace.expectedNetCents)} today ·{" "}
               {pace.netBehindCents >= 100
-                ? <span className="text-amber-400">{usd(pace.netBehindCents)} behind</span>
+                ? <span className="text-warn">{usd(pace.netBehindCents)} behind</span>
                 : <span className="text-sage">on pace</span>}
             </p>
             {r.pastDue.subscriptions > 0 && (
-              <p className="text-xs text-red-400 mt-1">{usd(r.pastDue.netCents)}/mo more is past due, not counted</p>
+              <p className="text-xs text-danger mt-1">{usd(r.pastDue.netCents)}/mo more is past due, not counted</p>
             )}
           </CardContent>
         </Card>
@@ -220,7 +220,7 @@ export default async function ScoreboardPage() {
                   </p>
                   <ul>
                     {g.upcoming.map((e) => <EventLine key={e.uri} e={e} />)}
-                    {g.upcoming.length > 0 && g.past.length > 0 && <li className="border-t border-white/5 my-1" />}
+                    {g.upcoming.length > 0 && g.past.length > 0 && <li className="border-t border-rule my-1" />}
                     {[...g.past].reverse().map((e) => <EventLine key={e.uri} e={e} />)}
                   </ul>
                 </div>
@@ -240,7 +240,7 @@ export default async function ScoreboardPage() {
                   Last issue, <Link href="/admin/mail" className="text-sage hover:underline">{s.newsletter.lastIssue.subject}</Link>{" "}
                   <span className="text-muted">({day(s.newsletter.lastIssue.createdAt)})</span>: sent to{" "}
                   <span className="font-semibold tabular-nums">{s.newsletter.lastIssue.sent}</span> of {s.newsletter.lastIssue.total}
-                  {s.newsletter.lastIssue.failed > 0 && <span className="text-amber-400"> · {s.newsletter.lastIssue.failed} failed or skipped</span>}
+                  {s.newsletter.lastIssue.failed > 0 && <span className="text-warn"> · {s.newsletter.lastIssue.failed} failed or skipped</span>}
                   {s.newsletter.lastIssue.pending > 0 && <span className="text-muted"> · {s.newsletter.lastIssue.pending} still sending</span>}
                 </p>
               ) : (
@@ -300,7 +300,7 @@ export default async function ScoreboardPage() {
 function FollowUpTable({ rows, empty }: { rows: { key: string; href: string | null; name: string; email: string | null; detail: string; last: string }[]; empty: string }) {
   if (rows.length === 0) return <p className="text-sm text-muted">{empty}</p>;
   return (
-    <ul className="divide-y divide-white/5 max-h-96 overflow-y-auto">
+    <ul className="divide-y divide-rule max-h-96 overflow-y-auto">
       {rows.map((r) => (
         <li key={r.key} className="py-1.5 flex items-baseline justify-between gap-3 text-sm">
           <div className="min-w-0">

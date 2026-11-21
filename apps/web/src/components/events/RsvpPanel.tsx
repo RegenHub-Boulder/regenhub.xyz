@@ -156,7 +156,7 @@ export function RsvpPanel({ event, going, path, membersOnly = false }: Props) {
       )}
 
       {error && (
-        <p className="text-sm text-red-300" role="alert">
+        <p className="text-sm text-danger" role="alert">
           {error}
         </p>
       )}

@@ -51,7 +51,7 @@ export default function HubEssentials({
     <div className={`glass-panel overflow-hidden ${className}`}>
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-white/5 transition-colors"
+        className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-ink/10 transition-colors"
       >
         <h3 className="text-lg font-semibold text-forest">Hub Essentials</h3>
         <ChevronDown
@@ -62,7 +62,7 @@ export default function HubEssentials({
       </button>
 
       {expanded && (
-        <div className="px-6 pb-6 space-y-5 border-t border-white/10 pt-5">
+        <div className="px-6 pb-6 space-y-5 border-t border-rule pt-5">
           <Section icon={MapPin} title="Location">
             <p>
               1515 Walnut St, Suite 200, Boulder, CO 80302

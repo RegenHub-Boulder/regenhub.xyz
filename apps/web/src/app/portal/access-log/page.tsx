@@ -185,19 +185,19 @@ export default async function AccessLogPage() {
         <div className="space-y-6">
           {Array.from(groups.entries()).map(([day, dayRows]) => (
             <section key={day} className="space-y-2">
-              <h2 className="text-xs uppercase tracking-wider text-muted font-medium pl-1">
-                {day} <span className="text-muted/60">· {dayRows.length}</span>
+              <h2 className="text-xs text-muted font-medium pl-1">
+                {day} <span className="text-muted">· {dayRows.length}</span>
               </h2>
               <Card className="glass-panel">
                 <CardContent className="p-0">
-                  <ul className="divide-y divide-white/5">
+                  <ul className="divide-y divide-rule">
                     {dayRows.map((r) => {
                       const kind = entryKind(r);
                       const m = r.member_id ? memberMap.get(r.member_id) : null;
                       return (
                         <li
                           key={r.id}
-                          className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/[0.02] transition-colors"
+                          className="flex items-center gap-3 px-4 py-2.5 hover:bg-ink/10 transition-colors"
                         >
                           <div className="w-14 text-xs tabular-nums text-muted shrink-0">
                             {formatTime(r.created_at)}
@@ -207,10 +207,10 @@ export default async function AccessLogPage() {
                             <img
                               src={m.profile_photo_url}
                               alt={m.name}
-                              className="w-7 h-7 rounded-full object-cover border border-white/10 shrink-0"
+                              className="w-7 h-7 rounded-full object-cover border border-rule shrink-0"
                             />
                           ) : (
-                            <div className="w-7 h-7 rounded-full bg-sage/15 border border-white/10 shrink-0 flex items-center justify-center">
+                            <div className="w-7 h-7 rounded-full bg-sage/15 border border-rule shrink-0 flex items-center justify-center">
                               <UserRound className="w-3.5 h-3.5 text-muted" />
                             </div>
                           )}
@@ -229,12 +229,12 @@ export default async function AccessLogPage() {
                             <p className="text-xs text-muted truncate">
                               {lockLabel(r.note)}
                               {r.slot != null && r.slot > 0 && (
-                                <span className="ml-1 text-muted/60">· slot {r.slot}</span>
+                                <span className="ml-1 text-muted">· slot {r.slot}</span>
                               )}
                             </p>
                           </div>
                           {kind === "denied" && (
-                            <Badge className="text-[10px] bg-red-500/20 text-red-400 border-red-500/30">
+                            <Badge className="text-[10px] bg-danger/10 text-danger border-danger/40">
                               denied
                             </Badge>
                           )}
@@ -244,12 +244,12 @@ export default async function AccessLogPage() {
                             </Badge>
                           )}
                           {kind === "manual" && (
-                            <Badge className="text-[10px] bg-blue-500/15 text-blue-400 border-blue-500/30">
+                            <Badge className="text-[10px] bg-note/10 text-note border-note/40">
                               thumb-turn
                             </Badge>
                           )}
                           {kind === "polling" && (
-                            <Badge className="text-[10px] bg-white/10 text-muted border-white/15">
+                            <Badge className="text-[10px] bg-tint text-muted border-rule">
                               no slot
                             </Badge>
                           )}

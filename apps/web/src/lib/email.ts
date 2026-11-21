@@ -181,12 +181,12 @@ export function freeDayApprovedEmail(args: { name: string; siteUrl: string }) {
   return {
     subject: "Your RegenHub day pass is ready",
     html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
         <p>Hi ${firstName},</p>
         <p>You&rsquo;re cleared to visit RegenHub — <strong>a day pass is waiting in your account.</strong></p>
         <p>When you&rsquo;re ready to come in any weekday between 8&nbsp;AM and 6&nbsp;PM:</p>
         <p style="margin: 20px 0;">
-          <a href="${base}/portal/passes" style="background: #2d5e3e; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Get my door code</a>
+          <a href="${base}/portal/passes" style="background: #4b5a2c; color: white; padding: 12px 20px; border-radius: 2px; text-decoration: none; display: inline-block;">Get my door code</a>
         </p>
         <p>You&rsquo;ll sign in with your email (no password — we&rsquo;ll send you a one-time link), tap <strong>Generate code</strong>, and get a 6-digit PIN valid until 6&nbsp;PM that day. It works on both 2nd-floor door keypads — front and back.</p>
         <h3 style="margin-top: 28px;">When you arrive</h3>
@@ -212,12 +212,12 @@ export function freeDayPlusMembershipApprovedEmail(args: { name: string; siteUrl
   return {
     subject: "You're approved for a free day + RegenHub membership",
     html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
         <p>Hi ${firstName},</p>
         <p>Welcome — you&rsquo;re approved on two fronts:</p>
         <p><strong>1. Your day pass — already in your account.</strong> Come any weekday between 8&nbsp;AM and 6&nbsp;PM. When you&rsquo;re ready, sign in and tap <strong>Generate code</strong>:</p>
         <p style="margin: 16px 0;">
-          <a href="${base}/portal/passes" style="background: #2d5e3e; color: white; padding: 10px 18px; border-radius: 8px; text-decoration: none; display: inline-block;">Get my door code</a>
+          <a href="${base}/portal/passes" style="background: #4b5a2c; color: white; padding: 10px 18px; border-radius: 2px; text-decoration: none; display: inline-block;">Get my door code</a>
         </p>
         <p><strong>2. RegenHub membership.</strong> You&rsquo;re also cleared to sign up for a contributing membership when you&rsquo;re ready:</p>
         <ul style="line-height: 1.7; padding-left: 20px;">
@@ -229,7 +229,7 @@ export function freeDayPlusMembershipApprovedEmail(args: { name: string; siteUrl
         </ul>
         <p>Day passes accumulate &mdash; they never expire. Plus members get day passes at $25 instead of $30, and access to members-only events. Full Access tiers (Hot/Cold Desk) auto-allocate your PIN on signup.</p>
         <p style="margin: 16px 0;">
-          <a href="${base}/membership" style="background: #2d5e3e; color: white; padding: 10px 18px; border-radius: 8px; text-decoration: none; display: inline-block;">See membership tiers</a>
+          <a href="${base}/membership" style="background: #4b5a2c; color: white; padding: 10px 18px; border-radius: 2px; text-decoration: none; display: inline-block;">See membership tiers</a>
         </p>
         <p><strong>Address:</strong> 1515 Walnut St, Suite 200, Boulder, CO</p>
         <p>Any questions, just reply.</p>
@@ -259,11 +259,11 @@ export function paymentReminderEmail(args: {
   return {
     subject: "Update your RegenHub payment method",
     html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
         <p>Hi ${firstName},</p>
         <p>Quick note &mdash; your ${args.planLabel} subscription ($${args.monthlyDollars}/mo) needs attention. ${overdueLine} Stripe will keep retrying for a few days but it&rsquo;s easiest to just update your card.</p>
         <p style="margin: 24px 0;">
-          <a href="${link}" style="background: #2d5e3e; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Update payment method</a>
+          <a href="${link}" style="background: #4b5a2c; color: white; padding: 12px 20px; border-radius: 2px; text-decoration: none; display: inline-block;">Update payment method</a>
         </p>
         <p>Click the link, sign in, then hit &ldquo;Manage subscription&rdquo; &mdash; that opens the Stripe portal where you can swap your card.</p>
         <p>Reply to this email if anything&rsquo;s off &mdash; we&rsquo;re happy to chat.</p>
@@ -314,7 +314,7 @@ export function adminDigestEmail(d: DigestData): { subject: string; html: string
   const textLines: string[] = [`Morning — quick rundown for ${dateLabel}.`, ""];
 
   if (hasActionable) {
-    lines.push(`<h3 style="color:#cb904d;margin-top:24px;margin-bottom:8px;">Needs attention</h3><ul style="line-height:1.7;padding-left:20px;">`);
+    lines.push(`<h3 style="color:#7a4f10;margin-top:24px;margin-bottom:8px;">Needs attention</h3><ul style="line-height:1.7;padding-left:20px;">`);
     textLines.push("NEEDS ATTENTION");
     if (d.pendingApplications) {
       lines.push(`<li><strong>${d.pendingApplications}</strong> membership application${d.pendingApplications === 1 ? "" : "s"} pending — <a href="${base}/admin/people?tab=applications">review →</a></li>`);
@@ -337,7 +337,7 @@ export function adminDigestEmail(d: DigestData): { subject: string; html: string
   }
 
   if (hasActivity) {
-    lines.push(`<h3 style="color:#2d5e3e;margin-top:24px;margin-bottom:8px;">Yesterday</h3><ul style="line-height:1.7;padding-left:20px;">`);
+    lines.push(`<h3 style="color:#4b5a2c;margin-top:24px;margin-bottom:8px;">Yesterday</h3><ul style="line-height:1.7;padding-left:20px;">`);
     textLines.push("YESTERDAY");
     if (d.newSignupsYesterday) {
       lines.push(`<li>${d.newSignupsYesterday} interest signup${d.newSignupsYesterday === 1 ? "" : "s"}</li>`);
@@ -363,7 +363,7 @@ export function adminDigestEmail(d: DigestData): { subject: string; html: string
 
   return {
     subject,
-    html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1a1a1a;line-height:1.55;">${lines.join("")}</div>`,
+    html: `<div style="font-family:'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif;max-width:560px;margin:0 auto;padding:24px; background: #f4f0e6;color:#27231d;line-height:1.55;">${lines.join("")}</div>`,
     text: textLines.join("\n"),
   };
 }
@@ -379,7 +379,7 @@ export function membershipApprovedEmail(args: { name: string; siteUrl: string })
   return {
     subject: "You're cleared to subscribe to RegenHub membership",
     html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
         <p>Hi ${firstName},</p>
         <p>You&rsquo;re approved to subscribe to a RegenHub membership whenever you&rsquo;re ready. Five tiers:</p>
         <ul style="line-height: 1.7; padding-left: 20px;">
@@ -391,7 +391,7 @@ export function membershipApprovedEmail(args: { name: string; siteUrl: string })
         </ul>
         <p>Day passes accumulate &mdash; they never expire. Plus members get day passes at $25 instead of $30, and access to members-only events. Full Access tiers (Hot/Cold Desk) auto-allocate your PIN on signup.</p>
         <p style="margin: 16px 0;">
-          <a href="${base}/membership" style="background: #2d5e3e; color: white; padding: 10px 18px; border-radius: 8px; text-decoration: none; display: inline-block;">See membership tiers</a>
+          <a href="${base}/membership" style="background: #4b5a2c; color: white; padding: 10px 18px; border-radius: 2px; text-decoration: none; display: inline-block;">See membership tiers</a>
         </p>
         <p>Any questions, just reply.</p>
         <p>&mdash; RegenHub</p>
@@ -416,11 +416,11 @@ export function applicationReceivedEmail(args: {
   return {
     subject: "We got your RegenHub application",
     html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
         <p>Hi ${firstName},</p>
         <p>Thanks for applying to join RegenHub${args.interestLabel ? ` (${args.interestLabel})` : ""} — we&rsquo;ve got it.</p>
         <p>We review applications by hand so we can welcome each member personally. You&rsquo;ll hear from us soon — usually within a day or two.</p>
-        <p>In the meantime you can check your status any time in your <a href="${base}/portal" style="color: #2d5e3e;">member portal</a>, and you&rsquo;re welcome at our public events.</p>
+        <p>In the meantime you can check your status any time in your <a href="${base}/portal" style="color: #4b5a2c;">member portal</a>, and you&rsquo;re welcome at our public events.</p>
         <p>Any questions, just reply to this email.</p>
         <p>&mdash; RegenHub</p>
       </div>
@@ -452,18 +452,18 @@ export function welcomeNewMemberEmail(args: {
   return {
     subject: `Welcome to RegenHub — you're a member 🎉`,
     html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
         <p>Hi ${firstName},</p>
         <p>Welcome aboard — your <strong>${args.planLabel}</strong> membership ($${args.monthlyDollars}/mo) is active. We&rsquo;re glad you&rsquo;re here.</p>
         <p>${accessLine}</p>
         <p style="margin: 20px 0;">
-          <a href="${accessLink}" style="background: #2d5e3e; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">${accessCta}</a>
+          <a href="${accessLink}" style="background: #4b5a2c; color: white; padding: 12px 20px; border-radius: 2px; text-decoration: none; display: inline-block;">${accessCta}</a>
         </p>
         <p>A few things worth knowing:</p>
         <ul style="line-height: 1.7; padding-left: 20px;">
           <li><strong>The space:</strong> 1515 Walnut St, Suite 200 (2nd floor), Boulder. The street door is unlocked 8 AM &ndash; 6 PM weekdays.</li>
           <li><strong>Day passes for guests:</strong> $25 at the member rate, from your portal.</li>
-          <li><strong>Community:</strong> most coordination happens in our Telegram group — add your handle in <a href="${base}/portal/profile" style="color: #2d5e3e;">your profile</a> and say hi.</li>
+          <li><strong>Community:</strong> most coordination happens in our Telegram group — add your handle in <a href="${base}/portal/profile" style="color: #4b5a2c;">your profile</a> and say hi.</li>
           <li><strong>Billing:</strong> manage your card or plan any time from the portal.</li>
         </ul>
         <p>Reply to this email any time — it goes straight to us. See you at the hub.</p>
@@ -495,12 +495,12 @@ export function dayPassReceiptEmail(args: {
   return {
     subject: "Your RegenHub day pass — receipt",
     html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
         <p>Hi ${firstName},</p>
         <p>Thanks — your ${passWord} ($${args.amountDollars.toFixed(0)}) is in your account.${balanceLine}</p>
         <p>When you&rsquo;re coming in (any weekday, 8&nbsp;AM&ndash;6&nbsp;PM), generate your door code here:</p>
         <p style="margin: 20px 0;">
-          <a href="${base}/portal/passes" style="background: #2d5e3e; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Get my door code</a>
+          <a href="${base}/portal/passes" style="background: #4b5a2c; color: white; padding: 12px 20px; border-radius: 2px; text-decoration: none; display: inline-block;">Get my door code</a>
         </p>
         <p>1515 Walnut St, Suite 200 (2nd floor), Boulder. Any questions, just reply.</p>
         <p>&mdash; RegenHub</p>
@@ -531,11 +531,11 @@ export function monthlyPassesCreditedEmail(args: {
   return {
     subject: `Your ${args.quantity} day pass${args.quantity === 1 ? "" : "es"} for the month just landed`,
     html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
         <p>Hi ${firstName},</p>
         <p>Your ${args.planLabel} renewal went through and <strong>${args.quantity} day pass${args.quantity === 1 ? "" : "es"}</strong> just landed in your account${balanceLine}. Passes accumulate and never expire.</p>
         <p style="margin: 20px 0;">
-          <a href="${base}/portal/passes" style="background: #2d5e3e; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Use a pass</a>
+          <a href="${base}/portal/passes" style="background: #4b5a2c; color: white; padding: 12px 20px; border-radius: 2px; text-decoration: none; display: inline-block;">Use a pass</a>
         </p>
         <p>See you at the hub.</p>
         <p>&mdash; RegenHub</p>
@@ -558,11 +558,11 @@ export function onchainRenewalReminderEmail(args: {
   return {
     subject: `Your RegenHub membership renews ${args.renewalDate}`,
     html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
         <p>Hi ${firstName},</p>
         <p>Your <strong>${args.planLabel}</strong> membership renews on <strong>${args.renewalDate}</strong>.</p>
         <p>Your membership rate is <strong>${args.amountUsdc} USDC</strong>. Open the portal, connect your verified wallet, and RegenHub will prepare the exact native-USDC transfer on OP Mainnet for you to approve.</p>
-        <p style="margin: 20px 0;"><a href="${base}/portal" style="background: #2d5e3e; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Review and pay</a></p>
+        <p style="margin: 20px 0;"><a href="${base}/portal" style="background: #4b5a2c; color: white; padding: 12px 20px; border-radius: 2px; text-decoration: none; display: inline-block;">Review and pay</a></p>
         <p>You stay in good standing through the renewal date, with the same seven-day grace period afterward if you need it.</p>
         <p>&mdash; RegenHub</p>
       </div>
@@ -590,12 +590,12 @@ export function subscriptionEndedEmail(args: {
   return {
     subject: "Your RegenHub membership has ended",
     html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
         <p>Hi ${firstName},</p>
         <p>Your ${args.planLabel} membership has ended, and no further charges will happen.${deskLine}</p>
         <p>Your portal account stays active — you can use remaining passes, grab day passes at any time, or restart a membership whenever it fits:</p>
         <p style="margin: 20px 0;">
-          <a href="${base}/portal" style="background: #2d5e3e; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">My portal</a>
+          <a href="${base}/portal" style="background: #4b5a2c; color: white; padding: 12px 20px; border-radius: 2px; text-decoration: none; display: inline-block;">My portal</a>
         </p>
         <p>If this wasn&rsquo;t what you intended — or there&rsquo;s anything we could have done better — just reply. We&rsquo;d genuinely like to know, and we&rsquo;d love to see you around the hub either way.</p>
         <p>&mdash; RegenHub</p>
@@ -636,15 +636,15 @@ export function approvalCheckoutEmail(args: {
   return {
     subject: `You're approved — complete your RegenHub membership (${args.planLabel})`,
     html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
         <p>Hi ${firstName},</p>
         <p>Great news — your RegenHub application is approved. We&rsquo;ve set you up as:</p>
-        <p style="margin: 12px 0; font-size: 17px;"><strong>${args.planLabel}</strong> &mdash; ${rate}${discountLine ? ` <span style="color: #b45309;">(${discountLine})</span>` : ""}</p>
+        <p style="margin: 12px 0; font-size: 17px;"><strong>${args.planLabel}</strong> &mdash; ${rate}${discountLine ? ` <span style="color: #7a4f10;">(${discountLine})</span>` : ""}</p>
         <p>Complete your signup here — it takes about a minute:</p>
         <p style="margin: 20px 0;">
-          <a href="${args.checkoutUrl}" style="background: #2d5e3e; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Complete my membership</a>
+          <a href="${args.checkoutUrl}" style="background: #4b5a2c; color: white; padding: 12px 20px; border-radius: 2px; text-decoration: none; display: inline-block;">Complete my membership</a>
         </p>
-        <p>Once that&rsquo;s done, everything lands in your member portal at <a href="${base}/portal" style="color: #2d5e3e;">${base.replace(/^https?:\/\//, "")}/portal</a> — day passes, door codes, and billing.</p>
+        <p>Once that&rsquo;s done, everything lands in your member portal at <a href="${base}/portal" style="color: #4b5a2c;">${base.replace(/^https?:\/\//, "")}/portal</a> — day passes, door codes, and billing.</p>
         <p>Any questions — or if you&rsquo;d like a different plan — just reply to this email.</p>
         <p>Welcome aboard,<br>RegenHub</p>
       </div>
@@ -665,12 +665,12 @@ export function nudgeNeverVisitedEmail(args: { name: string; balance: number; si
   return {
     subject: `${firstName}, your RegenHub day pass is still waiting`,
     html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
         <p>Hi ${firstName},</p>
         <p>Just a friendly nudge — you still have ${passes} sitting in your RegenHub account, ready whenever you are.</p>
         <p>We're open Monday&ndash;Friday, 8&nbsp;AM&ndash;6&nbsp;PM at 1515 Walnut St, Suite 200, Boulder. When you're ready to come in:</p>
         <p style="margin: 20px 0;">
-          <a href="${base}/portal/passes" style="background: #2d5e3e; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Get my door code</a>
+          <a href="${base}/portal/passes" style="background: #4b5a2c; color: white; padding: 12px 20px; border-radius: 2px; text-decoration: none; display: inline-block;">Get my door code</a>
         </p>
         <p>No pressure, no expiration — your pass keeps. We'd just love to meet you.</p>
         <p>Any questions, just reply.</p>
@@ -691,13 +691,13 @@ export function nudgeComeBackEmail(args: { name: string; balance: number; siteUr
   return {
     subject: `${firstName}, come co-work with us again?`,
     html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
         <p>Hi ${firstName},</p>
         <p>It was lovely having you at the hub — we'd love to see you again. ${passLine}the door's open Monday&ndash;Friday, 8&nbsp;AM&ndash;6&nbsp;PM.</p>
         <p style="margin: 20px 0;">
-          <a href="${base}/portal/passes" style="background: #2d5e3e; color: white; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Plan my next visit</a>
+          <a href="${base}/portal/passes" style="background: #4b5a2c; color: white; padding: 12px 20px; border-radius: 2px; text-decoration: none; display: inline-block;">Plan my next visit</a>
         </p>
-        <p>And if RegenHub is starting to feel like your kind of place, membership starts at $30/month with a coworking day included — <a href="${base}/membership" style="color: #2d5e3e;">have a look at the tiers</a> whenever you're curious.</p>
+        <p>And if RegenHub is starting to feel like your kind of place, membership starts at $30/month with a coworking day included — <a href="${base}/membership" style="color: #4b5a2c;">have a look at the tiers</a> whenever you're curious.</p>
         <p>Any questions, just reply.</p>
         <p>Warmly,<br>RegenHub</p>
       </div>
@@ -713,12 +713,12 @@ export function nudgeBalanceEmptyEmail(args: { name: string; siteUrl: string }) 
   return {
     subject: `${firstName}, the easy way back into the hub`,
     html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
         <p>Hi ${firstName},</p>
         <p>You've used up your day passes — thanks for spending those days with us. If RegenHub is working for you, here are the two easy ways back in:</p>
         <ul style="line-height: 1.8; padding-left: 20px;">
-          <li><strong>Become a member from $30/month</strong> — includes a coworking day every month (they accumulate and never expire), member pricing on extras, and members-only events. <a href="${base}/membership" style="color: #2d5e3e;">See the tiers</a></li>
-          <li><strong>Grab a single day pass</strong> for $30 whenever you need one. <a href="${base}/portal/passes" style="color: #2d5e3e;">Buy a pass</a></li>
+          <li><strong>Become a member from $30/month</strong> — includes a coworking day every month (they accumulate and never expire), member pricing on extras, and members-only events. <a href="${base}/membership" style="color: #4b5a2c;">See the tiers</a></li>
+          <li><strong>Grab a single day pass</strong> for $30 whenever you need one. <a href="${base}/portal/passes" style="color: #4b5a2c;">Buy a pass</a></li>
         </ul>
         <p>The membership math works out better after one visit a month — and it supports the cooperative.</p>
         <p>Any questions, just reply — happy to help you pick.</p>
@@ -753,27 +753,27 @@ export function hubHealthDigestEmail(args: {
   const base = args.siteUrl.replace(/\/$/, "");
   const mrr = `$${(stats.mrrCents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
   const tierRows = stats.tierCounts
-    .map((t) => `<tr><td style="padding: 4px 12px 4px 0; color: #555;">${t.label}</td><td style="padding: 4px 0; font-weight: 600;">${t.count}</td></tr>`)
+    .map((t) => `<tr><td style="padding: 4px 12px 4px 0; color: #514939;">${t.label}</td><td style="padding: 4px 0; font-weight: 600;">${t.count}</td></tr>`)
     .join("");
   const tierText = stats.tierCounts.map((t) => `  ${t.label}: ${t.count}`).join("\n");
 
   return {
     subject: `RegenHub pulse — ${stats.monthLabel}`,
     html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
-        <p style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: #2d5e3e; margin-bottom: 4px;">Hub pulse · ${stats.monthLabel}</p>
+      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
+        <p style="font-size: 13px; font-style: italic; color: #4b5a2c; margin-bottom: 4px;">Hub pulse · ${stats.monthLabel}</p>
         <h2 style="margin: 0 0 16px;">How the cooperative is doing</h2>
         <p>As a cooperative, we believe everyone who's part of RegenHub should see how it's going — the numbers below are the same ones we look at.</p>
         <table style="width: 100%; border-collapse: collapse; margin: 18px 0;">
-          <tr><td style="padding: 4px 12px 4px 0; color: #555;">Monthly recurring revenue</td><td style="padding: 4px 0; font-weight: 600;">${mrr}</td></tr>
-          <tr><td style="padding: 4px 12px 4px 0; color: #555;">Paying members</td><td style="padding: 4px 0; font-weight: 600;">${stats.payingMembers}</td></tr>
-          <tr><td style="padding: 4px 12px 4px 0; color: #555;">New members this month</td><td style="padding: 4px 0; font-weight: 600;">${stats.newMembers}</td></tr>
-          <tr><td style="padding: 4px 12px 4px 0; color: #555;">Door entries</td><td style="padding: 4px 0; font-weight: 600;">${stats.totalVisits}</td></tr>
-          <tr><td style="padding: 4px 12px 4px 0; color: #555;">Distinct visitors</td><td style="padding: 4px 0; font-weight: 600;">${stats.distinctVisitors}</td></tr>
-          <tr><td style="padding: 4px 12px 4px 0; color: #555;">Day codes issued</td><td style="padding: 4px 0; font-weight: 600;">${stats.dayCodesIssued}</td></tr>
-          <tr><td style="padding: 4px 12px 4px 0; color: #555;">Free-day signups</td><td style="padding: 4px 0; font-weight: 600;">${stats.freeDaySignups}</td></tr>
+          <tr><td style="padding: 4px 12px 4px 0; color: #514939;">Monthly recurring revenue</td><td style="padding: 4px 0; font-weight: 600;">${mrr}</td></tr>
+          <tr><td style="padding: 4px 12px 4px 0; color: #514939;">Paying members</td><td style="padding: 4px 0; font-weight: 600;">${stats.payingMembers}</td></tr>
+          <tr><td style="padding: 4px 12px 4px 0; color: #514939;">New members this month</td><td style="padding: 4px 0; font-weight: 600;">${stats.newMembers}</td></tr>
+          <tr><td style="padding: 4px 12px 4px 0; color: #514939;">Door entries</td><td style="padding: 4px 0; font-weight: 600;">${stats.totalVisits}</td></tr>
+          <tr><td style="padding: 4px 12px 4px 0; color: #514939;">Distinct visitors</td><td style="padding: 4px 0; font-weight: 600;">${stats.distinctVisitors}</td></tr>
+          <tr><td style="padding: 4px 12px 4px 0; color: #514939;">Day codes issued</td><td style="padding: 4px 0; font-weight: 600;">${stats.dayCodesIssued}</td></tr>
+          <tr><td style="padding: 4px 12px 4px 0; color: #514939;">Free-day signups</td><td style="padding: 4px 0; font-weight: 600;">${stats.freeDaySignups}</td></tr>
         </table>
-        <p style="font-size: 14px; color: #555; margin-bottom: 4px;">Members by tier:</p>
+        <p style="font-size: 14px; color: #514939; margin-bottom: 4px;">Members by tier:</p>
         <table style="border-collapse: collapse; margin: 4px 0 18px;">${tierRows}</table>
         <p>Questions, ideas, or want to get more involved in the cooperative? Just reply — it goes straight to a human.</p>
         <p>With gratitude,<br>RegenHub</p>
@@ -793,11 +793,11 @@ export function techneLinkEmail(args: { name: string; link: string }) {
   return {
     subject: "Link your Techne account to RegenHub",
     html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
         <p>Hi ${escapeHtml(firstName)},</p>
         <p>Someone signed in to regenhub.xyz with a Techne account and asked to link it to your membership. After that, &ldquo;Sign in with Techne&rdquo; opens your portal.</p>
         <p style="margin: 16px 0;">
-          <a href="${args.link}" style="background: #2d5e3e; color: white; padding: 10px 18px; border-radius: 8px; text-decoration: none; display: inline-block;">Link my Techne account</a>
+          <a href="${args.link}" style="background: #4b5a2c; color: white; padding: 10px 18px; border-radius: 2px; text-decoration: none; display: inline-block;">Link my Techne account</a>
         </p>
         <p>Open it on the device where you signed in with Techne. It only works for the account that asked, once, for 30 minutes.</p>
         <p>If this wasn&rsquo;t you, ignore this email and nothing changes.</p>
@@ -815,7 +815,7 @@ export function techneLinkedEmail(args: { name: string; account: string; profile
   return {
     subject: "A Techne account was linked to your RegenHub membership",
     html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1a1a1a; line-height: 1.55;">
+      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
         <p>Hi ${escapeHtml(firstName)},</p>
         <p>The Techne account <strong>${escapeHtml(args.account)}</strong> is now linked to your membership. &ldquo;Sign in with Techne&rdquo; with it opens your portal.</p>
         <p>If this wasn&rsquo;t you, unlink it on <a href="${args.profile}">your profile</a> (sign in with an email link) and reply to this email.</p>

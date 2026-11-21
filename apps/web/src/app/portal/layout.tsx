@@ -43,7 +43,7 @@ export default async function PortalLayout({ children }: { children: React.React
   ];
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen" data-surface="work">
       <header className="sticky top-0 z-50 px-6 py-3">
         <nav className="glass-panel-subtle max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-6">
@@ -57,7 +57,7 @@ export default async function PortalLayout({ children }: { children: React.React
                 <Link
                   key={l.href}
                   href={l.href}
-                  className={l.accent ? "text-gold hover:text-gold/80 transition-colors" : "text-muted hover:text-foreground transition-colors"}
+                  className={l.accent ? "text-gold hover:text-foreground transition-colors" : "text-muted hover:text-foreground transition-colors"}
                 >
                   {l.label}
                 </Link>

@@ -76,7 +76,7 @@ export function RegenerateCodeButton({ hasSlot }: Props) {
             setCustomCode(e.target.value.replace(/\D/g, "").slice(0, 8));
           }}
           disabled={loading || !hasSlot}
-          className="w-44 text-sm font-mono bg-white/5 border-white/10"
+          className="w-44 text-sm font-mono bg-tint border-rule"
           maxLength={8}
         />
         {confirming ? (
@@ -84,7 +84,7 @@ export function RegenerateCodeButton({ hasSlot }: Props) {
             <Button
               onClick={handleConfirm}
               disabled={loading}
-              className="btn-glass gap-1 text-red-400 border-red-500/20"
+              className="btn-glass gap-1 text-danger border-danger/40"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
               {loading ? "Updating..." : "Confirm"}
@@ -115,12 +115,12 @@ export function RegenerateCodeButton({ hasSlot }: Props) {
       </div>
 
       {confirming && !loading && (
-        <p className="text-xs text-amber-400">
+        <p className="text-xs text-warn">
           Your old code will stop working immediately.
         </p>
       )}
-      {error && <p className="text-xs text-red-400">{error}</p>}
-      {warning && <p className="text-xs text-amber-400">{warning}</p>}
+      {error && <p className="text-xs text-danger">{error}</p>}
+      {warning && <p className="text-xs text-warn">{warning}</p>}
       {!hasSlot && <p className="text-xs text-muted">No slot assigned — contact an admin</p>}
       {hasSlot && !loading && !confirming && !success && (
         <p className="text-xs text-muted">Leave blank to auto-generate</p>

@@ -53,7 +53,7 @@ export function BuyPassButton({ kind, children, className }: Props) {
         children
       )}
       {error && (
-        <span className="block text-xs text-red-400 mt-2">{error}</span>
+        <span className="block text-xs text-danger mt-2">{error}</span>
       )}
     </button>
   );

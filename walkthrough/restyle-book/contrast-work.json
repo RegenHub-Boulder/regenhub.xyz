@@ -1,0 +1,170 @@
+{
+ "/portal": {
+  "checked": 23,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 6.6,
+  "fails": []
+ },
+ "/portal/my-code": {
+  "checked": 20,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 7.11,
+  "fails": []
+ },
+ "/portal/passes": {
+  "checked": 22,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 4.91,
+  "fails": []
+ },
+ "/portal/profile": {
+  "checked": 42,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 6.6,
+  "fails": []
+ },
+ "/portal/access-log": {
+  "checked": 55,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 6.25,
+  "fails": []
+ },
+ "/admin": {
+  "checked": 58,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 6.02,
+  "fails": []
+ },
+ "/admin/scoreboard": {
+  "checked": 165,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 6.02,
+  "fails": []
+ },
+ "/admin/people?tab=applications": {
+  "checked": 76,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 4.53,
+  "fails": []
+ },
+ "/admin/people?tab=freedays": {
+  "checked": 59,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 4.53,
+  "fails": []
+ },
+ "/admin/people?tab=interests": {
+  "checked": 68,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 4.95,
+  "fails": []
+ },
+ "/admin/members": {
+  "checked": 123,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 4.95,
+  "fails": []
+ },
+ "/admin/members/5": {
+  "checked": 45,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 4.87,
+  "fails": []
+ },
+ "/admin/members/5?tab=billing": {
+  "checked": 32,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 4.87,
+  "fails": []
+ },
+ "/admin/members/5?tab=access": {
+  "checked": 28,
+  "overImage": 0,
+  "disabled": 1,
+  "min": 5.59,
+  "fails": []
+ },
+ "/admin/members/5?tab=activity": {
+  "checked": 23,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 5.59,
+  "fails": []
+ },
+ "/admin/members/new": {
+  "checked": 26,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 7.14,
+  "fails": []
+ },
+ "/admin/members/stale-links": {
+  "checked": 13,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 7.14,
+  "fails": []
+ },
+ "/admin/billing": {
+  "checked": 113,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 6.02,
+  "fails": []
+ },
+ "/admin/access": {
+  "checked": 42,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 4.87,
+  "fails": []
+ },
+ "/admin/access?tab=sync": {
+  "checked": 80,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 6.02,
+  "fails": []
+ },
+ "/admin/mail": {
+  "checked": 43,
+  "overImage": 0,
+  "disabled": 1,
+  "min": 6.02,
+  "fails": []
+ },
+ "/admin/mail?tab=group": {
+  "checked": 38,
+  "overImage": 0,
+  "disabled": 2,
+  "min": 6.02,
+  "fails": []
+ },
+ "/admin/events": {
+  "checked": 49,
+  "overImage": 0,
+  "disabled": 0,
+  "min": 6.02,
+  "fails": []
+ },
+ "/admin/events?roles=open": {
+  "checked": 57,
+  "overImage": 0,
+  "disabled": 1,
+  "min": 6.02,
+  "fails": []
+ }
+}

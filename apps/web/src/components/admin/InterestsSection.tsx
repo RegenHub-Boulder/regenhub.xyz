@@ -68,7 +68,7 @@ export function InterestsSection({
       ) : (
         <div className="glass-panel rounded-xl overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="text-left text-xs uppercase tracking-wider text-muted border-b border-white/10">
+            <thead className="text-left text-xs text-muted border-b border-rule">
               <tr>
                 <th className="px-4 py-3 font-medium">Email</th>
                 <th className="px-4 py-3 font-medium">Name</th>
@@ -80,7 +80,7 @@ export function InterestsSection({
             </thead>
             <tbody>
               {interests.map((row) => (
-                <tr key={row.id} className="border-b border-white/5 last:border-0">
+                <tr key={row.id} className="border-b border-rule last:border-0">
                   <td className="px-4 py-3">
                     <a href={`mailto:${row.email}`} className="hover:text-sage transition-colors">
                       {row.email}

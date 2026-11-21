@@ -98,7 +98,7 @@ export default async function AccessPage() {
           sync: (
             <div className="space-y-6">
               {writer && (
-                <div className={`text-sm ${nowMs - Date.parse(writer.acquired_at) > 120_000 ? "text-red-600" : "text-amber-500"}`}>
+                <div className={`text-sm ${nowMs - Date.parse(writer.acquired_at) > 120_000 ? "text-danger" : "text-warn"}`}>
                   <p>Door-code writer held by {writer.holder_label} for {Math.max(0, Math.floor((nowMs - Date.parse(writer.acquired_at)) / 1000))} seconds (since {fmtBoulderDateTime(writer.acquired_at)}).</p>
                   {nowMs - Date.parse(writer.acquired_at) > 120_000 && <p role="alert">Warning: reservation held for over 2 minutes; operator attention required.</p>}
                   <p>See “Stuck reservation recovery” under “Door-code writer reservation” in DEPLOYMENT.md.</p>

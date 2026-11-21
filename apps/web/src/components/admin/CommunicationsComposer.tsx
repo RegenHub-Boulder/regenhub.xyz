@@ -126,7 +126,7 @@ export function CommunicationsComposer() {
                   className={`px-2.5 py-1 rounded text-xs border ${
                     selectedTypes.has(t.key)
                       ? "bg-sage/20 border-sage/50 text-sage"
-                      : "bg-white/5 border-white/10 text-muted hover:bg-white/10"
+                      : "bg-tint border-rule text-muted hover:bg-ink/10"
                   }`}
                 >
                   {t.label}
@@ -226,7 +226,7 @@ export function CommunicationsComposer() {
         </Button>
       </div>
 
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
 
       {preview && (
         <Card className="glass-panel border border-sage/30">
@@ -251,16 +251,16 @@ export function CommunicationsComposer() {
       )}
 
       {sendResult && (
-        <Card className="glass-panel border border-emerald-500/30">
+        <Card className="glass-panel border border-ok/40">
           <CardContent className="p-5">
             <p className="text-sm font-medium">
               Sent to {sendResult.sent} of {sendResult.total}
-              {sendResult.failed > 0 && <span className="text-red-400"> · {sendResult.failed} failed</span>}
+              {sendResult.failed > 0 && <span className="text-danger"> · {sendResult.failed} failed</span>}
             </p>
             {sendResult.failed > 0 && (
               <ul className="text-xs space-y-1 mt-3">
                 {sendResult.results.filter((r) => !r.ok).map((r) => (
-                  <li key={r.member_id} className="text-red-400">
+                  <li key={r.member_id} className="text-danger">
                     {r.email}: {r.error ?? "send returned false"}
                   </li>
                 ))}

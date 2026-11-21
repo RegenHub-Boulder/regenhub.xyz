@@ -68,7 +68,7 @@ export function OAuthSignInButton() {
           autoCapitalize="none"
           spellCheck={false}
           disabled={busy}
-          className="bg-white/10 border-white/20 text-foreground placeholder:text-muted"
+          className="bg-tint border-rule text-foreground placeholder:text-muted"
         />
         {/* The one place the underlying names are allowed to appear: a person
             who has a handle needs to recognise it, and nobody else should have
@@ -78,7 +78,7 @@ export function OAuthSignInButton() {
         </p>
       </div>
       {error && (
-        <p className="text-red-400 text-sm" role="alert">
+        <p className="text-danger text-sm" role="alert">
           {error}
         </p>
       )}
@@ -92,7 +92,7 @@ export function OAuthSignInButton() {
         className={cn(
           "w-full h-auto min-h-10 whitespace-normal py-2 text-center",
           canSubmit
-            ? "bg-white/15 border border-sage/50 text-foreground hover:bg-white/20 hover:border-sage/70"
+            ? "bg-ink/10 border border-sage/50 text-foreground hover:bg-ink/10 hover:border-sage/70"
             : "btn-glass",
         )}
       >

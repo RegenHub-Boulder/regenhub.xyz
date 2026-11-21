@@ -92,7 +92,7 @@ export function QuickCodeForm({ members }: Props) {
           <div>
             <p className="text-xs text-muted mb-1">Code ready — share with guest</p>
             <div className="flex items-center gap-3">
-              <p className="text-5xl font-mono font-bold text-gold tracking-widest">{result.code}</p>
+              <p className="text-5xl font-serif font-normal text-foreground lining-nums tabular-nums tracking-[0.14em]">{result.code}</p>
               <Button
                 variant="ghost"
                 size="sm"
@@ -115,7 +115,7 @@ export function QuickCodeForm({ members }: Props) {
             </p>
             {copied && <p className="text-xs text-sage mt-1">Copied to clipboard</p>}
             {result.lock_status && (
-              <p className={`text-sm mt-2 ${result.lock_status.includes("didn't respond") ? "text-amber-400" : "text-emerald-400"}`}>
+              <p className={`text-sm mt-2 ${result.lock_status.includes("didn't respond") ? "text-warn" : "text-ok"}`}>
                 {result.lock_status}
               </p>
             )}
@@ -146,7 +146,7 @@ export function QuickCodeForm({ members }: Props) {
           <select
             value={memberId}
             onChange={(e) => setMemberId(e.target.value === "" ? "" : Number(e.target.value))}
-            className="glass-input rounded-md px-3 py-2 text-sm bg-white/5 border border-white/10 text-foreground"
+            className="glass-input rounded-md px-3 py-2 text-sm bg-tint border border-rule text-foreground"
           >
             <option value="">No member (anonymous)</option>
             {members.map((m) => (
@@ -164,7 +164,7 @@ export function QuickCodeForm({ members }: Props) {
                   className={`px-2 py-1.5 rounded text-xs transition-colors ${
                     selected
                       ? "bg-gold/20 text-gold border border-gold/40"
-                      : "bg-white/5 text-muted border border-white/10 hover:bg-white/10"
+                      : "bg-tint text-muted border border-rule hover:bg-ink/10"
                   }`}
                 >
                   {p.hours === null ? <Infinity className="w-3.5 h-3.5 inline" /> : p.label}
@@ -198,7 +198,7 @@ export function QuickCodeForm({ members }: Props) {
             {loading ? "Generating…" : "Generate code"}
           </Button>
           {error && (
-            <p className="text-sm text-red-400 flex items-center gap-1">
+            <p className="text-sm text-danger flex items-center gap-1">
               <X className="w-3.5 h-3.5" /> {error}
             </p>
           )}

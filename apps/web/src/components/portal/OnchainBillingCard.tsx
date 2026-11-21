@@ -289,7 +289,7 @@ function OnchainBillingCardInner(props: Props) {
       {isConnected && address && (
         <ConnectButton.Custom>
           {({ account, openAccountModal }) => account && (
-            <button type="button" onClick={openAccountModal} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs hover:bg-white/10 transition-colors">
+            <button type="button" onClick={openAccountModal} className="rounded-md border border-rule bg-tint px-2.5 py-1.5 text-xs hover:bg-ink/10 transition-colors">
               {connector?.name ?? "Wallet"} · {account.displayName}
             </button>
           )}
@@ -297,7 +297,7 @@ function OnchainBillingCardInner(props: Props) {
       )}
 
       {moveOffer ? (
-        <div className="rounded-lg border border-amber-400/30 bg-amber-400/5 p-3 space-y-2">
+        <div className="rounded-lg border border-warn/40 bg-warn/10 p-3 space-y-2">
           <p className="text-xs">{moveOffer}</p>
           <div className="flex gap-2 flex-wrap">
             <Button disabled={busy} onClick={() => void connectAndVerify(true)} className="btn-glass text-xs gap-2">
@@ -323,9 +323,9 @@ function OnchainBillingCardInner(props: Props) {
           </Button>
         </div>
       ) : props.invoice?.status === "paid" ? (
-        <p className="text-xs text-emerald-400 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> Payment confirmed.</p>
+        <p className="text-xs text-ok flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> Payment confirmed.</p>
       ) : (
-        <p className="text-xs text-emerald-400">Wallet verified. Your next invoice appears here seven days before renewal.</p>
+        <p className="text-xs text-ok">Wallet verified. Your next invoice appears here seven days before renewal.</p>
       )}
       {props.invoice && authorization && (
         <GaslessPaymentReview
@@ -336,8 +336,8 @@ function OnchainBillingCardInner(props: Props) {
       {props.walletAddress && <p className="text-[11px] text-muted font-mono break-all">Verified wallet: {props.walletAddress}</p>}
       {props.invoice?.txHash && <a className="text-xs text-sage underline" href={`https://optimistic.etherscan.io/tx/${props.invoice.txHash}`} target="_blank" rel="noreferrer">View transaction</a>}
       {submittedTxHash && !props.invoice?.txHash && <a className="text-xs text-sage underline" href={`https://optimistic.etherscan.io/tx/${submittedTxHash}`} target="_blank" rel="noreferrer">View submitted transaction</a>}
-      {message && <p className="text-xs text-emerald-400">{message}</p>}
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      {message && <p className="text-xs text-ok">{message}</p>}
+      {error && <p className="text-xs text-danger">{error}</p>}
     </div>
   );
 }

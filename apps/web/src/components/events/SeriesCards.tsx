@@ -15,7 +15,7 @@ export function SeriesCard({ overview }: { overview: SeriesOverview }) {
   const href = next?.url ?? `/events/${series.slug}`;
   return (
     <Link href={href} className="block transition-opacity hover:opacity-90" data-testid={`series-card-${series.slug}`}>
-      <div className="glass-panel-subtle rounded-lg p-5 h-full flex flex-col gap-2 hover-lift">
+      <div className="glass-panel-subtle py-5 h-full flex flex-col gap-2 hover-lift">
         <p className="font-semibold text-xl leading-snug">{series.name}</p>
         {series.membersOnly && (
           <p className="text-sm font-medium flex items-center gap-1.5" data-testid="series-card-members-only">
@@ -45,7 +45,7 @@ export function SeriesCard({ overview }: { overview: SeriesOverview }) {
 export function SeriesCards({ overviews }: { overviews: SeriesOverview[] }) {
   const ordered = [...overviews].sort((a, b) => nextStart(a).localeCompare(nextStart(b)));
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="grid gap-x-10 sm:grid-cols-2">
       {ordered.map((o) => (
         <SeriesCard key={o.series.slug} overview={o} />
       ))}

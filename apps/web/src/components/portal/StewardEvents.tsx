@@ -76,12 +76,12 @@ export function StewardEvents({
     <div className="space-y-6">
       {who}
       {readFailed && (
-        <p className="text-sm text-red-300" role="alert">
+        <p className="text-sm text-danger" role="alert">
           Couldn&apos;t read the calendar from Techne just now. Reload to try again.
         </p>
       )}
       {editingOff && (
-        <p className="text-sm text-red-300" role="alert">
+        <p className="text-sm text-danger" role="alert">
           Couldn&apos;t read each event&apos;s settings from Techne, so Edit and Remove are off. Reload to try again.
         </p>
       )}

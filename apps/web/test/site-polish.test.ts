@@ -1,11 +1,12 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 const source = (file: string) => readFileSync(new URL(`../src/${file}`, import.meta.url), "utf8");
-it("uses the unchanged homepage tagline as its only h1 and eagerly loads the wordmark", () => {
+it("uses the unchanged homepage tagline as its only h1 and eagerly loads the mark", () => {
   const landing = source("components/landing/RegenHubLanding.tsx");
   expect(landing.match(/<h1\b/g)).toHaveLength(1);
   expect(landing).toMatch(/<h1[^>]*>\s*Boulder&apos;s regenerative coworking space\s*<\/h1>/);
-  expect(landing).toMatch(/<Image src={regenHubFull}[^>]*priority[^>]*sizes=/);
+  expect(landing).toMatch(/<BrushEnso \/>/);
+  expect(source("components/landing/BrushEnso.tsx")).toMatch(/<Image[^>]*\bpriority\b/);
 });
 it("provides keyboard outlines and disables animations under reduced motion", () => {
   const css = source("app/globals.css");
@@ -35,11 +36,12 @@ it("pairs every light fill token with a defined dark foreground", () => {
     expect(css).toMatch(new RegExp(`--color-${token}: var\\(--${token}\\)`));
     expect(css).toMatch(new RegExp(`\\n\\s*--${token}: `));
   }
-  expect(css).toMatch(/--accent-foreground: var\(--forest-deep\)/);
+  // The book's accent (walnut) is dark, so its foreground is the light paper ink.
+  expect(css).toMatch(/--accent-foreground: var\(--primary-foreground\)/);
 });
 
 it("keeps ghost and outline hovers as a subtle tint so caller text colours stay readable", () => {
   const button = source("components/ui/button.tsx");
   expect(button).not.toMatch(/hover:bg-accent/);
-  expect(button).toMatch(/ghost: "hover:bg-white\/5"/);
+  expect(button).toMatch(/ghost: "hover:bg-ink\/10"/);
 });
