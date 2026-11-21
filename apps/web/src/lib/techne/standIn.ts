@@ -53,7 +53,8 @@ export function standInOAuth(): TechneOAuth {
       if (!value?.standIn || !/^did:plc:[a-z0-9]{1,64}$/.test(did)) throw new Error("stand-in sign-in didn't match a start");
       const { error } = await db().from("techne_oauth_sessions").upsert({ did, value: { standIn: true } }, { onConflict: "did" });
       if (error) throw new Error(error.message);
-      return { did, appState: value.appState ?? null };
+      // The stand-in plays the home PDS (techne.town) on staging.
+      return { did, appState: value.appState ?? null, session: standInSession(standInBase(), did), homeAccount: true };
     },
     async restore(did) {
       const { data } = await db().from("techne_oauth_sessions").select("did").eq("did", did).maybeSingle();

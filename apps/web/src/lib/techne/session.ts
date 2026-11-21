@@ -11,6 +11,9 @@ import { safeNextPath } from "@/lib/safeNext";
 
 const DEFAULT_PLATFORM = TECHNE_PLATFORM_DID;
 
+/** Reading the person's email address (and whether their PDS confirmed it). */
+export const EMAIL_SCOPE = "transition:email";
+
 /**
  * One sign-in for everyone, one scope list (Aaron, 11-17): the public records the site writes
  * (`repo:` for the RSVP and for the collective's event, config and listing) plus techne-sdk's default
@@ -20,6 +23,11 @@ const DEFAULT_PLATFORM = TECHNE_PLATFORM_DID;
  * The scopes don't decide who may post as RegenHub: Techne does, on the write (lib/techne/collectiveWrite.ts).
  * Nothing here lets the session open the portal: the portal session is started by this server, after its own
  * code exchange (app/techne/callback/route.ts).
+ *
+ * `transition:email` (T-497, Aaron 11-20): the person's email, read once at sign-in from their PDS
+ * (`com.atproto.server.getSession`, lib/techne/person.ts) so every Techne sign-in is a person the site can write to.
+ * pds.techne.town lists it in `scopes_supported` (its granular twin `account:email` is not listed there). A grant
+ * made before this asked has no email: the next sign-in asks again, and nothing else changes.
  */
 export function signInScope(config: Pick<TechneConfig, "clientId" | "platform">): string[] {
   const platform = config.platform ?? DEFAULT_PLATFORM;
@@ -27,6 +35,7 @@ export function signInScope(config: Pick<TechneConfig, "clientId" | "platform">)
     ...scopes({ clientId: config.clientId, platform, types: [...RSVP_TYPES, ...COLLECTIVE_EVENT_TYPES] }),
     // Posting as the collective (lib/techne/collectiveWrite.ts), through the PDS to the platform.
     `rpc:pub.techne.draft.identity.writeAsCollective?aud=${platform}%23atproto_appview`,
+    EMAIL_SCOPE,
   ];
 }
 

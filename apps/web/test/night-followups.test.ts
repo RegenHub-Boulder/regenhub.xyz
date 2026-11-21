@@ -39,8 +39,9 @@ const STEWARD = { did: "did:plc:stewardfu", handle: "steward-fu.techne.town", na
 const ANA = { did: "did:plc:anafu", handle: "ana-fu.techne.town", name: "Ana (sample member, no Techne role)" };
 const SAM = { did: "did:plc:samfu", handle: "sam-fu.techne.town", name: "Sam (sample guest)" };
 const LEE = { did: "did:plc:leefu", handle: "lee-fu.techne.town", name: "Lee (sample, unsubscribed)" };
-const KIM = { did: "did:plc:kimfu", handle: "kim-fu.techne.town", name: "Kim (sample, Techne only)" };
-const PEOPLE = [STEWARD, ANA, SAM, LEE, KIM];
+const KIM = { did: "did:plc:kimfu", handle: "kim-fu.techne.town", name: "Kim (sample, Techne only)", email: "kim@example.test", emailConfirmed: true };
+const JO = { did: "did:plc:jofu", handle: "jo-fu.techne.town", name: "Jo (sample, Techne only, never signed in here)" };
+const PEOPLE = [STEWARD, ANA, SAM, LEE, KIM, JO];
 const SITE = "https://preview.test";
 
 describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () => {
@@ -98,8 +99,6 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
       alter table members add column member_type text not null default 'day_pass', add column show_in_directory boolean;
       create table subscriptions (id serial primary key, member_id integer references members(id), status text not null,
         monthly_cents integer not null);`);
-    // 035's email_unsubscribes (the rest of 035 needs Supabase's auth schema).
-    await pg.exec("create table email_unsubscribes (email text primary key, created_at timestamptz not null default now(), source text)");
     await pg.exec(await migration("066_night_followups.sql"));
     // Ana: a desk member, page not set up. Sam: a day-pass guest. Lee: unsubscribed from the newsletter. Kim: no
     // member row (Techne only). The steward has no member row at all.
@@ -179,7 +178,7 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
   }
   const nightOnPage = async (uri: string) => followupsIn((await EventsPage()) as ReactElement)?.find((x) => x.eventUri === uri) ?? null;
 
-  const click = async (event: string, decision: "send" | "skip" | "retry", keep: number[]) => {
+  const click = async (event: string, decision: "send" | "skip" | "retry", keep: string[]) => {
     const res = await followupsPOST(
       new Request(`${SITE}/api/portal/events/followups`, {
         method: "POST",
@@ -201,19 +200,19 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
     expect(night?.state).toBe("open");
     expect(night!.send.map((p) => [p.name, p.variant])).toEqual([["Ana Sample", "member"], ["Sam Sample", "guest"]]);
     expect(night!.held.map((p) => [p.name, p.held])).toEqual([["Lee Sample", "unsubscribed"]]);
-    expect(night!.noEmail).toBe(1); // Kim: Techne only
-    expect(night!.previews.guest?.subject).toBe("Civic Tech Night, and what's next");
+    expect(night!.noEmail).toBe(1); // Kim: Techne only, and hasn't signed in here since sign-ins carry the email
+    expect(night!.previews.guest?.subject).toBe("Thanks for coming to Civic Tech Night");
     expect(night!.previews.member?.html).toContain("/portal/profile");
     // Rendering the page sent nothing and recorded nothing.
     expect(edge.mails).toEqual([]);
     expect(await rows()).toEqual([]);
 
-    const ids = night!.send.map((p) => p.memberId);
+    const ids = night!.send.map((p) => p.did);
     expect(await click(uri, "send", ids)).toMatchObject({ status: 200, ok: true, sent: 2, held: 0 });
     // Through lib/email.ts sendEmailDetailed → the Resend provider → Resend's API (the edge): one mail each, nobody else.
     expect(edge.mails.map((m) => [m.to, m.subject])).toEqual([
-      ["ana@example.test", "Civic Tech Night, and what's next"],
-      ["sam@example.test", "Civic Tech Night, and what's next"],
+      ["ana@example.test", "Thanks for coming to Civic Tech Night"],
+      ["sam@example.test", "Thanks for coming to Civic Tech Night"],
     ]);
     const sam = edge.mails.find((m) => m.to === "sam@example.test")!;
     expect(sam.html).toContain(`${SITE}/membership`);
@@ -233,12 +232,40 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
     expect((await nightOnPage(uri))?.state).toBe("sent");
   });
 
+  it("a Techne-only RSVP becomes reachable once they've signed in here: their confirmed email, the guest note", async () => {
+    // Kim signs in to RSVP (any page): the callback reads her email from her PDS and records her (migration 068).
+    await signInAs(KIM.did);
+    expect((await pg.query("select email, email_confirmed, member_id from techne_people where did = $1", [KIM.did])).rows)
+      .toEqual([{ email: "kim@example.test", email_confirmed: true, member_id: null }]);
+    const uri = await pastNight("Civic Tech Night", 20, [SAM, KIM, JO]);
+    await signInAs(STEWARD.did);
+    const night = (await nightOnPage(uri))!;
+    expect(night.send.map((p) => [p.name, p.variant])).toEqual([["@kim-fu.techne.town", "guest"], ["Sam Sample", "guest"]]);
+    expect(night.noEmail).toBe(1); // Jo never signed in here: still no email, never guessed
+    expect(await click(uri, "send", night.send.map((p) => p.did))).toMatchObject({ status: 200, sent: 2 });
+    const kim = edge.mails.find((m) => m.to === "kim@example.test")!;
+    expect(kim.subject).toBe("Thanks for coming to Civic Tech Night");
+    expect(kim.html).toContain("Hi there,"); // no display name: never "Hi @kim-fu…"
+    expect(kim.html).toContain("/api/followups/optout?email=kim%40example.test");
+    expect((await pg.query("select email, member_id, status from night_followups where email = 'kim@example.test'")).rows)
+      .toEqual([{ email: "kim@example.test", member_id: null, status: "sent" }]);
+    expect((await nightOnPage(uri))!.outcomes.map((o) => o.name).sort()).toEqual(["@kim-fu.techne.town", "Sam Sample"]);
+
+    // The hold rules are the same for her: unsubscribed → held, never mailed.
+    await pg.query("update night_followups set created_at = now() - interval '8 days'");
+    await pg.query("insert into email_unsubscribes (email, source) values ('kim@example.test', 'link')");
+    const next = await pastNight("420 Happy Hour", 5, [KIM]);
+    const held = (await nightOnPage(next))!;
+    expect(held.send).toEqual([]);
+    expect(held.held.map((p) => [p.name, p.held])).toEqual([["@kim-fu.techne.town", "unsubscribed"]]);
+  });
+
   it("only the people the steward left ticked get a note; Skip sends nothing", async () => {
     const uri = await pastNight("Agents Building Night", 30, [ANA, SAM]);
     await signInAs(STEWARD.did);
     const night = (await nightOnPage(uri))!;
     const sam = night.send.find((p) => p.name === "Sam Sample")!;
-    expect(await click(uri, "send", [sam.memberId])).toMatchObject({ status: 200, sent: 1 });
+    expect(await click(uri, "send", [sam.did])).toMatchObject({ status: 200, sent: 1 });
     expect(edge.mails.map((m) => m.to)).toEqual(["sam@example.test"]);
 
     const other = await pastNight("420 Happy Hour", 10, [ANA]);
@@ -254,14 +281,14 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
     const t = (await nightOnPage(tuesday))!;
     // Both nights are open at once: both pages list Sam.
     expect((await nightOnPage(friday))!.send.map((p) => p.name)).toContain("Sam Sample");
-    const tuesdayOut = await click(tuesday, "send", t.send.map((p) => p.memberId));
+    const tuesdayOut = await click(tuesday, "send", t.send.map((p) => p.did));
     expect(tuesdayOut).toMatchObject({ sent: 2 });
 
     // Friday's page now holds both; and a click with the old ticks is held in SQL, not sent.
     const f = (await nightOnPage(friday))!;
     expect(f.send).toEqual([]);
     expect(f.held.map((p) => p.held)).toEqual(["this_week", "this_week"]);
-    expect(await click(friday, "send", t.send.map((p) => p.memberId))).toMatchObject({ status: 400 });
+    expect(await click(friday, "send", t.send.map((p) => p.did))).toMatchObject({ status: 400 });
     const sql = await pg.query<{ status: string; held_reason: string }>(
       `select (r).status, (r).held_reason from decide_night_followups('at://x/e/1', 'X', now(), 'send', 'did:plc:x',
          '[{"member_id": null, "email": "sam@example.test", "variant": "guest"}]'::jsonb) r`,
@@ -290,10 +317,9 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
     const uri = await pastNight("Civic Tech Night", 8, [SAM]);
     await signInAs(ANA.did);
     expect(followupsIn((await EventsPage()) as ReactElement)).toBeNull(); // the page shows the explainer, not the batches
-    const ana = (await pg.query<{ id: number }>("select id from members where did = $1", [SAM.did])).rows[0].id;
-    expect(await click(uri, "send", [ana])).toMatchObject({ status: 403, ok: false });
+    expect(await click(uri, "send", [SAM.did])).toMatchObject({ status: 403, ok: false });
     browser.jar = new Map();
-    expect(await click(uri, "send", [ana])).toMatchObject({ status: 401, ok: false });
+    expect(await click(uri, "send", [SAM.did])).toMatchObject({ status: 401, ok: false });
     expect(edge.mails).toEqual([]);
     expect(await rows()).toEqual([]);
     expect((await pg.query("select * from night_followup_batches")).rows).toEqual([]);
@@ -304,7 +330,7 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
     await signInAs(STEWARD.did);
     const sam = (await nightOnPage(uri))!.send[0];
     vi.stubEnv("RESEND_API_KEY", ""); // the provider is down for the first click
-    expect(await click(uri, "send", [sam.memberId])).toMatchObject({ status: 200, sent: 0, failed: 1 });
+    expect(await click(uri, "send", [sam.did])).toMatchObject({ status: 200, sent: 0, failed: 1 });
     expect(edge.mails).toEqual([]);
     const failed = (await nightOnPage(uri))!;
     expect(failed.outcomes).toEqual([expect.objectContaining({ name: "Sam Sample", status: "failed" })]);
@@ -339,7 +365,7 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
     await signInAs(STEWARD.did);
     const sam = (await nightOnPage(uri))!.send[0];
     vi.stubEnv("RESEND_API_KEY", "");
-    expect(await click(uri, "send", [sam.memberId])).toMatchObject({ failed: 1 });
+    expect(await click(uri, "send", [sam.did])).toMatchObject({ failed: 1 });
     await pg.query("insert into night_followup_optouts (email) values ('sam@example.test')");
     vi.stubEnv("RESEND_API_KEY", "test-only");
     expect(await click(uri, "retry", [])).toMatchObject({ status: 200, sent: 0 });
@@ -351,8 +377,7 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
     const old = await pastNight("Agents Building Night", 24 * 4, [SAM]);
     await signInAs(STEWARD.did);
     expect(await nightOnPage(old)).toBeNull();
-    const sam = (await pg.query<{ id: number }>("select id from members where did = $1", [SAM.did])).rows[0].id;
-    expect(await click(old, "send", [sam])).toMatchObject({ status: 409 });
+    expect(await click(old, "send", [SAM.did])).toMatchObject({ status: 409 });
     expect(edge.mails).toEqual([]);
   });
 });

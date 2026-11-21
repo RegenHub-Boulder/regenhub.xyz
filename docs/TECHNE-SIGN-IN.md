@@ -111,6 +111,37 @@ a member linked to a different Techne account ends at that sign-in (this browser
 **Not a member.** A visitor signs in, RSVPs, and `/auth/login` tells them they can RSVP and points to /membership and
 /apply. They get no portal session. `/apply` asks them for an email link (an application needs a reachable email).
 
+**Every sign-in is a person with an email (T-497, 2026-11-20).** Aaron, 11-20: "If people sign up to a Techne
+account, shouldn't we get their email right away and create them an account on our site?" The one scope list now
+includes `transition:email` (`lib/techne/session.ts`). pds.techne.town lists it in `scopes_supported` (read-only,
+11-20: `["atproto", "transition:email", "transition:generic", "transition:chat.bsky"]`); the granular `account:email`
+is not listed there, so we don't ask for it. The Techne docs (quickstart, reference, building-an-app) and the Techne
+MCP guide say nothing about email either way. At `/techne/callback` the server reads `com.atproto.server.getSession` on
+the person's own PDS (email + `emailConfirmed`) and the public display name, then `record_techne_sign_in` (migration
+068, `lib/techne/person.ts`) saves the person in `techne_people`, links the member (by `members.did`, else a confirmed
+email matching one member who has no Techne account), and puts a confirmed email on the stay-in-touch list
+(`interests`, `source_path 'techne'`) unless it is there already, a member's, unsubscribed, or declined. That sign-in
+leaves a one-time line, "We'll send you RegenHub news. No thanks". None of it opens the portal or writes
+`members.did` (that still takes the emailed link), and none of it can fail a sign-in: a PDS that doesn't answer, or a
+grant without the email scope, just records no email.
+- **Whose "confirmed" counts:** only the home PDS's (pds.techne.town, or `TECHNE_PDS_URL`), the server whose sign-up
+  proves the email with a code. An account on another server (reached by hand-back) keeps its email as unconfirmed: it
+  links no member, joins no list and gets no note, because anyone can run a PDS that says an address is confirmed.
+- **The list decision is per email:** a new email on the PDS is looked at again at the next sign-in, and the entry this
+  added for the old address goes (the entry follows the person); "No thanks" stays (it was about us, not the address).
+  "Already there" means the newsletter reaches the address now (an `interests` row, or a member who isn't disabled), and
+  it is looked at again at each sign-in. An email-matched member counts only while the
+  member's email is still the one the account confirmed.
+- **Counts:** these list rows (`source_path 'techne'`) count in the admin "Interest signups", the daily digest and the
+  scoreboard's stay-in-touch funnel like any signup.
+- **Before this shipped:** an account that signed in earlier has a grant without the email scope. Nothing breaks
+  (RSVP and posting keep working on the old grant); its email is read at its next sign-in. No backfill, no forced
+  re-consent: a new sign-in shows the PDS's consent with the email line, and the email link stays the fallback.
+- **Night follow-ups** reach a Techne-only RSVP through `techne_people` (confirmed email only), with every hold rule.
+- **Unproven until one real sign-in:** that pds.techne.town's consent page grants `transition:email` to a community
+  app and its `getSession` answers the email under it (a stock atproto PDS does). If it grants a session without it,
+  the sign-in still works and records no email: ask Lucian.
+
 **Unproven until one real sign-in** (needs a deploy with the flag on and the key set): that pds.techne.town fetches
 `/techne/client-metadata.json` and `/techne/jwks.json` and accepts our client assertion at PAR and at the token
 endpoint. Read-only on 11-17: its metadata validates with the library and lists `private_key_jwt` with ES256, required
@@ -281,6 +312,7 @@ Each line was checked with one real read-only call on 2026-11-17.
 | `TECHNE_SIGNIN_ENABLED=true` (new name; drop `TECHNE_RSVP_ENABLED` if set) | Turns on the door, `/techne/client-metadata.json`, `/techne/callback`, the Techne `/admin/events` (`/portal/events` redirects there; the old page moves to `/portal/events/old`) | `https://pds.techne.town/.well-known/oauth-authorization-server`: issuer pds.techne.town, `client_id_metadata_document_supported: true`, DPoP ES256; handle resolution `unforced.techne.town` → did:plc:3hmy2v5fvvdh7vuujef5upvl. `https://regenhub.xyz/techne/client-metadata.json` answers 200 today with main's public (`none`) browser client: the flag is already on in production; `/techne/jwks.json` and `/techne/signin` are 404 until this PR ships |
 | `REGENOS_LOGIN_ENABLED=false` (Uni set it off 11-17 as a stopgap; keep it off) | That lane is what emailed a scenius link that went to beacon.techne.computer | With the one door no page shows the lane either way. With it off, `/login` redirects there, `/oauth/callback` is a 404, **the "Old steward page" goes away**, and **`/admin/members` "Sync claims to regenOS" turns off too** (it rides the same lane) |
 | Apply migration `064_techne_one_door.sql` **before** deploying (MCP `run_migration`; it is additive and main's code never touches its tables) | The one door's tables and functions; deployed without them, sign-in can't start (`/auth/login?error=techne_start`) | Confirmed in a test: with the OAuth-state table missing, sign-in answers 303 to `/auth/login?error=techne_start` |
+| Apply `068_techne_people.sql` after deploying (MCP `run_migration`; additive) | Every sign-in saved as a person with an email (T-497) | Until it runs, sign-ins log "recording the person failed" and carry on; follow-ups read members only |
 | No `TECHNE_PDS_URL`, `TECHNE_PLC_URL`, `TECHNE_HANDLE_DOMAIN`, `TECHNE_PLATFORM_DID`, `TECHNE_STAGING_STANDIN` | Production uses the SDK's defaults; the stand-in is refused for regenhub.xyz anyway | |
 
 The env vars are runtime: set them in Coolify and redeploy the web app. Production deploy is Aaron's go.

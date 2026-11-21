@@ -40,7 +40,8 @@ const people = await night.locator("[data-testid=followup-people] li").allInnerT
 assert.deepEqual(people.map((s) => s.replace(/\s+/g, " ").trim()), ["Ana Sample member note", "Sam Sample guest note"]);
 const held = await night.locator("[data-testid=followup-held]").innerText();
 assert.match(held, /Lee Sample \(unsubscribed from email\)/);
-assert.match(held, /1 RSVP'd with a Techne account that isn't linked to a member/);
+// Jo (not linked) and Kim (Techne only) haven't signed in here yet: no confirmed email for either.
+assert.match(held, /2 RSVP'd with a Techne account we have no confirmed email for/);
 assert.ok(!/@/.test(text), "no emails on the page");
 assert.ok(await night.locator("button:has-text('Send 2 notes')").isEnabled());
 await shot(page, "batch-review-desktop", { clip: await clipOf(page, "[data-testid=night-followups]") });
@@ -48,7 +49,7 @@ await shot(page, "batch-review-desktop", { clip: await clipOf(page, "[data-testi
 // Both notes, as the people will get them.
 await night.locator("button:has-text('guest note')").click();
 const frame = page.frameLocator("[data-testid=followup-preview] iframe");
-await frame.locator("text=Civic Tech Night, and what's next").waitFor();
+await frame.locator("text=Thanks for coming to Civic Tech Night on").waitFor();
 assert.match(await frame.locator("body").innerText(), /The next Civic Tech Night is .*\n[\s\S]*members get a few things[\s\S]*Membership starts at \$30/);
 await shot(page, "guest-note-preview", { clip: await clipOf(page, "[data-testid=followup-night]") });
 await night.locator("button:has-text('member note')").click();
@@ -79,7 +80,7 @@ const inbox = await ctx.newPage();
 await inbox.goto(BASE + "/staging/outbox");
 const mail = await inbox.locator("body").innerText();
 assert.match(mail, /to sam-sample@example\.test/);
-assert.match(mail, /Civic Tech Night, and what's next/);
+assert.match(mail, /Thanks for coming to Civic Tech Night\n/);
 assert.match(mail, /No more notes after nights/);
 await inbox.setViewportSize({ width: 640, height: 900 });
 await shot(inbox, "sent-note-in-staging-outbox", { fullPage: true });

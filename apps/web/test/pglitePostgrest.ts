@@ -7,7 +7,9 @@ import type { PGlite } from "@electric-sql/pglite";
  * the real supabase-js client and the real SQL functions with no server.
  *
  * Deliberately small: no RLS (every query runs as the PGlite superuser, like
- * the service role), no embedded selects, no `or=` filters. Anything it
+ * the service role), embedded selects only one level deep and only along a
+ * foreign key on the parent (`members(name)`, `members:triggered_by(name)`,
+ * `members!subscriptions_member_id_fkey(id)`), no `or=` filters. Anything it
  * doesn't understand fails loudly with a 501 rather than guessing.
  */
 
@@ -48,11 +50,51 @@ function pgError(error: unknown) {
   return json(status, { code: e.code ?? "XX000", message: e.message ?? String(error), details: e.detail ?? null, hint: e.hint ?? null });
 }
 
-function selectList(select: string | null) {
+/** A foreign key: `table.column` references `ref.refColumn`. */
+export type ForeignKey = { name: string; table: string; column: string; ref: string; refColumn: string };
+
+/** Splits a select list on its top-level commas (an embed's own list stays whole). */
+function splitTop(select: string) {
+  const out: string[] = [];
+  let depth = 0, cur = "";
+  for (const ch of select) {
+    if (ch === "(") depth++;
+    if (ch === ")") depth--;
+    if (ch === "," && depth === 0) { out.push(cur); cur = ""; } else cur += ch;
+  }
+  if (cur.trim()) out.push(cur);
+  return out.map((s) => s.trim());
+}
+
+function selectList(select: string | null, table?: string, fks: ForeignKey[] = []) {
   if (!select || select === "*") return "*";
-  return select.split(",").map((col) => {
-    if (col.includes("(") || col.includes(":")) throw new Unsupported(`select ${col}`);
-    return ident(col.trim());
+  const self = table ? `${ident(table)}.` : "";
+  return splitTop(select).map((col) => {
+    if (col === "*") return `${self}*`;
+    const embed = col.match(/^(?:([a-z_][a-z0-9_]*):)?([a-z_][a-z0-9_]*)(?:!([a-z_][a-z0-9_]*))?\((.*)\)$/);
+    if (!embed) {
+      if (col.includes("(") || col.includes(":")) throw new Unsupported(`select ${col}`);
+      return `${self}${ident(col)}`;
+    }
+    if (!table) throw new Unsupported(`select ${col}`);
+    // `alias:rel(cols)`, `rel!fk_name(cols)` or `rel:fk_column(cols)`: a many-to-one embed along the parent's key.
+    const [, alias, rel, hint, inner] = embed;
+    const byColumn = fks.filter((f) => f.table === table && f.column === rel);
+    const fk = byColumn.length === 1
+      ? byColumn[0]
+      : (() => {
+          const found = fks.filter((f) => f.table === table && f.ref === rel && (!hint || f.name === hint || f.column === hint));
+          if (found.length !== 1) throw new Unsupported(`embed ${col} (${found.length} keys from ${table} to ${rel})`);
+          return found[0];
+        })();
+    const cols = inner === "*" ? "e.*" : splitTop(inner).map((c) => {
+      if (c.includes("(")) throw new Unsupported(`nested embed ${c}`);
+      return `e.${ident(c)}`;
+    }).join(", ");
+    // PostgREST names the key after what the select wrote: the alias, else the table or column named.
+    const name = alias ?? rel;
+    return `(select to_jsonb(x) from (select ${cols} from ${ident(fk.ref)} e where e.${ident(fk.refColumn)} = ` +
+      `${ident(table)}.${ident(fk.column)}) x) as ${ident(name)}`;
   }).join(", ");
 }
 
@@ -137,6 +179,25 @@ export function pglitePostgrest(pg: PGlite, users: Map<string, FakeAuthUser>) {
     }
     return arrayColumns.get(table)!;
   };
+  // Foreign keys, read once and again whenever an embed names a key we haven't seen (a table created later).
+  let foreignKeys: ForeignKey[] | null = null;
+  const readForeignKeys = async () => (await pg.query<ForeignKey>(
+    `select c.conname as name, c.conrelid::regclass::text as table, a.attname as column,
+            c.confrelid::regclass::text as ref, af.attname as "refColumn"
+       from pg_constraint c
+       join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+       join pg_attribute af on af.attrelid = c.confrelid and af.attnum = c.confkey[1]
+      where c.contype = 'f' and array_length(c.conkey, 1) = 1`)).rows;
+  const selectFor = async (select: string | null, table: string) => {
+    if (!select?.includes("(")) return selectList(select, table);
+    foreignKeys ??= await readForeignKeys();
+    try { return selectList(select, table, foreignKeys); }
+    catch (error) {
+      if (!(error instanceof Unsupported)) throw error;
+      foreignKeys = await readForeignKeys();
+      return selectList(select, table, foreignKeys);
+    }
+  };
   async function handle(url: URL, method: string, headers: Headers, bodyText: string | null): Promise<Response> {
     const path = url.pathname;
     if (path === "/auth/v1/user") {
@@ -176,7 +237,7 @@ export function pglitePostgrest(pg: PGlite, users: Map<string, FakeAuthUser>) {
     try {
       if (method === "GET" || method === "HEAD") {
         const where = whereClause(params, args);
-        let sql = `select ${selectList(params.get("select"))} from ${name}${where}${orderClause(params.get("order"))}`;
+        let sql = `select ${await selectFor(params.get("select"), table[1])} from ${name}${where}${orderClause(params.get("order"))}`;
         if (params.get("limit")) sql += ` limit ${Number(params.get("limit"))}`;
         if (params.get("offset")) sql += ` offset ${Number(params.get("offset"))}`;
         const result = await pg.query(sql, args);

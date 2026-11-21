@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // STAGING ONLY (T-497). A RegenHub night that just ended, posted as the collective through the stand-in (as the
 // steward page does), and the sample people's RSVPs to it, so /admin/events shows its follow-ups: Ana (a desk
-// member: member note), Sam (a day-pass guest: guest note), Lee (unsubscribed: held), Jo (no Techne link: no email).
+// member: member note), Sam (a day-pass guest: guest note), Lee (unsubscribed: held), Jo (a member not linked to
+// Techne), Kim (Techne only: reachable once she has signed in here, T-497).
 // The night is Civic Tech Night on the latest third Tuesday if it ended within the last three days, else yesterday
 // 6-8pm Denver. Nobody here is a real person.
 // Usage: node followups-seed.mjs --standin http://127.0.0.1:18593 --state <dir>
@@ -66,7 +67,7 @@ const { results } = await res.json();
 const ev = { uri: results[0].uri, cid: results[0].cid };
 console.log("followups night", date, ev.uri);
 
-for (const name of ["Ana", "Sam", "Lee", "Jo"]) {
+for (const name of ["Ana", "Sam", "Lee", "Jo", "Kim"]) {
   const p = byName(name);
   if (!p) continue;
   const r = await fetch(`${STANDIN}/xrpc/com.atproto.repo.putRecord`, {
