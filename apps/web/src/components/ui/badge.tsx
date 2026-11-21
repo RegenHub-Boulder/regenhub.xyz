@@ -12,8 +12,8 @@ import { cn } from "@/lib/utils"
  */
 const TONE = /^(?:hover:)?(?:bg|text|border)-(?:ok|warn|danger|note|gold|sage|forest|muted|rule|tint|ink|foreground|transparent)(?:\/[\d.]+)?$/
 
-/** Enum values, lowercase and Title Case labels, as plain words: "past_due" → "Past due", "no code" → "No code",
- * "Cold Desk" → "Cold desk". */
+/** Enum values and lowercase labels, as plain words: "past_due" → "Past due", "no code" → "No code". Anything a
+ * caller already capitalised is left as written (proper nouns: "Card · Stripe"). */
 const WORDS: Record<string, string> = { trialing: "Trial", past_due: "Past due", uncollectible: "Uncollectible" }
 export function plainWords(s: string): string {
   if (WORDS[s]) return WORDS[s]
@@ -21,8 +21,7 @@ export function plainWords(s: string): string {
     const w = s.replace(/_/g, " ")
     return w.charAt(0).toUpperCase() + w.slice(1)
   }
-  // Title Case → sentence case; acronyms and single words stay as written.
-  return s.replace(/(\s)([A-Z])([a-z]+)/g, (_, sp, c, rest) => sp + c.toLowerCase() + rest)
+  return s
 }
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> {

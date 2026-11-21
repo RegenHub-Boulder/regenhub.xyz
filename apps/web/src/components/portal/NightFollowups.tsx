@@ -131,7 +131,7 @@ function Night({ night }: { night: NightFollowupView }) {
                     <label className="flex items-center gap-2 text-sm cursor-pointer">
                       <input
                         type="checkbox"
-                        className="accent-[var(--color-sage,#7fb069)] w-4 h-4"
+                        className="accent-sage w-4 h-4"
                         checked={keep.has(p.did)}
                         onChange={(e) =>
                           setKeep((k) => {

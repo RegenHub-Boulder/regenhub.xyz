@@ -44,7 +44,7 @@ function transform(src) {
   s = s.replace(new RegExp(`${B}${V}bg-(?:white|black)(\\/\\[?[\\d.]+\\]?)(?![\\w/-])`, "g"),
     (_, v, o) => `${v}${(opacity(o) ?? 100) <= 10 && !v.includes("hover:") ? "bg-tint" : "bg-ink/10"}`);
   // status hues
-  s = s.replace(new RegExp(`${B}${V}(text|bg|border(?:-[xytrbl])?|ring|outline|divide|fill|stroke|from|to|via)-(${FAM})-(\\d{2,3})(\\/\\[?[\\d.]+\\]?)?(?![\\w/-])`, "g"),
+  s = s.replace(new RegExp(`${B}${V}(text|bg|border(?:-[xytrbl])?|ring|outline|divide|fill|stroke|from|to|via|accent|caret|placeholder|shadow|decoration)-(${FAM})-(\\d{2,3})(\\/\\[?[\\d.]+\\]?)?(?![\\w/-])`, "g"),
     (_, v, k, fam, shade, o) => {
       const t = TONE[fam];
       // a hover fill is a step darker than the resting one, so hover still shows

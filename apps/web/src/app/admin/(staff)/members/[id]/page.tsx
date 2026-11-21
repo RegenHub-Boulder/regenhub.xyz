@@ -123,10 +123,10 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
   }));
 
   const memberTypeLabel =
-    member.member_type === "cold_desk" ? "Cold Desk"
-    : member.member_type === "hot_desk" ? "Hot Desk"
-    : member.member_type === "hub_friend" ? "Hub Friend"
-    : "Day Pass";
+    member.member_type === "cold_desk" ? "Cold desk"
+    : member.member_type === "hot_desk" ? "Hot desk"
+    : member.member_type === "hub_friend" ? "Hub friend"
+    : "Day pass";
 
   const memberTypeColor =
     member.member_type === "cold_desk" ? "bg-ok/10 text-ok border-ok/40"

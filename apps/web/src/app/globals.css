@@ -117,16 +117,21 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3, h4 { font-weight: 500; letter-spacing: 0; }
-h1 { font-weight: 400; }
-h2 { font-style: italic; font-weight: 400; }
+/* Headings in the base layer, so a heading's own utilities (font-medium, not-italic, tracking-*) still apply. */
+@layer base {
+  h1, h2, h3, h4 { font-weight: 500; letter-spacing: 0; }
+  h1 { font-weight: 400; }
+  h2 { font-style: italic; font-weight: 400; }
+  [data-surface="work"] :is(h2, h3, h4) { font-family: inherit; font-style: normal; font-weight: 600; }
+}
 :is(.font-bold, .font-semibold) { font-weight: 600; }
 code, kbd, pre, samp, .font-mono { font-variant-numeric: normal; }
 ::selection { background: rgba(75, 90, 44, 0.22); }
 
 /* ---- Panels: text on the page, no box (public pages; the working pages draw sheets, below) ---------
-   Unlayered on purpose: it must beat a component's own `border` / `bg-*` utilities, so no box comes back. */
-:is(.glass-panel, .glass-panel-strong, .glass-panel-subtle):not([data-surface="work"] *) {
+   Unlayered on purpose: it must beat a component's own `border` / `bg-*` utilities, so no box comes back. A panel
+   that carries a tone (a notice: border-warn/40, border-sage/30 …) keeps its outline. */
+:is(.glass-panel, .glass-panel-strong, .glass-panel-subtle):not([data-surface="work"] *):not([class*="border-warn"], [class*="border-danger"], [class*="border-ok"], [class*="border-note"], [class*="border-sage"], [class*="border-gold"]) {
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -184,7 +189,6 @@ dialog::backdrop { background: rgba(20, 18, 14, 0.32); }
   line-height: 1.5;
   background: var(--background);
 }
-[data-surface="work"] :is(h2, h3, h4) { font-family: inherit; font-style: normal; font-weight: 600; }
 /* The page's title is the one Garamond line. */
 [data-surface="work"] main h1 { font-family: var(--font-book), Georgia, serif; font-weight: 400; letter-spacing: 0; }
 [data-surface="work"] :is(.btn-primary-glass, .btn-glass) { font-style: normal; font-weight: 500; letter-spacing: 0; border-radius: 4px; }
@@ -211,10 +215,11 @@ dialog::backdrop { background: rgba(20, 18, 14, 0.32); }
    Motion
    ===================================================================================================== */
 
-/* The page's arrival, once per visit to a page: the content rises a few pixels as it appears. The working
+/* The page's arrival, when a page (or a section of pages sharing a layout) loads: the content rises a few pixels as it appears. The working
    pages never move. On home the ensō is drawn first, then the title, its line, the actions. */
 @keyframes arrive { from { opacity: 0; transform: translateY(var(--arrive-rise, 6px)); } }
-.arrive { animation: arrive 900ms var(--ease) both; animation-delay: var(--arrive-at, 0ms); }
+/* backwards, not both: once arrived nothing is left applied (a held transform would trap fixed children). */
+.arrive { animation: arrive 900ms var(--ease) backwards; animation-delay: var(--arrive-at, 0ms); }
 
 @keyframes ink { from { stroke-dashoffset: 1; } }
 .enso path { stroke-dasharray: 1; stroke-dashoffset: 0; animation: ink 1.6s var(--ease) 200ms both; }

@@ -11,7 +11,7 @@ export function emailLinkPage(
   confirm?: { label: string; action: string },
 ): Response {
   const button = confirm
-    ? `<form method="post" action="${esc(confirm.action)}" style="margin-top: 24px;"><button type="submit" style="font: inherit; font-size: 15px; padding: 10px 20px; border-radius: 8px; border: 0; background: #4b5a2c; color: #ebe6d9; cursor: pointer;">${esc(confirm.label)}</button></form>`
+    ? `<form method="post" action="${esc(confirm.action)}" style="margin-top: 24px;"><button type="submit" style="font: inherit; font-size: 15px; padding: 10px 20px; border-radius: 2px; border: 0; background: #4b5a2c; color: #f6f2e8; cursor: pointer;">${esc(confirm.label)}</button></form>`
     : "";
   return new Response(
     `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">

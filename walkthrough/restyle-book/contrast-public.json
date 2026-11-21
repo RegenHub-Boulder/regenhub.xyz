@@ -1,9 +1,9 @@
 {
  "/": {
-  "checked": 104,
+  "checked": 126,
   "overImage": 0,
   "disabled": 0,
-  "min": 5.97,
+  "min": 5.22,
   "fails": []
  },
  "/events": {

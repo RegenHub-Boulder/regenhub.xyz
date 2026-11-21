@@ -92,7 +92,7 @@ export function QuickCodeForm({ members }: Props) {
           <div>
             <p className="text-xs text-muted mb-1">Code ready — share with guest</p>
             <div className="flex items-center gap-3">
-              <p className="text-5xl font-serif font-normal text-foreground tabular-nums [font-variant-numeric:lining-nums_tabular-nums] tracking-[0.14em]">{result.code}</p>
+              <p className="text-5xl font-serif font-normal text-foreground lining-nums tabular-nums tracking-[0.14em]">{result.code}</p>
               <Button
                 variant="ghost"
                 size="sm"

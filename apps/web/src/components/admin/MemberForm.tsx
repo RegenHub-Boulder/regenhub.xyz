@@ -195,7 +195,7 @@ export function MemberForm({ member, initialEmail, initialUserId }: Props) {
               Admin
             </label>
             <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" checked={form.disabled} onChange={set("disabled")} className="accent-red-400" />
+              <input type="checkbox" checked={form.disabled} onChange={set("disabled")} className="accent-danger" />
               Disabled
             </label>
           </div>

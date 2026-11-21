@@ -344,7 +344,7 @@ export default function FreeDayForm({
               <p className="text-sm text-muted mb-2">
                 Your Door Code
               </p>
-              <p className="text-5xl md:text-6xl font-serif font-normal text-foreground tabular-nums [font-variant-numeric:lining-nums_tabular-nums] tracking-[0.14em] mb-4">
+              <p className="text-5xl md:text-6xl font-serif font-normal text-foreground lining-nums tabular-nums tracking-[0.14em] mb-4">
                 {doorCode}
               </p>
               {expiresAt && (

@@ -41,15 +41,15 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
         <div className="max-w-[40rem] mx-auto text-center">
           <BrushEnso />
           <h1
-            className="arrive text-[clamp(1.75rem,4.6vw,2.4rem)] italic leading-tight mb-3 text-foreground [--arrive-at:500ms]"
+            className="arrive text-[clamp(1.75rem,4.6vw,2.4rem)] italic leading-tight mb-3 text-foreground [--arrive-at:250ms]"
           >
             Boulder&apos;s regenerative coworking space
           </h1>
-          <p className="arrive text-[1.05rem] text-muted mb-8 max-w-lg mx-auto [--arrive-at:620ms] [--arrive-rise:4px]">
+          <p className="arrive text-[1.05rem] text-muted mb-8 max-w-lg mx-auto [--arrive-at:370ms] [--arrive-rise:4px]">
             A cooperative workspace for builders and changemakers.
             Your first day is free.
           </p>
-          <div className="arrive [--arrive-at:720ms] [--arrive-rise:4px]">
+          <div className="arrive [--arrive-at:470ms] [--arrive-rise:4px]">
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/freeday">
                 <Button className="btn-primary-glass px-8 py-3 text-lg gap-2">

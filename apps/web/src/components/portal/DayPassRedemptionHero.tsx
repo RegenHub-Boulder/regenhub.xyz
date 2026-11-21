@@ -78,7 +78,7 @@ export async function DayPassRedemptionHero({ member }: Props) {
             </span>
             <span className="text-xs text-muted ml-auto">{formatRemaining(activeCode.expires_at, nowMs)}</span>
           </div>
-          <p className="text-5xl sm:text-6xl font-serif font-normal text-foreground tabular-nums [font-variant-numeric:lining-nums_tabular-nums] tracking-[0.14em] text-center my-4 select-all">
+          <p className="text-5xl sm:text-6xl font-serif font-normal text-foreground lining-nums tabular-nums tracking-[0.14em] text-center my-4 select-all">
             {activeCode.code}
           </p>
           <p className="text-xs text-muted text-center mb-5">

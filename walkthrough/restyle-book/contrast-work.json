@@ -28,7 +28,7 @@
   "fails": []
  },
  "/portal/access-log": {
-  "checked": 60,
+  "checked": 58,
   "overImage": 0,
   "disabled": 0,
   "min": 6.25,

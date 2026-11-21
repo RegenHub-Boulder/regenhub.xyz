@@ -54,21 +54,21 @@ type LegacyMemberWithSub = Member & { subscription: AdminUserSubscription | null
 
 function memberStatusBadge(member: Member | null) {
   if (!member) {
-    return <Badge className="text-sm bg-warn/10 text-warn border-warn/40">No Profile</Badge>;
+    return <Badge className="text-sm bg-warn/10 text-warn border-warn/40">No profile</Badge>;
   }
   if (member.disabled) {
     return <Badge variant="destructive" className="text-sm">Disabled</Badge>;
   }
   if (member.member_type === "cold_desk") {
-    return <Badge className="text-sm bg-ok/10 text-ok border-ok/40">Cold Desk</Badge>;
+    return <Badge className="text-sm bg-ok/10 text-ok border-ok/40">Cold desk</Badge>;
   }
   if (member.member_type === "hot_desk") {
-    return <Badge className="text-sm bg-ok/10 text-ok border-ok/40">Hot Desk</Badge>;
+    return <Badge className="text-sm bg-ok/10 text-ok border-ok/40">Hot desk</Badge>;
   }
   if (member.member_type === "hub_friend") {
-    return <Badge className="text-sm bg-note/10 text-note border-note/40">Hub Friend</Badge>;
+    return <Badge className="text-sm bg-note/10 text-note border-note/40">Hub friend</Badge>;
   }
-  return <Badge className="text-sm bg-note/10 text-note border-note/40">Day Pass</Badge>;
+  return <Badge className="text-sm bg-note/10 text-note border-note/40">Day pass</Badge>;
 }
 
 // ── Mobile card view ──
@@ -367,11 +367,11 @@ export default function UsersPage() {
             className="rounded-md px-3 py-2 text-sm glass-input"
           >
             <option value="all">All types</option>
-            <option value="cold_desk">Cold Desk</option>
-            <option value="hot_desk">Hot Desk</option>
-            <option value="hub_friend">Hub Friend</option>
-            <option value="day_pass">Day Pass</option>
-            <option value="no_profile">No Profile</option>
+            <option value="cold_desk">Cold desk</option>
+            <option value="hot_desk">Hot desk</option>
+            <option value="hub_friend">Hub friend</option>
+            <option value="day_pass">Day pass</option>
+            <option value="no_profile">No profile</option>
           </select>
           <select
             value={statusFilter}
@@ -499,19 +499,19 @@ export default function UsersPage() {
       <div className="flex flex-wrap gap-4 text-xs text-muted">
         <span className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-ok/10 inline-block" />
-          Cold Desk / Hot Desk — linked
+          Cold desk / hot desk — linked
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-note/10 inline-block" />
-          Hub Friend
+          Hub friend
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-note/10 inline-block" />
-          Day Pass
+          Day pass
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-warn/10 inline-block" />
-          No Profile — needs setup
+          No profile — needs setup
         </span>
       </div>
     </div>

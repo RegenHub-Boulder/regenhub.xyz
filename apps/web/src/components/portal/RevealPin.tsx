@@ -30,7 +30,7 @@ export function RevealPin({ code, slot }: { code: string; slot: number | null })
   return (
     <div>
       <div className="flex items-center gap-3">
-        <p className="text-5xl font-serif font-normal text-foreground tabular-nums [font-variant-numeric:lining-nums_tabular-nums] tracking-[0.14em] mt-3">
+        <p className="text-5xl font-serif font-normal text-foreground lining-nums tabular-nums tracking-[0.14em] mt-3">
           {visible ? code : masked}
         </p>
         <div className="flex gap-1 mt-3">
