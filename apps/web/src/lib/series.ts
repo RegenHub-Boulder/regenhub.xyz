@@ -306,12 +306,15 @@ export function inSeriesSlot(series: Series, startIso: string | null | undefined
 }
 
 /** Whether `name` contains `phrase` as whole words, ignoring case ("Ugly Sweater Party 420 Happy Hour" ⊃ "420 Happy Hour"). */
+/** Whether `phrase` appears in `name` as whole words at any of its matches, not only the first. */
 function containsWords(name: string, phrase: string): boolean {
-  const i = name.indexOf(phrase);
-  if (i < 0) return false;
-  const before = name[i - 1];
-  const after = name[i + phrase.length];
-  return (!before || !/[a-z0-9]/.test(before)) && (!after || !/[a-z0-9]/.test(after));
+  if (!phrase) return false;
+  for (let i = name.indexOf(phrase); i >= 0; i = name.indexOf(phrase, i + 1)) {
+    const before = name[i - 1];
+    const after = name[i + phrase.length];
+    if ((!before || !/[a-z0-9]/.test(before)) && (!after || !/[a-z0-9]/.test(after))) return true;
+  }
+  return false;
 }
 
 /**

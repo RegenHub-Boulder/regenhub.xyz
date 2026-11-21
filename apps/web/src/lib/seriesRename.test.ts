@@ -39,6 +39,14 @@ describe("a renamed Happy Hour still counts as that Friday's Happy Hour", () => 
     expect(pickedNight(happy, "2026-12-18", postedFrom([record]), NOW)).toMatchObject({ night: { date: "2026-12-18" } });
   });
 
+  it("looks past a first near-miss for the series name as whole words (containsWords checks every match)", () => {
+    // The first "420 happy hour" sits inside "420 Happy Hours"; the second is whole words.
+    expect(seriesOf({ name: "420 Happy Hours Recap: Ugly Sweater 420 Happy Hour", startsAt: DEC18 })?.slug).toBe("happy-hour");
+    expect(seriesOf({ name: "X420 Happy Hour and 420 Happy Hour", startsAt: DEC18 })?.slug).toBe("happy-hour");
+    // Every match a near-miss: still not the series.
+    expect(seriesOf({ name: "Ugly 420 Happy Hours, 420 Happy Hourly", startsAt: DEC18 })).toBeNull();
+  });
+
   it("the series name at another time, or a different night that day, is not the series", () => {
     // Friday 18 Dec at 7pm: outside the 4:20 slot (more than 30 minutes off).
     expect(seriesOf({ name: "After-party for 420 Happy Hour", startsAt: "2026-12-19T02:00:00.000Z" })).toBeNull();
