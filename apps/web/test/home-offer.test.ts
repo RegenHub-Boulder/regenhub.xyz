@@ -14,6 +14,8 @@ vi.mock("@/lib/luma", () => {
 });
 
 import HomeNights from "@/components/landing/HomeNights";
+import HomeMembership from "@/components/landing/HomeMembership";
+import { DAY_PASS_PUBLIC_CENTS, PLANS, formatCents } from "@/lib/plans";
 import { fetchUpcomingRegenosEvents } from "@/lib/regenos/events";
 
 const HUB = "did:plc:regenhubcollective";
@@ -120,6 +122,7 @@ const HOME_FILES = [
   "app/page.tsx",
   "components/landing/RegenHubLanding.tsx",
   "components/landing/HomeNights.tsx",
+  "components/landing/HomeMembership.tsx",
   "components/landing/CommunityGalleryClient.tsx",
   "components/landing/HeroInterestForm.tsx",
 ];
@@ -144,5 +147,35 @@ describe("the home page's words", () => {
       const code = src(f).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/^\s*\/\/.*$/gm, "");
       expect(code, f).not.toMatch(/\$\d/);
     }
+  });
+});
+
+describe("the home page's membership", () => {
+  const html = renderToStaticMarkup(HomeMembership());
+  const text = (h: string) => h.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  const plans = html.match(/<ul[^>]*data-testid="home-member-plans"[^>]*>([\s\S]*?)<\/ul>/)?.[1] ?? "";
+  const steps = [...plans.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/g)].map((m) => text(m[1]));
+
+  it("is one ladder, cheapest first, from one coworking day to a desk of your own", () => {
+    // Aaron, 11-21: the desks are membership, not a separate "come by the day" block.
+    const p = (c: number) => `${formatCents(c)} a month`;
+    expect(steps).toEqual([
+      `${p(PLANS.member_basic.defaultMonthlyCents)} 1 coworking day`,
+      `${p(PLANS.member_2day.defaultMonthlyCents)} 2 coworking days`,
+      `${p(PLANS.member_5day.defaultMonthlyCents)} 5 coworking days`,
+      `${p(PLANS.hot_desk.defaultMonthlyCents)} Hot desk: every day, 24/7, your own door code`,
+      `${p(PLANS.cold_desk.defaultMonthlyCents)} Cold desk: your own desk, 24/7`,
+    ]);
+  });
+
+  it("says what every plan includes once, then the free day and day pass in one line, with no desks below", () => {
+    expect(html.match(/Every plan includes/g)).toHaveLength(1);
+    const notReady = html.match(/<p[^>]*data-testid="home-not-ready"[^>]*>([\s\S]*?)<\/p>/);
+    expect(notReady).not.toBeNull();
+    expect(notReady![1]).toContain('href="/freeday"');
+    expect(text(notReady![1])).toContain(formatCents(DAY_PASS_PUBLIC_CENTS));
+    const after = html.slice(html.indexOf("home-not-ready"));
+    expect(after.toLowerCase()).not.toContain("desk");
+    expect(html).not.toContain("Or come by the day");
   });
 });

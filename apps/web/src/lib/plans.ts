@@ -102,6 +102,12 @@ export const PLANS = {
 /** The member plans with coworking days, cheapest first: what /membership and the home page sell. */
 export const MEMBER_DAY_PLANS = [PLANS.member_basic, PLANS.member_2day, PLANS.member_5day] as const;
 
+/**
+ * The whole membership ladder, cheapest first: more days, then every day (hot desk), then a desk of your own
+ * (cold desk). What the home page sells as one list.
+ */
+export const MEMBERSHIP_LADDER = [...MEMBER_DAY_PLANS, PLANS.hot_desk, PLANS.cold_desk] as const;
+
 /** "From $30 a month": the cheapest member plan. */
 export const MEMBERSHIP_FROM_CENTS = Math.min(...MEMBER_DAY_PLANS.map((p) => p.defaultMonthlyCents));
 

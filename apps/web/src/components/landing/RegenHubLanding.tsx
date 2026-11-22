@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { MapPin, Calendar, Mail, ArrowRight } from "lucide-react";
+import { MapPin, Calendar, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MemberDirectory } from "@/components/landing/MemberDirectory";
 import HeroInterestForm from "@/components/landing/HeroInterestForm";
@@ -10,15 +10,8 @@ import { BrushEnso } from "@/components/landing/BrushEnso";
 import { PublicHeader } from "@/components/layout/PublicHeader";
 import { PublicFooter } from "@/components/layout/PublicFooter";
 import { HUB_ADDRESS, HUB_EMAIL, HUB_TELEGRAM } from "@/components/layout/publicNav";
-import {
-  DAY_PASS_MEMBER_CENTS,
-  DAY_PASS_PUBLIC_CENTS,
-  MEMBER_DAY_PLANS,
-  MEMBERSHIP_FROM_CENTS,
-  PLANS,
-  coworkingDays,
-  formatCents,
-} from "@/lib/plans";
+import { MEMBERSHIP_FROM_CENTS, formatCents } from "@/lib/plans";
+import HomeMembership from "@/components/landing/HomeMembership";
 
 export type SignedInMember = { name: string } | null;
 
@@ -41,8 +34,8 @@ function Section({ title, line, children, label }: { title?: string; line?: stri
 }
 
 /**
- * The home page (T-482, "what we offer now"): who we are, the next nights, membership as the main offer with
- * day passes, desks and the free day below it, the members, one line about the co-op, photos, where we are,
+ * The home page (T-482, "what we offer now"): who we are, the next nights, membership as one ladder from the
+ * cheapest plan to a desk of your own, with the free day and day pass in one line under it, the members, one line about the co-op, photos, where we are,
  * and staying in touch. Every price comes from lib/plans.ts, as on /membership. Copy marked "draft for Aaron"
  * in the PR is new; the rest reuses /membership's and /events' words.
  */
@@ -100,87 +93,7 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
         title={`Membership, from ${from} a month`}
         line="Membership gets you into the rooms where members show their work and help each other with it."
       >
-        <ul className="border-b border-rule mb-6" data-testid="home-member-plans">
-          {MEMBER_DAY_PLANS.map((p) => (
-            <li key={p.label} className="border-t border-rule py-3 flex items-baseline justify-between gap-4">
-              <span className="text-lg">
-                <span className="text-gold">{formatCents(p.defaultMonthlyCents)}</span>
-                <span className="text-muted"> a month</span>
-              </span>
-              <span className="text-right">{coworkingDays(p.monthlyDayPasses)} a month</span>
-            </li>
-          ))}
-        </ul>
-        <p className="mb-2 font-semibold">Every plan includes</p>
-        <ul className="space-y-2 text-muted mb-8 list-disc pl-5 marker:text-sage">
-          <li>
-            <span className="text-foreground">Member demos:</span> the Friday demos before 420 Happy Hour, and first
-            claim on demo slots at Techne Tuesdays.
-          </li>
-          <li>
-            <span className="text-foreground">Studio Night:</span> hang out with other members and get help with your
-            agent, your data, your tools.
-          </li>
-          <li>
-            <span className="text-foreground">Your member page:</span> a page of your own and a place in the member
-            directory.
-          </li>
-          <li>
-            Unused days carry over. Extra day passes are {formatCents(DAY_PASS_MEMBER_CENTS)} for members instead of{" "}
-            {formatCents(DAY_PASS_PUBLIC_CENTS)}.
-          </li>
-        </ul>
-        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-          <Link href="/apply">
-            <Button className="btn-primary-glass px-8 py-3 text-lg gap-2">
-              Apply to join
-              <ArrowRight className="w-5 h-5" />
-            </Button>
-          </Link>
-          <Link href="/membership" className="text-sage hover:underline">
-            More about membership →
-          </Link>
-        </div>
-
-        {/* The smaller ways in */}
-        <h3 className="mt-12 mb-3 text-center text-lg font-semibold">Or come by the day</h3>
-        <ul className="border-b border-rule text-[0.95rem]" data-testid="home-add-ons">
-          {[
-            {
-              name: "Free day",
-              price: "Free",
-              note: "Your first day is on us. Pick a date and we'll send you a door code.",
-              href: "/freeday",
-            },
-            {
-              name: "Day pass",
-              price: `${formatCents(DAY_PASS_PUBLIC_CENTS)} a day, ${formatCents(DAY_PASS_MEMBER_CENTS)} for members`,
-              note: "Monday to Friday, 8 AM to 6 PM, no contract.",
-            },
-            {
-              name: "Desks",
-              price: `Hot desk ${formatCents(PLANS.hot_desk.defaultMonthlyCents)} · cold desk ${formatCents(PLANS.cold_desk.defaultMonthlyCents)} a month`,
-              note: "A permanent door code and 24/7 access.",
-              href: "/membership",
-            },
-          ].map(({ name, price, note, href }) => (
-            <li key={name} className="border-t border-rule py-3 sm:grid sm:grid-cols-[8rem_1fr] sm:gap-6">
-              <p className="font-semibold">
-                {href ? (
-                  <Link href={href} className="hover:text-sage transition-colors">
-                    {name}
-                  </Link>
-                ) : (
-                  name
-                )}
-              </p>
-              <div>
-                <p className="text-gold">{price}</p>
-                <p className="text-muted">{note}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <HomeMembership />
       </Section>
 
       {/* Members */}

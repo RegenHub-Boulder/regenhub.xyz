@@ -17,10 +17,12 @@ Self-hosted on local infrastructure (compute-1), not deployed to cloud providers
   `node scripts/restyle-book-codemod.mjs --check` lists anything still in the old dark-theme vocabulary. Badges are
   one calm skin (`components/ui/badge.tsx`), with sentence-case words from the caller. On public pages a
   `glass-panel` draws no box; a notice that needs its outline adds `panel-tone`. Emails use the same palette inline with a web-safe serif stack.
-- **Home page** (T-482, `components/landing/RegenHubLanding.tsx`): who we are, the next nights, membership as the
-  main offer (day pass, desks and the free day below it), members, one line about the co-op, photos, find us, stay in
-  touch. Prices on `/`, `/membership` and `MemberOffer` come only from `lib/plans.ts` (`MEMBER_DAY_PLANS`,
-  `MEMBERSHIP_FROM_CENTS`, the day-pass cents); `test/home-offer.test.ts` fails on a typed `$` amount or a retired claim.
+- **Home page** (T-482, `components/landing/RegenHubLanding.tsx`): who we are, the next nights, membership as one
+  ladder (`components/landing/HomeMembership.tsx`: $30/$50/$100 day plans, then hot desk, then cold desk, with one
+  "Not ready to join?" line for the free day and day pass), members, one line about the co-op, photos, find us, stay
+  in touch. Prices on `/`, `/membership` and `MemberOffer` come only from `lib/plans.ts` (`MEMBERSHIP_LADDER`,
+  `MEMBER_DAY_PLANS`, `MEMBERSHIP_FROM_CENTS`, the day-pass cents); `test/home-offer.test.ts` fails on a typed `$`
+  amount, a retired claim, or desks split off the ladder.
 
 ## Live URLs
 - `https://regenhub.xyz` — production web app (public domain, via Cloudflare Tunnel)
