@@ -50,6 +50,7 @@ export const PLANS = {
     productIdEnvKey: "STRIPE_PRODUCT_COLD_DESK",
     selfServe: true,
     description: "Your own reserved desk + permanent door code + 24/7 access.",
+    ladderLine: "Cold desk: a desk of your own, 24/7, your own door code",
   },
   hot_desk: {
     label: "Hot Desk",
@@ -58,6 +59,7 @@ export const PLANS = {
     productIdEnvKey: "STRIPE_PRODUCT_HOT_DESK",
     selfServe: true,
     description: "Permanent door code + 24/7 access to any open desk.",
+    ladderLine: "Hot desk: every day, 24/7, your own door code",
   },
   member_5day: {
     label: "Member + 5 days/mo",
@@ -96,8 +98,26 @@ export const PLANS = {
     monthlyDayPasses?: number;
     selfServe: boolean;
     description: string;
+    /** The home ladder's line for a plan without monthly days (the desks). */
+    ladderLine?: string;
   }
 >;
+
+/** The member plans with coworking days, cheapest first: what /membership and the home page sell. */
+export const MEMBER_DAY_PLANS = [PLANS.member_basic, PLANS.member_2day, PLANS.member_5day] as const;
+
+/**
+ * The whole membership ladder, cheapest first: more days, then every day (hot desk), then a desk of your own
+ * (cold desk). What the home page sells as one list.
+ */
+export const MEMBERSHIP_LADDER: readonly (
+  | (typeof MEMBER_DAY_PLANS)[number]
+  | typeof PLANS.hot_desk
+  | typeof PLANS.cold_desk
+)[] = [...MEMBER_DAY_PLANS, PLANS.hot_desk, PLANS.cold_desk].sort((a, b) => a.defaultMonthlyCents - b.defaultMonthlyCents);
+
+/** "From $30 a month": the cheapest member plan. */
+export const MEMBERSHIP_FROM_CENTS = Math.min(...MEMBER_DAY_PLANS.map((p) => p.defaultMonthlyCents));
 
 export type KnownPlanKey = keyof typeof PLANS;
 
@@ -109,6 +129,8 @@ export interface PlanDef {
   monthlyDayPasses?: number;
   selfServe: boolean;
   description: string;
+  /** The home ladder's line for a plan without monthly days (the desks); day plans' lines come from their days. */
+  ladderLine?: string;
 }
 
 export function getPlan(planKey: PlanKey): PlanDef | null {

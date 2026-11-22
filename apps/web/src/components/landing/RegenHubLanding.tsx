@@ -1,15 +1,17 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { MapPin, Calendar, Mail, Zap, ArrowRight } from "lucide-react";
+import { MapPin, Calendar, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MemberDirectory } from "@/components/landing/MemberDirectory";
 import HeroInterestForm from "@/components/landing/HeroInterestForm";
 import CommunityGallery from "@/components/landing/CommunityGallery";
-import UpcomingEvents, { NextNights } from "@/components/landing/UpcomingEvents";
+import HomeNights from "@/components/landing/HomeNights";
 import { BrushEnso } from "@/components/landing/BrushEnso";
 import { PublicHeader } from "@/components/layout/PublicHeader";
 import { PublicFooter } from "@/components/layout/PublicFooter";
 import { HUB_ADDRESS, HUB_EMAIL, HUB_TELEGRAM } from "@/components/layout/publicNav";
+import { MEMBERSHIP_FROM_CENTS, formatCents } from "@/lib/plans";
+import HomeMembership from "@/components/landing/HomeMembership";
 
 export type SignedInMember = { name: string } | null;
 
@@ -31,139 +33,84 @@ function Section({ title, line, children, label }: { title?: string; line?: stri
   );
 }
 
+/**
+ * The home page (T-482, "what we offer now"): who we are, the next nights, membership as one ladder from the
+ * cheapest plan to a desk of your own, with the free day and day pass in one line under it, the members, one line about the co-op, photos, where we are,
+ * and staying in touch. Every price comes from lib/plans.ts, as on /membership. Copy marked "draft for Aaron"
+ * in the PR is new; the rest reuses /membership's and /events' words.
+ */
 export default function RegenHubLanding({ signedInMember }: { signedInMember?: SignedInMember }) {
+  const from = formatCents(MEMBERSHIP_FROM_CENTS);
   return (
     <div className="min-h-screen overflow-x-hidden">
       <PublicHeader />
 
-      {/* Hero: the ensō starts drawing; the title, its line and the actions settle in while it draws. */}
-      <section className="px-6 pt-8 pb-6 md:pt-12">
+      {/* Hero: the ensō draws; the title and its line settle in once. The actions are there at once. */}
+      <section className="px-6 pt-8 pb-2 md:pt-12">
         <div className="max-w-[40rem] mx-auto text-center">
           <BrushEnso />
-          <h1
-            className="arrive text-[clamp(1.75rem,4.6vw,2.4rem)] italic leading-tight mb-3 text-foreground [--arrive-at:250ms]"
-          >
-            Boulder&apos;s regenerative coworking space
+          <h1 className="arrive text-[clamp(1.75rem,4.6vw,2.4rem)] italic leading-tight mb-3 text-foreground [--arrive-at:250ms]">
+            A co-op of builders in Boulder
           </h1>
           <p className="arrive text-[1.05rem] text-muted mb-8 max-w-lg mx-auto [--arrive-at:370ms] [--arrive-rise:4px]">
-            A cooperative workspace for builders and changemakers.
+            Techne Tuesdays are free and open to everyone. Members show their work and help each other with it.
             Your first day is free.
           </p>
-          <div className="arrive [--arrive-at:470ms] [--arrive-rise:4px]">
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/freeday">
-                <Button className="btn-primary-glass px-8 py-3 text-lg gap-2">
-                  <Zap className="w-5 h-5" />
-                  Try a Free Day
-                </Button>
-              </Link>
-              <Link href="/events">
-                <Button className="btn-glass px-8 py-3 text-lg">
-                  View Events
-                </Button>
-              </Link>
-            </div>
-            {signedInMember ? (
-              <p className="mt-6 text-sm text-muted">
-                You&apos;re in, {signedInMember.name.split(" ")[0]}.{" "}
-                <Link href="/portal" className="text-sage hover:underline">
-                  Open your portal →
-                </Link>
-              </p>
-            ) : (
-              <HeroInterestForm />
-            )}
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Link href="/events">
+              <Button className="btn-primary-glass px-8 py-3 text-lg w-full sm:w-auto">Come to a Tuesday</Button>
+            </Link>
+            <Link href="/freeday">
+              <Button className="btn-glass px-8 py-3 text-lg w-full sm:w-auto">Try a free day</Button>
+            </Link>
           </div>
+          {signedInMember && (
+            <p className="mt-6 text-sm text-muted">
+              You&apos;re in, {signedInMember.name.split(" ")[0]}.{" "}
+              <Link href="/portal" className="text-sage hover:underline">
+                Open your portal →
+              </Link>
+            </p>
+          )}
         </div>
       </section>
 
-      {/* The regular nights lead, right under the hero */}
-      <Suspense fallback={<div className="h-40" />}>
-        <NextNights />
-      </Suspense>
-
-      {/* Community Gallery */}
-      <CommunityGallery />
-
-      {/* What We Offer: a two-column list, no cards */}
-      <Section title="What We Offer" line="Community. Democracy. Regeneration.">
-        <div className="grid sm:grid-cols-2 gap-x-10 gap-y-6">
-          {[
-            { title: "Community Infrastructure", body: "Affordable co-working and event space for regenerative builders and changemakers." },
-            { title: "Economic Democracy", body: "Meaningful ownership and governance through profit-sharing and equity." },
-            { title: "Regenerative Tech Incubation", body: "Mentorship and support for climate, social equity, and sustainability projects." },
-            { title: "Collective Intelligence", body: "Building 'scenius' \u2014 collective intelligence through sustained collaboration." },
-          ].map(({ title, body }) => (
-            <div key={title}>
-              <h3 className="text-lg font-semibold mb-1">{title}</h3>
-              <p className="text-muted leading-relaxed">{body}</p>
-            </div>
-          ))}
-        </div>
+      {/* The next nights, from the same calendar /events reads */}
+      <Section title="Coming up">
+        <Suspense
+          fallback={
+            <p className="text-center">
+              <Link href="/events" className="text-sage hover:underline">See the nights on the events page →</Link>
+            </p>
+          }
+        >
+          <HomeNights />
+        </Suspense>
       </Section>
 
-      {/* How to Co-work With Us: the three ways in, as ruled rows */}
-      <Section title="Co-work With Us" line="Start with a free day, come back with day passes, or get your own desk.">
-        <ul className="mb-8 border-b border-rule">
-          {[
-            {
-              tier: "Free Day",
-              price: "Free",
-              desc: "Try the space with no commitment",
-              items: ["Full day access (8 AM \u2013 6 PM)", "WiFi, coffee, and community", "One free day per person"],
-            },
-            {
-              tier: "Day Pass",
-              price: "$30/day",
-              desc: "Come back whenever you want",
-              items: ["Door code access (8 AM \u2013 6 PM)", "$25/day for members", "Monday \u2013 Friday, no contract"],
-            },
-            {
-              tier: "Desk Membership",
-              price: "from $250/mo",
-              desc: "Full access with a permanent door code",
-              items: ["Hot desk $250/mo \u00b7 cold desk $500/mo", "24/7 access", "Member demos and Studio Night"],
-            },
-          ].map(({ tier, price, desc, items }) => (
-            <li key={tier} className="border-t border-rule py-5 sm:grid sm:grid-cols-[11rem_1fr] sm:gap-6">
-              <div>
-                <h3 className="text-lg font-semibold">{tier}</h3>
-                <p className="text-lg text-gold mb-2 sm:mb-0">{price}</p>
-              </div>
-              <div>
-                <p className="mb-1">{desc}</p>
-                <ul className="text-muted">
-                  {items.map((i) => <li key={i}>{i}</li>)}
-                </ul>
-              </div>
-            </li>
-          ))}
-        </ul>
-        <div className="text-center space-y-3">
-          <Link href="/freeday">
-            <Button className="btn-primary-glass px-8 py-3 text-lg gap-2">
-              Get Your Free Day
-              <ArrowRight className="w-5 h-5" />
-            </Button>
-          </Link>
-          <p className="text-muted">
-            Contributing memberships start at $30/mo —{" "}
-            <Link href="/membership" className="text-sage hover:underline">see all tiers →</Link>
-          </p>
-        </div>
+      {/* Membership: the main offer */}
+      <Section
+        title={`Membership, from ${from} a month`}
+        line="Membership gets you into the rooms where members show their work and help each other with it."
+      >
+        <HomeMembership />
       </Section>
 
-      {/* Member Directory */}
-      <Section title="Our Community" line="Builders, creators, and changemakers shaping regenerative futures">
+      {/* Members */}
+      <Section title="Members" line="Some of the people who work here.">
         <MemberDirectory />
       </Section>
 
-      {/* Events: regenOS collective calendar when configured, Luma embed otherwise. */}
-      <Section title="Upcoming Events" line="Join us for community building, learning, and collaboration">
-        <Suspense fallback={<div className="h-24" />}>
-          <UpcomingEvents />
-        </Suspense>
+      {/* The co-op, in one line (draft for Aaron) */}
+      <Section label="About RegenHub">
+        <p className="text-center text-[1.1rem] italic max-w-lg mx-auto">
+          RegenHub is a cooperative workspace in downtown Boulder. Its members and stewards host the nights, and the
+          open ones are open to everyone.
+        </p>
       </Section>
+
+      {/* Photos */}
+      <CommunityGallery />
 
       {/* Location / Contact */}
       <Section>
@@ -185,7 +132,7 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
               <p className="text-muted">Members & Day Pass Holders<br />Public Events Welcome</p>
             </div>
           </div>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <a href={`mailto:${HUB_EMAIL}`} className="flex items-center justify-center gap-2 hover:text-sage transition-colors">
               <Mail className="w-5 h-5" />
               {HUB_EMAIL}
@@ -195,16 +142,15 @@ export default function RegenHubLanding({ signedInMember }: { signedInMember?: S
               <span>Telegram</span> Community Chat
             </a>
           </div>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/freeday">
-              <Button className="btn-primary-glass px-6">Try a Free Day</Button>
-            </Link>
-            <Link href="/events">
-              <Button className="btn-glass px-6">View All Events</Button>
-            </Link>
-          </div>
         </div>
       </Section>
+
+      {/* Stay in touch, for anyone not signed in */}
+      {!signedInMember && (
+        <Section title="Stay in touch" line="Leave your email and we'll write when there's something on.">
+          <HeroInterestForm />
+        </Section>
+      )}
 
       <PublicFooter />
     </div>

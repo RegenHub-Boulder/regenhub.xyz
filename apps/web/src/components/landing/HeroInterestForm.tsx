@@ -36,8 +36,7 @@ export default function HeroInterestForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-6 max-w-md mx-auto">
-      <p className="text-xs text-muted mb-2">Or just stay in the loop:</p>
+    <form onSubmit={handleSubmit} className="max-w-md mx-auto">
       <div className="flex flex-col sm:flex-row gap-2">
         <Input
           type="email"

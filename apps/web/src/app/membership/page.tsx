@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getSelfServePlans } from "@/lib/stripe";
+import { DAY_PASS_MEMBER_CENTS, DAY_PASS_PUBLIC_CENTS, MEMBERSHIP_FROM_CENTS, PLANS, formatCents } from "@/lib/plans";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SubscribeButton } from "@/components/membership/SubscribeButton";
@@ -13,13 +14,13 @@ import { isSyntheticEmail } from "@/lib/regenos/syntheticEmail";
 export const metadata: Metadata = {
   title: "Membership — RegenHub",
   description:
-    "Membership at RegenHub, from $30 a month: member demos, Studio Night, coworking days and the member rate on day passes.",
+    `Membership at RegenHub, from ${formatCents(MEMBERSHIP_FROM_CENTS)} a month: member demos, Studio Night, coworking days and the member rate on day passes.`,
 };
 
 // Perks shown on every social tier card (the offer itself is <MemberOffer>, above the plans)
 const SOCIAL_PERKS = [
   "Member demos and Studio Night",
-  "Day passes at the member rate ($25 instead of $30)",
+  `Day passes at the member rate (${formatCents(DAY_PASS_MEMBER_CENTS)} instead of ${formatCents(DAY_PASS_PUBLIC_CENTS)})`,
   "Unused days carry over; they never expire",
 ];
 
@@ -27,7 +28,7 @@ const SOCIAL_PERKS = [
 const DESK_PERKS = [
   "Permanent door code, 24/7 access",
   "Member demos and Studio Night",
-  "Guest day passes at the member rate ($25)",
+  `Guest day passes at the member rate (${formatCents(DAY_PASS_MEMBER_CENTS)})`,
 ];
 
 // The three ways in, in the order a stranger meets them.
@@ -41,13 +42,13 @@ const LADDER = [
   {
     step: 2,
     title: "Day pass",
-    price: "$30 / day",
-    body: "Liked it? Drop in whenever, Monday to Friday, no contract. Members pay $25 and bank unused passes.",
+    price: `${formatCents(DAY_PASS_PUBLIC_CENTS)} / day`,
+    body: `Liked it? Drop in whenever, Monday to Friday, no contract. Members pay ${formatCents(DAY_PASS_MEMBER_CENTS)} and bank unused passes.`,
   },
   {
     step: 3,
     title: "Membership",
-    price: "from $30 / month",
+    price: `from ${formatCents(MEMBERSHIP_FROM_CENTS)} / month`,
     body: "The member nights and demos, plus coworking days each month. Desk plans add a permanent door code and 24/7 access.",
   },
 ] as const;
@@ -120,7 +121,7 @@ export default async function MembershipPage({ searchParams }: PageProps) {
           </p>
           <h1 className="text-4xl sm:text-5xl font-bold text-forest">A place in the practice</h1>
           <p className="text-muted max-w-2xl mx-auto">
-            Techne Tuesdays stay free and open to everyone. Membership, from $30 a month, gets you into the rooms
+            Techne Tuesdays stay free and open to everyone. Membership, from {formatCents(MEMBERSHIP_FROM_CENTS)} a month, gets you into the rooms
             where members show their work and help each other with it.
           </p>
         </header>
@@ -170,7 +171,7 @@ export default async function MembershipPage({ searchParams }: PageProps) {
             <p className="font-medium">Full Access needs one more step</p>
             <p className="text-sm text-muted">
               You&apos;re cleared for the member plans below. Full Access
-              ($250 Hot Desk / $500 Cold Desk) involves 24/7 access + a permanent door
+              ({formatCents(PLANS.hot_desk.defaultMonthlyCents)} Hot Desk / {formatCents(PLANS.cold_desk.defaultMonthlyCents)} Cold Desk) involves 24/7 access + a permanent door
               code, so we set up a quick chat first — reach out and we&apos;ll get you welcomed in.
             </p>
             <div className="flex gap-3 justify-center flex-wrap">

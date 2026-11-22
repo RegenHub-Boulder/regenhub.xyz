@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Archive, CalendarDays, Coffee, Presentation, UserRound } from "lucide-react";
-import { DAY_PASS_MEMBER_CENTS, DAY_PASS_PUBLIC_CENTS, PLANS, formatCents } from "@/lib/plans";
+import { DAY_PASS_MEMBER_CENTS, DAY_PASS_PUBLIC_CENTS, MEMBER_DAY_PLANS, formatCents } from "@/lib/plans";
 import { getSeries, rhythmOf } from "@/lib/series";
 
 /**
@@ -9,10 +9,8 @@ import { getSeries, rhythmOf } from "@/lib/series";
  * lib/series.ts, so this copy can't drift from what's sold or posted.
  */
 
-const DAY_PLANS = [PLANS.member_basic, PLANS.member_2day, PLANS.member_5day];
-
 function daysLine(): string {
-  return DAY_PLANS.map(
+  return MEMBER_DAY_PLANS.map(
     (p) => `${formatCents(p.defaultMonthlyCents)} a month includes ${p.monthlyDayPasses} day${p.monthlyDayPasses === 1 ? "" : "s"}`,
   ).join(", ");
 }

@@ -13,8 +13,7 @@ import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const ROOT = new URL("../apps/web/src/", import.meta.url).pathname;
-// The flag-gated broadsheet prototype keeps its own palette (NEXT_PUBLIC_HOME_V2, default off).
-const SKIP = [join(ROOT, "components/landing/v2")];
+const SKIP = [];
 const CHECK = process.argv.includes("--check");
 
 const TONE = {

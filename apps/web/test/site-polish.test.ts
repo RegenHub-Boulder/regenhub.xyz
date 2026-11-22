@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 const source = (file: string) => readFileSync(new URL(`../src/${file}`, import.meta.url), "utf8");
-it("uses the unchanged homepage tagline as its only h1 and eagerly loads the mark", () => {
+it("has one h1, who we are, and eagerly loads the mark", () => {
   const landing = source("components/landing/RegenHubLanding.tsx");
   expect(landing.match(/<h1\b/g)).toHaveLength(1);
-  expect(landing).toMatch(/<h1[^>]*>\s*Boulder&apos;s regenerative coworking space\s*<\/h1>/);
+  expect(landing).toMatch(/<h1[^>]*>\s*A co-op of builders in Boulder\s*<\/h1>/);
   expect(landing).toMatch(/<BrushEnso \/>/);
   expect(source("components/landing/BrushEnso.tsx")).toMatch(/<Image[^>]*\bpriority\b/);
 });

@@ -1,10 +1,7 @@
 /**
- * The shared event-rendering vocabulary — one visual language for the landing
- * page's "Upcoming Events" panel and the public /events page.
- *
- * Extracted from components/landing/UpcomingEvents.tsx so the two surfaces
- * cannot drift: glass-panel cards, sage accents, America/Denver times, and the
- * Luma iframe that stands in whenever regenOS has nothing to say.
+ * The shared event-rendering vocabulary for the public /events page, and the one date format
+ * (`formatEventWhen`) the home page's next nights use too: America/Denver times, and the
+ * Luma iframe that stands in on /events whenever regenOS has nothing to say.
  *
  * ── Internal vs external links ───────────────────────────────────────────────
  * Aaron's rule: regenhub.xyz IS the experience — a regenOS event never links

@@ -1,6 +1,6 @@
 ---
 name: newsletter
-description: Compile the RegenHub community newsletter ("dispatch") as a Markdown draft for admin review. Use when asked to draft/write the newsletter, the biweekly dispatch, or the hub update email. Gathers upcoming Luma events + hub source material, writes in the house voice, and saves a draft the admin reviews and sends from /admin/mail.
+description: Compile the RegenHub community newsletter ("dispatch") as a Markdown draft for admin review. Use when asked to draft/write the newsletter, the biweekly dispatch, or the hub update email. Gathers upcoming events from regenhub.xyz/events.ics + hub source material, writes in the house voice, and saves a draft the admin reviews and sends from /admin/mail.
 ---
 
 # RegenHub newsletter skill
@@ -14,16 +14,16 @@ Cadence: every other week (open to weekly later). One issue per run.
 ## 1. Gather material
 
 **Upcoming events (always include).** Pull the real upcoming events — don't work from
-memory. Luma's API needs Luma Plus, which we don't pay for; its public iCal feed needs no key:
+memory. Read the calendar the site itself shows (Techne, the same nights as regenhub.xyz/events
+and the home page); its public iCal feed needs no key:
 
 ```bash
-curl -s "https://api.lu.ma/ics/get?entity=calendar&id=cal-ZCWMKx1NMCXGd7v" > "${TMPDIR:-/tmp}/regenhub-luma.ics"
-# VEVENTs: DTSTART (UTC), SUMMARY, and the page in DESCRIPTION ("Get up-to-date information at: https://luma.com/…")
+curl -s "https://regenhub.xyz/events.ics" > "${TMPDIR:-/tmp}/regenhub-events.ics"
+# VEVENTs: DTSTART (UTC), SUMMARY, URL (the night's page on regenhub.xyz), STATUS:CANCELLED on a cancelled one
 ```
 
-RegenHub's own nights are also on regenhub.xyz/events (Techne) and in `https://regenhub.xyz/events.ics`.
-Keep the next 28 days, sort by start, render dates in `America/Denver`. Highlight 3–6 standouts; link to
-`lu.ma/regenhub` for the full calendar.
+Keep the next 28 days, drop cancelled ones, sort by start, render dates in `America/Denver`. Highlight 3–6
+standouts, each linked to its URL; link to `regenhub.xyz/events` for the full calendar.
 
 **Hub source material.** Ask the admin for "what's happening at the hub" — recent
 happenings, guest speakers, member news, cooperative milestones, anything to share.
@@ -77,4 +77,4 @@ DB; until then the admin loads it.)
 - A Limited Cooperative Association, incorporated 2026-02-06.
 - Membership starts at $30/mo (incl. 1 co-working day/mo + member channels/events);
   full ladder at /membership.
-- Full event calendar + RSVP: lu.ma/regenhub.
+- Full event calendar + RSVP: regenhub.xyz/events.
