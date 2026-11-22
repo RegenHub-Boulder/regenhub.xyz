@@ -64,7 +64,7 @@ Reused words are marked *(from /membership)* or *(from /events)*; everything els
 9. "Every plan includes": Member demos (the Friday demos before 420 Happy Hour, and first claim on demo slots at
    Techne Tuesdays); Studio Night (hang out with other members and get help with your agent, your data, your tools);
    Your member page (a page of your own and a place in the member directory) *(from /membership's "What members
-   get")*; **new:** "Extra day passes for $25 instead of $30." Under the ladder, **new:** "On the day plans, unused
+   get")*; **new:** "Day passes at the member rate, $25 instead of $30." Under the ladder, **new:** "On the day plans, unused
    days carry over; they never expire." *(from /membership's plan cards)*
 10. "Apply to join", "More about membership →"
 11. **New:** "Not ready to join? Your first day is free, then a day pass is $30, weekdays 8 AM to 6 PM." (the link is

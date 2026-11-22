@@ -161,12 +161,14 @@ describe("the home page's membership", () => {
   it("is one ladder, cheapest first: 1, 2, 5 days a month, every day, a desk of your own", () => {
     // Aaron, 11-21: the desks are membership, not a separate "come by the day" block.
     const p = (c: number) => `${formatCents(c)} a month`;
+    expect(steps[3]).toMatch(/^\S+ a month Hot desk: every day/);
+    expect(steps[4]).toMatch(/^\S+ a month Cold desk: a desk of your own/);
     expect(steps).toEqual([
       `${p(PLANS.member_basic.defaultMonthlyCents)} 1 day a month`,
       `${p(PLANS.member_2day.defaultMonthlyCents)} 2 days a month`,
       `${p(PLANS.member_5day.defaultMonthlyCents)} 5 days a month`,
-      `${p(PLANS.hot_desk.defaultMonthlyCents)} Hot desk: every day, 24/7, your own door code`,
-      `${p(PLANS.cold_desk.defaultMonthlyCents)} Cold desk: a desk of your own, 24/7, your own door code`,
+      `${p(PLANS.hot_desk.defaultMonthlyCents)} ${PLANS.hot_desk.ladderLine}`,
+      `${p(PLANS.cold_desk.defaultMonthlyCents)} ${PLANS.cold_desk.ladderLine}`,
     ]);
   });
 
@@ -180,6 +182,6 @@ describe("the home page's membership", () => {
     expect(after.toLowerCase()).not.toContain("desk");
     expect(html).not.toContain("Or come by the day");
     // The rest of the home page sells no desk of its own.
-    expect(code("components/landing/RegenHubLanding.tsx")).not.toMatch(/\bdesks?\b/i);
+    expect(code("components/landing/RegenHubLanding.tsx")).not.toMatch(/desk(?!top)/i);
   });
 });

@@ -110,9 +110,11 @@ export const MEMBER_DAY_PLANS = [PLANS.member_basic, PLANS.member_2day, PLANS.me
  * The whole membership ladder, cheapest first: more days, then every day (hot desk), then a desk of your own
  * (cold desk). What the home page sells as one list.
  */
-export const MEMBERSHIP_LADDER = Object.freeze(
-  [...MEMBER_DAY_PLANS, PLANS.hot_desk, PLANS.cold_desk].sort((a, b) => a.defaultMonthlyCents - b.defaultMonthlyCents),
-);
+export const MEMBERSHIP_LADDER: readonly (
+  | (typeof MEMBER_DAY_PLANS)[number]
+  | typeof PLANS.hot_desk
+  | typeof PLANS.cold_desk
+)[] = [...MEMBER_DAY_PLANS, PLANS.hot_desk, PLANS.cold_desk].sort((a, b) => a.defaultMonthlyCents - b.defaultMonthlyCents);
 
 /** "From $30 a month": the cheapest member plan. */
 export const MEMBERSHIP_FROM_CENTS = Math.min(...MEMBER_DAY_PLANS.map((p) => p.defaultMonthlyCents));
@@ -127,6 +129,8 @@ export interface PlanDef {
   monthlyDayPasses?: number;
   selfServe: boolean;
   description: string;
+  /** The home ladder's line for a plan without monthly days (the desks); day plans' lines come from their days. */
+  ladderLine?: string;
 }
 
 export function getPlan(planKey: PlanKey): PlanDef | null {

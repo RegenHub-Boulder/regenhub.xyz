@@ -22,7 +22,7 @@ export function ladderLine(p: (typeof MEMBERSHIP_LADDER)[number]): string {
 export default function HomeMembership() {
   return (
     <>
-      <ul className="border-b border-rule mb-6" data-testid="home-member-plans">
+      <ul className="border-b border-rule mb-3" data-testid="home-member-plans">
         {MEMBERSHIP_LADDER.map((p) => (
           <li key={p.label} className="border-t border-rule py-3 grid grid-cols-[7.5rem_1fr] sm:grid-cols-[8.5rem_1fr] items-baseline gap-x-4">
             <span className="text-lg">
@@ -33,7 +33,7 @@ export default function HomeMembership() {
           </li>
         ))}
       </ul>
-      <p className="-mt-3 mb-6 text-sm text-muted">On the day plans, unused days carry over; they never expire.</p>
+      <p className="mb-6 text-sm text-muted">On the day plans, unused days carry over; they never expire.</p>
       <p className="mb-2 font-semibold">Every plan includes</p>
       <ul className="space-y-2 text-muted mb-8 list-disc pl-5 marker:text-sage">
         <li>
@@ -49,7 +49,7 @@ export default function HomeMembership() {
           directory.
         </li>
         <li>
-          Extra day passes for {formatCents(DAY_PASS_MEMBER_CENTS)} instead of {formatCents(DAY_PASS_PUBLIC_CENTS)}.
+          Day passes at the member rate, {formatCents(DAY_PASS_MEMBER_CENTS)} instead of {formatCents(DAY_PASS_PUBLIC_CENTS)}.
         </li>
       </ul>
       <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
