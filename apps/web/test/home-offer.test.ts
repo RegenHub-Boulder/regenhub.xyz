@@ -118,6 +118,9 @@ describe("the home page's nights", () => {
 });
 
 const src = (file: string) => readFileSync(new URL(`../src/${file}`, import.meta.url), "utf8");
+/** The source without comments: what can reach the page. */
+const code = (file: string) =>
+  src(file).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/^\s*\/\/.*$/gm, "");
 const HOME_FILES = [
   "app/page.tsx",
   "components/landing/RegenHubLanding.tsx",
@@ -144,8 +147,7 @@ describe("the home page's words", () => {
   it("takes every price on home and /membership from lib/plans.ts: no dollar amount typed into the page", () => {
     for (const f of [...HOME_FILES, "app/membership/page.tsx", "components/membership/MemberOffer.tsx"]) {
       // Comments may name prices; the rendered copy may not.
-      const code = src(f).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/^\s*\/\/.*$/gm, "");
-      expect(code, f).not.toMatch(/\$\d/);
+      expect(code(f), f).not.toMatch(/\$\d/);
     }
   });
 });
@@ -156,15 +158,15 @@ describe("the home page's membership", () => {
   const plans = html.match(/<ul[^>]*data-testid="home-member-plans"[^>]*>([\s\S]*?)<\/ul>/)?.[1] ?? "";
   const steps = [...plans.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/g)].map((m) => text(m[1]));
 
-  it("is one ladder, cheapest first, from one coworking day to a desk of your own", () => {
+  it("is one ladder, cheapest first: 1, 2, 5 days a month, every day, a desk of your own", () => {
     // Aaron, 11-21: the desks are membership, not a separate "come by the day" block.
     const p = (c: number) => `${formatCents(c)} a month`;
     expect(steps).toEqual([
-      `${p(PLANS.member_basic.defaultMonthlyCents)} 1 coworking day`,
-      `${p(PLANS.member_2day.defaultMonthlyCents)} 2 coworking days`,
-      `${p(PLANS.member_5day.defaultMonthlyCents)} 5 coworking days`,
+      `${p(PLANS.member_basic.defaultMonthlyCents)} 1 day a month`,
+      `${p(PLANS.member_2day.defaultMonthlyCents)} 2 days a month`,
+      `${p(PLANS.member_5day.defaultMonthlyCents)} 5 days a month`,
       `${p(PLANS.hot_desk.defaultMonthlyCents)} Hot desk: every day, 24/7, your own door code`,
-      `${p(PLANS.cold_desk.defaultMonthlyCents)} Cold desk: your own desk, 24/7`,
+      `${p(PLANS.cold_desk.defaultMonthlyCents)} Cold desk: a desk of your own, 24/7, your own door code`,
     ]);
   });
 
@@ -177,5 +179,7 @@ describe("the home page's membership", () => {
     const after = html.slice(html.indexOf("home-not-ready"));
     expect(after.toLowerCase()).not.toContain("desk");
     expect(html).not.toContain("Or come by the day");
+    // The rest of the home page sells no desk of its own.
+    expect(code("components/landing/RegenHubLanding.tsx").toLowerCase()).not.toContain("desk");
   });
 });

@@ -32,7 +32,7 @@ for (const [label, viewport, scale] of VIEWS) {
 
   const steps = (await page.locator("[data-testid=home-member-plans] li").allInnerTexts()).map((t) => t.replace(/\s+/g, " "));
   console.log(`${label} ladder:`, steps.join(" | "));
-  const prices = steps.map((s) => Number(s.match(/\$(\d+)/)?.[1]));
+  const prices = steps.map((s) => Number(s.match(/\$([\d,]+)/)?.[1].replace(/,/g, "")));
   if (steps.length !== 5) fail(`${label}: ${steps.length} steps, want 5`);
   if (prices.some((p, i) => i && p <= prices[i - 1])) fail(`${label}: ladder not cheapest first: ${prices}`);
   if (!/Hot desk/.test(steps[3] ?? "") || !/Cold desk/.test(steps[4] ?? "")) fail(`${label}: desks are not the top of the ladder`);

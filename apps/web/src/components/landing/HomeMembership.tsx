@@ -5,15 +5,21 @@ import {
   DAY_PASS_MEMBER_CENTS,
   DAY_PASS_PUBLIC_CENTS,
   MEMBERSHIP_LADDER,
-  PLANS,
-  coworkingDays,
   formatCents,
 } from "@/lib/plans";
 
-/** One step of the ladder in a few words: more days, then every day, then a desk of your own. */
+// The desk steps, by the member type they grant: every day, then a desk of your own (draft for Aaron).
+const DESK_LINES: Record<string, string> = {
+  hot_desk: "Hot desk: every day, 24/7, your own door code",
+  cold_desk: "Cold desk: a desk of your own, 24/7, your own door code",
+};
+
+/** One step of the ladder in a few words: 1, 2, 5 days a month, then every day, then a desk of your own. */
 export function ladderLine(p: (typeof MEMBERSHIP_LADDER)[number]): string {
-  if ("monthlyDayPasses" in p) return coworkingDays(p.monthlyDayPasses);
-  return p === PLANS.hot_desk ? "Hot desk: every day, 24/7, your own door code" : "Cold desk: your own desk, 24/7";
+  if ("monthlyDayPasses" in p) return `${p.monthlyDayPasses} day${p.monthlyDayPasses === 1 ? "" : "s"} a month`;
+  const line = DESK_LINES[p.grantsMemberType];
+  if (!line) throw new Error(`no ladder line for ${p.label}`);
+  return line;
 }
 
 /**
@@ -50,7 +56,7 @@ export default function HomeMembership() {
           directory.
         </li>
         <li>
-          Unused days carry over. Extra day passes are {formatCents(DAY_PASS_MEMBER_CENTS)} for members instead of{" "}
+          On the day plans, unused days carry over. Extra day passes are {formatCents(DAY_PASS_MEMBER_CENTS)} for members instead of{" "}
           {formatCents(DAY_PASS_PUBLIC_CENTS)}.
         </li>
       </ul>
@@ -72,7 +78,7 @@ export default function HomeMembership() {
         <Link href="/freeday" className="text-sage hover:underline">
           Your first day is free
         </Link>
-        , then a day pass is {formatCents(DAY_PASS_PUBLIC_CENTS)}.
+        , then a day pass is {formatCents(DAY_PASS_PUBLIC_CENTS)}, weekdays 8 AM to 6 PM.
       </p>
     </>
   );
