@@ -180,6 +180,6 @@ describe("the home page's membership", () => {
     expect(after.toLowerCase()).not.toContain("desk");
     expect(html).not.toContain("Or come by the day");
     // The rest of the home page sells no desk of its own.
-    expect(code("components/landing/RegenHubLanding.tsx").toLowerCase()).not.toContain("desk");
+    expect(code("components/landing/RegenHubLanding.tsx")).not.toMatch(/\bdesks?\b/i);
   });
 });

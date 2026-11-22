@@ -20,7 +20,8 @@ Self-hosted on local infrastructure (compute-1), not deployed to cloud providers
 - **Home page** (T-482, `components/landing/RegenHubLanding.tsx`): who we are, the next nights, membership as one
   ladder (`components/landing/HomeMembership.tsx`: $30/$50/$100 day plans, then hot desk, then cold desk, with one
   "Not ready to join?" line for the free day and day pass), members, one line about the co-op, photos, find us, stay
-  in touch. Prices on `/`, `/membership` and `MemberOffer` come only from `lib/plans.ts` (`MEMBERSHIP_LADDER`,
+  in touch. A desk's ladder line is `ladderLine` on its `PLANS` entry. Prices on `/`, `/membership` and `MemberOffer`
+  come only from `lib/plans.ts` (`MEMBERSHIP_LADDER`,
   `MEMBER_DAY_PLANS`, `MEMBERSHIP_FROM_CENTS`, the day-pass cents); `test/home-offer.test.ts` fails on a typed `$`
   amount, a retired claim, or desks split off the ladder.
 
