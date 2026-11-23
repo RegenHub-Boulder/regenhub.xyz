@@ -463,6 +463,8 @@ export interface TurnoutEvent {
   going: number | null;
   /** Who is going (Techne DIDs), when read. */
   goingDids?: string[];
+  /** The same, each with when they RSVP'd (lib/techne/rsvp.ts countGoing), when read. */
+  goingRsvps?: { did: string; at: string }[];
 }
 
 export interface SeriesTurnout {

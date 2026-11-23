@@ -58,7 +58,7 @@ async function seed() {
     { uri: "at://c/e/1", name: "Agents Night", startAt: iso(-21 * DAY), url: "/events/c/1", series: { name: "Agents Night" } },
     { uri: "at://c/e/2", name: "Agents Night", startAt: iso(-7 * DAY), url: "/events/c/2", series: { name: "Agents Night" } },
   ] as never);
-  vi.mocked(fetchAttendance).mockImplementation(async () => ({ going: 2, goingDids: ["did:plc:gil", "did:plc:riley"] }));
+  vi.mocked(fetchAttendance).mockImplementation(async () => ({ going: 2, goingDids: ["did:plc:gil", "did:plc:riley"], goingRsvps: [{ did: "did:plc:gil", at: "" }, { did: "did:plc:riley", at: "" }] }));
 }
 
 beforeEach(async () => {
@@ -97,6 +97,22 @@ describe("scoreboard_summary", () => {
     expect(t).toMatch(/Open recommended actions: 7 /);
     expect(t).not.toMatch(EMAIL);
     for (const name of ["Pat", "Brent", "Cleo", "Gil", "cus_", "sub_", "price_"]) expect(t).not.toContain(name);
+  });
+});
+
+describe("scoreboard_summary who_is_coming", () => {
+  it("lists who is going to each upcoming night by name and handle, members first, never an email", async () => {
+    vi.mocked(fetchCollectiveEvents).mockResolvedValue([
+      { uri: "at://c/e/1", name: "Agents Night", startAt: iso(-21 * DAY), url: "/events/c/1", series: { name: "Agents Night" } },
+      { uri: "at://c/e/3", name: "Agents Night", startAt: iso(3 * DAY), url: "/events/c/3", series: { name: "Agents Night" } },
+    ] as never);
+    const t = body(await scoreboardSummaryHandler(db as never, ada(), { who_is_coming: true }));
+    expect(t).toMatch(/### Who's coming/);
+    // Gil: a member row with no plan; the other account: a guest, by the handle Techne resolves.
+    expect(t).toMatch(/\*\*\d{4}-\d{2}-\d{2} Agents Night\*\*\n- Gil Guest \(@riley\.techne\.test\) — member, no current plan\n- @riley\.techne\.test — guest/);
+    expect(t).not.toMatch(EMAIL);
+    // Without the flag: no names, as before.
+    expect(body(await scoreboardSummaryHandler(db as never, ada()))).not.toContain("Gil");
   });
 });
 

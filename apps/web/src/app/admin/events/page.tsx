@@ -23,11 +23,17 @@ import { readNightFollowups, type NightFollowupView } from "@/lib/nightFollowupD
 import { NightFollowups } from "@/components/portal/NightFollowups";
 import { StewardRoster, type RosterRow } from "@/components/admin/StewardRoster";
 import { CollapsibleSection } from "@/components/admin/CollapsibleSection";
+import { portalViewer } from "@/lib/admin";
+import { mapLimit } from "@/lib/mapLimit";
+import { readWhoIsComing } from "@/lib/whoIsComingData";
 
 export const metadata = { title: "Manage Events — RegenHub" };
 
 /** Per-request reads (going counts, the calendar right after a change). */
 export const dynamic = "force-dynamic";
+
+/** How far back past nights keep their "Who's coming" list. */
+const WHO_PAST_DAYS = 60;
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -147,13 +153,21 @@ export default async function ManageEventsPage({
     searchParams ?? Promise.resolve({} as { fromLuma?: string | string[]; roles?: string | string[] }),
   ]);
   const events = read ?? [];
-  const goingCountsRead = Promise.all(
-    events.map((e) =>
-      e.startAt && Date.parse(e.startAt) > now.getTime() - 86_400_000
-        ? fetchAttendance(e.uri).then((a) => a?.going ?? null)
-        : Promise.resolve(null),
-    ),
-  );
+  // Who's coming, for upcoming nights and the last WHO_PAST_DAYS (at the door, and for follow-ups): one RSVP read per
+  // night, a few at a time, then the people for every night in one batch. Emails only for a site admin.
+  const inWindow = (e: (typeof events)[number]) => !!e.startAt && Date.parse(e.startAt) > now.getTime() - WHO_PAST_DAYS * 86_400_000;
+  const comingRead = Promise.all([
+    mapLimit(events, 6, (e) => (inWindow(e) ? fetchAttendance(e.uri) : Promise.resolve(null))),
+    // A failed session read is "not an admin": names and handles, never emails.
+    portalViewer().catch(() => ({ isAdmin: false })),
+  ]).then(async ([attendance, viewer]) => ({
+    attendance,
+    lists: await readWhoIsComing(createServiceClient(), attendance, { withEmails: viewer.isAdmin }),
+  })).catch((err) => {
+    // Never the whole page: each night in the window says "Couldn't load who's coming".
+    console.error("[admin/events] who's coming read failed:", err);
+    return { attendance: events.map(() => null), lists: events.map(() => null) };
+  });
   // Each event's config and listing in the collective's repo, so an edit keeps the config and a removal
   // deletes exactly what is there.
   const own = events.filter((e) => e.did === collective);
@@ -177,8 +191,8 @@ export default async function ManageEventsPage({
       return { did: h.did, role: h.role, since: h.since, label: handle ? `@${handle}` : shortDid(h.did) };
     }),
   );
-  const [goingCounts, answers, followups, roster] = await Promise.all([
-    goingCountsRead,
+  const [coming, answers, followups, roster] = await Promise.all([
+    comingRead,
     Promise.all(chunks.map((c) => getRecords(c, { revalidate: 0 }))),
     followupsRead,
     rosterRead,
@@ -196,7 +210,8 @@ export default async function ManageEventsPage({
     visibility: "public",
     value: e.value,
     url: e.url,
-    going: goingCounts[i],
+    // Outside the window: nothing read, nothing shown. Read: the count and the list (null = couldn't load).
+    ...(inWindow(e) ? { going: coming.attendance[i]?.going ?? null, who: coming.attendance[i] ? coming.lists[i] : null } : {}),
     // Only the collective's own events are ours to edit; a listed event belongs to its author.
     editable: e.did === collective && siblingsKnown,
     config: siblings.get(`at://${collective}/${EVENT_CONFIG_NSID}/${e.rkey}-cfg`) ?? null,

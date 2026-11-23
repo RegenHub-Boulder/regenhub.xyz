@@ -5,6 +5,8 @@ import { readScoreboard, type Scoreboard } from "@/lib/scoreboardData";
 import { SCOREBOARD_GOALS, headlineText, usd } from "@/lib/scoreboard";
 import type { RecommendedAction } from "@/lib/scoreboardActions";
 import { ACTION_KIND_LABEL } from "@/lib/scoreboardActionKinds";
+import { readWhoIsComing } from "@/lib/whoIsComingData";
+import { dateIn } from "@/lib/series";
 import { MONTH_NOTES, PLAN_BUCKETS, monthCsv } from "@/lib/scoreboardMonths";
 
 /**
@@ -25,8 +27,11 @@ async function read(admin: ServiceClient): Promise<Scoreboard | ToolResult> {
 }
 const isResult = (x: Scoreboard | ToolResult): x is ToolResult => "content" in x;
 
-/** `scoreboard_summary` — headline numbers, goal pace, the month-by-month table, by plan now, event turnout. */
-export async function scoreboardSummaryHandler(admin: ServiceClient, auth: McpAuthInfo): Promise<ToolResult> {
+/** `scoreboard_summary` — headline numbers, goal pace, the month-by-month table, by plan now, event turnout; with
+ *  `who_is_coming`, who is going to each upcoming night (names and handles, as /admin/events shows a steward). */
+export async function scoreboardSummaryHandler(
+  admin: ServiceClient, auth: McpAuthInfo, args: { who_is_coming?: boolean } = {},
+): Promise<ToolResult> {
   const denied = scopeDenied(auth, "scoreboard_summary", "read");
   if (denied) return denied;
   const s = await read(admin);
@@ -73,8 +78,27 @@ export async function scoreboardSummaryHandler(admin: ServiceClient, auth: McpAu
       }
     }
   }
+  if (args.who_is_coming) lines.push("", ...(await comingLines(admin, s.turnout)));
   lines.push("", `Open recommended actions: ${s.actions.open.length} (recommended_actions lists them).`);
   return text(lines.join("\n"));
+}
+
+/** Who is going to each upcoming night: names and handles, members first, never an email (withEmails: false). */
+async function comingLines(admin: ServiceClient, turnout: Scoreboard["turnout"]): Promise<string[]> {
+  const lines = ["### Who's coming (upcoming nights; RSVPs going on Techne)"];
+  const upcoming = (turnout ?? []).flatMap((g) => g.upcoming).sort((a, b) => Date.parse(a.startAt ?? "") - Date.parse(b.startAt ?? ""));
+  if (upcoming.length === 0) return [...lines, "No upcoming nights."];
+  const lists = await readWhoIsComing(admin, upcoming.map((e) => (e.going == null ? null : { goingRsvps: e.goingRsvps ?? [] })), { withEmails: false });
+  upcoming.forEach((e, i) => {
+    const list = lists[i];
+    lines.push(`**${e.startAt ? dateIn(e.startAt, "America/Denver") : "—"} ${e.name}**`);
+    if (!list) lines.push("Couldn't load who's coming.");
+    else if (list.length === 0) lines.push("No RSVPs yet.");
+    else for (const p of list) {
+      lines.push(`- ${p.name}${p.handle && p.name !== `@${p.handle}` ? ` (@${p.handle})` : ""} — ${p.kind === "member" ? `member, ${p.plan ?? "no current plan"}` : "guest"}`);
+    }
+  });
+  return lines;
 }
 
 function actionLines(a: RecommendedAction, n: number, mark?: string): string[] {
@@ -119,7 +143,8 @@ export const SCOREBOARD_DESCRIPTIONS = {
     "the month-by-month table from July 2026 as CSV (space visits, stay-in-touch list, day passes by kind and rail, memberships new, " +
     "cancelled and paying at month end by plan with net revenue, and four conversion rates, each column defined), paying members and " +
     "revenue by plan now with comped and past-due counts, event turnout from Techne by series, " +
-    "and the newsletter list. Same definitions as the scoreboard page, the admin home and billing_summary. No names or contact details.",
+    "and the newsletter list. Same definitions as the scoreboard page, the admin home and billing_summary. No names or contact details, " +
+    "unless who_is_coming: then each upcoming night also lists who is going (names, handles, member or guest; never an email).",
   recommended_actions:
     "Read-only. The scoreboard's \"what to do next\" list, ranked by goal impact then urgency: past-due members (send the reminder), members " +
     "set to end (talk first), people who left in the last 90 days (a personal note), new members (welcome), day-pass buyers and regular " +

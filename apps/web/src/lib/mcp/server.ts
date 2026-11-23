@@ -253,8 +253,13 @@ function buildServer(auth: McpAuthInfo): McpServer {
     async (extra) => billingSummaryHandler(sb(), callerAuth(extra)));
 
   // ── scoreboard (T-497): read-only, `read` scope, the numbers /admin/scoreboard shows and the actions on /admin ──
-  server.registerTool("scoreboard_summary", { description: SCOREBOARD_DESCRIPTIONS.scoreboard_summary, annotations: READ },
-    async (extra) => scoreboardSummaryHandler(sb(), callerAuth(extra)));
+  server.registerTool("scoreboard_summary", {
+    description: SCOREBOARD_DESCRIPTIONS.scoreboard_summary,
+    annotations: READ,
+    inputSchema: {
+      who_is_coming: z.boolean().optional().describe("Also list who is going to each upcoming night (names and handles)"),
+    },
+  }, async (args, extra) => scoreboardSummaryHandler(sb(), callerAuth(extra), args));
 
   server.registerTool("recommended_actions", {
     description: SCOREBOARD_DESCRIPTIONS.recommended_actions,

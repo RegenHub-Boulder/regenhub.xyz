@@ -6,6 +6,7 @@ import type { createServiceClient } from "@/lib/supabase/admin";
 import { compileAudience } from "@/lib/newsletter";
 import { issueProgress } from "@/lib/newsletterSend";
 import { fetchAttendance, fetchCollectiveEvents } from "@/lib/regenos/events";
+import { mapLimit } from "@/lib/mapLimit";
 import { isMissingColumn, membershipInvoices } from "@/lib/onchain/invoiceKind";
 import { dateIn } from "@/lib/series";
 import { readAll } from "@/lib/supabase/readAll";
@@ -29,20 +30,6 @@ type Admin = ReturnType<typeof createServiceClient>;
 const TURNOUT_PAST_DAYS = 60;
 /** How far back "last visit" looks. */
 const VISIT_LOOKBACK_DAYS = 365;
-
-/** `fn` over `items`, at most `limit` at a time, results in order. */
-async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const out = new Array<R>(items.length);
-  let next = 0;
-  const worker = async () => {
-    while (next < items.length) {
-      const i = next++;
-      out[i] = await fn(items[i]);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return out;
-}
 
 /** `fn` over `ids` in chunks of 200 (a short URL), four chunks at a time. */
 const inChunks = <R>(ids: number[], fn: (chunk: number[]) => Promise<R[]>): Promise<R[]> => {
@@ -118,7 +105,7 @@ async function turnout(now: Date): Promise<TurnoutEvent[] | null> {
   const going = await mapLimit(events, 6, (e) => fetchAttendance(e.uri));
   return events.map((e, i) => ({
     uri: e.uri, name: e.name, startAt: e.startAt, url: e.url, seriesName: e.series?.name ?? null,
-    going: going[i]?.going ?? null, goingDids: going[i]?.goingDids ?? [],
+    going: going[i]?.going ?? null, goingDids: going[i]?.goingDids ?? [], goingRsvps: going[i]?.goingRsvps ?? [],
   }));
 }
 

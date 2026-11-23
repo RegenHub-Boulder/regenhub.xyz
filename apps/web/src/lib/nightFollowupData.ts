@@ -60,21 +60,24 @@ export interface NightFollowupView {
   rsvpsUnread: boolean;
 }
 
+/** A paying subscription of a member an RSVP maps to (its plan names them on "Who's coming"). */
+export type RsvpSubscription = { member_id: number; status: string; monthly_cents: number; plan_key: string | null };
+
 /**
- * The DB facts that decide a batch, for the people going to some nights: the members their DIDs are linked to, what
- * their Techne sign-ins recorded (techne_people, migration 068: a member a confirmed email matched, or their own
- * confirmed email), those members' paying subscriptions, and the holds on every email that could be written to.
+ * Who the people going to some nights are, in one read per table whatever the number of people (the follow-ups and
+ * /admin/events "Who's coming" share it): the members their DIDs are linked to and what their Techne sign-ins recorded
+ * (techne_people, migration 068: a member a confirmed email matched, or their own confirmed email). Turn a DID into a
+ * person with lib/nightFollowups.ts rsvpPeople. A failed read throws.
  */
-async function batchFacts(admin: Admin, dids: string[]) {
-  const none = { members: [] as FollowupMember[], people: [] as FollowupTechnePerson[], subs: [], holds: new Map<string, HeldReason>() };
-  if (dids.length === 0) return none;
+async function rsvpRows(admin: Admin, dids: readonly string[]) {
+  if (dids.length === 0) return { members: [] as FollowupMember[], people: [] as FollowupTechnePerson[] };
   const [byDid, known] = await Promise.all([
     admin.from("members").select(MEMBER_COLUMNS).in("did", dids),
     admin.from("techne_people").select("did, handle, name, email, email_confirmed, member_id").in("did", dids),
   ]);
   if (byDid.error) throw byDid.error;
-  // Deployed before migration 068 ran (deploy first, then migrate): follow-ups work as before, members only.
-  if (known.error) console.error("[night followups] techne_people read failed; members only:", known.error.message);
+  // Deployed before migration 068 ran (deploy first, then migrate): members only, as before.
+  if (known.error) console.error("[rsvp people] techne_people read failed; members only:", known.error.message);
   const people = (known.error ? [] : (known.data ?? [])) as FollowupTechnePerson[];
   const rows = [...((byDid.data ?? []) as FollowupMember[])];
   const extra = [...new Set(people.flatMap((p) => (p.member_id != null && !rows.some((m) => m.id === p.member_id) ? [p.member_id] : [])))];
@@ -83,23 +86,39 @@ async function batchFacts(admin: Admin, dids: string[]) {
     if (error) throw error;
     rows.push(...((data ?? []) as FollowupMember[]));
   }
-  const ids = rows.map((m) => m.id);
+  return { members: rows, people };
+}
+
+/** Those members' paying subscriptions (their plan, and whether they are in standing). */
+async function rsvpSubs(admin: Admin, members: readonly FollowupMember[]): Promise<RsvpSubscription[]> {
+  if (members.length === 0) return [];
+  const { data, error } = await admin.from("subscriptions").select("member_id, status, monthly_cents, plan_key")
+    .in("member_id", members.map((m) => m.id)).in("status", PAYING_STATUSES);
+  if (error) throw error;
+  return (data ?? []) as RsvpSubscription[];
+}
+
+/** rsvpRows and the subscriptions: who the people going are, with their plans. */
+export async function rsvpFacts(admin: Admin, dids: readonly string[]) {
+  const rows = await rsvpRows(admin, dids);
+  return { ...rows, subs: await rsvpSubs(admin, rows.members) };
+}
+
+/** rsvpFacts, plus the holds on every email that could be written to: what decides a batch of follow-ups. */
+async function batchFacts(admin: Admin, dids: string[]) {
+  const rows = await rsvpRows(admin, dids);
   const emails = [...new Set([
-    ...rows.flatMap((m) => (m.email ? [m.email.trim().toLowerCase()] : [])),
-    ...people.flatMap((p) => (p.email && p.email_confirmed ? [p.email.trim().toLowerCase()] : [])),
+    ...rows.members.flatMap((m) => (m.email ? [m.email.trim().toLowerCase()] : [])),
+    ...rows.people.flatMap((p) => (p.email && p.email_confirmed ? [p.email.trim().toLowerCase()] : [])),
   ])];
   const [subs, holds] = await Promise.all([
-    ids.length
-      ? admin.from("subscriptions").select("member_id, status, monthly_cents").in("member_id", ids).in("status", PAYING_STATUSES)
-      : { data: [], error: null },
-    emails.length ? admin.rpc("night_followup_holds", { p_emails: emails }) : { data: [], error: null },
+    rsvpSubs(admin, rows.members),
+    emails.length ? admin.rpc("night_followup_holds", { p_emails: emails }) : Promise.resolve({ data: [], error: null }),
   ]);
-  if (subs.error) throw subs.error;
   if (holds.error) throw holds.error;
   return {
-    members: rows,
-    people,
-    subs: (subs.data ?? []) as { member_id: number; status: string; monthly_cents: number }[],
+    ...rows,
+    subs,
     holds: new Map(((holds.data ?? []) as { email: string; reason: HeldReason }[]).map((h) => [h.email, h.reason])),
   };
 }

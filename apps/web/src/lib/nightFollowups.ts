@@ -84,6 +84,38 @@ export interface FollowupBatch {
   noEmail: number;
 }
 
+/** Who an RSVP's Techne account is, as this site knows them. */
+export interface RsvpPerson<M extends FollowupMember = FollowupMember> {
+  /** The member: linked by DID, else the one this account's confirmed email matched at sign-in (still matching). */
+  member: M | undefined;
+  /** What their Techne sign-ins here recorded (techne_people), if they ever signed in. */
+  techne: FollowupTechnePerson | undefined;
+  /** The address this site may use for them, lowercase: the member's, else their own confirmed one. */
+  email: string | undefined;
+}
+
+/**
+ * The one mapping from an RSVP's DID to a person (the follow-ups and /admin/events "Who's coming" both use it): the
+ * member linked by `members.did`, else the member a confirmed email matched at sign-in while the two addresses still
+ * match (a member row whose email changed since is someone else's now), else a Techne-only person.
+ */
+export function rsvpPeople<M extends FollowupMember>(facts: {
+  members: readonly M[];
+  people?: readonly FollowupTechnePerson[];
+}): (did: string) => RsvpPerson<M> {
+  const byDid = new Map(facts.members.flatMap((m) => (m.did ? [[m.did, m] as const] : [])));
+  const byId = new Map(facts.members.map((m) => [m.id, m] as const));
+  const techne = new Map((facts.people ?? []).map((p) => [p.did, p] as const));
+  return (did) => {
+    const t = techne.get(did);
+    const ownEmail = t?.email_confirmed ? t.email?.trim().toLowerCase() || undefined : undefined;
+    const byEmailLink = t?.member_id != null ? byId.get(t.member_id) : undefined;
+    // Two missing addresses are no match: an email link needs this account's confirmed email to still be the member's.
+    const member = byDid.get(did) ?? (byEmailLink && ownEmail && byEmailLink.email?.trim().toLowerCase() === ownEmail ? byEmailLink : undefined);
+    return { member, techne: t, email: member?.email?.trim().toLowerCase() || ownEmail };
+  };
+}
+
 /**
  * Who would get a note for one night. `holds`: lowercase email → why it can't get a follow-up now, as the database
  * answers it (migration 066 night_followup_holds: unsubscribed, opted out, or a follow-up this week), the same rule
@@ -97,20 +129,11 @@ export function followupBatch(input: {
   subs: readonly (StandingSubscription & { member_id: number })[];
   holds: ReadonlyMap<string, HeldReason>;
 }): FollowupBatch {
-  const byDid = new Map(input.members.flatMap((m) => (m.did ? [[m.did, m] as const] : [])));
-  const byId = new Map(input.members.map((m) => [m.id, m] as const));
-  const techne = new Map((input.people ?? []).map((p) => [p.did, p] as const));
+  const personOf = rsvpPeople(input);
   const out: FollowupBatch = { send: [], held: [], noEmail: 0 };
   const found: FollowupPerson[] = [];
   for (const did of new Set(input.goingDids)) {
-    const t = techne.get(did);
-    const ownEmail = t?.email_confirmed ? t.email?.trim().toLowerCase() : undefined;
-    // The member: linked by DID, else the one this account's confirmed email matched at sign-in, while the two
-    // addresses still match (a member row whose email changed since is someone else's now).
-    const byEmailLink = t?.member_id != null ? byId.get(t.member_id) : undefined;
-    const m = byDid.get(did) ?? (byEmailLink && byEmailLink.email?.trim().toLowerCase() === ownEmail ? byEmailLink : undefined);
-    const memberEmail = m?.email?.trim().toLowerCase();
-    const email = memberEmail || ownEmail;
+    const { member: m, techne: t, email } = personOf(did);
     if (!email) {
       out.noEmail += 1;
       continue;

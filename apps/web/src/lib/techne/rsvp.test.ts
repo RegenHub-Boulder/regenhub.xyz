@@ -36,6 +36,11 @@ describe("rsvp records", () => {
       EV,
     );
     expect(a.goingDids.sort()).toEqual(["did:plc:jo", "did:plc:sam"]);
+    // Each with when their latest answer was made (Ana's later "not going" took her off the list).
+    expect([...a.goingRsvps].sort((x, y) => x.did.localeCompare(y.did))).toEqual([
+      { did: "did:plc:jo", at: "2026-11-03T00:00:00Z" },
+      { did: "did:plc:sam", at: "2026-11-04T00:00:00Z" },
+    ]);
     expect(goingLine(a)).toBe("2 going");
     expect(goingLine({ going: 0 })).toBe("No RSVPs yet");
   });

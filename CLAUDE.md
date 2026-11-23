@@ -512,7 +512,13 @@ two independently-switchable things. Both degrade to today's behaviour when unco
   `/events/<slug>` is the series page (next posted night, posted nights after it, past nights; with none upcoming
   it says "Next date coming soon"), built from `lib/seriesEvents.ts`. `/events` leads with the series cards; `/` lists the next nights one line each (below). `/admin/events` → **Add the next nights** offers the next 3 rule dates not yet posted
   (a posted date is skipped, a cancelled one isn't re-offered) plus a date picker for any later night (`lib/seriesNights.ts`), posts them as the collective (below) and shows
-  "N going" per event. Below it, **Also on Luma?** (`components/admin/LumaSyncSection.tsx`, `lib/lumaCalendar.ts`)
+  "N going" per event, which opens **Who's coming** (`components/admin/WhoIsComing.tsx`, `lib/whoIsComing.ts` pure,
+  `lib/whoIsComingData.ts` reads): everyone whose latest RSVP says going, members first (badge and plan, or "No current
+  plan"), then guests (named from `techne_people`, else the handle), with when they RSVP'd and **Copy names**; upcoming
+  nights and the last 60 days. A DID becomes a person by the follow-ups' own mapping (`rsvpPeople` in
+  `lib/nightFollowups.ts`, `rsvpFacts` in `lib/nightFollowupData.ts`: one read per table for all nights). **Emails only
+  for a site admin** (`portalViewer().isAdmin`, server-side; the field is absent otherwise); a failed people read says
+  "Couldn't load who's coming". Luma RSVPs aren't in Techne, so they aren't listed. Below it, **Also on Luma?** (`components/admin/LumaSyncSection.tsx`, `lib/lumaCalendar.ts`)
   checks the next 60 days against Luma's public iCal feed (no API key; Next-cached 15 min; fails soft): each night
   "On Luma" (link) or "Not on Luma" (same Denver date, start within 30 min, not two different series), plus the
   Luma-only nights with **Add here** (`?fromLuma=<evt-id>` opens the new-event form prefilled). Read-only toward Luma.
@@ -715,7 +721,8 @@ MCP changes, just redeploy the web app.
   the caller is an enabled `is_admin` + `is_ops_admin`, write an `admin_actions` row
   (`mcp_billing_write`) before acting and its outcome after (no row, no action), and call the same
   code as the admin page and portal (`cancelMembership`, `scheduleDeskToDaily`,
-  `changeCardPlanNow`, `changeOnchainPlan`); scoreboard reads `scoreboard_summary` and `recommended_actions`
+  `changeCardPlanNow`, `changeOnchainPlan`); scoreboard reads `scoreboard_summary` (optional `who_is_coming`: who is going to each upcoming night, names and
+  handles only) and `recommended_actions`
   (`lib/mcp/scoreboardTools.ts`, scope `read`, the numbers /admin/scoreboard shows and the actions on /admin; names and member ids,
   never emails). To add a tool: register it in `server.ts`
   (zod input shape), redeploy web; the client auto-reconnects and picks up the new tool (bump
