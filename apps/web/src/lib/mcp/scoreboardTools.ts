@@ -7,6 +7,7 @@ import type { RecommendedAction } from "@/lib/scoreboardActions";
 import { ACTION_KIND_LABEL } from "@/lib/scoreboardActionKinds";
 import { readWhoIsComing } from "@/lib/whoIsComingData";
 import { dateIn } from "@/lib/series";
+import { MONTH_NOTES, PLAN_BUCKETS, monthCsv } from "@/lib/scoreboardMonths";
 
 /**
  * The MCP's scoreboard tools (T-497): the numbers /admin/scoreboard shows and the recommended actions on /admin (Today), so Uni can
@@ -17,8 +18,6 @@ import { dateIn } from "@/lib/series";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
-const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`);
-
 async function read(admin: ServiceClient): Promise<Scoreboard | ToolResult> {
   try {
     return await readScoreboard(admin);
@@ -28,7 +27,7 @@ async function read(admin: ServiceClient): Promise<Scoreboard | ToolResult> {
 }
 const isResult = (x: Scoreboard | ToolResult): x is ToolResult => "content" in x;
 
-/** `scoreboard_summary` — headline numbers, goal pace, subscriptions and funnel by month, event turnout; with
+/** `scoreboard_summary` — headline numbers, goal pace, the month-by-month table, by plan now, event turnout; with
  *  `who_is_coming`, who is going to each upcoming night (names and handles, as /admin/events shows a steward). */
 export async function scoreboardSummaryHandler(
   admin: ServiceClient, auth: McpAuthInfo, args: { who_is_coming?: boolean } = {},
@@ -50,15 +49,21 @@ export async function scoreboardSummaryHandler(
       (pace.netBehindCents > 0 ? `${usd(pace.netBehindCents)} behind` : `${usd(-pace.netBehindCents)} ahead`) +
       `); ${usd(pace.netNeededFortnightCents)}/mo more in the next two weeks keeps pace.`,
     "",
-    "### Subscriptions per month (card and USDC; a cancellation counts in the month it ended)",
-    "| month | new | cancelled | net |",
-    "|---|---|---|---|",
-    ...s.flow.map((m) => `| ${m.month} | ${m.started} | ${m.canceled} | ${signed(m.net)} |`),
+    "### Month by month (from July 2026, America/Denver; the current month is so far)",
+    "The same table as the page and its Download CSV. Counts only. How each column is counted:",
+    ...MONTH_NOTES.map((n) => `- ${n}`),
+    "```csv",
+    monthCsv(s.monthTable).trimEnd().replace(/\r\n/g, "\n"),
+    "```",
     "",
-    "### Funnel per month",
-    "| month | stay-in-touch | applications | day passes | first subscriptions |",
+    "### By plan now (total paying and net are the headline's)",
+    "| plan | paying | net/mo | comped | past due |",
     "|---|---|---|---|---|",
-    ...s.funnel.map((m) => `| ${m.month} | ${m.signups} | ${m.applications} | ${m.passesBought} | ${m.firstSubscriptions} |`),
+    ...PLAN_BUCKETS.map((b) => {
+      const c = s.byPlanNow.byPlan[b.key];
+      return `| ${b.label} | ${c.paying} | ${usd(c.netCents)} | ${c.comped} | ${c.pastDue} |`;
+    }),
+    `| all plans | ${s.byPlanNow.total.paying} | ${usd(s.byPlanNow.total.netCents)} | ${s.byPlanNow.total.comped} | ${s.byPlanNow.total.pastDue} |`,
     "",
     "### Event turnout (RSVPs going, on Techne; upcoming and the last 60 days)",
   ];
@@ -134,8 +139,10 @@ export async function recommendedActionsHandler(
 export const SCOREBOARD_DESCRIPTIONS = {
   scoreboard_summary:
     "Read-only. The co-op scoreboard (/admin/scoreboard) as text: paying members ($30+/mo plans) and net membership revenue against the " +
-    "goals (net +10 members and $2,750/mo by 2027-01-20), pace against the straight line to the goal, subscriptions started and cancelled per " +
-    "month, the funnel per month (stay-in-touch signups, applications, day passes, first subscriptions), event turnout from Techne by series, " +
+    "goals (net +10 members and $2,750/mo by 2027-01-20), pace against the straight line to the goal, " +
+    "the month-by-month table from July 2026 as CSV (space visits, stay-in-touch list, day passes by kind and rail, memberships new, " +
+    "cancelled and paying at month end by plan with net revenue, and four conversion rates, each column defined), paying members and " +
+    "revenue by plan now with comped and past-due counts, event turnout from Techne by series, " +
     "and the newsletter list. Same definitions as the scoreboard page, the admin home and billing_summary. No names or contact details, " +
     "unless who_is_coming: then each upcoming night also lists who is going (names, handles, member or guest; never an email).",
   recommended_actions:

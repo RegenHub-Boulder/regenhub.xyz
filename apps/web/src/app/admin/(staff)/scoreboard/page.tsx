@@ -5,14 +5,15 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import { CopyTextBlock } from "@/components/admin/CopyTextBlock";
 import { planLabel } from "@/lib/plans";
-import { SCOREBOARD_GOALS, SCOREBOARD_TZ, usd, type MonthFlow, type TurnoutEvent } from "@/lib/scoreboard";
+import { SCOREBOARD_GOALS, SCOREBOARD_TZ, usd, type TurnoutEvent } from "@/lib/scoreboard";
 import { readScoreboard } from "@/lib/scoreboardData";
+import {
+  LIST_SOURCES, MONTH_NOTES, PLAN_BUCKETS, rateText, type MonthRow, type PlanBreakdown, type Rate,
+} from "@/lib/scoreboardMonths";
 
 export const metadata = { title: "Scoreboard — Admin" };
 export const dynamic = "force-dynamic";
 
-const monthShort = (key: string) =>
-  new Date(`${key}-15T12:00:00Z`).toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
 const day = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: SCOREBOARD_TZ }) : "—";
 const dayShort = (iso: string | null) =>
@@ -45,23 +46,107 @@ function Bar({ value, goal, marker }: { value: number; goal: number; marker?: { 
   );
 }
 
-function MonthTable({ months, rows }: { months: string[]; rows: { label: string; values: (string | number)[]; strong?: boolean; sub?: boolean }[] }) {
+const monthLong = (key: string) =>
+  new Date(`${key}-15T12:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+
+type Col = { label: string; cell: (r: MonthRow) => React.ReactNode };
+
+function RateCell({ rate }: { rate: Rate | null }) {
+  if (rate == null) return <span className="text-muted">—</span>;
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm tabular-nums">
+    <>
+      {rateText(rate)}
+      <span className="block text-[11px] text-muted">{rate.converted}/{rate.base}</span>
+    </>
+  );
+}
+
+/** A count with its plans under it ("2 hot · 1 $30"), when there is one. */
+function WithPlans({ n, r, k }: { n: number; r: MonthRow; k: "started" | "canceled" }) {
+  const parts = PLAN_BUCKETS.filter((b) => r.memberships.byPlan[b.key][k] > 0)
+    .map((b) => `${r.memberships.byPlan[b.key][k]} ${b.key === "hot" || b.key === "cold" ? b.label.split(" ")[0].toLowerCase() : b.label.split(" ")[0]}`);
+  return (
+    <>
+      {n}
+      {parts.length > 0 && <span className="block text-[11px] text-muted whitespace-nowrap">{parts.join(" · ")}</span>}
+    </>
+  );
+}
+
+/** The month table: one row per month (rows = months, so it reads like the sheet), grouped columns, sideways scroll. */
+function MonthByMonth({ rows }: { rows: MonthRow[] }) {
+  const used = (b: (typeof PLAN_BUCKETS)[number]) => b.key !== "other" || rows.some((r) => r.memberships.atEnd.byPlan.other.paying > 0);
+  const groups: { title: string; cols: Col[] }[] = [
+    { title: "Space visits", cols: [
+      { label: "Member days", cell: (r) => r.visits.memberDays },
+      { label: "Day-code days", cell: (r) => r.visits.dayCodeDays },
+    ] },
+    { title: "Site", cols: [{ label: "Visits", cell: () => null }] },
+    { title: "Stay-in-touch list", cols: [
+      { label: "At month end", cell: (r) => r.list.size },
+      { label: "Added", cell: (r) => (
+        <>
+          {r.list.added}
+          {r.list.added > 0 && (
+            <span className="block text-[11px] text-muted whitespace-nowrap">
+              {LIST_SOURCES.filter((src) => r.list.bySource[src.key] > 0).map((src) => `${r.list.bySource[src.key]} ${src.label.split(" ")[0]}`).join(" · ")}
+            </span>
+          )}
+        </>
+      ) },
+    ] },
+    { title: "Day passes bought", cols: [
+      { label: "Single, card", cell: (r) => r.passes.singleCard },
+      { label: "Single, USDC", cell: (r) => r.passes.singleUsdc },
+      { label: "5-pack, card", cell: (r) => r.passes.packCard },
+      { label: "5-pack, USDC", cell: (r) => r.passes.packUsdc },
+    ] },
+    { title: "Memberships", cols: [
+      { label: "Applied", cell: (r) => r.applications },
+      { label: "New", cell: (r) => <WithPlans n={r.memberships.started} r={r} k="started" /> },
+      { label: "Cancelled", cell: (r) => <WithPlans n={r.memberships.canceled} r={r} k="canceled" /> },
+      { label: "First-time", cell: (r) => r.memberships.firstTime },
+    ] },
+    { title: "Paying at month end", cols: [
+      ...PLAN_BUCKETS.filter(used).map((b) => ({ label: b.label, cell: (r: MonthRow) => r.memberships.atEnd.byPlan[b.key].paying })),
+      { label: "Total", cell: (r) => <strong>{r.memberships.atEnd.total.paying}</strong> },
+      { label: "Net / mo", cell: (r) => <strong>{usd(r.memberships.atEnd.total.netCents)}</strong> },
+    ] },
+    { title: "Conversions", cols: [
+      { label: "List → day pass", cell: (r) => <RateCell rate={r.conversions.listToPass} /> },
+      { label: "Day pass → member", cell: (r) => <RateCell rate={r.conversions.passToMember} /> },
+      { label: "Night → member", cell: (r) => <RateCell rate={r.conversions.nightToMember} /> },
+      { label: "Day plan → desk", cell: (r) => <RateCell rate={r.conversions.dayPlanToDesk} /> },
+    ] },
+  ];
+  const cols = groups.flatMap((g) => g.cols.map((c, i) => ({ ...c, first: i === 0, site: g.title === "Site" })));
+  const edge = (first: boolean) => (first ? "border-l border-rule" : "");
+  return (
+    <div className="overflow-x-auto" data-testid="month-table">
+      <table className="text-sm tabular-nums border-collapse">
         <thead>
+          <tr className="text-xs text-muted">
+            <th className="sticky left-0 bg-sheet" />
+            {groups.map((g) => (
+              <th key={g.title} colSpan={g.cols.length} className="py-1 px-2 text-left font-semibold border-l border-rule whitespace-nowrap">{g.title}</th>
+            ))}
+          </tr>
           <tr className="text-xs text-muted border-b border-rule">
-            <th className="py-1.5 pr-4 text-left font-medium" />
-            {months.map((m) => <th key={m} className="py-1.5 px-2 text-right font-medium">{monthShort(m)}</th>)}
+            <th className="sticky left-0 bg-sheet py-1.5 pr-3 text-left font-medium">Month</th>
+            {cols.map((c) => <th key={c.label} className={`py-1.5 px-2 text-right font-medium align-bottom ${edge(c.first)}`}>{c.label}</th>)}
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr key={r.label} className={`border-b border-rule ${r.sub ? "text-xs text-muted" : ""}`}>
-              <td className={`py-1.5 pr-4 ${r.sub ? "pl-3" : ""} ${r.strong ? "font-semibold" : ""}`}>{r.label}</td>
-              {r.values.map((v, i) => (
-                <td key={months[i]} className={`py-1.5 px-2 text-right ${r.strong ? "font-semibold" : ""}`}>{v}</td>
-              ))}
+          {rows.map((r, ri) => (
+            <tr key={r.month} className="border-b border-rule align-top" data-month={r.month}>
+              <th scope="row" className="sticky left-0 bg-sheet py-1.5 pr-3 text-left font-medium whitespace-nowrap">
+                {monthLong(r.month)}{r.soFar && <span className="block text-[11px] font-normal text-muted">so far</span>}
+              </th>
+              {cols.map((c) => c.site
+                ? ri === 0 && (
+                  <td key={c.label} rowSpan={rows.length} className={`py-1.5 px-2 text-xs text-muted align-middle text-center ${edge(true)}`}>not tracked yet</td>
+                )
+                : <td key={c.label} className={`py-1.5 px-2 text-right ${edge(c.first)}`}>{c.cell(r)}</td>)}
             </tr>
           ))}
         </tbody>
@@ -70,17 +155,45 @@ function MonthTable({ months, rows }: { months: string[]; rows: { label: string;
   );
 }
 
-function planRows(flow: MonthFlow[]) {
-  const plans = [...new Set(flow.flatMap((m) => Object.keys(m.byPlan)))].sort((a, b) => planLabel(a).localeCompare(planLabel(b)));
-  return plans.map((p) => ({
-    label: planLabel(p),
-    sub: true,
-    values: flow.map((m) => {
-      const v = m.byPlan[p];
-      if (!v || (v.started === 0 && v.canceled === 0)) return "·";
-      return [v.started ? `+${v.started}` : "", v.canceled ? `−${v.canceled}` : ""].filter(Boolean).join(" ");
-    }),
-  }));
+function ByPlanNow({ plans }: { plans: PlanBreakdown }) {
+  const rows = PLAN_BUCKETS.filter((b) => {
+    const c = plans.byPlan[b.key];
+    return b.key !== "other" || c.paying + c.comped + c.pastDue > 0;
+  });
+  return (
+    <table className="w-full text-sm tabular-nums" data-testid="by-plan">
+      <thead>
+        <tr className="text-xs text-muted border-b border-rule">
+          <th className="py-1.5 pr-4 text-left font-medium">Plan</th>
+          <th className="py-1.5 px-2 text-right font-medium">Paying</th>
+          <th className="py-1.5 px-2 text-right font-medium">Net / mo</th>
+          <th className="py-1.5 px-2 text-right font-medium">Comped</th>
+          <th className="py-1.5 px-2 text-right font-medium">Past due</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((b) => {
+          const c = plans.byPlan[b.key];
+          return (
+            <tr key={b.key} className="border-b border-rule">
+              <td className="py-1.5 pr-4">{b.label}</td>
+              <td className="py-1.5 px-2 text-right">{c.paying}</td>
+              <td className="py-1.5 px-2 text-right">{usd(c.netCents)}</td>
+              <td className="py-1.5 px-2 text-right">{c.comped || "·"}</td>
+              <td className={`py-1.5 px-2 text-right ${c.pastDue ? "text-danger" : ""}`}>{c.pastDue || "·"}</td>
+            </tr>
+          );
+        })}
+        <tr className="font-semibold">
+          <td className="py-1.5 pr-4">All plans</td>
+          <td className="py-1.5 px-2 text-right">{plans.total.paying}</td>
+          <td className="py-1.5 px-2 text-right">{usd(plans.total.netCents)}</td>
+          <td className="py-1.5 px-2 text-right">{plans.total.comped || "·"}</td>
+          <td className="py-1.5 px-2 text-right">{plans.total.pastDue || "·"}</td>
+        </tr>
+      </tbody>
+    </table>
+  );
 }
 
 function EventLine({ e }: { e: TurnoutEvent }) {
@@ -98,7 +211,7 @@ function EventLine({ e }: { e: TurnoutEvent }) {
 export default async function ScoreboardPage() {
   if (!await requireAdmin()) redirect("/portal");
   const s = await readScoreboard(createServiceClient());
-  const { goal, flow, funnel, pace } = s;
+  const { goal, pace } = s;
   const r = goal.revenue;
 
   return (
@@ -178,30 +291,19 @@ export default async function ScoreboardPage() {
         <CopyTextBlock text={s.text} />
       </Section>
 
-      <Section title="Subscriptions per month" note="Card and USDC. A cancellation counts in the month it ended; one asked for but still running is under People to follow up.">
-        <MonthTable
-          months={s.months}
-          rows={[
-            { label: "New", values: flow.map((m) => m.started) },
-            { label: "Cancelled", values: flow.map((m) => m.canceled) },
-            { label: "Net change", values: flow.map((m) => signed(m.net)), strong: true },
-            ...planRows(flow),
-          ]}
-        />
+      <Section
+        title="Month by month"
+        note={<>From July 2026, Denver time. <a href="/api/admin/scoreboard/months" className="text-sage hover:underline" data-testid="download-csv" download>Download CSV</a> for a sheet.</>}
+      >
+        <MonthByMonth rows={s.monthTable} />
+        <ol className="mt-3 space-y-1 text-xs text-muted list-decimal pl-4" data-testid="month-notes">
+          {MONTH_NOTES.map((n) => <li key={n}>{n}</li>)}
+        </ol>
+        <p className="mt-2 text-xs text-muted">{s.pool} day-pass members have never subscribed.</p>
       </Section>
 
-      <Section title="Funnel per month" note={`${s.pool} day-pass members have never subscribed.`}>
-        <MonthTable
-          months={s.months}
-          rows={[
-            { label: "Stay-in-touch signups", values: funnel.map((m) => m.signups) },
-            { label: "Applications", values: funnel.map((m) => m.applications) },
-            { label: "Day passes bought", values: funnel.map((m) => m.passesBought) },
-            { label: "First subscriptions", values: funnel.map((m) => m.firstSubscriptions), strong: true },
-            { label: "Followed up after a night", values: s.followUps ? s.followUps.map((m) => m.followedUp) : s.months.map(() => "—") },
-            { label: "→ joined within 30 days", values: s.followUps ? s.followUps.map((m) => m.joined) : s.months.map(() => "—"), sub: true },
-          ]}
-        />
+      <Section title="By plan now" note="Today. All plans' paying count and revenue are the headline's.">
+        <ByPlanNow plans={s.byPlanNow} />
       </Section>
 
       <div className="grid lg:grid-cols-2 gap-4">

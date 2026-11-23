@@ -12,7 +12,6 @@ import {
   Loader2,
   CheckCircle,
   ArrowLeft,
-  Calendar,
   Zap,
   Users,
   Wifi,
@@ -48,20 +47,6 @@ type Props = {
   inviter?: { name: string; invite_code: string };
 };
 
-/** Format a Date as YYYY-MM-DD in Mountain Time (matches server) */
-function toMountainDateString(d: Date): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Denver",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(d); // en-CA gives YYYY-MM-DD
-}
-
-function getTodayString(): string {
-  return toMountainDateString(new Date());
-}
-
 function formatDate(dateStr: string): string {
   return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", {
     weekday: "long",
@@ -85,7 +70,6 @@ export default function FreeDayForm({
   inviter,
 }: Props) {
   const router = useRouter();
-  const today = getTodayString();
 
   // Form state — no date input anymore; claim now, visit any weekday
   const [name, setName] = useState("");
@@ -262,11 +246,7 @@ export default function FreeDayForm({
               Hope You Enjoyed Your Day!
             </h1>
             <p className="text-muted">
-              {claim.claimed_date ? (
-                <>Your free day on <strong className="text-foreground">{formatDate(claim.claimed_date)}</strong> has passed. Here&apos;s how to come back.</>
-              ) : (
-                <>Your free day has been used. Here&apos;s how to come back.</>
-              )}
+              Your free day has been used. Here&apos;s how to come back.
             </p>
           </div>
 
@@ -397,57 +377,22 @@ export default function FreeDayForm({
     );
   }
 
-  // ── Render: Legacy reserved-for-future-date branch ─────────────
-  // Only relevant for old claims created before we removed the date
-  // picker. New claims store NULL claimed_date and skip this branch.
-
-  if (claim?.status === "reserved" && claim.claimed_date && claim.claimed_date !== today) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center px-6">
-        <Card className="glass-panel-strong max-w-md w-full">
-          <CardContent className="p-10 text-center">
-            <Calendar className="w-12 h-12 text-sage mx-auto mb-4" />
-            <h1 className="text-2xl font-bold text-forest mb-3">
-              You&apos;re Booked!
-            </h1>
-            <p className="text-muted mb-2">
-              Your free day is reserved for
-            </p>
-            <p className="text-xl font-semibold text-gold mb-6">
-              {formatDate(claim.claimed_date)}
-            </p>
-            <div className="glass-panel-subtle p-4 rounded-lg text-left space-y-2 mb-6">
-              <div className="flex items-center gap-2 text-sm text-muted">
-                <MapPin className="w-4 h-4 text-sage" />
-                1515 Walnut St, Suite 200, Boulder
-              </div>
-              <div className="flex items-center gap-2 text-sm text-muted">
-                <Coffee className="w-4 h-4 text-sage" />
-                Hours: 8 AM – 6 PM
-              </div>
-            </div>
-            <p className="text-xs text-muted">
-              Come back to this page on your reserved day to get your door code.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   // ── Render: Reserved — activate button (today or anytime) ───────
 
-  if (claim?.status === "reserved" && (!claim.claimed_date || claim.claimed_date === today)) {
+  if (claim?.status === "reserved") {
     return (
       <div className="min-h-[60vh] flex items-center justify-center px-6">
         <Card className="glass-panel-strong max-w-md w-full">
           <CardContent className="p-10 text-center">
             <Zap className="w-12 h-12 text-gold mx-auto mb-4" />
             <h1 className="text-2xl font-bold text-forest mb-3">
-              Your Free Day is Today!
+              Your Free Day
             </h1>
             <p className="text-muted mb-6">
-              Ready to get your door code for RegenHub?
+              Come any weekday, 8 AM to 6 PM. When you&apos;re here, get your door code; it works until 6 PM that day.
+              {claim.claimed_date && (
+                <> You originally asked for {formatDate(claim.claimed_date)}; any weekday is fine now.</>
+              )}
             </p>
 
             {error && (

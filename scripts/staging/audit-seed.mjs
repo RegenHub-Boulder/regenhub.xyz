@@ -21,6 +21,10 @@ const PEOPLE = [
   ["Gus Ferreira (sample)", "gus@example.test", "day_pass", { created_at: ago(5) }],
   ["Old Account (sample)", "old@example.test", "hot_desk", { disabled: true, created_at: ago(500) }],
   ["Sam Sample", "sam-sample@example.test", "day_pass", { created_at: ago(0.2) }],
+  // Free-day claimants (round 3): their member rows, as the claim trigger makes them.
+  ["Eve Entry (sample)", "eve@example.test", "day_pass", { created_at: ago(12) }],
+  ["Bea Bought (sample)", "bea@example.test", "day_pass", { created_at: ago(30) }],
+  ["Jo Joined (sample)", "jo@example.test", "day_pass", { created_at: ago(40) }],
 ];
 
 export async function seedAudit(pg, people = []) {
@@ -113,10 +117,32 @@ async function seed(pg, people) {
     ["jun@example.test", "Jun (sample)", 15], ["bo@example.test", "Bo Nguyen (sample)", 50], ["kit@example.test", null, 70]]) {
     await q("insert into interests(email, name, source_path, interests, created_at) values ($1, $2, '/interest', '{coworking,events}', $3)", [email, name, ago(d)]);
   }
-  await q(`insert into free_day_claims(email, name, status, claimed_date, about, why_join, created_at) values
-    ('nora@example.test', 'Nora (sample)', 'pending', null, 'Freelance illustrator.', 'Looking for a quiet desk two days a week.', $1),
-    ('sam-sample@example.test', 'Sam Sample', 'reserved', current_date, 'Climate data person.', 'Heard about Agents Building Night.', $2),
-    ('gus@example.test', 'Gus Ferreira (sample)', 'activated', current_date, 'Bike mechanic.', 'Friend of Mira.', $3)`, [ago(1), ago(0.3), ago(2)]);
+  // Free days (round 3): no date since flexible free days (claimed_date null), one legacy claim with the date it once
+  // asked for, people already members when they claimed, and people who came in, bought a pass or joined since.
+  const claims = [
+    // email, name, status, claimed_date, days ago, about, why_join, activated days ago
+    ["nora@example.test", "Nora (sample)", "pending", null, 1, "Freelance illustrator.", "Looking for a quiet desk two days a week.", null],
+    ["mira@example.test", "Mira Okafor (sample)", "pending", null, 2, "Already has a desk.", "Bringing a friend? Clicked the wrong link.", null],
+    ["sam-sample@example.test", "Sam Sample", "reserved", null, 0.3, "Climate data person.", "Heard about Agents Building Night.", null],
+    ["pat@example.test", "Pat (sample)", "reserved", null, 9, "Teaches high-school physics.", "Wants to see the space.", null],
+    ["lee@example.test", "Lee Legacy (sample)", "reserved", "2026-09-04", 80, "Writes grant proposals.", "Picked a date back when we asked for one.", null],
+    ["theo@example.test", "Theo Lindqvist (sample)", "reserved", null, 20, "Hot desk member.", "Claimed out of habit.", null],
+    ["gus@example.test", "Gus Ferreira (sample)", "activated", null, 2, "Bike mechanic.", "Friend of Mira.", 0.2],
+    ["eve@example.test", "Eve Entry (sample)", "reserved", null, 12, "Product manager.", "Between jobs.", null],
+    ["bea@example.test", "Bea Bought (sample)", "activated", null, 30, "Ceramicist.", "Needs a laptop day.", 29],
+    ["jo@example.test", "Jo Joined (sample)", "activated", null, 40, "Climate founder.", "Looking for a home base.", 39],
+    ["cy@example.test", "Cy (sample)", "cancelled", null, 5, "Crypto.", "Mailing address.", null],
+  ];
+  for (const [email, name, status, date, d, about, why, act] of claims) {
+    await q(`insert into free_day_claims(email, name, status, claimed_date, about, why_join, created_at, activated_at, invited_by_member_id)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, [email, name, status, date, about, why, ago(d), act == null ? null : ago(act), email === "pat@example.test" ? ana : null]);
+  }
+  await q("insert into access_logs(member_id, method, result, created_at) values ($1, 'daycode', 'granted', $2)", [id["eve@example.test"], ago(10)]);
+  await q("insert into access_logs(member_id, method, result, created_at) values ($1, 'daycode', 'granted', $2)", [id["bea@example.test"], ago(29)]);
+  await q("insert into purchases(member_id, kind, amount_cents, passes_granted, email, created_at) values ($1, 'day_pass', 3000, 1, 'bea@example.test', $2)", [id["bea@example.test"], ago(20)]);
+  await q(`insert into subscriptions(member_id, plan_key, monthly_cents, net_cents, status, current_period_end, created_at,
+    stripe_subscription_id, stripe_customer_id, stripe_price_id) values ($1, 'member_basic', 3000, 3000, 'active', $2, $3, 'sub_sample_jo', 'cus_sample_jo', 'price_sample_member_basic')`,
+  [id["jo@example.test"], ahead(5), ago(25)]);
   await q(`insert into applications(email, name, about, why_join, membership_interest, status, telegram, created_at) values
     ('olu@example.test', 'Olu (sample)', 'Runs a small solar co-op.', 'Wants a hot desk near other builders.', 'hot_desk', 'pending', '@olu_sample', $1),
     ('pia@example.test', 'Pia (sample)', 'Grad student, soil science.', 'Daily membership, two days a week.', 'daily', 'pending', null, $2),
@@ -127,7 +153,27 @@ async function seed(pg, people) {
   // The door: the last lock sync failed on one slot; one slot is quarantined.
   await q(`insert into lock_sync_runs(triggered_by, synced, failed, partial, results, created_at)
     values ($1, 9, 1, 0, '[{"slot":4,"door":"back","ok":false,"error":"timeout (sample)"}]', $2)`, [steward, ago(0.4)]);
-  await q(`insert into lock_slot_quarantine(slot, reason, quarantined_at) values (42, 'Clear failed on the back door (sample)', $1)`, [ago(3)]);
+  // Quarantine as production had it on 11-23 (round 3): eight guest-code slots from one bad day, nobody holding them,
+  // no door results recorded; and Theo's member slot, where one lock didn't confirm a new code.
+  for (let slot = 110; slot <= 117; slot++) {
+    await q(`insert into lock_slot_quarantine(slot, reason, quarantined_at) values ($1, 'SET threw or timed out; clear required before reuse', $2)`, [slot, "2026-10-09T16:12:00Z"]);
+  }
+  await q(`insert into lock_slot_quarantine(slot, reason, quarantined_at, door_results) values (4, 'SET incomplete; clear required before reuse', $1, $2)`,
+    [ago(3), JSON.stringify([{ entity: "lock.front_door_lock", ok: true }, { entity: "lock.back_door_lock", ok: false, error: "timeout (sample)" }])]);
+
+  // Theo's emails (round 3), when migration 069 is there: what the member page's Emails list shows.
+  if ((await q("select to_regclass('public.email_log') as t")).rows[0].t) {
+    const theo = id["theo@example.test"];
+    for (const [kind, subject, status, d, error] of [
+      ["welcome", "Welcome to RegenHub", "sent", 190, null],
+      ["monthly_passes", "Your monthly day passes are in", "sent", 36, null],
+      ["payment_failed", "Update your RegenHub payment method", "sent", 6, null],
+      ["payment_reminder", "Update your RegenHub payment method", "failed", 2, "Daily sending quota reached (sample)"],
+    ]) {
+      await q(`insert into email_log(member_id, email, kind, subject, provider, provider_id, status, error, sent_at)
+        values ($1, 'theo@example.test', $2, $3, 'resend', $4, $5, $6, $7)`, [theo, kind, subject, status === "sent" ? `msg_sample_${kind}` : null, status, error, ago(d)]);
+    }
+  }
 
   // The newsletter: one sent, one draft.
   await q(`insert into newsletter_issues(issue_key, subject, status, markdown_body, recipients_count, sent_count, created_at) values

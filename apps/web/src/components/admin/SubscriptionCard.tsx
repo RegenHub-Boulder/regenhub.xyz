@@ -1,6 +1,7 @@
 "use client";
 
 import { OnchainPlanEditor } from "@/components/portal/OnchainPlanEditor";
+import { effectiveMonthlyCents } from "@/lib/stripeNet";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,7 +13,6 @@ import { getAllPlansSorted, planLabel } from "@/lib/plans";
 import { isLiveSubscription } from "@/lib/subscriptionStatus";
 import type { CancelMembershipResult } from "@/lib/membershipCancel";
 import { CancelMembershipButton, CryptoInvoices, cancelResultSummary, type InvoiceRow } from "@/components/admin/CancelMembership";
-import { SendPaymentReminderButton } from "@/components/admin/SendPaymentReminderButton";
 
 // The member page's Billing tab: one box for the member's subscription (status, the controls that act on it, its
 // invoices and purchases), so a subscription shows once with one status.
@@ -236,7 +236,6 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, sub
             )}
           </div>
           <div className="flex gap-2 flex-wrap items-start">
-            {subscription?.status === "past_due" && <SendPaymentReminderButton memberId={memberId} />}
             {activeSubscription?.payment_rail !== "onchain" && <Button
               size="sm"
               onClick={() => { setShowCredit(!showCredit); setCreditApplied(null); }}
@@ -276,10 +275,9 @@ export function SubscriptionCard({ memberId, memberName, activeSubscription, sub
           <div className="space-y-2 text-sm">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-foreground">
-                ${((typeof activeSubscription.net_cents === "number" ? activeSubscription.net_cents : activeSubscription.monthly_cents) / 100)}/mo
+                ${effectiveMonthlyCents(activeSubscription) / 100}/mo
               </span>
-              {typeof activeSubscription.net_cents === "number" &&
-                activeSubscription.net_cents !== activeSubscription.monthly_cents && (
+              {effectiveMonthlyCents(activeSubscription) < activeSubscription.monthly_cents && (
                   <span className="text-xs text-muted line-through">
                     ${activeSubscription.monthly_cents / 100}
                   </span>

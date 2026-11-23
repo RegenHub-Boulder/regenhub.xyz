@@ -125,7 +125,7 @@ export async function POST(req: Request) {
     interestLabel: interestLabel(membership_interest ?? "member_basic"),
     siteUrl,
   });
-  sendEmail({ to: email, subject: ackTpl.subject, html: ackTpl.html, text: ackTpl.text })
+  sendEmail({ kind: "application_received", to: email, subject: ackTpl.subject, html: ackTpl.html, text: ackTpl.text })
     .catch((err) => console.error("[PortalApplication] Ack email failed:", err));
 
   return NextResponse.json({ application: data });

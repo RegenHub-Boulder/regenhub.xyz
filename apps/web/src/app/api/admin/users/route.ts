@@ -31,7 +31,7 @@ export type AdminUser = {
 export type AdminUsersResponse = {
   // Auth users (with or without a member row)
   users: AdminUser[];
-  // Members with no auth account (legacy / Telegram-only)
+  // Members with no auth account (legacy / Telegram-only) or a stale link to one
   legacyMembers: (Member & { subscription: AdminUserSubscription | null })[];
 };
 
@@ -103,9 +103,11 @@ export async function GET() {
     };
   });
 
-  // Members that have no linked auth account (legacy / Telegram-only)
+  // Members that have no linked auth account (legacy / Telegram-only), or a link to an auth user that no longer
+  // exists (a stale link): either way no row above shows them, and the admin home's counts include them.
+  const authIds = new Set((authData.users ?? []).map((u) => u.id));
   const legacyMembers = (members ?? [])
-    .filter((m) => !m.supabase_user_id)
+    .filter((m) => !m.supabase_user_id || !authIds.has(m.supabase_user_id))
     .map((m) => ({ ...m, subscription: subByMemberId.get(m.id) ?? null }));
 
   // Sort: unlinked auth users first (needs attention), then linked, then legacy

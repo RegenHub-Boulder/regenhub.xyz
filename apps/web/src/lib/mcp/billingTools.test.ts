@@ -350,10 +350,14 @@ describe("change_member_plan", () => {
       items: [expect.objectContaining({ id: "si_1", price_data: expect.objectContaining({ unit_amount: 3000 }) })],
       metadata: expect.objectContaining({ plan_key: "member_basic", monthly_cents: "3000" }),
     }));
+    // The change in place is logged with its plans (the scoreboard's "day plan → desk" reads it).
+    const logged = () => db.sql("select target_id, payload from admin_actions where action = 'card_plan_changed'");
+    expect(await logged()).toEqual([{ target_id: expect.any(String), payload: expect.objectContaining({ from: "member_2day", to: "member_basic", source: "mcp" }) }]);
     // The webhook hasn't synced the local row yet; Stripe already runs the new plan.
     const retry = await changeMemberPlanHandler(db as never, ada(), { member_id: 9, plan_key: "member_basic", confirm: true });
     expect(body(retry)).toMatch(/Stripe already runs Member \+ 1 day\/mo/);
     expect(stripe.subscriptions.update).toHaveBeenCalledTimes(1);
+    expect(await logged()).toHaveLength(1); // nothing changed, nothing logged
   });
 
   it("is refused while an admin cancel is recorded", async () => {

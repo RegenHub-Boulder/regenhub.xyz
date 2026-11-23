@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     const to = row.member_email;
     const mail = techneLinkEmail({ name: row.member_name ?? "", link: `${siteOrigin()}${LINK_PATH}?code=${code}` });
     later(async () => {
-      if (!(await sendEmail({ to, ...mail }))) stagingOutbox(to, mail);
+      if (!(await sendEmail({ kind: "techne_link", to, ...mail }))) stagingOutbox(to, mail);
     });
   } else {
     console.info(`[techne door] link ask for ${signedIn.who.did}: ${row.status} (nothing sent)`);

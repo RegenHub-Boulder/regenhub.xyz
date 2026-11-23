@@ -18,6 +18,10 @@ import { planLabel } from "@/lib/plans";
 import { memberTypeLabel } from "@/lib/memberTypeLabel";
 import { isLiveSubscription } from "@/lib/subscriptionStatus";
 import { membershipInvoices } from "@/lib/onchain/invoiceKind";
+import { effectiveMonthlyCents } from "@/lib/stripeNet";
+import { readEmailHistory } from "@/lib/emailLog";
+import { EmailHistory } from "@/components/admin/EmailHistory";
+import { SendPaymentReminderButton } from "@/components/admin/SendPaymentReminderButton";
 
 export const metadata = { title: "Edit Member — Admin" };
 
@@ -87,7 +91,7 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
   // Fetch admin_actions targeting this member (joined with actor name) for the Activity tab.
   // Service client after the page-level active-admin check above.
   const adminClient = createServiceClient();
-  const [{ data: rawActions }, { data: onchainInvoices }] = await Promise.all([
+  const [{ data: rawActions }, { data: onchainInvoices }, emailHistory] = await Promise.all([
     adminClient
       .from("admin_actions")
       .select("id, action, payload, created_at, actor_member_id")
@@ -105,6 +109,7 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
         .order("period_start", { ascending: false })
         .limit(6);
     }),
+    readEmailHistory(adminClient, { id: member.id, email: member.email }),
   ]);
   const actorIds = Array.from(
     new Set((rawActions ?? []).map((r) => r.actor_member_id).filter((id): id is number => id != null)),
@@ -133,18 +138,20 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
   return (
     <div className="space-y-6 max-w-3xl">
       {pastDue && (
-        <div className="glass-panel p-4 border border-danger/40 bg-danger/10 flex items-start gap-3">
+        <div className="glass-panel panel-tone p-4 border border-danger/40 bg-danger/10 flex items-start gap-3" data-testid="past-due">
           <AlertCircle className="w-5 h-5 text-danger shrink-0 mt-0.5" />
-          <div>
+          <div className="flex-1">
             <p className="text-sm font-medium text-danger">Payment past due</p>
             <p className="text-xs text-muted mt-0.5">
-              {member.name}&apos;s {planLabel(activeSubscription!.plan_key)} subscription has a failed payment
+              {member.name}&apos;s {planLabel(activeSubscription!.plan_key)}{" "}
+              {activeSubscription!.payment_rail === "onchain" ? "membership has an unpaid USDC invoice" : "subscription has a failed card payment"}
               {activeSubscription!.past_due_since && (
                 <> since {fmtShortDate(activeSubscription!.past_due_since)}</>
               )}
-              . The 7-day grace cron will flip them to day-pass if not resolved.
+              . After 7 days the grace period ends and they move to day passes. Emails they got are under Activity.
             </p>
           </div>
+          {member.email && <SendPaymentReminderButton memberId={member.id} />}
         </div>
       )}
 
@@ -175,7 +182,7 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
                 ? "bg-danger/10 text-danger border-danger/40"
                 : "bg-sage/20 text-sage border-sage/30"
             }`}>
-              ${(typeof activeSubscription.net_cents === "number" ? activeSubscription.net_cents : activeSubscription.monthly_cents) / 100}/mo {planLabel(activeSubscription.plan_key)}
+              ${effectiveMonthlyCents(activeSubscription) / 100}/mo {planLabel(activeSubscription.plan_key)}
               {activeSubscription.status === "past_due" && " · past due"}
               {activeSubscription.cancel_at_period_end && " · canceling"}
             </Badge>
@@ -316,7 +323,12 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
               )}
             </>
           ),
-          activity: <MemberActivityTimeline rows={activityRows} />,
+          activity: (
+            <>
+              <EmailHistory history={emailHistory} />
+              <MemberActivityTimeline rows={activityRows} />
+            </>
+          ),
         }}
       </MemberDetailTabs>
     </div>

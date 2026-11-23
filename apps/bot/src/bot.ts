@@ -200,7 +200,7 @@ async function handleDayPassImpl(msg: TelegramBot.Message) {
   const expiresAt = calculateDayPassExpiration();
 
   // Atomic slot claim. INSERT-with-retry; rollback (deactivate row + refund
-  // balance) on lock failure so the slot frees up for the next attempt.
+  // balance) on lock failure. The slot itself stays quarantined until an admin clears it (Door → Lock Sync).
   const allocation = await allocateSlotWithRetry<{ id: number }>({
     min: DAY_CODE_SLOT_MIN,
     max: DAY_CODE_SLOT_MAX,
@@ -439,6 +439,7 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
       ? freeDayPlusMembershipApprovedEmail({ name: claim.name, siteUrl })
       : freeDayApprovedEmail({ name: claim.name, siteUrl });
     sendEmail({
+      kind: "free_day_approved",
       to: claim.email,
       subject: tpl.subject,
       html: tpl.html,
@@ -571,6 +572,7 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
     const tpl = membershipApprovedEmail({ name: application.name, siteUrl });
     sendEmail({
+      kind: "membership_approved",
       to: application.email,
       subject: tpl.subject,
       html: tpl.html,
