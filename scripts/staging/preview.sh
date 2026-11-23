@@ -19,6 +19,9 @@
 # T482_AUDIT=1 (alone) runs the stand-in on the real schema with sample rows for every /portal and /admin screen
 # (audit-seed.mjs); scripts/staging/audit-shots.mjs captures and counts them. The steward is an admin there.
 # T482_SCOREBOARD=1 also seeds the fictional rows /admin/scoreboard reads (scoreboard-seed.mjs); sign in as the steward.
+# T482_STUCK_WRITER=1 (with T482_AUDIT) also seeds a door-code writer that died on 11-20 (silent past its lease) and two
+# failed door-code changes; T482_HA_STUB=1 points HA_URL at scripts/staging/ha-stub.mjs (127.0.0.1:B+6, never the real
+# locks; its calls are logged to $T482_STATE/ha-stub.log), so Clear on Door → Lock Sync runs end to end.
 # Env: T482_STATE (state dir, default ~/.cache/t482), T482_BUILD (where pgenv/, target/ and appview.env live;
 # default T482_STATE), T482_PORT_BASE.
 set -euo pipefail
@@ -54,6 +57,11 @@ node "$ROOT/scripts/staging/seed-rsvps.mjs" --standin "http://127.0.0.1:$P_STAND
 if [ -n "${T497_FOLLOWUPS:-}" ]; then
   node "$ROOT/scripts/staging/followups-seed.mjs" --standin "http://127.0.0.1:$P_STANDIN" --state "$STATE" >> "$S/seed.log"
   export EMAIL_PROVIDER=outbox EMAIL_FROM="RegenHub (staging) <hello@regenhub.test>" NEWSLETTER_UNSUBSCRIBE_SECRET=staging-only
+fi
+
+if [ -n "${T482_HA_STUB:-}" ]; then
+  node "$ROOT/scripts/staging/ha-stub.mjs" --port "$((B + 6))" --log "$S/ha-stub.log" > "$S/ha-stub.out" 2>&1 & pids+=($!)
+  export HA_URL="http://127.0.0.1:$((B + 6))/api" HA_TOKEN=staging-only HA_LOCK_ENTITIES=lock.front_door_lock,lock.back_door_lock
 fi
 
 COLLECTIVE="$(node -e 'console.log(require(process.argv[1]).collective)' "$STATE/seed.json")"

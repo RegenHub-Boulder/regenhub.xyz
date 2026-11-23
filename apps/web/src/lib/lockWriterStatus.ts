@@ -36,7 +36,8 @@ export function lockWriterStatus(row: LockWriterRow | null, nowMs: number, fmt: 
   return {
     state: "stuck", holder, since: row.acquired_at,
     text: hasLease
-      ? `The door-code writer stopped part-way: ${holder} took it at ${fmt(row.acquired_at)} and hasn't been heard from since ${fmt(row.renewed_at!)}. ` +
+      ? `The door-code writer is stuck: ${holder} took it at ${fmt(row.acquired_at)} and stopped` +
+        (fmt(row.renewed_at!) === fmt(row.acquired_at) ? ". " : ` (last heard from at ${fmt(row.renewed_at!)}). `) +
         "The next door-code change takes it over; any slot it was changing stays in quarantine until cleared."
       : `The door-code writer has been held by ${holder} since ${fmt(row.acquired_at)}. ` +
         "Until migration 070 runs it doesn't free itself: see “Door-code writer lease” in DEPLOYMENT.md.",

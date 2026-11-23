@@ -53,7 +53,24 @@ export function QuarantinedSlots({ groups, explainer }: { groups: QuarantineGrou
     router.refresh();
   }
 
-  if (all.length === 0) return null;
+  const results = (
+    <>
+      {notice && <p role="alert" className="text-sm text-danger">{notice}</p>}
+      {outcomes.length > 0 && (
+        <ul role="status" className="text-sm space-y-0.5">
+          {outcomes.map((o) => (
+            <li key={o.slot} className={o.ok ? "text-ok" : "text-danger"}>Slot {o.slot}: {o.message}</li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+  // Everything cleared: the slots are gone after the refresh, but what happened to each stays on screen.
+  if (all.length === 0) {
+    return outcomes.length || notice
+      ? <section aria-label="Clear results" className="space-y-2" data-testid="quarantined-slots">{results}</section>
+      : null;
+  }
   const label = (key: string, text: string) => (busy === key ? "Clearing…" : text);
   return (
     <section aria-labelledby="quarantine" className="space-y-3" data-testid="quarantined-slots">
@@ -70,14 +87,7 @@ export function QuarantinedSlots({ groups, explainer }: { groups: QuarantineGrou
       <p className="text-sm text-muted">
         A door code in these slots may still be on a lock, so no new code goes there until it&apos;s cleared. {explainer}
       </p>
-      {notice && <p role="alert" className="text-sm text-danger">{notice}</p>}
-      {outcomes.length > 0 && (
-        <ul role="status" className="text-sm space-y-0.5">
-          {outcomes.map((o) => (
-            <li key={o.slot} className={o.ok ? "text-ok" : "text-danger"}>Slot {o.slot}: {o.message}</li>
-          ))}
-        </ul>
-      )}
+      {results}
       <ul className="divide-y divide-rule border-y border-rule">
         {groups.map((g) => {
           const key = g.slots.join(",");
