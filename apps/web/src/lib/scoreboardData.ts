@@ -6,7 +6,7 @@ import type { createServiceClient } from "@/lib/supabase/admin";
 import { compileAudience } from "@/lib/newsletter";
 import { issueProgress } from "@/lib/newsletterSend";
 import { fetchAttendance, fetchCollectiveEvents } from "@/lib/regenos/events";
-import { membershipInvoices } from "@/lib/onchain/invoiceKind";
+import { isMissingColumn, membershipInvoices } from "@/lib/onchain/invoiceKind";
 import { dateIn } from "@/lib/series";
 import { readAll } from "@/lib/supabase/readAll";
 import { handleFor } from "@/lib/techne/did";
@@ -14,11 +14,15 @@ import { AuditAction } from "@/lib/auditLog";
 import {
   SCOREBOARD_GOALS, SCOREBOARD_TZ, canceledSince, dayPassPool, followupFunnel, funnelByMonth, goalPace, goalProgress, headlineText, lastMonths,
   lastVisits, passBuyersNeverSubscribed, subscriptionFlow, turnoutBySeries,
-  type MemberRow, type PurchaseRow, type SubRow, type TurnoutEvent,
+  type MemberRow, type SubRow, type TurnoutEvent,
 } from "@/lib/scoreboard";
 import {
   ACTION_RULES, frequentGuests, latestStates, recommendedActions, visibleActions, type ActionMark, type ActionState,
 } from "@/lib/scoreboardActions";
+import {
+  MONTH_TABLE_FROM, firstSignups, monthByMonth, monthStartMs, monthsSince, planBreakdown,
+  type DoorRow, type InterestRow, type MonthRow, type PassRow, type PlanChange,
+} from "@/lib/scoreboardMonths";
 
 type Admin = ReturnType<typeof createServiceClient>;
 
@@ -136,35 +140,113 @@ export async function readActionStates(admin: Admin): Promise<Map<string, Action
   }
 }
 
-export async function readScoreboard(admin: Admin, now = new Date()) {
-  const months = lastMonths(now);
-  // A day before the first month in UTC, so no Denver-local row of that month is cut; months outside are ignored.
-  const since = new Date(Date.parse(`${months[0]}-01T00:00:00Z`) - 86_400_000).toISOString();
+/** Day-pass purchases with their rail. `onchain_invoice_id` comes with migration 063: before it, every pass is card. */
+async function readPurchases(admin: Admin): Promise<PassRow[]> {
+  const read = (cols: string) => readAll<PassRow>("purchases", (f, t) => admin.from("purchases").select(cols)
+    .order("id", { ascending: true }).range(f, t));
+  try {
+    return await read("id, member_id, email, created_at, passes_granted, kind, onchain_invoice_id");
+  } catch (e) {
+    const { error } = await admin.from("purchases").select("onchain_invoice_id").limit(1);
+    if (!isMissingColumn(error)) throw e;
+    return read("id, member_id, email, created_at, passes_granted, kind");
+  }
+}
 
-  const [rawSubs, members, interests, applications, purchases, newsletter, events, followups] = await Promise.all([
+/** Plans changed in place on a subscription row, from the audit log: a desk → daily switch landing
+ *  (`plan_switch_completed`, migration 060), a USDC plan change (`onchain_subscription_changed`) and a card plan
+ *  changed now (`card_plan_changed`, logged from T-497 on). Null when unreadable: "day plan → desk" shows blank. */
+async function planChangesLogged(admin: Admin): Promise<PlanChange[] | null> {
+  const rows = await readAll<{ target_table: string | null; target_id: string | null; payload: Record<string, unknown> | null; created_at: string }>("admin_actions", (f, t) =>
+    admin.from("admin_actions").select("id, target_table, target_id, payload, created_at")
+      .in("action", [AuditAction.PLAN_SWITCH_COMPLETED, AuditAction.ONCHAIN_SUBSCRIPTION_CHANGED, AuditAction.CARD_PLAN_CHANGED])
+      .order("id", { ascending: true }).range(f, t)).catch((e) => {
+    // Only "day plan → desk" needs it: that column goes blank, and nothing else breaks.
+    console.error("[scoreboard] plan change log read failed", e);
+    return null;
+  });
+  return rows?.flatMap((r) => {
+    const p = r.payload ?? {};
+    // The subscription: in the payload (060's row targets the member), else the target of a row about a subscription.
+    const id = Number(p.subscription_id ?? (r.target_table === "subscriptions" ? r.target_id : NaN));
+    const to = p.to ?? p.plan_key;
+    return Number.isInteger(id) && id > 0 && typeof p.from === "string" && typeof to === "string"
+      ? [{ subscription_id: id, at: r.created_at, from: p.from, to }] : [];
+  }) ?? null;
+}
+
+/**
+ * The rows both the page and the month table count, read once. `since` bounds the dated lists (a day early in UTC,
+ * so no Denver-local row of the first month is cut; months outside are ignored by the counts).
+ */
+async function readRows(admin: Admin, since: string, doorsSince: string) {
+  const [rawSubs, members, interests, unsubscribes, applications, purchases, doors, followups, planChanges] = await Promise.all([
     readAll<SubRow>("subscriptions", (f, t) => admin.from("subscriptions")
       .select("id, member_id, plan_key, status, monthly_cents, net_cents, payment_rail, created_at, canceled_at, updated_at, " +
         "cancel_at_period_end, admin_canceled_at, admin_cancel_mode, past_due_since, current_period_end")
       .order("id", { ascending: true }).range(f, t)),
     readAll<MemberRow>("members", (f, t) => admin.from("members").select("id, name, email, member_type, disabled, did")
       .order("id", { ascending: true }).range(f, t)),
-    readAll<{ created_at: string }>("interests", (f, t) => admin.from("interests").select("id, created_at")
-      .gte("created_at", since).order("id", { ascending: true }).range(f, t)),
+    // All of it: the list's size at each month end counts everyone who ever signed up.
+    readAll<InterestRow>("interests", (f, t) => admin.from("interests").select("id, email, source_path, member_id, created_at")
+      .order("id", { ascending: true }).range(f, t)),
+    readAll<{ email: string; created_at: string }>("email_unsubscribes", (f, t) => admin.from("email_unsubscribes")
+      .select("email, created_at").order("email", { ascending: true }).range(f, t)),
     readAll<{ created_at: string }>("applications", (f, t) => admin.from("applications").select("id, created_at")
       .gte("created_at", since).order("id", { ascending: true }).range(f, t)),
-    readAll<PurchaseRow>("purchases", (f, t) => admin.from("purchases").select("id, member_id, email, created_at, passes_granted")
-      .order("id", { ascending: true }).range(f, t)),
-    newsletterNumbers(admin),
-    turnout(now).catch((e) => {
-      console.error("[scoreboard] events read failed", e);
-      return null;
-    }),
+    readPurchases(admin),
+    readAll<DoorRow>("access_logs", (f, t) => admin.from("access_logs").select("id, member_id, slot, method, result, created_at")
+      .eq("result", "granted").gte("created_at", doorsSince).order("id", { ascending: true }).range(f, t)),
     followupsSent(admin, since),
+    planChangesLogged(admin),
   ]);
 
   const canceledOnchain = rawSubs.filter((s) => s.payment_rail === "onchain" && s.status === "canceled").map((s) => s.id);
   const paid = await paidOnchain(admin, canceledOnchain);
   const subs: SubRow[] = rawSubs.map((s) => (s.payment_rail === "onchain" && s.status === "canceled" ? { ...s, paid: paid.has(s.id) } : s));
+  // A note to someone known only by their Techne sign-in (T-497) has no member_id: it counts as the member with that
+  // email if they have joined since, so "followed up → joined" sees them.
+  const memberByEmail = new Map(members.flatMap((m) => (m.email ? [[m.email.trim().toLowerCase(), m.id] as const] : [])));
+  const notes = followups?.map((f) => (f.member_id == null ? { ...f, member_id: memberByEmail.get(f.email) ?? null } : f)) ?? null;
+  return { subs, members, interests, unsubscribes, applications, purchases, doors, notes, planChanges };
+}
+
+type Rows = Awaited<ReturnType<typeof readRows>>;
+
+/** The day before `month` starts in Denver, as an ISO instant: the lower bound for reading a month's rows. */
+const dayBefore = (month: string) => new Date(monthStartMs(month) - 86_400_000).toISOString();
+
+const monthRows = (rows: Rows, now: Date): MonthRow[] => monthByMonth({
+  subs: rows.subs, members: rows.members, interests: rows.interests, unsubscribes: rows.unsubscribes,
+  applications: rows.applications, purchases: rows.purchases, doors: rows.doors,
+  followUps: rows.notes ? followupFunnel(rows.notes, rows.subs, monthsSince(MONTH_TABLE_FROM, now)) : null,
+  planChanges: rows.planChanges,
+}, now);
+
+/** Where reading starts: the earlier of the six-month lists and the month table. */
+function readBounds(now: Date) {
+  const months = lastMonths(now);
+  const first = months[0] < MONTH_TABLE_FROM ? months[0] : MONTH_TABLE_FROM;
+  return { months, since: dayBefore(first), doorsSince: dayBefore(MONTH_TABLE_FROM) };
+}
+
+/** The month table alone (the CSV download): the same rows and counts as the page's. */
+export async function readMonthTable(admin: Admin, now = new Date()): Promise<MonthRow[]> {
+  const { since, doorsSince } = readBounds(now);
+  return monthRows(await readRows(admin, since, doorsSince), now);
+}
+
+export async function readScoreboard(admin: Admin, now = new Date()) {
+  const { months, since, doorsSince } = readBounds(now);
+  const [rows, newsletter, events] = await Promise.all([
+    readRows(admin, since, doorsSince),
+    newsletterNumbers(admin),
+    turnout(now).catch((e) => {
+      console.error("[scoreboard] events read failed", e);
+      return null;
+    }),
+  ]);
+  const { subs, members, purchases } = rows;
 
   // Last visits only for the people on the follow-up lists and the leavers the actions name: find who, then read.
   const followUpSince = SCOREBOARD_GOALS.followUpSince;
@@ -179,13 +261,9 @@ export async function readScoreboard(admin: Admin, now = new Date()) {
 
   const goal = goalProgress(subs);
   const flow = subscriptionFlow(subs, months);
-  const funnel = funnelByMonth({ interests, applications, purchases, subs }, months);
-  // A note to someone known only by their Techne sign-in (T-497) has no member_id: it counts as the member with that
-  // email if they have joined since, so "followed up → joined" sees them.
-  const memberByEmail = new Map(members.flatMap((m) => (m.email ? [[m.email.trim().toLowerCase(), m.id] as const] : [])));
-  const followUps = followups
-    ? followupFunnel(followups.map((f) => (f.member_id == null ? { ...f, member_id: memberByEmail.get(f.email) ?? null } : f)), subs, months)
-    : null;
+  // Signups are people (each email's first signup), as the month table's "added" counts them.
+  const funnel = funnelByMonth({ interests: firstSignups(rows.interests), applications: rows.applications, purchases, subs }, months);
+  const followUps = rows.notes ? followupFunnel(rows.notes, subs, months) : null;
   const pool = dayPassPool(members, subs);
   const today = dateIn(now.toISOString(), SCOREBOARD_TZ);
 
@@ -210,6 +288,8 @@ export async function readScoreboard(admin: Admin, now = new Date()) {
     flow,
     funnel,
     followUps,
+    monthTable: monthRows(rows, now),
+    byPlanNow: planBreakdown(subs),
     pool,
     actions,
     canceled,

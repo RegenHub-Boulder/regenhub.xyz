@@ -1,5 +1,8 @@
 # T-497 scoreboard (/admin/scoreboard), staging with fictional data
 
+> Steps 3 and 4 (the two six-month tables) are now one **Month by month** table: see
+> `WALKTHROUGH-T497-funnel-by-month.md`.
+
 **What's judged:** can the family meeting read members, money and the funnel off one screen, and paste the headline
 into the meeting doc? Check the two goal cards, then the "Copy as text" block.
 

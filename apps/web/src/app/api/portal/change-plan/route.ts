@@ -186,7 +186,11 @@ export async function POST(req: Request) {
   // Swap the price now, with prorations (lib/planSwitch.ts). The webhook syncs
   // our local subscriptions row from the customer.subscription.updated event.
   try {
-    await changeCardPlanNow(getStripe(), sub.stripe_subscription_id, targetKey);
+    const { changed } = await changeCardPlanNow(getStripe(), sub.stripe_subscription_id, targetKey);
+    if (changed) {
+      await logAction({ action: AuditAction.CARD_PLAN_CHANGED, actorMemberId: member.id, target: { table: "subscriptions", id: sub.id },
+        payload: { subscription_id: sub.id, from: sub.plan_key, to: targetKey, source: "self_serve" } }, admin);
+    }
   } catch (err) {
     if (err instanceof PlanSwitchError) return NextResponse.json({ error: err.message }, { status: err.status });
     console.error("[ChangePlan] Plan change failed:", err);

@@ -32,20 +32,30 @@ const members = Array.from({ length: 17 }, (_, i) => {
   return [id, `Sample ${i + 1}`, id === 113 ? "pat@example.test" : `sample${i + 1}@example.test`, types[id] ?? "day_pass", id === 114];
 });
 const purchases = [
+  // member, email, at, on-chain invoice (USDC), kind
   [112, "sample12@example.test", "2026-10-02T16:00:00Z", null],
   [112, null, "2026-11-12T16:00:00Z", 7],
   [null, "walkin@example.test", "2026-09-09T16:00:00Z", null],
   [null, "Pat@Example.test", "2026-08-08T16:00:00Z", null],
   [102, null, "2026-07-20T16:00:00Z", null],
   [109, null, "2026-11-11T16:00:00Z", null],
+  // Month by month (T-497): a five-pack, bought by a member (so no follow-up list changes).
+  [102, null, "2026-08-20T16:00:00Z", null, "five_pack"],
 ];
 const visits = [
+  // member, at, slot (null = their own key; 101-200 = a day code)
   [107, "2026-10-20T16:00:00Z"], [112, "2026-11-15T16:00:00Z"], [112, "2026-10-01T16:00:00Z"],
   [113, "2026-08-09T16:00:00Z"], [null, "2026-11-19T16:00:00Z"],
+  // Month by month (T-497): Sample 1 late on Sep 30 in Denver on their own code; their guest's day code twice on
+  // Nov 5 (one day-code day); a free day's code on Nov 6.
+  [101, "2026-10-01T05:30:00Z", 3], [101, "2026-11-05T17:00:00Z", 120], [101, "2026-11-05T19:00:00Z", 120],
+  [null, "2026-11-06T17:00:00Z", 121],
 ];
 const interests = [
-  ["sample3@example.test", "2026-06-05T16:00:00Z"], ["friend1@example.test", "2026-11-01T05:00:00Z"],
-  ["friend2@example.test", "2026-11-10T16:00:00Z"], ["old@example.test", "2025-12-01T16:00:00Z"],
+  // email, at, where they signed up
+  ["sample3@example.test", "2026-06-05T16:00:00Z", "/"], ["friend1@example.test", "2026-11-01T05:00:00Z", "/interest"],
+  ["friend2@example.test", "2026-11-10T16:00:00Z", "luma"], ["old@example.test", "2025-12-01T16:00:00Z", null],
+  ["techne1@example.test", "2026-08-15T16:00:00Z", "techne"],
 ];
 const applications = [["sample15@example.test", "2026-09-01T16:00:00Z"], ["sample16@example.test", "2026-11-05T16:00:00Z"]];
 
@@ -62,9 +72,10 @@ export async function seedScoreboard(pg) {
     create table if not exists interests (id serial primary key, email text not null, name text, created_at timestamptz not null default now());
     create table applications (id serial primary key, email text not null, name text not null, created_at timestamptz not null default now());
     create table purchases (id serial primary key, member_id integer, email text, onchain_invoice_id integer,
-      amount_cents integer not null default 3000, passes_granted integer not null default 1, created_at timestamptz not null default now());
-    create table access_logs (id serial primary key, member_id integer, result text not null default 'granted',
+      kind text not null default 'day_pass', amount_cents integer not null default 3000, passes_granted integer not null default 1,
       created_at timestamptz not null default now());
+    create table access_logs (id serial primary key, member_id integer, method text not null default 'pin', slot integer,
+      result text not null default 'granted', created_at timestamptz not null default now());
     create table onchain_invoices (id serial primary key, subscription_id integer not null, status text not null,
       kind text not null default 'membership');
     create table if not exists email_unsubscribes (email text primary key, created_at timestamptz not null default now());
@@ -90,13 +101,18 @@ export async function seedScoreboard(pg) {
   await pg.query("update subscriptions set past_due_since = '2026-11-12T16:00:00Z' where id = 5");
   // The USDC subscriptions (3, 8, 11) were paid: a paid membership invoice each.
   for (const id of [3, 8, 11]) await pg.query("insert into onchain_invoices(subscription_id, status) values ($1, 'paid')", [id]);
-  for (const [member, email, at, invoice] of purchases) {
-    await pg.query("insert into purchases(member_id, email, created_at, onchain_invoice_id) values ($1, $2, $3, $4)", [member, email, at, invoice]);
+  for (const [member, email, at, invoice, kind = "day_pass"] of purchases) {
+    await pg.query("insert into purchases(member_id, email, created_at, onchain_invoice_id, kind, passes_granted) values ($1, $2, $3, $4, $5, $6)",
+      [member, email, at, invoice, kind, kind === "five_pack" ? 5 : 1]);
   }
-  for (const [member, at] of visits) await pg.query("insert into access_logs(member_id, created_at) values ($1, $2)", [member, at]);
-  for (const [email, at] of interests) await pg.query("insert into interests(email, created_at) values ($1, $2)", [email, at]);
+  for (const [member, at, slot = null] of visits) await pg.query("insert into access_logs(member_id, created_at, slot) values ($1, $2, $3)", [member, at, slot]);
+  // Month by month (T-497): Sample 10 joined on the $100 plan in USDC on Nov 15 and moved up to a hot desk on Nov 18,
+  // in place (the audit log keeps the change): a day plan → desk move in November.
+  await pg.query(`insert into admin_actions(action, target_table, target_id, payload, created_at)
+    values ('onchain_subscription_changed', 'subscriptions', '11', '{"from": "member_5day", "to": "hot_desk", "source": "self_serve"}', '2026-11-18T16:00:00Z')`);
+  for (const [email, at, source] of interests) await pg.query("insert into interests(email, created_at, source_path) values ($1, $2, $3)", [email, at, source]);
   for (const [email, at] of applications) await pg.query("insert into applications(email, name, created_at) values ($1, 'Applicant (sample)', $2)", [email, at]);
-  await pg.query("insert into email_unsubscribes(email) values ('friend2@example.test')");
+  await pg.query("insert into email_unsubscribes(email, created_at) values ('friend2@example.test', '2026-11-15T16:00:00Z')");
   await pg.query("insert into newsletter_issues(id, issue_key, subject, status, created_at) values (1, '2026-W46', 'The hub, mid-November (sample)', 'sent', '2026-11-12T17:00:00Z')");
   for (const [i, status] of ["sent", "sent", "sent", "sent", "failed"].entries()) {
     await pg.query("insert into newsletter_sends(issue_id, email, status) values (1, $1, $2)", [`reader${i}@example.test`, status]);
