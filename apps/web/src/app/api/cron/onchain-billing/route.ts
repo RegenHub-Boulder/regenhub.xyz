@@ -83,7 +83,7 @@ export async function POST(req: Request) {
       renewalDate: new Date(invoice.period_start).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
       siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz",
     });
-    if (await sendEmail({ to: member.email, ...mail })) {
+    if (await sendEmail({ kind: "onchain_renewal_reminder", to: member.email, ...mail })) {
       await admin.from("onchain_invoices").update({ reminder_sent_at: new Date().toISOString() }).eq("id", invoice.id);
       remindersSent += 1;
     }

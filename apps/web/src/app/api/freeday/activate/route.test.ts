@@ -36,8 +36,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { setUserCode, allocateSlotWithRetry } from "@regenhub/shared";
 
-// Frozen date (above) is Monday 2026-06-08 — match the claim's reserved date
-// so the route's "claimed_date === today" check passes.
+// Frozen date (above) is Monday 2026-06-08, a weekday (activation refuses weekends).
 const FROZEN_TODAY_MT = "2026-06-08";
 
 const reservedClaim = {
@@ -119,22 +118,30 @@ describe("POST /api/freeday/activate", () => {
     expect(setUserCode).not.toHaveBeenCalled();
   });
 
-  it("rejects activation on a non-today reserved date", async () => {
+  it("an older claim's requested date no longer holds it to that day: it activates on any weekday", async () => {
     const sb = makeSupabaseMock({ auth: { user: { id: "user-1", email: "guest@example.com" } } });
     const admin = makeSupabaseMock({
       selects: {
-        free_day_claims: { data: { ...reservedClaim, claimed_date: "2099-01-01" } },
+        free_day_claims: { data: { ...reservedClaim, claimed_date: "2026-03-02" } },
+        members: { data: { id: 42 } },
       },
     });
     vi.mocked(createClient).mockResolvedValue(sb as never);
     vi.mocked(createServiceClient).mockReturnValue(admin as never);
 
     const res = await POST();
-    const json = await res.json();
+    expect(res.status).toBe(200);
+    expect(setUserCode).toHaveBeenCalledTimes(1);
+  });
 
-    expect(res.status).toBe(400);
-    expect(json.error).toMatch(/reserved for/);
-    expect(setUserCode).not.toHaveBeenCalled();
+  it("a claim with no date (every claim since flexible free days) activates too", async () => {
+    const sb = makeSupabaseMock({ auth: { user: { id: "user-1", email: "guest@example.com" } } });
+    const admin = makeSupabaseMock({
+      selects: { free_day_claims: { data: { ...reservedClaim, claimed_date: null } }, members: { data: { id: 42 } } },
+    });
+    vi.mocked(createClient).mockResolvedValue(sb as never);
+    vi.mocked(createServiceClient).mockReturnValue(admin as never);
+    expect((await POST()).status).toBe(200);
   });
 
   it("rejects activation when the claim is in pending state (not yet approved)", async () => {

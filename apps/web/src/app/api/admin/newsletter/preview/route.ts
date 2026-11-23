@@ -25,6 +25,6 @@ export async function POST(request: Request) {
   const audience = normalizeAudience(body.audience);
   const archiveHref = audience === "members" ? undefined : issueKey ? `${base}/news/${issueKey}` : `${base}/news`;
   const { html, text } = renderDraftEmail(markdown, unsubscribeUrl(user.email, siteUrl), archiveHref, audience);
-  const ok = await sendEmail({ to: user.email, subject: `[PREVIEW] ${subject}`, html, text });
+  const ok = await sendEmail({ kind: "newsletter_preview", to: user.email, subject: `[PREVIEW] ${subject}`, html, text });
   return NextResponse.json({ ok, sent_to: user.email });
 }

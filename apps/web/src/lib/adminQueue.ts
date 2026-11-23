@@ -14,7 +14,7 @@ export interface AdminQueueCounts {
   pastDue: number | null;
   pendingApplications: number | null;
   pendingFreeDays: number | null;
-  /** Hot or cold desk members with no billed subscription (BILLED_STATUSES) on either rail. */
+  /** Hot or cold desk members with no billed subscription on either rail (`isUnbilledDesk`, lib/adminMemberFilters.ts). */
   unbilledDesks: number | null;
 }
 
@@ -38,7 +38,7 @@ const RULES: { key: keyof AdminQueueCounts; urgent: boolean; href: string; what:
     label: (n) => `${plural(n, "application")} to review` },
   { key: "pendingFreeDays", urgent: false, href: "/admin/people?tab=freedays", what: "free-day requests",
     label: (n) => `${plural(n, "free-day request")} to review` },
-  { key: "unbilledDesks", urgent: false, href: "/admin/members?status=no_subscription", what: "unbilled desk members",
+  { key: "unbilledDesks", urgent: false, href: "/admin/members?status=unbilled_desk", what: "unbilled desk members",
     label: (n) => `${plural(n, "desk member")} not billed: send a checkout link` },
 ];
 

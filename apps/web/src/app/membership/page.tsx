@@ -37,7 +37,7 @@ const LADDER = [
     step: 1,
     title: "Free day",
     price: "Free",
-    body: "Come work for a day on us. No card, no commitment — pick a date and we'll send you a door code. One per person.",
+    body: "Come work for a day on us. No card, no commitment: come any weekday and get your door code when you arrive. One per person.",
   },
   {
     step: 2,

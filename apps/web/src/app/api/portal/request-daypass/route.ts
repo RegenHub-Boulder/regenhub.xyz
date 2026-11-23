@@ -156,7 +156,7 @@ export async function POST(request: Request) {
       lockStatus = formatLockStatus(lockResults);
     } catch (err) {
       console.error("[Lock] Failed to set day code:", err);
-      // Roll back: deactivate the just-inserted day_code so its slot frees up,
+      // Roll back: deactivate the just-inserted day_code (its slot stays quarantined until an admin clears it),
       // then refund the balance.
       await admin
         .from("day_codes")

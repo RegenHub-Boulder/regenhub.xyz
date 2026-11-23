@@ -9,6 +9,7 @@ import { SCOREBOARD_TZ, usd } from "@/lib/scoreboard";
 import { adminQueue } from "@/lib/adminQueue";
 import { readAll } from "@/lib/supabase/readAll";
 import { BILLED_STATUSES } from "@/lib/membershipRevenue";
+import { DESK_MEMBER_TYPES, countUnbilledDesks } from "@/lib/adminMemberFilters";
 
 export const metadata = { title: "Today — Admin" };
 export const dynamic = "force-dynamic";
@@ -37,14 +38,13 @@ export default async function AdminHome() {
     settle("scoreboard", readScoreboard(admin)),
     admin.from("applications").select("id", { count: "exact", head: true }).eq("status", "pending"),
     admin.from("free_day_claims").select("id", { count: "exact", head: true }).eq("status", "pending"),
-    settle("desk members", readAll<{ id: number }>("desk members", (from, to) => admin.from("members").select("id")
-      .eq("disabled", false).in("member_type", ["cold_desk", "hot_desk"]).order("id").range(from, to))),
+    settle("desk members", readAll<{ id: number; disabled: boolean; member_type: string }>("desk members", (from, to) => admin.from("members")
+      .select("id, disabled, member_type").in("member_type", [...DESK_MEMBER_TYPES]).order("id").range(from, to))),
     settle("billed subscriptions", readAll<{ member_id: number; status: string }>("billed subscriptions", (from, to) => admin.from("subscriptions")
       .select("member_id, status").in("status", [...BILLED_STATUSES]).order("id").range(from, to))),
     admin.from("lock_sync_runs").select("failed").order("created_at", { ascending: false }).limit(1).maybeSingle(),
     admin.from("lock_slot_quarantine").select("slot", { count: "exact", head: true }),
   ]);
-  const billed = live && new Set(live.map((r) => r.member_id));
   const queue = adminQueue({
     lastSyncFailures: lastSync.error ? null : (lastSync.data as { failed: number | null } | null)?.failed ?? 0,
     quarantinedSlots: count(quarantine),
@@ -52,7 +52,8 @@ export default async function AdminHome() {
     pastDue: live && live.filter((r) => r.status === "past_due").length,
     pendingApplications: count(apps),
     pendingFreeDays: count(freeDays),
-    unbilledDesks: desks && billed ? desks.filter((m) => !billed.has(m.id)).length : null,
+    // The same predicate as its link (/admin/members?status=unbilled_desk), so the count is the list.
+    unbilledDesks: desks && live ? countUnbilledDesks(desks, live) : null,
   });
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: SCOREBOARD_TZ });
 

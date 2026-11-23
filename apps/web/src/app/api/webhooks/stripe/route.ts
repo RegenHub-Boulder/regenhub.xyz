@@ -226,7 +226,7 @@ async function handleSubscriptionUpdated(admin: ServiceClient, event: Stripe.Sub
           siteUrl,
           daysOverdue: null,
         });
-        sendEmail({ to: email, subject: tpl.subject, html: tpl.html, text: tpl.text })
+        sendEmail({ kind: "payment_failed", to: email, subject: tpl.subject, html: tpl.html, text: tpl.text })
           .catch((err) => console.error("[Webhook] Past-due email failed:", err));
       }
     }
@@ -309,7 +309,7 @@ async function handleSubscriptionDeleted(admin: ServiceClient, sub: Stripe.Subsc
       wasDeskTier,
       siteUrl,
     });
-    sendEmail({ to: row.members.email, subject: tpl.subject, html: tpl.html, text: tpl.text })
+    sendEmail({ kind: "subscription_ended", to: row.members.email, subject: tpl.subject, html: tpl.html, text: tpl.text })
       .catch((err) => console.error("[Webhook] Subscription-ended email failed:", err));
   }
   return row.member_id;

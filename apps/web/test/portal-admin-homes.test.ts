@@ -161,7 +161,7 @@ describe("admin home (/admin, Today)", () => {
     expect(app).toBeLessThan(desk);
     expect(h).toContain('href="/admin/access?tab=sync"');
     expect(h).toContain('href="/admin/people?tab=applications"');
-    expect(h).toContain('href="/admin/members?status=no_subscription"');
+    expect(h).toContain('href="/admin/members?status=unbilled_desk"');
     // What to do next moved here from the scoreboard: Theo is past due, with the one-click reminder.
     const next = at(h, 'data-testid="admin-next"');
     expect(waiting).toBeLessThan(next);

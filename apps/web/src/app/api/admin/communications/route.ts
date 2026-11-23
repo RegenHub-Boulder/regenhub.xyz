@@ -159,7 +159,7 @@ export async function POST(req: Request) {
     const html = personalize(body.body_html, m.name);
     const text = htmlToText(html);
     try {
-      const sent = await sendEmail({ to: m.email, subject, html, text });
+      const sent = await sendEmail({ kind: "group_message", to: m.email, subject, html, text });
       results.push({ member_id: m.id, email: m.email, ok: sent });
       if (sent) {
         await logAction(

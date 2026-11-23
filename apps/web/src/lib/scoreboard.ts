@@ -81,6 +81,18 @@ export interface VisitRow {
 const NEVER_STARTED = new Set(["incomplete", "incomplete_expired"]);
 export const started = (s: Pick<SubRow, "status" | "paid">) => !NEVER_STARTED.has(s.status) && s.paid !== false;
 
+/** Each member's first subscription that started (ms): when they first joined. One definition for every "first". */
+export function firstStartedAt(subs: readonly SubRow[]): Map<number, number> {
+  const first = new Map<number, number>();
+  for (const s of subs) {
+    const t = Date.parse(s.created_at);
+    if (!started(s) || Number.isNaN(t)) continue;
+    const prev = first.get(s.member_id);
+    if (prev === undefined || t < prev) first.set(s.member_id, t);
+  }
+  return first;
+}
+
 export const monthOf = (iso: string, tz: string = SCOREBOARD_TZ) => dateIn(iso, tz).slice(0, 7);
 
 /** The last `n` calendar months, oldest first, ending with the month `now` is in: `YYYY-MM`. */
@@ -132,6 +144,10 @@ export interface GoalProgress {
   rentGapCents: number;
 }
 
+/** The goal's paying member: plans in good standing coming to $30+/mo at list, paying something (a full comp isn't). */
+export const isPayingMember = (m: { list: number; net: number }, goals: ScoreboardGoals = SCOREBOARD_GOALS) =>
+  m.list >= goals.minMemberCents && m.net > 0;
+
 export function goalProgress(subs: readonly SubRow[], goals: ScoreboardGoals = SCOREBOARD_GOALS): GoalProgress {
   const revenue = membershipRevenue(subs);
   const perMember = new Map<number, { list: number; net: number }>();
@@ -142,7 +158,7 @@ export function goalProgress(subs: readonly SubRow[], goals: ScoreboardGoals = S
     m.net += effectiveMonthlyCents(s);
     perMember.set(s.member_id, m);
   }
-  const counted = new Set([...perMember].filter(([, m]) => m.list >= goals.minMemberCents && m.net > 0).map(([id]) => id));
+  const counted = new Set([...perMember].filter(([, m]) => isPayingMember(m, goals)).map(([id]) => id));
   const payingMembers = counted.size;
   // Only members the goal counts, so "N set to end" reads as N of the paying members.
   const endingRows = subs.filter((s) => isGoodStanding(s.status) && isEnding(s) && counted.has(s.member_id));
@@ -269,14 +285,8 @@ export function funnelByMonth(
   tally(input.interests, "signups");
   tally(input.applications, "applications");
   tally(input.purchases, "passesBought");
-  const first = new Map<number, string>();
-  for (const s of input.subs) {
-    if (!started(s)) continue;
-    const prev = first.get(s.member_id);
-    if (!prev || s.created_at < prev) first.set(s.member_id, s.created_at);
-  }
-  for (const at of first.values()) {
-    const row = rows.get(monthOf(at));
+  for (const at of firstStartedAt(input.subs).values()) {
+    const row = rows.get(monthOf(new Date(at).toISOString()));
     if (row) row.firstSubscriptions += 1;
   }
   return [...rows.values()];
@@ -305,13 +315,7 @@ export function followupFunnel(
   subs: readonly SubRow[],
   months: readonly string[],
 ): FollowupMonth[] {
-  const first = new Map<number, number>();
-  for (const s of subs) {
-    if (!started(s)) continue;
-    const t = Date.parse(s.created_at);
-    const prev = first.get(s.member_id);
-    if (prev === undefined || t < prev) first.set(s.member_id, t);
-  }
+  const first = firstStartedAt(subs);
   const rows = new Map(months.map((m) => [m, { month: m, followedUp: 0, joined: 0 }]));
   const seen = new Set<string>();
   const lastBeforeJoin = new Map<number, number>();

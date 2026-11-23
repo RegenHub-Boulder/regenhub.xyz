@@ -233,7 +233,9 @@ export async function setUserCode(slot: number, code: string): Promise<LockResul
     else if (!alreadyQuarantined) await finishSlotSet(slot);
     return results;
   } catch (error) {
-    await quarantineSlot(slot, "SET threw or timed out; clear required before reuse");
+    // Keep what went wrong (e.g. "All locks failed: lock.front_door_lock: HA 502 …"): the admin's Door page shows it.
+    const detail = (error instanceof Error ? error.message : String(error)).replace(/\s+/g, " ").slice(0, 120);
+    await quarantineSlot(slot, `SET threw or timed out; clear required before reuse (${detail})`);
     throw error;
   }
 }

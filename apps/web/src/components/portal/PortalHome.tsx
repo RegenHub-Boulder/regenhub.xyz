@@ -14,6 +14,7 @@ import { MembershipStatusCard } from "@/components/portal/MembershipStatusCard";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { PreviewProvider } from "@/components/portal/PreviewContext";
 import { planLabel, getPlan } from "@/lib/plans";
+import { effectiveMonthlyCents } from "@/lib/stripeNet";
 import { memberTypeLabel } from "@/lib/memberTypeLabel";
 import { OnchainBillingCard } from "@/components/portal/OnchainBillingCard";
 import { RemoveWalletButton } from "@/components/portal/RemoveWalletButton";
@@ -136,12 +137,10 @@ function PortalHomeBody({ view }: { view: PortalHomeView }) {
       })
     : null;
 
-  // Hub Essentials (address, hours, Wi-Fi, keypad) opens by itself only on a newcomer's visit day: a free day booked
-  // or activated for today in Boulder, or a day-pass code live right now (the same code the day-pass hero shows).
-  // Every other day it starts closed, one click away, so the first-week page stays short.
-  const todayInBoulder = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Denver" }).format(new Date(nowMs));
-  const visitingToday = (!!freeDayClaim && ["reserved", "activated"].includes(freeDayClaim.status) &&
-    freeDayClaim.claimed_date === todayInBoulder) || (!isFullMember && !!view.dayCode);
+  // Hub Essentials (address, hours, Wi-Fi, keypad) opens by itself only on a newcomer's visit day: a door code live
+  // right now (a day pass, or a free day activated today; the same code the day-pass hero shows). Free days have no
+  // date any more, so a code is the only sign of the day. Every other day it starts closed, one click away.
+  const visitingToday = !isFullMember && !!view.dayCode;
 
   const coopView = !!member.is_coop_member || !!member.is_admin;
   const passesLeft = member.day_passes_balance ?? 0;
@@ -217,9 +216,7 @@ function PortalHomeBody({ view }: { view: PortalHomeView }) {
                         <Calendar className="w-8 h-8 text-gold mb-3" />
                         <h3 className="font-semibold mb-1">Free day reserved</h3>
                         <p className="text-sm text-muted">
-                          {!freeDayClaim.claimed_date || freeDayClaim.claimed_date === todayInBoulder
-                            ? "Tap to get your door code — visit any weekday"
-                            : `Reserved for ${new Date(freeDayClaim.claimed_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+                          Tap to get your door code — visit any weekday
                         </p>
                       </>
                     ) : (
@@ -282,7 +279,7 @@ function PortalHomeBody({ view }: { view: PortalHomeView }) {
                   Membership
                   {activeSubscription.plan_key && (
                     <span className="text-muted font-normal ml-2 text-sm">
-                      · {planLabel(activeSubscription.plan_key)} · ${((typeof activeSubscription.net_cents === "number" ? activeSubscription.net_cents : activeSubscription.monthly_cents) / 100)}/mo
+                      · {planLabel(activeSubscription.plan_key)} · ${effectiveMonthlyCents(activeSubscription) / 100}/mo
                     </span>
                   )}
                 </h3>
