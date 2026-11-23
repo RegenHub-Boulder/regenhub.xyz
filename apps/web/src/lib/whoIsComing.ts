@@ -20,7 +20,8 @@ export interface ComingPerson {
   /** Their Techne handle, without the @, when known. */
   handle: string | null;
   kind: "member" | "guest";
-  /** A member's plan in words ("Hot Desk", "Member + 2 days/mo"), null when they have none now. */
+  /** A member's plan in words ("Hot Desk", "Member + 2 days/mo"; "Account disabled" for a disabled row), null when
+   *  they have none now. */
   plan: string | null;
   /** When their latest RSVP was made (ISO), "" when the record doesn't say. */
   rsvpAt: string;
@@ -66,7 +67,9 @@ export function whoIsComing(
       name,
       handle,
       kind: member ? "member" : "guest",
-      plan: member ? planWords(member, facts.subs.filter((s) => s.member_id === member.id)) : null,
+      plan: member
+        ? member.disabled ? "Account disabled" : planWords(member, facts.subs.filter((s) => s.member_id === member.id))
+        : null,
       rsvpAt: r.at,
     };
     if (opts.withEmails && email) person.email = email;

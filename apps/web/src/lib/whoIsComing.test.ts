@@ -12,6 +12,7 @@ const members = [
   member(2, "Bo", "did:plc:bo", "day_pass"),
   member(3, "Cy", null, "day_pass", "cy@example.test"),
   member(4, "Dee", "did:plc:dee", "day_pass"),
+  { ...member(5, "Eve", "did:plc:eve", "hot_desk"), disabled: true },
 ];
 const people = [
   techne("did:plc:ana", { handle: "ana.techne.town" }),
@@ -26,8 +27,8 @@ const subs = [
   { member_id: 2, status: "active", monthly_cents: 5000, plan_key: "member_2day" },
   { member_id: 4, status: "canceled", monthly_cents: 3000, plan_key: "member_basic" },
 ];
-const rsvps = ["did:plc:kim", "did:plc:unconf", "did:plc:nobody0000000000000000", "did:plc:moved", "did:plc:bo", "did:plc:cy", "did:plc:ana"]
-  .map((did, i) => ({ did, at: `2026-11-2${i}T00:00:00Z` }));
+const rsvps = ["did:plc:eve", "did:plc:kim", "did:plc:unconf", "did:plc:nobody0000000000000000", "did:plc:moved", "did:plc:bo", "did:plc:cy", "did:plc:ana"]
+  .map((did, i) => ({ did, at: `2026-11-${10 + i}T00:00:00Z` }));
 
 describe("who's coming", () => {
   it("maps each DID to a member (with plan) or a guest (named from techne_people or the handle), members first", () => {
@@ -36,12 +37,13 @@ describe("who's coming", () => {
       ["Ana", "ana.techne.town", "member", "Hot Desk"],
       ["Bo", "bo.techne.town", "member", "Member + 2 days/mo"],
       ["Cy", "cy.techne.town", "member", null],
+      ["Eve", null, "member", "Account disabled"],
       ["@unconf.other.pds", "unconf.other.pds", "guest", null],
       ["did:plc:nobo…0000", null, "guest", null],
       ["Kim", "kim.techne.town", "guest", null],
       ["Moved", "moved.techne.town", "guest", null],
     ]);
-    expect(list.find((p) => p.name === "Bo")?.rsvpAt).toBe("2026-11-24T00:00:00Z");
+    expect(list.find((p) => p.name === "Bo")?.rsvpAt).toBe("2026-11-15T00:00:00Z");
     // An admin's list: only addresses this site may use (never an unconfirmed one).
     expect(Object.fromEntries(list.map((p) => [p.name, p.email]))).toMatchObject({
       Ana: "ana@example.test", Cy: "cy@example.test", Kim: "kim@example.test", Moved: "other@example.test", "@unconf.other.pds": undefined,

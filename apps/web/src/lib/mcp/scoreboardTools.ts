@@ -6,6 +6,7 @@ import { SCOREBOARD_GOALS, headlineText, usd } from "@/lib/scoreboard";
 import type { RecommendedAction } from "@/lib/scoreboardActions";
 import { ACTION_KIND_LABEL } from "@/lib/scoreboardActionKinds";
 import { readWhoIsComing } from "@/lib/whoIsComingData";
+import { dateIn } from "@/lib/series";
 
 /**
  * The MCP's scoreboard tools (T-497): the numbers /admin/scoreboard shows and the recommended actions on /admin (Today), so Uni can
@@ -80,12 +81,12 @@ export async function scoreboardSummaryHandler(
 /** Who is going to each upcoming night: names and handles, members first, never an email (withEmails: false). */
 async function comingLines(admin: ServiceClient, turnout: Scoreboard["turnout"]): Promise<string[]> {
   const lines = ["### Who's coming (upcoming nights; RSVPs going on Techne)"];
-  const upcoming = (turnout ?? []).flatMap((g) => g.upcoming).sort((a, b) => (a.startAt ?? "").localeCompare(b.startAt ?? ""));
+  const upcoming = (turnout ?? []).flatMap((g) => g.upcoming).sort((a, b) => Date.parse(a.startAt ?? "") - Date.parse(b.startAt ?? ""));
   if (upcoming.length === 0) return [...lines, "No upcoming nights."];
   const lists = await readWhoIsComing(admin, upcoming.map((e) => (e.going == null ? null : { goingRsvps: e.goingRsvps ?? [] })), { withEmails: false });
   upcoming.forEach((e, i) => {
     const list = lists[i];
-    lines.push(`**${e.startAt ? e.startAt.slice(0, 10) : "—"} ${e.name}**`);
+    lines.push(`**${e.startAt ? dateIn(e.startAt, "America/Denver") : "—"} ${e.name}**`);
     if (!list) lines.push("Couldn't load who's coming.");
     else if (list.length === 0) lines.push("No RSVPs yet.");
     else for (const p of list) {
