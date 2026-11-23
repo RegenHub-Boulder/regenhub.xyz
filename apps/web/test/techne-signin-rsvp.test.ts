@@ -199,7 +199,7 @@ describe("Sign in with Techne → RSVP (stand-in)", () => {
     expect((await fetchAttendance(EVENT.uri))?.going).toBe(0);
     const { rkey } = await post("going");
     expect(rkey).toMatch(/^[234567a-j][234567a-z]{12}$/);
-    expect(await fetchAttendance(EVENT.uri)).toEqual({ going: 1, goingDids: [PERSON.did] });
+    expect(await fetchAttendance(EVENT.uri)).toMatchObject({ going: 1, goingDids: [PERSON.did] });
 
     // Changing their mind rewrites the same record, not a second one.
     expect((await post("notgoing")).rkey).toBe(rkey);

@@ -24,6 +24,8 @@ import { AddSeriesNights } from "@/components/portal/AddSeriesNights";
 import type { PlannedNight } from "@/lib/series";
 import type { PostedNight } from "@/lib/seriesNights";
 import { lumaEventToFormValues, type ParsedLumaEvent } from "@/lib/lumaImport";
+import type { ComingPerson } from "@/lib/whoIsComing";
+import { WhoIsComing } from "@/components/admin/WhoIsComing";
 
 export interface ManageableEvent {
   uri: string;
@@ -36,6 +38,8 @@ export interface ManageableEvent {
   url: string | null;
   /** How many have RSVP'd going (their own Techne records), when known. */
   going?: number | null;
+  /** Who's coming (lib/whoIsComing.ts): absent = not read for this night, null = couldn't load. */
+  who?: ComingPerson[] | null;
   /** In the collective's own repo (a listed event belongs to its author: shown, not edited). */
   editable?: boolean;
   /** Its `pub.techne.draft.event.config` ({rkey}-cfg), null when there is none. */
@@ -414,8 +418,9 @@ function EventList({
                 </div>
                 <p className="text-sm text-muted mt-0.5">
                   {formatWhen(event.startAt)}
-                  {typeof event.going === "number" && ` · ${event.going} going`}
+                  {typeof event.going === "number" && event.who === undefined && ` · ${event.going} going`}
                 </p>
+                {event.who !== undefined && <WhoIsComing going={event.going ?? null} who={event.who} />}
                 {/* In-site now (`/events/<did>/<rkey>`), so a plain internal link — and only for a
                     PUBLIC event, since the public page 404s anything the AppView keeps private. */}
                 {event.url && event.visibility === "public" && (

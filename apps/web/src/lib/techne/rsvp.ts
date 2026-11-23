@@ -50,6 +50,8 @@ export interface Attendance {
   going: number;
   /** DIDs whose latest RSVP says going. */
   goingDids: string[];
+  /** The same people, each with when that latest RSVP was made (its `createdAt`, "" when the record has none). */
+  goingRsvps: { did: string; at: string }[];
 }
 
 /** Who's going: the latest RSVP per author naming `eventUri`, counting `#going`. */
@@ -62,8 +64,9 @@ export function countGoing(rows: RsvpRow[], eventUri: string): Attendance {
     const prev = latest.get(author);
     if (!prev || createdAt >= prev.createdAt) latest.set(author, { status: r.value.status, createdAt });
   }
-  const goingDids = [...latest].filter(([, v]) => statusOf(v.status) === "going").map(([did]) => did);
-  return { going: goingDids.length, goingDids };
+  const goingRsvps = [...latest].filter(([, v]) => statusOf(v.status) === "going").map(([did, v]) => ({ did, at: v.createdAt }));
+  const goingDids = goingRsvps.map((r) => r.did);
+  return { going: goingDids.length, goingDids, goingRsvps };
 }
 
 export function goingLine(a: { going: number }): string {

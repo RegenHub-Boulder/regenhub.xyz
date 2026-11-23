@@ -98,7 +98,7 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
     await pg.exec(`
       alter table members add column member_type text not null default 'day_pass', add column show_in_directory boolean;
       create table subscriptions (id serial primary key, member_id integer references members(id), status text not null,
-        monthly_cents integer not null);`);
+        monthly_cents integer not null, plan_key text);`);
     await pg.exec(await migration("066_night_followups.sql"));
     // Ana: a desk member, page not set up. Sam: a day-pass guest. Lee: unsubscribed from the newsletter. Kim: no
     // member row (Techne only). The steward has no member row at all.
