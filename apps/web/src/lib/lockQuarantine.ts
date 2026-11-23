@@ -87,3 +87,46 @@ export function explainQuarantine(row: QuarantineRow, holder: SlotHolder, fmt: (
     raw: row.reason,
   };
 }
+
+/** Slots that read the same (same reason, same day, nobody holding them, no lock results) shown as one entry. */
+export interface QuarantineGroup {
+  slots: number[];
+  title: string;
+  since: string;
+  why: string;
+  doors: string[];
+  clearing: string;
+  raw: string;
+}
+
+const span = (slots: number[]) => {
+  const parts: string[] = [];
+  for (let i = 0; i < slots.length; i++) {
+    let j = i;
+    while (j + 1 < slots.length && slots[j + 1] === slots[j] + 1) j++;
+    parts.push(j > i ? `${slots[i]}–${slots[j]}` : `${slots[i]}`);
+    i = j;
+  }
+  return parts.join(", ");
+};
+
+export function groupQuarantine(rows: QuarantineExplained[], dayOf: (slot: number) => string): QuarantineGroup[] {
+  const groups: (QuarantineGroup & { key: string; kind: string })[] = [];
+  for (const r of rows) {
+    const kind = slotKind(r.slot);
+    // Someone's code or a lock's own answer makes a slot its own entry: those are what an admin must read one by one.
+    const key = r.doors.length || !r.clearing.startsWith("Nobody") ? `slot-${r.slot}` : [kind, r.why, r.raw, dayOf(r.slot)].join("|");
+    const g = groups.find((x) => x.key === key);
+    if (g) g.slots.push(r.slot);
+    else groups.push({ key, kind, slots: [r.slot], title: r.title, since: r.since, why: r.why, doors: r.doors, clearing: r.clearing, raw: r.raw });
+  }
+  return groups.map(({ key: _key, kind, ...g }) => {
+    void _key;
+    if (g.slots.length === 1) return g;
+    return {
+      ...g,
+      title: `${kind}s ${span(g.slots)}`,
+      clearing: `Nobody holds these slots now. Clearing only wipes the locks, then frees each slot for the next code.`,
+    };
+  });
+}

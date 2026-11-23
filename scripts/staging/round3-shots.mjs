@@ -82,7 +82,7 @@ if (AUDIT) {
       await shot(page, `audit-${name}`, vw);
     }
     await ctx.close();
-    const sam = await signedIn("Sam Sample", w, h);
+    const sam = await signedIn("Sam (sample)", w, h);
     await shot(sam.page, "audit-sam-portal", vw);
     await sam.page.goto(BASE + "/freeday", { waitUntil: "networkidle" });
     await shot(sam.page, "audit-sam-freeday-reserved", vw);

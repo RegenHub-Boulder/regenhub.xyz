@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { QuarantinedSlots } from "@/components/admin/QuarantinedSlots";
-import { CLEAR_EXPLAINED, explainQuarantine, type QuarantineRow, type SlotHolder } from "@/lib/lockQuarantine";
+import { CLEAR_EXPLAINED, explainQuarantine, groupQuarantine, type QuarantineRow, type SlotHolder } from "@/lib/lockQuarantine";
 import { createClient } from "@/lib/supabase/server";
 import { AdminTabs, type TabDef } from "@/components/admin/AdminTabs";
 import { LiveCodesSection, type CodeWithMember } from "@/components/admin/LiveCodesSection";
@@ -80,7 +80,10 @@ export default async function AccessPage() {
     const code = codeRows.find((c) => c.pin_slot === slot);
     return code ? { kind: "guest", label: code.label ?? code.members?.name ?? null } : null;
   };
-  const quarantined = ((quarantine ?? []) as QuarantineRow[]).map((row) => explainQuarantine(row, holderOf(row.slot), fmtBoulderDateTime));
+  const quarantineRows = (quarantine ?? []) as QuarantineRow[];
+  const boulderDay = (slot: number) => new Date(quarantineRows.find((r) => r.slot === slot)!.quarantined_at)
+    .toLocaleDateString("en-CA", { timeZone: "America/Denver" });
+  const quarantined = groupQuarantine(quarantineRows.map((row) => explainQuarantine(row, holderOf(row.slot), fmtBoulderDateTime)), boulderDay);
 
   return (
     <div className="space-y-6">
@@ -113,7 +116,7 @@ export default async function AccessPage() {
                   <p>See “Stuck reservation recovery” under “Door-code writer reservation” in DEPLOYMENT.md.</p>
                 </div>
               )}
-              <QuarantinedSlots slots={quarantined} explainer={CLEAR_EXPLAINED} />
+              <QuarantinedSlots groups={quarantined} explainer={CLEAR_EXPLAINED} />
               <LockSyncSection
                 members={slotRows}
                 lastRun={(lastRun as LastRun | null) ?? null}
