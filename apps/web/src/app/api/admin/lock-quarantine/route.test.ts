@@ -103,6 +103,26 @@ describe("POST /api/admin/lock-quarantine", () => {
     expect(clearUserCode).not.toHaveBeenCalled();
   });
 
+  it("a batch that loses the writer part-way stops and says so, recorded once", async () => {
+    // After slot 101 the batch stalls past its lease and another writer takes over.
+    vi.mocked(clearUserCode).mockImplementationOnce(async (slot) => {
+      const out = await clearSlotSafely(slot, async () => doors.map((entity) => ({ entity, ok: true })), doors);
+      await db.exec("update lock_slot_writer set token = '00000000-0000-4000-8000-0000000000ff', holder_label = 'Bot PIN writer'");
+      return out;
+    });
+    const { lines } = await clear({ slots: [101, 102, 103] });
+    expect(lines).toEqual([
+      { slot: 101, ok: true, message: "cleared on every lock and released" },
+      { slot: 102, ok: false, message: "not tried: the door-code writer was lost part-way. Try again in a minute." },
+      { slot: 103, ok: false, message: "not tried: the door-code writer was lost part-way. Try again in a minute." },
+      { done: true },
+    ]);
+    expect(clearUserCode).toHaveBeenCalledTimes(1);
+    expect(await db.sql("select count(*)::int n from admin_actions where action = 'lock_writer_failed'")).toEqual([{ n: 1 }]);
+    // The new holder keeps its lease.
+    expect(await db.sql("select holder_label from lock_slot_writer")).toEqual([{ holder_label: "Bot PIN writer" }]);
+  });
+
   it("a single slot still works ({ slot })", async () => {
     const { lines } = await clear({ slot: 102 });
     expect(lines).toEqual([{ slot: 102, ok: true, message: "cleared on every lock and released" }, { done: true }]);

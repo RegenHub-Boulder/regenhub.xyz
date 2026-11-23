@@ -32,6 +32,6 @@ export {
 } from "./homeAssistant.js";
 
 export {
-  withLockWriter, lockWriterFetch, quarantinedSlots, quarantineSlot, clearSlotSafely, recordLockWriterFailure,
+  withLockWriter, lockWriterFetch, assertLockWriter, quarantinedSlots, quarantineSlot, clearSlotSafely, recordLockWriterFailure,
   LockWriterBusyError, LOCK_WRITER_BUSY_MESSAGE, LOCK_WRITER_LEASE_SECONDS, LOCK_WRITER_RENEW_MS,
 } from "./lockSlotSafety.js";

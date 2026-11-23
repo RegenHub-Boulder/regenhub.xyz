@@ -63,7 +63,7 @@ export default async function AdminHome() {
     pendingFreeDays: count(freeDays),
     // The same predicate as its link (/admin/members?status=unbilled_desk), so the count is the list.
     unbilledDesks: desks && live ? countUnbilledDesks(desks, live) : null,
-  }, writerNow?.state === "stuck" ? { holder: writerNow.holder, since: fmtBoulderDateTime(writerNow.since) } : null);
+  }, writerNow?.state === "stuck" ? { holder: writerNow.holder, since: fmtBoulderDateTime(writerNow.since), recovers: writerNow.recovers } : null);
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: SCOREBOARD_TZ });
 
   return (

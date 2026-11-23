@@ -16,6 +16,8 @@ export interface LockWriterRow {
 
 export interface LockWriterStatus {
   state: "running" | "stuck";
+  /** Migration 070 is in: a stuck writer is taken over by the next door-code change. */
+  recovers: boolean;
   holder: string;
   /** ISO time it took the writer. */
   since: string;
@@ -30,11 +32,11 @@ export function lockWriterStatus(row: LockWriterRow | null, nowMs: number, fmt: 
   const lastSign = Date.parse(hasLease ? row.renewed_at! : row.acquired_at);
   const stuck = nowMs - lastSign > LOCK_WRITER_LEASE_SECONDS * 1000;
   if (!stuck) {
-    return { state: "running", holder, since: row.acquired_at,
+    return { state: "running", recovers: hasLease, holder, since: row.acquired_at,
       text: `A door-code change is running (${holder}, since ${fmt(row.acquired_at)}).` };
   }
   return {
-    state: "stuck", holder, since: row.acquired_at,
+    state: "stuck", recovers: hasLease, holder, since: row.acquired_at,
     text: hasLease
       ? `The door-code writer is stuck: ${holder} took it at ${fmt(row.acquired_at)} and stopped` +
         (fmt(row.renewed_at!) === fmt(row.acquired_at) ? ". " : ` (last heard from at ${fmt(row.renewed_at!)}). `) +

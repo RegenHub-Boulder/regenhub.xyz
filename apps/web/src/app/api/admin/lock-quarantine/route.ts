@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { lockWriterErrorMessage } from "@/lib/lockWriter";
 import type { ClearLine, ClearOutcome } from "@/lib/lockQuarantine";
-import { clearUserCode, quarantinedSlots, recordLockWriterFailure, withLockWriter, LockWriterBusyError } from "@regenhub/shared";
+import { assertLockWriter, clearUserCode, quarantinedSlots, recordLockWriterFailure, withLockWriter, LockWriterBusyError } from "@regenhub/shared";
 
 type Admin = ReturnType<typeof createServiceClient>;
 
@@ -59,7 +59,17 @@ export async function POST(request: Request) {
       };
       try {
         await withLockWriter(admin, async () => {
-          for (const slot of slots as number[]) {
+          for (const [i, slot] of (slots as number[]).entries()) {
+            // A batch that lost the writer (taken over after a long stall) stops: every later slot would fail the same way.
+            try { await assertLockWriter(); }
+            catch (error) {
+              console.error("[LockQuarantine] writer lost mid-batch:", error);
+              await recordLockWriterFailure(admin, "Web PIN writer", error);
+              for (const rest of (slots as number[]).slice(i)) {
+                send({ slot: rest, ok: false, message: "not tried: the door-code writer was lost part-way. Try again in a minute." });
+              }
+              break;
+            }
             try { send(await clearQuarantinedSlot(admin, slot)); }
             catch (error) {
               console.error(`[LockQuarantine] slot ${slot} failed:`, error);

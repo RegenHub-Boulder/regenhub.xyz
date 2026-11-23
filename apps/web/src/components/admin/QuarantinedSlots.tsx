@@ -45,10 +45,10 @@ export function QuarantinedSlots({ groups, explainer }: { groups: QuarantineGrou
         if (buffer.trim()) take(JSON.parse(buffer) as ClearLine);
       }
     } catch {
-      setNotice("Couldn't reach the server; nothing more was cleared. Try again in a minute.");
+      setNotice("Lost touch with the server part-way; reload to see which slots were cleared.");
     }
     const missing = slots.filter((s) => !done.some((o) => o.slot === s));
-    if (missing.length && done.length) setNotice((n) => n ?? `No answer for ${missing.length === 1 ? "slot" : "slots"} ${missing.join(", ")}; reload to see where they stand.`);
+    if (missing.length) setNotice((n) => n ?? `No answer for ${missing.length === 1 ? "slot" : "slots"} ${missing.join(", ")}; reload to see where they stand.`);
     setBusy(null);
     router.refresh();
   }

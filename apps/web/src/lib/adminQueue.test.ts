@@ -38,10 +38,15 @@ describe("adminQueue (Waiting on you)", () => {
   });
 
   it("a stuck door-code writer leads the queue, saying who held it and since when", () => {
-    const q = adminQueue({ ...none, pastDue: 1 }, { holder: "Web PIN writer", since: "Nov 20, 3:52 PM" });
+    const q = adminQueue({ ...none, pastDue: 1 }, { holder: "Web PIN writer", since: "Nov 20, 3:52 PM", recovers: true });
     expect(q[0]).toEqual({
       key: "stuckWriter", urgent: true, href: "/admin/access?tab=sync",
       label: "Door-code writer stuck: held by Web PIN writer since Nov 20, 3:52 PM; the next door-code change frees it",
     });
+  });
+
+  it("before migration 070 it doesn't promise the writer frees itself", () => {
+    const [item] = adminQueue(none, { holder: "Web PIN writer", since: "Nov 20, 3:52 PM", recovers: false });
+    expect(item.label).toBe("Door-code writer stuck: held by Web PIN writer since Nov 20, 3:52 PM; see Door → Lock Sync to free it");
   });
 });

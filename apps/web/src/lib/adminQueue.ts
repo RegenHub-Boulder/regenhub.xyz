@@ -21,7 +21,7 @@ export interface AdminQueueCounts {
 }
 
 /** A door-code writer older than its lease (lib/lockWriterStatus.ts): who held it, since when (already formatted). */
-export interface StuckWriter { holder: string; since: string }
+export interface StuckWriter { holder: string; since: string; /** False before migration 070: nothing takes it over yet. */ recovers: boolean }
 
 export interface AdminQueueItem {
   key: keyof AdminQueueCounts | "stuckWriter";
@@ -53,7 +53,8 @@ export function adminQueue(c: AdminQueueCounts, stuckWriter: StuckWriter | null 
   const items: AdminQueueItem[] = [];
   if (stuckWriter) {
     items.push({ key: "stuckWriter", urgent: true, href: "/admin/access?tab=sync",
-      label: `Door-code writer stuck: held by ${stuckWriter.holder} since ${stuckWriter.since}; the next door-code change frees it` });
+      label: `Door-code writer stuck: held by ${stuckWriter.holder} since ${stuckWriter.since}` +
+        (stuckWriter.recovers ? "; the next door-code change frees it" : "; see Door → Lock Sync to free it") });
   }
   for (const r of RULES) {
     const n = c[r.key];
