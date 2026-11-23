@@ -43,7 +43,7 @@ export function WhoIsComing({ going, who }: { going: number | null; who: ComingP
               <span className="font-medium text-foreground">{p.name}</span>
               {p.handle && p.name !== `@${p.handle}` && <span className="text-muted">@{p.handle}</span>}
               <Badge>{p.kind === "member" ? "Member" : "Guest"}</Badge>
-              {p.plan && <span className="text-muted">{p.plan}</span>}
+              {p.kind === "member" && <span className="text-muted">{p.plan ?? "No current plan"}</span>}
               {p.email && (
                 <a href={`mailto:${p.email}`} className="text-muted hover:text-foreground break-all" data-testid="who-email">
                   {p.email}

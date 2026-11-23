@@ -108,7 +108,7 @@ describe("scoreboard_summary who_is_coming", () => {
     const t = body(await scoreboardSummaryHandler(db as never, ada(), { who_is_coming: true }));
     expect(t).toMatch(/### Who's coming/);
     // Gil: a member row with no plan; the other account: a guest, by the handle Techne resolves.
-    expect(t).toMatch(/\*\*\d{4}-\d{2}-\d{2} Agents Night\*\*\n- Gil Guest \(@riley\.techne\.test\) — member\n- @riley\.techne\.test — guest/);
+    expect(t).toMatch(/\*\*\d{4}-\d{2}-\d{2} Agents Night\*\*\n- Gil Guest \(@riley\.techne\.test\) — member, no current plan\n- @riley\.techne\.test — guest/);
     expect(t).not.toMatch(EMAIL);
     // Without the flag: no names, as before.
     expect(body(await scoreboardSummaryHandler(db as never, ada()))).not.toContain("Gil");

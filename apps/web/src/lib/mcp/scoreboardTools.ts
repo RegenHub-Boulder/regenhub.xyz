@@ -89,7 +89,7 @@ async function comingLines(admin: ServiceClient, turnout: Scoreboard["turnout"])
     if (!list) lines.push("Couldn't load who's coming.");
     else if (list.length === 0) lines.push("No RSVPs yet.");
     else for (const p of list) {
-      lines.push(`- ${p.name}${p.handle && p.name !== `@${p.handle}` ? ` (@${p.handle})` : ""} — ${p.kind === "member" ? `member${p.plan ? `, ${p.plan}` : ""}` : "guest"}`);
+      lines.push(`- ${p.name}${p.handle && p.name !== `@${p.handle}` ? ` (@${p.handle})` : ""} — ${p.kind === "member" ? `member, ${p.plan ?? "no current plan"}` : "guest"}`);
     }
   });
   return lines;
