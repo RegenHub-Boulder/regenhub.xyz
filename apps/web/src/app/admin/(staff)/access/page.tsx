@@ -8,6 +8,7 @@ import { AdminTabs, type TabDef } from "@/components/admin/AdminTabs";
 import { LiveCodesSection, type CodeWithMember } from "@/components/admin/LiveCodesSection";
 import { LockSyncSection, type LastRun } from "@/components/admin/LockSyncSection";
 import { fmtBoulderDateTime } from "@/lib/boulderTime";
+import { lockWriterStatus, readLockWriter, recentLockWriteFailures, type LockWriteFailureRow } from "@/lib/lockWriterStatus";
 
 export const metadata = { title: "Door — Admin" };
 
@@ -25,14 +26,20 @@ export default async function AccessPage() {
   const { data: quarantine, error: quarantineError } = await service.from("lock_slot_quarantine")
     .select("slot, reason, quarantined_at, door_results").order("slot");
   if (quarantineError) throw quarantineError;
-  const { data: writer, error: writerError } = await service.from("lock_slot_writer")
-    .select("acquired_at, holder_label").eq("id", 1).maybeSingle();
+  const { data: writer, error: writerError } = await readLockWriter(service);
   if (writerError) throw writerError;
 
   // Capture a server-side `now` for "expiring soon" + "ago" calculations.
   // eslint-disable-next-line react-hooks/purity -- server component, renders once per request
   const nowMs = Date.now();
   const since = new Date(nowMs - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: failureRows, count: failureCount, error: failureError } = await service.from("admin_actions")
+    .select("created_at, payload", { count: "exact" }).eq("action", "lock_writer_failed")
+    .gte("created_at", new Date(nowMs - 24 * 60 * 60 * 1000).toISOString())
+    .order("created_at", { ascending: false }).limit(20);
+  if (failureError) console.error("[Door] couldn't read door-code failures:", failureError);
+  const failures = recentLockWriteFailures((failureRows ?? []) as LockWriteFailureRow[], fmtBoulderDateTime);
+  const failed = failureCount ?? failures.length;
 
   const [
     { data: codes },
@@ -83,6 +90,7 @@ export default async function AccessPage() {
   const quarantineRows = (quarantine ?? []) as QuarantineRow[];
   const boulderDay = (slot: number) => new Date(quarantineRows.find((r) => r.slot === slot)!.quarantined_at)
     .toLocaleDateString("en-CA", { timeZone: "America/Denver" });
+  const writerStatus = lockWriterStatus(writer, nowMs, fmtBoulderDateTime);
   const quarantined = groupQuarantine(quarantineRows.map((row) => explainQuarantine(row, holderOf(row.slot), fmtBoulderDateTime)), boulderDay);
 
   return (
@@ -109,12 +117,21 @@ export default async function AccessPage() {
           ),
           sync: (
             <div className="space-y-6">
-              {writer && (
-                <div className={`text-sm ${nowMs - Date.parse(writer.acquired_at) > 120_000 ? "text-danger" : "text-warn"}`}>
-                  <p>Door-code writer held by {writer.holder_label} for {Math.max(0, Math.floor((nowMs - Date.parse(writer.acquired_at)) / 1000))} seconds (since {fmtBoulderDateTime(writer.acquired_at)}).</p>
-                  {nowMs - Date.parse(writer.acquired_at) > 120_000 && <p role="alert">Warning: reservation held for over 2 minutes; operator attention required.</p>}
-                  <p>See “Stuck reservation recovery” under “Door-code writer reservation” in DEPLOYMENT.md.</p>
-                </div>
+              {writerStatus && (
+                <p data-testid="lock-writer" role={writerStatus.state === "stuck" ? "alert" : undefined}
+                  className={`text-sm ${writerStatus.state === "stuck" ? "text-danger" : "text-muted"}`}>
+                  {writerStatus.text}
+                </p>
+              )}
+              {failures.length > 0 && (
+                <section aria-labelledby="door-failures" className="space-y-2 text-sm" data-testid="lock-write-failures">
+                  <h2 id="door-failures" className="font-semibold">
+                    {failed === 1 ? "1 door-code change" : `${failed} door-code changes`} failed in the last day
+                  </h2>
+                  <ul className="space-y-0.5 text-muted">
+                    {failures.slice(0, 5).map((f) => <li key={f.key}>{f.line}</li>)}
+                  </ul>
+                </section>
               )}
               <QuarantinedSlots groups={quarantined} explainer={CLEAR_EXPLAINED} />
               <LockSyncSection

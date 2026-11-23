@@ -130,3 +130,8 @@ export function groupQuarantine(rows: QuarantineExplained[], dayOf: (slot: numbe
     };
   });
 }
+
+/** Clear's answer for one slot (POST /api/admin/lock-quarantine streams one per line). */
+export type ClearOutcome = { slot: number; ok: boolean; message: string };
+/** One NDJSON line per slot as it finishes, then `{ done: true }`; or one `{ error }` line if nothing could run. */
+export type ClearLine = ClearOutcome | { done: true } | { error: string };

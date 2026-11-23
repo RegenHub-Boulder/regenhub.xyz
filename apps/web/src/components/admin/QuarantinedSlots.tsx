@@ -2,43 +2,53 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { QuarantineGroup } from "@/lib/lockQuarantine";
-
-type Outcome = { slot: number; ok: boolean; message: string };
+import type { ClearLine, ClearOutcome, QuarantineGroup } from "@/lib/lockQuarantine";
 
 /**
  * Door → Lock Sync: the quarantined slots in plain words (which slot, since when, why, what Clear does for it).
  * Slots that read the same (one bad day, nobody holding them) are one entry. Clear works on one slot, an entry, or
- * all of them: POST /api/admin/lock-quarantine, one slot at a time, which sends a clear to every lock and releases
- * the slot only if every lock confirms.
+ * all of them: one POST /api/admin/lock-quarantine that clears the slots one at a time under one door-code writer and
+ * streams each slot's outcome as it finishes; a slot is released only if every lock confirms.
  */
 export function QuarantinedSlots({ groups, explainer }: { groups: QuarantineGroup[]; explainer: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
-  const [outcomes, setOutcomes] = useState<Outcome[]>([]);
+  const [outcomes, setOutcomes] = useState<ClearOutcome[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
   const all = groups.flatMap((g) => g.slots);
 
-  async function clearOne(slot: number): Promise<Outcome> {
+  async function run(key: string, slots: number[]) {
+    setBusy(key); setOutcomes([]); setNotice(null);
+    const done: ClearOutcome[] = [];
+    const take = (line: ClearLine) => {
+      if ("error" in line) setNotice(line.error);
+      else if ("slot" in line) { done.push(line); setOutcomes([...done]); }
+    };
     try {
       const response = await fetch("/api/admin/lock-quarantine", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slot }),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slots }),
       });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) return { slot, ok: false, message: result.error ?? "Clear failed" };
-      return { slot, ok: true, message: "cleared on every lock and released" };
+      if (!response.ok || !response.body) {
+        const result = await response.json().catch(() => ({}));
+        setNotice(result.error ?? "Clear failed");
+      } else {
+        const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+        let buffer = "";
+        for (;;) {
+          const { value, done: finished } = await reader.read();
+          if (value) buffer += value;
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          for (const l of lines) if (l.trim()) take(JSON.parse(l) as ClearLine);
+          if (finished) break;
+        }
+        if (buffer.trim()) take(JSON.parse(buffer) as ClearLine);
+      }
     } catch {
-      return { slot, ok: false, message: "couldn't reach the server" };
+      setNotice("Couldn't reach the server; nothing more was cleared. Try again in a minute.");
     }
-  }
-
-  async function run(key: string, slots: number[]) {
-    setBusy(key); setOutcomes([]);
-    const done: Outcome[] = [];
-    // One at a time: each clear holds the door-code writer and talks to every lock.
-    for (const s of slots) {
-      done.push(await clearOne(s));
-      setOutcomes([...done]);
-    }
+    const missing = slots.filter((s) => !done.some((o) => o.slot === s));
+    if (missing.length && done.length) setNotice((n) => n ?? `No answer for ${missing.length === 1 ? "slot" : "slots"} ${missing.join(", ")}; reload to see where they stand.`);
     setBusy(null);
     router.refresh();
   }
@@ -60,6 +70,7 @@ export function QuarantinedSlots({ groups, explainer }: { groups: QuarantineGrou
       <p className="text-sm text-muted">
         A door code in these slots may still be on a lock, so no new code goes there until it&apos;s cleared. {explainer}
       </p>
+      {notice && <p role="alert" className="text-sm text-danger">{notice}</p>}
       {outcomes.length > 0 && (
         <ul role="status" className="text-sm space-y-0.5">
           {outcomes.map((o) => (
