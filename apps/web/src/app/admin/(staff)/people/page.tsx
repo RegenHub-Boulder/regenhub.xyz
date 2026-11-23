@@ -4,7 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { InterestsSection, type InterestFilter } from "@/components/admin/InterestsSection";
 import { ApplicationsFilter } from "@/components/admin/ApplicationsFilter";
-import { ClaimsFilter } from "@/components/admin/ClaimsFilter";
+import { FreeDaysList } from "@/components/admin/FreeDaysList";
+import { readFreeDays } from "@/lib/freeDayData";
+import { FREE_DAY_GROUPS, type FreeDayGroup } from "@/lib/freeDayFunnel";
 import { PeopleTabs, type PeopleTab } from "@/components/admin/PeopleTabs";
 import { peoplePending } from "@/lib/peoplePending";
 import type { Interest, Application } from "@/lib/supabase/types";
@@ -22,7 +24,7 @@ const FUNNEL_TABS: FunnelTab[] = ["applications", "freedays", "interests"];
 export default async function PeoplePage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; linked?: string }>;
+  searchParams: Promise<{ tab?: string; linked?: string; show?: string }>;
 }) {
   if (!await requireAdmin()) redirect("/portal");
   const params = await searchParams;
@@ -61,26 +63,9 @@ export default async function PeoplePage({
       />
     );
   } else if (tab === "freedays") {
-    const { data } = await admin.from("free_day_claims").select("*").order("created_at", { ascending: false });
-    const claims = (data ?? []) as Array<{
-      id: number;
-      email: string;
-      name: string;
-      claimed_date: string;
-      status: string;
-      created_at: string;
-      about?: string | null;
-      why_join?: string | null;
-      invite_code?: string | null;
-    }>;
-    body = (
-      <div className="space-y-4">
-        <p className="text-sm text-muted">
-          {claims.length} total · {claims.filter((c) => c.status === "pending").length} pending review
-        </p>
-        <ClaimsFilter claims={claims} />
-      </div>
-    );
+    const { placed, counts } = await readFreeDays(admin);
+    const show: FreeDayGroup = FREE_DAY_GROUPS.some((g) => g.key === params.show) ? (params.show as FreeDayGroup) : "review";
+    body = <FreeDaysList placed={placed} counts={counts} show={show} />;
   } else {
     const { data } = await supabase.from("applications").select("*").order("created_at", { ascending: false });
     const apps = (data ?? []) as Application[];

@@ -265,6 +265,11 @@ export function MembersList() {
       data.legacyMembers.filter((m) => matchesStatusFilter(m, m.subscription, "overdue")).length
     : 0;
 
+  const unbilledDeskCount = data
+    ? data.users.filter((u) => matchesStatusFilter(u.member, u.subscription, "unbilled_desk")).length +
+      data.legacyMembers.filter((m) => matchesStatusFilter(m, m.subscription, "unbilled_desk")).length
+    : 0;
+
   // Client-side search + filter
   const filteredUsers = useMemo(() => {
     if (!data) return [];
@@ -386,7 +391,8 @@ export function MembersList() {
             <option value="all">All statuses</option>
             <option value="active">Active</option>
             <option value="disabled">Disabled</option>
-            <option value="no_subscription">No subscription (migration backlog)</option>
+            <option value="no_subscription">No subscription (any type)</option>
+            <option value="unbilled_desk">Desk, not billed ({unbilledDeskCount})</option>
             <option value="overdue">Overdue — past due, card or crypto ({overdueCount})</option>
           </select>
         </div>

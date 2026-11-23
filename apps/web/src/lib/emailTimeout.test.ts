@@ -10,7 +10,7 @@ it('installed SDK passes an abort timeout to fetch without any network I/O', asy
     return new Response(JSON.stringify({ id: 'mock-message' }), { status: 200, headers: { 'content-type': 'application/json' } });
   });
   vi.stubGlobal('fetch', fetch);
-  expect(await sendEmailDetailed({ to: 'test@example.com', subject: 'test', html: 'test', idempotencyKey: 'newsletter:1:1' })).toMatchObject({ ok: true });
+  expect(await sendEmailDetailed({ kind: 'newsletter', to: 'test@example.com', subject: 'test', html: 'test', idempotencyKey: 'newsletter:1:1' })).toMatchObject({ ok: true });
   expect(timeout).toHaveBeenCalledWith(30_000);
   expect(fetch).toHaveBeenCalledTimes(1);
   timeout.mockRestore();

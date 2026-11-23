@@ -65,7 +65,7 @@ export async function grantSubscriptionPasses(
         planLabel: planLabel(args.planKey),
         siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz",
       });
-      sendEmail({
+      sendEmail({ kind: "monthly_passes",
         to: member.email,
         subject: template.subject,
         html: template.html,

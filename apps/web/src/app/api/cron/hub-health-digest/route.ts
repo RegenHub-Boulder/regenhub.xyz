@@ -106,7 +106,7 @@ export async function POST(req: Request) {
   let failed = 0;
   for (const r of recipients ?? []) {
     if (!r.email) continue;
-    const ok = await sendEmail({ to: r.email, subject: tpl.subject, html: tpl.html, text: tpl.text });
+    const ok = await sendEmail({ kind: "hub_digest", to: r.email, subject: tpl.subject, html: tpl.html, text: tpl.text });
     if (ok) sent++;
     else failed++;
     await sleep(SEND_DELAY_MS);

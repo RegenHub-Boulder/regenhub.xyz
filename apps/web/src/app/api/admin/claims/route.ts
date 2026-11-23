@@ -92,7 +92,7 @@ export async function PATCH(request: Request) {
     const tpl = approve_for_membership
       ? freeDayPlusMembershipApprovedEmail({ name: prev.name, siteUrl })
       : freeDayApprovedEmail({ name: prev.name, siteUrl });
-    sendEmail({
+    sendEmail({ kind: "free_day_approved",
       to: prev.email,
       subject: tpl.subject,
       html: tpl.html,

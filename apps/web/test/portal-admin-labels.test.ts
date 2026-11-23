@@ -115,7 +115,7 @@ describe("access page labels", () => {
     expect(h).toContain("Member codes");
     expect(h).not.toContain("Active codes");
     // 22:04 UTC is 3:04 PM in Boulder (MST).
-    expect(h).toMatch(/Since <!-- -->Nov 20, 3:04\sPM/);
+    expect(h).toMatch(/since <!-- -->Nov 20, 3:04\sPM/);
     expect(h).not.toContain("2026-11-20T22:04");
     expect(h).toContain(">Cold Desk</div>");
     expect(h).toContain(">Hot Desk</div>");
@@ -137,16 +137,19 @@ describe("Hub Essentials on the member home", () => {
   // The WiFi section only renders when the panel is open.
   const open = (h: string) => h.includes(">WiFi</h4>");
 
-  it("is open on a day-pass newcomer's free day", async () => {
+  // Free days have no date (any weekday), so the claim alone never opens it; the code they get on the day does.
+  it("is open on a newcomer's free day, once its door code is live", async () => {
     await db.exec(`insert into free_day_claims (email, name, status, supabase_user_id, claimed_date)
-      values ('sam@example.test', 'Sam Sample', 'reserved', '${SAM}', '${boulderDay()}');`);
+      values ('sam@example.test', 'Sam Sample', 'reserved', '${SAM}', null);`);
+    await asWriter(`insert into day_codes (member_id, label, code, pin_slot, expires_at)
+      values (5, 'Free Day: Sam Sample', '482914', 131, '${ahead(0.3)}');`);
     signIn(SAM, "sam@example.test");
     expect(open(await html(PortalPage))).toBe(true);
   });
 
-  it("is closed when the newcomer's visit is another day", async () => {
+  it("is closed while the free day is only claimed (no code yet), even with an old requested date of today", async () => {
     await db.exec(`insert into free_day_claims (email, name, status, supabase_user_id, claimed_date)
-      values ('sam@example.test', 'Sam Sample', 'reserved', '${SAM}', '${boulderDay(3)}');`);
+      values ('sam@example.test', 'Sam Sample', 'reserved', '${SAM}', '${boulderDay()}');`);
     signIn(SAM, "sam@example.test");
     const h = await html(PortalPage);
     expect(h).toContain("Hub Essentials");

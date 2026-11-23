@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Mail, Loader2, Check } from "lucide-react";
 
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export function SendPaymentReminderButton({ memberId }: Props) {
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +30,7 @@ export function SendPaymentReminderButton({ memberId }: Props) {
         return;
       }
       setSent(true);
+      router.refresh(); // the member page's email list and activity show it
       setTimeout(() => setSent(false), 4000);
     } finally {
       setBusy(false);

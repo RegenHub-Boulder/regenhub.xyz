@@ -222,7 +222,7 @@ export async function POST(
     checkoutUrl,
     siteUrl: baseUrl,
   });
-  const emailSent = await sendEmail({
+  const emailSent = await sendEmail({ kind: "approval_checkout",
     to: application.email,
     subject: tpl.subject,
     html: tpl.html,

@@ -126,7 +126,7 @@ export async function sendApplicationCheckoutEmail(
     checkoutUrl,
     siteUrl: baseUrl,
   });
-  const sent = await sendEmail({
+  const sent = await sendEmail({ kind: "approval_checkout",
     to: application.email,
     subject: tpl.subject,
     html: tpl.html,

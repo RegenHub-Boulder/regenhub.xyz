@@ -97,7 +97,8 @@ supabase/
     ├── 011_hub_friend.sql            # hub_friend member type
     ├── …
     ├── 066_night_followups.sql       # night follow-ups: decisions, sends, opt-outs
-    └── 068_techne_people.sql         # every Techne sign-in: the person, their email, the stay-in-touch list
+    ├── 068_techne_people.sql         # every Techne sign-in: the person, their email, the stay-in-touch list
+    └── 069_email_log.sql             # every email sent one person at a time (metadata only)
 DEPLOYMENT.md               # Full infra guide for agents + humans
 ```
 
@@ -118,6 +119,15 @@ DEPLOYMENT.md               # Full infra guide for agents + humans
   send you RegenHub news. No thanks" (`components/techne/NewsNote.tsx`; No thanks = `POST /api/techne/newsletter`,
   `decline_techne_newsletter`: removes only that row and is remembered; a new email on the PDS moves the entry). Accounts that signed in before 068 get their
   email at their next sign-in (no backfill); a grant without the email scope still signs in.
+
+- `email_log` (migration 069, T-482 round 3) — one row per email sent one person at a time: member/email, `kind`,
+  subject, provider and its message id, sent/failed (+ short error). Metadata only, never the body. Written by the one
+  send function (`lib/email.ts sendEmailDetailed`; every caller passes a `kind` from `lib/emailLog.ts EMAIL_KINDS`) and
+  by the bot's two sends; newsletter issues aren't logged (newsletter_sends is their record). Read on the admin member
+  page (Activity → Emails). Before 069 runs the send still goes and the page says "Email history starts once migration
+  069 runs". The past-due banner there has **Send reminder** (`/api/admin/members/[id]/send-payment-reminder`, the
+  same route as What to do next's): audited `payment_reminder_sent`; a USDC member's note names the open invoice; the
+  amount is `effectiveMonthlyCents` (a USDC row's `net_cents` is the last amount paid, so it lags a cheaper plan).
 
 - Member page fields on `members` (migration 065): `show_in_directory` (the opt-in: null = not asked, false = no, true = listed while in standing; co-op owners defaulted on), `working_on`, `links` (≤5 URLs), `show_rsvps`. See "Member pages and the directory" below.
 
@@ -197,7 +207,9 @@ the column is missing, the passes page hides "Pay with USDC", the purchase route
 ### The two home pages (T-482 audit, `AUDIT-PORTAL-ADMIN.md`)
 - **`/admin` "Today"** (admins): the goals in one line (→ Scoreboard), **Waiting on you** (`lib/adminQueue.ts`, pure +
   tested: lock-sync failures, quarantined slots, past due, applications, free-day requests, unbilled desks, each a
-  link; a failed read says "Couldn't check", and the queue renders even if the scoreboard read fails), then
+  link; a failed read says "Couldn't check", and the queue renders even if the scoreboard read fails; each count and
+  the list its link opens share one predicate, e.g. unbilled desks = `isUnbilledDesk` in `lib/adminMemberFilters.ts`,
+  link `/admin/members?status=unbilled_desk`), then
   **What to do next** (the scoreboard's recommended actions), then shortcuts (quick door code, find/add a member).
   The old stat cards, all-time funnel and recent lists are gone; "Stale auth links" sits on `/admin/members`.
 - **`/portal`** (members): the door first (their code via `RevealPin`, a guest code with the passes left, "N members
@@ -308,6 +320,18 @@ Member-facing lifecycle emails (all in `apps/web/src/lib/email.ts`, sent from th
 webhook): welcome on first activation, payment-reminder on past_due transition, warm exit on
 subscription end. The free-day email templates are **duplicated** in `apps/bot/src/email.ts` —
 edit both or they drift.
+
+### People → Free days and Door → quarantined slots (T-482 round 3)
+- **Free days** (`/admin/people?tab=freedays`, `lib/freeDayFunnel.ts` pure + `lib/freeDayData.ts`): claims have no
+  date since flexible free days (`claimed_date` null; an older claim's date shows only as "originally requested for",
+  and no longer limits activation). Grouped by where the person is: to review (default; the admin home's count), not in
+  yet, came in (activated or a granted door entry), bought a pass or joined since, already a member when they claimed,
+  closed; one line each. Audit and ranked next fixes: `AUDIT-FREE-DAY.md`. Test: `test/free-day-funnel.test.ts`.
+- **Quarantined slots** (Door → Lock Sync, `lib/lockQuarantine.ts`): each slot in plain words (which, since when, why,
+  what each lock said, who loses a code if cleared); identical ones (same day, reason, nobody holding them) are one
+  entry. Clear per slot, per entry, or all: `/api/admin/lock-quarantine`, one slot at a time, released only if every
+  lock confirms. A failed SET quarantines its slot until cleared, so every attempt during a lock outage holds one more
+  guest-code slot (production's 101–108 from 10-09); since round 3 the SET's error is kept in the reason.
 
 ### Admin "Cancel membership" (both rails)
 `/admin/members/[id]` → Billing → Cancel membership (`lib/membershipCancel.ts`). Each request is one row in

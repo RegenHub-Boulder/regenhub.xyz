@@ -8,7 +8,7 @@ import { GET } from "@/app/api/admin/users/route";
 import type { AdminUsersResponse } from "@/app/api/admin/users/route";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { matchesStatusFilter } from "./adminMemberFilters";
+import { countUnbilledDesks, matchesStatusFilter } from "./adminMemberFilters";
 
 const member = (id: number, name: string, extra: Record<string, unknown> = {}) => ({
   id, name, email: `${name.toLowerCase()}@example.test`, disabled: false, is_admin: false,
@@ -65,5 +65,49 @@ describe("Overdue filter on /admin/members", () => {
     expect(matchesStatusFilter(null, null, "active")).toBe(false);
     expect(matchesStatusFilter(null, null, "all")).toBe(true);
     expect(matchesStatusFilter({ disabled: false }, live, "overdue")).toBe(false);
+  });
+});
+
+describe("Unbilled desks: the admin home's count is the list its link opens", () => {
+  it("counts and lists the same people, on both rails, including a stale auth link", async () => {
+    const members = [
+      member(1, "Ada", { is_admin: true, member_type: "hub_friend" }),
+      member(2, "DeskNoSub"),                                              // counted
+      member(3, "ColdNoSub", { member_type: "cold_desk" }),                // counted
+      member(4, "DeskCard"),                                               // billed (card)
+      member(5, "DeskCryptoLate"),                                         // billed (past due still billed)
+      member(6, "DeskCanceled"),                                           // only a canceled row: counted
+      member(7, "DeskDisabled", { disabled: true }),                       // disabled: not counted
+      member(8, "DayPassNoSub", { member_type: "day_pass" }),              // no_subscription, but not a desk
+      member(9, "LegacyDesk", { supabase_user_id: null }),                 // counted, no auth account
+      member(10, "StaleLinkDesk", { supabase_user_id: "uid-gone" }),      // counted, auth user deleted
+    ];
+    const subscriptions = [
+      subscription(1, 4, "stripe", "active"),
+      subscription(2, 5, "onchain", "past_due"),
+      subscription(3, 6, "stripe", "canceled"),
+    ];
+    const db = makeMemoryDb({
+      auth_users: [1, 2, 3, 4, 5, 6, 7, 8].map((id) => ({ id: `uid-${id}`, email: `m${id}@example.test`, created_at: "2026-01-01" })),
+      members, subscriptions, applications: [],
+    }, { user: { id: "uid-1", email: "m1@example.test" } });
+    vi.mocked(createClient).mockResolvedValue(db as never);
+    vi.mocked(createServiceClient).mockReturnValue(db as never);
+
+    const data = (await (await GET()).json()) as AdminUsersResponse;
+    const listed = [
+      ...data.users.filter((u) => matchesStatusFilter(u.member, u.subscription, "unbilled_desk")).map((u) => u.member!.name),
+      ...data.legacyMembers.filter((m) => matchesStatusFilter(m, m.subscription, "unbilled_desk")).map((m) => m.name),
+    ].sort();
+    expect(listed).toEqual(["ColdNoSub", "DeskCanceled", "DeskNoSub", "LegacyDesk", "StaleLinkDesk"]);
+    // The admin home reads desk-type members and every subscription row, then counts with the same predicate.
+    const deskRows = members.filter((m) => m.member_type === "cold_desk" || m.member_type === "hot_desk");
+    expect(countUnbilledDesks(deskRows, subscriptions)).toBe(listed.length);
+    // The old link (any type, no subscription) is wider: that was the mismatch Aaron saw.
+    const noSub = [
+      ...data.users.filter((u) => matchesStatusFilter(u.member, u.subscription, "no_subscription")),
+      ...data.legacyMembers.filter((m) => matchesStatusFilter(m, m.subscription, "no_subscription")),
+    ];
+    expect(noSub.length).toBeGreaterThan(listed.length);
   });
 });

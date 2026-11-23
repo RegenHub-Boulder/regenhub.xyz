@@ -51,7 +51,7 @@ export async function POST(
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
   const tpl = membershipApprovedEmail({ name: member.name, siteUrl });
-  const sent = await sendEmail({
+  const sent = await sendEmail({ kind: "membership_approved",
     to: member.email,
     subject: tpl.subject,
     html: tpl.html,

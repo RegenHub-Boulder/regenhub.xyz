@@ -405,7 +405,7 @@ async function sendPassReceipt(admin: ServiceClient, memberId: number, amountCen
       newBalance: typeof member.day_passes_balance === "number" ? member.day_passes_balance : null,
       siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz",
     });
-    await sendEmail({ to: member.email, subject: mail.subject, html: mail.html, text: mail.text });
+    await sendEmail({ kind: "day_pass_receipt", to: member.email, subject: mail.subject, html: mail.html, text: mail.text });
   } catch (error) {
     console.error("[OnchainPass] Receipt email failed:", error);
   }

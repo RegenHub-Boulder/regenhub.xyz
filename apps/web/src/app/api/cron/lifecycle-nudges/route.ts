@@ -186,7 +186,8 @@ export async function POST(req: Request) {
       : type === "first_visit_followup" ? nudgeComeBackEmail({ name: m.name, balance: m.day_passes_balance, siteUrl })
       : nudgeNeverVisitedEmail({ name: m.name, balance: m.day_passes_balance, siteUrl });
 
-    const sent = await sendEmail({ to: m.email!, subject: tpl.subject, html: tpl.html, text: tpl.text });
+    const kind = type === "balance_empty" ? "nudge_balance_empty" : type === "first_visit_followup" ? "nudge_come_back" : "nudge_never_visited";
+    const sent = await sendEmail({ kind, memberId: m.id, to: m.email!, subject: tpl.subject, html: tpl.html, text: tpl.text });
     results.push({ member_id: m.id, type, sent });
     await sleep(SEND_DELAY_MS);
   }
