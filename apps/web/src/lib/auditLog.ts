@@ -29,6 +29,9 @@ export const AuditAction = {
   SUBSCRIPTION_CANCELED_BY_ADMIN: "subscription_canceled_by_admin",
   ONCHAIN_SUBSCRIPTION_CHANGED: "onchain_subscription_changed",
   ONCHAIN_SUBSCRIPTION_CREATED: "onchain_subscription_created",
+  /** A card plan changed now, in place on the same subscription (lib/planSwitch.ts changeCardPlanNow); payload
+   *  { subscription_id, from, to }. The scoreboard reads it for "day plan → desk" (Stripe keeps one row). */
+  CARD_PLAN_CHANGED: "card_plan_changed",
   // Crypto wallets — written by the SQL functions themselves (migration 058),
   // in the same transaction as the change, actor = the member who signed.
   WALLET_MOVED:           "wallet_moved",

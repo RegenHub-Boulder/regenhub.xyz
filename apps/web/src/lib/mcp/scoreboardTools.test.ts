@@ -24,6 +24,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAttendance, fetchCollectiveEvents } from "@/lib/regenos/events";
 import { readScoreboard } from "@/lib/scoreboardData";
 import { POST as markAction } from "@/app/api/admin/scoreboard/actions/route";
+import { GET as downloadCsv } from "@/app/api/admin/scoreboard/months/route";
 import type { McpAuthInfo } from "./oauth";
 import { recommendedActionsHandler, scoreboardSummaryHandler } from "./scoreboardTools";
 import type { ToolResult } from "./billingTools";
@@ -90,12 +91,63 @@ describe("scoreboard_summary", () => {
     expect(t).toMatch(/Paying members \(\$30\+\/mo\): 1 /); // Cleo; Pat is past due
     expect(t).toMatch(/1 more past due/);
     expect(t).toMatch(/### Goal pace/);
-    expect(t).toMatch(/\| month \| new \| cancelled \| net \|/);
-    expect(t).toMatch(/### Funnel per month/);
+    expect(t).toMatch(/### Month by month/);
+    expect(t).toMatch(/\| all plans \| 1 \| \$30 \| 0 \| 1 \|/); // by plan now: Cleo paying, Pat past due
     expect(t).toMatch(/\*\*Agents Night\*\* — 4 going over 2 past/);
     expect(t).toMatch(/Open recommended actions: 7 /);
     expect(t).not.toMatch(EMAIL);
     for (const name of ["Pat", "Brent", "Cleo", "Gil", "cus_", "sub_", "price_"]) expect(t).not.toContain(name);
+  });
+});
+
+/** The CSV in a summary (or the download): header → value per month. Data cells hold no commas. */
+function csvRows(csv: string): Record<string, string>[] {
+  const [head, ...lines] = csv.trim().split(/\r?\n/);
+  const keys = head.split(",");
+  return lines.map((l) => Object.fromEntries(l.split(",").map((v, i) => [keys[i], v])));
+}
+const sum = (rows: Record<string, string>[], key: string) => rows.reduce((n, r) => n + Number(r[key] || 0), 0);
+
+describe("the month table, on the real schema", () => {
+  beforeEach(async () => {
+    // Door: Cleo twice on one day on her own code, a guest's day code, an unlock nobody can be named for, a denied try.
+    await db.sql(`insert into access_logs (member_id, method, slot, result, created_at) values
+      (9, 'pin', 5, 'granted', $1), (9, 'pin', 5, 'granted', $1), (9, 'pin', 120, 'granted', $1),
+      (null, 'pin', null, 'granted', $1), (8, 'pin', 6, 'denied', $1)`, [iso(-3600_000)]);
+    // Brent's card pass; a USDC pass needs an on-chain invoice row, so it's covered in the unit tests.
+    await db.sql(`insert into purchases (member_id, kind, amount_cents, passes_granted, created_at) values (8, 'day_pass', 3000, 1, $1)`, [iso(-3600_000)]);
+    await db.sql(`insert into interests (email, source_path, created_at) values ('reader@example.test', '/', $1), ('READER@example.test', 'luma', $1)`, [iso(-3600_000)]);
+    // Cleo's $30 plan moved up to a hot desk in place (Stripe keeps one row; the audit log keeps the change).
+    await db.sql(`insert into admin_actions (action, target_table, target_id, payload, created_at)
+      values ('card_plan_changed', 'subscriptions', '62', '{"subscription_id": 62, "from": "member_basic", "to": "hot_desk"}', $1)`, [iso(-3600_000)]);
+  });
+
+  it("scoreboard_summary carries it as CSV, the download gives the same, and neither has a name or an email", async () => {
+    const t = body(await scoreboardSummaryHandler(db as never, ada()));
+    const csv = t.split("```csv\n")[1].split("\n```")[0];
+    const rows = csvRows(csv);
+    expect(rows[0]["Month (America/Denver)"]).toBe("2026-07");
+    expect(rows.at(-1)!["Month complete (no = so far)"]).toBe("no");
+    expect(sum(rows, "Member days at the space (member x day with a door entry)")).toBe(1);
+    expect(sum(rows, "Day-code days at the space (day code x day with a door entry)")).toBe(1);
+    expect(sum(rows, "Added to the list this month (emails)")).toBe(1); // one person, two rows
+    expect(sum(rows, "Single day passes bought by card")).toBe(1);
+    expect(rows.at(-1)!["Paying members at month end ($30+/mo plans; the headline count)"]).toBe("1");
+    expect(rows.at(-1)!["Net membership revenue at month end (USD per month)"]).toBe("30.00");
+    expect(sum(rows, "Day plan to desk: base (people)")).toBe(1);
+    expect(sum(rows, "Day plan to desk: converted (people)")).toBe(1);
+    expect(csv).not.toMatch(EMAIL);
+
+    vi.mocked(createClient).mockResolvedValue(makeSupabaseMock({
+      auth: { user: { id: "u1", email: "ada@example.test" } }, selects: { members: { data: { id: 1, name: "Ada Admin", is_admin: true, disabled: false } } },
+    }) as never);
+    const res = await downloadCsv();
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/^text\/csv/);
+    expect(res.headers.get("content-disposition")).toMatch(/attachment; filename="regenhub-month-by-month-\d{4}-\d{2}-\d{2}\.csv"/);
+    const download = await res.text();
+    expect(download.replace(/\r\n/g, "\n").trim()).toBe(csv);
+    for (const name of ["Ada", "Pat", "Brent", "Cleo", "Gil"]) expect(download).not.toContain(name);
   });
 });
 

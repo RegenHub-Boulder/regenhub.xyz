@@ -718,6 +718,10 @@ export async function changeMemberPlanHandler(admin: ServiceClient, auth: McpAut
       return finish("scheduled", `Scheduled: ${planLabel(sub.plan_key)} → ${target.label} on ${day(effectiveAt)}. The desk and door code stay until then; no proration.`, { effective_at: effectiveAt });
     }
     const { changed } = await changeCardPlanNow(getStripe(), sub.stripe_subscription_id!, args.plan_key);
+    if (changed) {
+      await logAction({ action: AuditAction.CARD_PLAN_CHANGED, actorMemberId: gate.actor.id, target: { table: "subscriptions", id: sub.id },
+        payload: { subscription_id: sub.id, from: sub.plan_key, to: args.plan_key, source: "mcp" } }, admin);
+    }
     const desk = isDeskPlan(sub.plan_key) && isDeskPlan(args.plan_key) ? " The member keeps their door code; assign the new desk in person." : "";
     return finish(changed ? "changed" : "already_at_stripe", changed
       ? `Changed now: ${planLabel(sub.plan_key)} → ${target.label} (${usd(target.defaultMonthlyCents)}/mo) with proration on the next renewal invoice. The webhook updates the local row in a few seconds.${desk}`

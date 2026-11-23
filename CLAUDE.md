@@ -220,7 +220,7 @@ Staff page read at the family meeting: paying members (on $30+/mo plans at list 
 promo code or the USDC discount doesn't drop a $30 member and a full comp doesn't count) and net membership revenue
 against the goals
 (`SCOREBOARD_GOALS` in `lib/scoreboard.ts`: 12 members and $1,710 on 2026-11-19, +10 members and $2,750/mo by
-2027-01-20, rent $2,250), new/cancelled subscriptions and the funnel per month, RSVPs per event (Techne, the same
+2027-01-20, rent $2,250), the month-by-month table (below), RSVPs per event (Techne, the same
 `fetchAttendance` /admin/events uses), the newsletter list and last issue, the people to follow up (staff only) and a
 "Copy as text" headline. The counts are pure functions in `lib/scoreboard.ts` (tested); `lib/scoreboardData.ts` reads
 the rows. **One definition of paying + MRR** (`lib/membershipRevenue.ts`): active and trialing, both rails, members
@@ -232,6 +232,20 @@ membership invoice never started. `compileAudience` (newsletter list) pages past
 read; shared pager: `lib/supabase/readAll.ts`. Staging: `T482_SCOREBOARD=1
 scripts/staging/preview.sh` seeds fictional rows; `scripts/staging/scoreboard-shots.mjs` checks the page against
 the hand-worked numbers.
+**Month by month** (T-497, `lib/scoreboardMonths.ts`, pure, tested; replaced the six-month "Subscriptions per month" and
+"Funnel per month" tables): one row per Denver month from `MONTH_TABLE_FROM` (Jul 2026) to now, the current one "so far":
+space visits (member days on their own code; day-code days, slots 101–200, once per code per day; unattributed unlocks
+not counted), site visits (not tracked yet), the stay-in-touch list (emails at month end minus unsubscribed by then;
+added by source: site form, Luma import, Techne sign-in), applications, day passes (purchases: single and 5-pack, card
+and USDC), memberships (new, cancelled, first-time; paying at month end per plan and net, rebuilt from today's rows by
+`subsAt`, so the current month equals the headline), and four conversions (list → first day pass in 60 days, day pass
+→ member in 60 days, night follow-up → member in 30 days, day plan → desk, which replays plans changed in place from
+the audit log: `plan_switch_completed`, `onchain_subscription_changed`, and `card_plan_changed`, logged by the portal
+and the MCP when a card plan changes now; "–" under a base of 5). Each member counts once per month end, under their
+largest plan, so the plans add up to the headline's total. `MONTH_NOTES` holds
+each definition, shown under the table. **By plan now**: paying, net, comped, past due per plan (`planBreakdown`; its
+total is the headline's). **Download CSV** = `GET /api/admin/scoreboard/months` (staff only, counts only, each header
+says what it counts); the MCP `scoreboard_summary` carries the same CSV. Staging checks it in `scoreboard-shots.mjs`.
 **What to do next** (on the admin home `/admin`, "Today", since T-482; the scoreboard links to it): recommended actions from `lib/scoreboardActions.ts` (pure, tested), fed by
 the same rows and counts: past due (one-click payment reminder), set to end, left in the last 90 days (names what's
 new since: `MEMBER_NEWS`), new in the last 30 days (welcome, next Studio Night), day-pass buyers with 2+ passes or a
