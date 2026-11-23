@@ -11,6 +11,8 @@ import { makePgDb, type PgDb } from "./pgDb";
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 120_000 });
 const url = vi.hoisted(() => ({ tab: "" }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
+// No portal preview cookie (lib/viewAs.ts): the member's own home.
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }), headers: async () => new Headers() }));
 vi.mock("@/lib/supabase/admin", () => ({ createServiceClient: vi.fn() }));
 vi.mock("next/navigation", async (orig) => ({
   ...(await orig<typeof import("next/navigation")>()),

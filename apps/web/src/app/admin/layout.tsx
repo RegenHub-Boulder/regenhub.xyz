@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { MobileNav, type NavLink } from "@/components/nav/MobileNav";
 import { techneConfig } from "@/lib/techne/config";
 import { regenosCollectiveDid } from "@/lib/regenos/config";
+import { currentViewAs, previewFrame } from "@/lib/viewAsServer";
+import { ViewAsBar } from "@/components/portal/ViewAsBar";
 
 export const metadata = { title: "Admin — RegenHub" };
 
@@ -29,9 +31,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const { user, isAdmin } = await portalViewer();
   const events = techneConfig() && regenosCollectiveDid() ? [eventsLink] : [];
   const links = [...(isAdmin ? [...before, ...events, ...after] : events), ...(user ? [portalLink] : [])];
+  // While a portal preview is on (lib/viewAs.ts) every write is paused here too: say so.
+  const viewAs = isAdmin ? await currentViewAs() : null;
+  const preview = viewAs ? await previewFrame(viewAs) : null;
 
   return (
     <div className="min-h-screen" data-surface="work">
+      {preview && <ViewAsBar label={preview.label} />}
       <header className="sticky top-0 z-50 px-6 py-3">
         <nav className="glass-panel-subtle max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-6">

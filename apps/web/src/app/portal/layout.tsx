@@ -10,6 +10,8 @@ import { currentTechne } from "@/lib/techne/webSession";
 import { stewardCheck } from "@/lib/techne/roster";
 import { regenosCollectiveDid } from "@/lib/regenos/config";
 import { SignOutButton } from "@/components/auth/SignOutButton";
+import { currentViewAs, previewFrame, strandedViewAs } from "@/lib/viewAsServer";
+import { ViewAsBar } from "@/components/portal/ViewAsBar";
 
 export const metadata = { title: "Member Portal — RegenHub" };
 
@@ -25,25 +27,34 @@ export default async function PortalLayout({ children }: { children: React.React
 
   if (!user) redirect(loginUrlFor(path));
 
-  const { data: member } = await supabase
+  // An admin viewing the portal as someone else (lib/viewAs.ts): the bar, and their menu, not the admin's. Each portal
+  // page other than the home holds itself back (NotInPreview), before it reads anything.
+  const viewAs = await currentViewAs();
+  const preview = viewAs ? await previewFrame(viewAs) : null;
+  const stranded = !viewAs && (await strandedViewAs());
+
+  const { data: member } = preview ? { data: null } : await supabase
     .from("members")
     .select("is_admin, disabled, member_type")
     .eq("supabase_user_id", user.id)
     .single();
 
   // Matches the admin layout's gate: disabling a member also removes admin.
-  const isAdmin = !!member?.is_admin && !member.disabled;
+  const isAdmin = !preview && !!member?.is_admin && !member.disabled;
+  const memberType = preview ? preview.memberType : member?.member_type;
+  const events = preview ? preview.steward : await showEvents(door);
 
   const links: NavLink[] = [
     { href: "/portal", label: "Home" },
     // One page, named for what it holds: passes for your guests, or a daily member's own day passes.
-    { href: "/portal/passes", label: member?.member_type === "day_pass" ? "Day passes" : "Guest passes" },
-    ...((await showEvents(door)) ? [{ href: door ? STEWARD_PATH : "/portal/events", label: "Events" }] : []),
+    { href: "/portal/passes", label: memberType === "day_pass" ? "Day passes" : "Guest passes" },
+    ...(events ? [{ href: door ? STEWARD_PATH : "/portal/events", label: "Events" }] : []),
     ...(isAdmin ? [{ href: "/admin", label: "Admin", accent: true }] : []),
   ];
 
   return (
     <div className="min-h-screen" data-surface="work">
+      {(preview || stranded) && <ViewAsBar label={preview?.label ?? null} />}
       <header className="sticky top-0 z-50 px-6 py-3">
         <nav className="glass-panel-subtle max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-6">

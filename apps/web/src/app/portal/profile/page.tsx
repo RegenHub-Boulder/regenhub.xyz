@@ -7,10 +7,15 @@ import { fetchTechneProfile } from "@/lib/techne/profile";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { PAYING_STATUSES } from "@/lib/memberStanding";
 import { isListed } from "@/lib/memberDirectory";
+import { currentViewAs } from "@/lib/viewAsServer";
+import { NotInPreview } from "@/components/portal/ViewAsBar";
 
 export const metadata = { title: "Profile — RegenHub" };
 
 export default async function ProfilePage() {
+  // An admin's portal preview (lib/viewAs.ts) shows only the member home: this page would read (and here and there
+  // act on) the admin's own account, so it stops before any of that.
+  if (await currentViewAs()) return <NotInPreview />;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");

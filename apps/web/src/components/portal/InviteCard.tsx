@@ -4,14 +4,20 @@ import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { UserPlus, Copy, Check, Loader2 } from "lucide-react";
+import { usePreview, PREVIEW_TITLE } from "@/components/portal/PreviewContext";
+
+/** What the card shows in a preview: no fetch (the route makes a real invite code on first read), no real link. */
+export const PREVIEW_INVITE_URL = "https://regenhub.xyz/freeday?invite=SAMPLE00";
 
 export default function InviteCard() {
-  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const preview = usePreview();
+  const [inviteUrl, setInviteUrl] = useState<string | null>(preview ? PREVIEW_INVITE_URL : null);
+  const [loading, setLoading] = useState(!preview);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (preview) return;
     fetch("/api/portal/invite")
       .then((res) => res.json())
       .then((data) => {
@@ -23,7 +29,7 @@ export default function InviteCard() {
       })
       .catch(() => setError("Failed to load invite link"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [preview]);
 
   async function handleCopy() {
     if (!inviteUrl) return;
@@ -69,6 +75,8 @@ export default function InviteCard() {
             </div>
             <Button
               onClick={handleCopy}
+              disabled={preview}
+              title={preview ? PREVIEW_TITLE : undefined}
               variant="ghost"
               className="btn-glass gap-2 w-full"
             >

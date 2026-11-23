@@ -6,6 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DoorOpen, ChevronLeft, AlertCircle, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { currentViewAs } from "@/lib/viewAsServer";
+import { NotInPreview } from "@/components/portal/ViewAsBar";
 
 export const metadata = { title: "Access Log — RegenHub" };
 
@@ -87,6 +89,9 @@ function entryKind(row: AccessLogRow): "attributed" | "guest" | "manual" | "poll
 }
 
 export default async function AccessLogPage() {
+  // An admin's portal preview (lib/viewAs.ts) shows only the member home: this page would read (and here and there
+  // act on) the admin's own account, so it stops before any of that.
+  if (await currentViewAs()) return <NotInPreview />;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Loader2, ArrowUpDown, Check, Undo2 } from "lucide-react";
+import { usePreview, PREVIEW_TITLE } from "@/components/portal/PreviewContext";
 
 import { getSelfServePlans, isDeskPlan } from "@/lib/plans";
 
@@ -30,6 +31,7 @@ interface Props {
 
 export function ChangePlanButton({ currentPlanKey, currentMonthlyCents, currentPeriodEnd, hasDiscount }: Props) {
   const router = useRouter();
+  const preview = usePreview();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [target, setTarget] = useState<string | null>(null);
@@ -71,7 +73,7 @@ export function ChangePlanButton({ currentPlanKey, currentMonthlyCents, currentP
 
   return (
     <>
-      <Button onClick={() => setOpen(!open)} className="btn-glass gap-2 text-sm">
+      <Button onClick={() => setOpen(!open)} disabled={preview} title={preview ? PREVIEW_TITLE : undefined} className="btn-glass gap-2 text-sm">
         <ArrowUpDown className="w-4 h-4" />
         Change plan
       </Button>
@@ -105,7 +107,8 @@ export function ChangePlanButton({ currentPlanKey, currentMonthlyCents, currentP
                 <button
                   key={p.key}
                   type="button"
-                  disabled={busy}
+                  disabled={busy || preview}
+                  title={preview ? PREVIEW_TITLE : undefined}
                   onClick={() => switchTo(p.key)}
                   className="w-full glass-panel p-3 text-left hover:bg-ink/10 transition-colors flex items-center justify-between gap-3 disabled:opacity-50"
                 >
@@ -151,6 +154,7 @@ export function ChangePlanButton({ currentPlanKey, currentMonthlyCents, currentP
 /** Drop a pending desk → daily switch before it takes effect. */
 export function CancelPlanSwitchButton({ keepLabel }: { keepLabel: string }) {
   const router = useRouter();
+  const preview = usePreview();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -172,7 +176,7 @@ export function CancelPlanSwitchButton({ keepLabel }: { keepLabel: string }) {
 
   return (
     <div className="flex flex-col gap-1">
-      <Button onClick={keep} disabled={busy} className="btn-glass gap-2 text-sm">
+      <Button onClick={keep} disabled={busy || preview} title={preview ? PREVIEW_TITLE : undefined} className="btn-glass gap-2 text-sm">
         {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Undo2 className="w-4 h-4" />}
         Keep {keepLabel}
       </Button>

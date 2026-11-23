@@ -6,10 +6,15 @@ import { RegenerateCodeButton } from "@/components/portal/RegenerateCodeButton";
 import { RevealPin } from "@/components/portal/RevealPin";
 import { Button } from "@/components/ui/button";
 import { Key, Nfc, AlertCircle, Zap, Ticket } from "lucide-react";
+import { currentViewAs } from "@/lib/viewAsServer";
+import { NotInPreview } from "@/components/portal/ViewAsBar";
 
 export const metadata = { title: "My Door Code — RegenHub" };
 
 export default async function MyCodePage() {
+  // An admin's portal preview (lib/viewAs.ts) shows only the member home: this page would read (and here and there
+  // act on) the admin's own account, so it stops before any of that.
+  if (await currentViewAs()) return <NotInPreview />;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");

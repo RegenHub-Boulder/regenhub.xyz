@@ -71,6 +71,9 @@ export const AuditAction = {
   /** "Done", "Not now" or reopen on a recommended action (/admin, Today); target_id is the action id, payload has
    *  { state, fingerprint }. lib/scoreboardData.ts reads the latest per action. */
   SCOREBOARD_ACTION_MARKED: "scoreboard_action_marked",
+  // Portal preview
+  /** An admin opened one real member's portal read-only (lib/viewAs.ts); target_id is the member. Written before it shows. */
+  PORTAL_VIEWED_AS: "portal_viewed_as",
 } as const;
 
 export type AuditAction = (typeof AuditAction)[keyof typeof AuditAction];

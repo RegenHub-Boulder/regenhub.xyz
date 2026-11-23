@@ -121,7 +121,7 @@ describe("every route in the audit's table", () => {
     "/admin", "/admin/scoreboard", "/admin/people", "/admin/pipeline", "/admin/applications", "/admin/interests",
     "/admin/claims", "/admin/members", "/admin/members/[id]", "/admin/members/new", "/admin/members/stale-links",
     "/admin/billing", "/admin/access", "/admin/codes", "/admin/lock", "/admin/communications", "/admin/newsletter",
-    "/admin/mail", "/admin/events", "/admin/stewards",
+    "/admin/mail", "/admin/events", "/admin/stewards", "/admin/view-as",
   ];
   const app = resolve(__dirname, "../src/app");
   it.each(ROUTES)("%s has a page", (route) => {

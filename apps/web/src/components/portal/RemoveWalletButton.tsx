@@ -3,12 +3,14 @@
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { usePreview, PREVIEW_TITLE } from "@/components/portal/PreviewContext";
 
 /**
  * Self-serve "Remove wallet". The server refuses while the wallet still backs
  * a live crypto membership and says why; this only shows that answer.
  */
 export function RemoveWalletButton({ walletId, address }: { walletId: number; address: string }) {
+  const preview = usePreview();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -44,7 +46,7 @@ export function RemoveWalletButton({ walletId, address }: { walletId: number; ad
           <Button size="sm" variant="ghost" disabled={busy} onClick={() => setConfirming(false)} className="text-xs">Keep it</Button>
         </div>
       ) : (
-        <Button size="sm" variant="ghost" onClick={() => { setError(null); setConfirming(true); }} className="text-xs text-muted hover:text-foreground px-2 -ml-2">
+        <Button size="sm" variant="ghost" disabled={preview} title={preview ? PREVIEW_TITLE : undefined} onClick={() => { setError(null); setConfirming(true); }} className="text-xs text-muted hover:text-foreground px-2 -ml-2">
           Remove wallet
         </Button>
       )}

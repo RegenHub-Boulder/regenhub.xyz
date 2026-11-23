@@ -11,6 +11,8 @@ vi.mock("next/cache", () => ({
   revalidatePath: (p: string) => revalidated.push(`path:${p}`),
   revalidateTag: (t: string) => revalidated.push(`tag:${t}`),
 }));
+// No portal preview cookie (lib/viewAs.ts).
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }), headers: async () => new Headers() }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: "u1" } } }) } }),
 }));

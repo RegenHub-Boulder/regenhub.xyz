@@ -227,6 +227,24 @@ the column is missing, the passes page hides "Pay with USDC", the purchase route
 - Staging for every portal/admin screen: `T482_AUDIT=1 scripts/staging/preview.sh` (the stand-in on the real schema,
   `audit-seed.mjs`), then `scripts/staging/audit-shots.mjs` captures and counts them.
 
+### View the portal as… (T-482, `lib/viewAs.ts`)
+An admin sees `/portal` as a kind of member, read-only: `/admin/view-as` (Today → "View the portal as…") lists the
+kinds in `lib/portalFixtures.ts` (day pass with no plan, free day used, $30/$50/$100 day plans, hot/cold desk, past due,
+set to end, first week, applicant, newcomer, co-op steward), each a fictional member built in memory (no DB rows,
+sample names, door code `000000`). One real member: their admin page → "See their portal (read-only)": the same reads
+through the service client, PIN and day code masked, each view audited (`portal_viewed_as`, target the member, written
+before it shows). The home is `components/portal/PortalHome.tsx`, rendering `PortalHomeView` from `lib/portalHome.ts`
+(`loadPortalHome` for the member themself), so a preview is the real page. State: the httpOnly cookie `rh_view_as`
+(view, admin's auth id, 1 h), set only by `POST /api/admin/view-as` after `requireAdminMember`, cleared by
+`/api/view-as/exit` (no sign-in needed) and sign-out; `currentViewAs()` re-checks on every request that the signed-in user is that
+admin and still active, so the cookie alone shows nothing. **Writes:** while the cookie is set, `src/proxy.ts` refuses
+every POST/PUT/PATCH/DELETE on every path (routes, server actions, sign-in starts) and the GETs that write (invite,
+unsubscribe, cron, `/xrpc`, `/freeday`), except entering/leaving and sign-out: default deny. A sign-in (`/auth/callback`,
+`/techne/signin`, `/techne/callback`) passes and ends the preview; a cookie someone is left holding shows an Exit bar. Buttons read `PreviewContext` and render
+disabled; the invite card shows a sample link without fetching; the USDC card is replaced by a line. Other portal pages
+(passes, my code, profile, who came in, events) show "Not in the preview yet" before reading anything. Test:
+`test/portal-view-as.test.ts` (every write route, read from disk).
+
 ### Scoreboard (/admin/scoreboard, T-497)
 Staff page read at the family meeting: paying members (on $30+/mo plans at list price and paying something, so a
 promo code or the USDC discount doesn't drop a $30 member and a full comp doesn't count) and net membership revenue
