@@ -247,7 +247,8 @@ export async function POST() {
       lockStatus = formatLockStatus(lockResults);
     } catch (err) {
       console.error("[FreeDay] Lock error:", err);
-      // Roll back the day_code so its slot frees up for another attempt.
+      // End the day_code. Its slot stays quarantined (a lock may hold it) until an admin clears it on Door → Lock
+      // Sync; another attempt takes the next free slot.
       await admin
         .from("day_codes")
         .update({ is_active: false, revoked_at: new Date().toISOString() })

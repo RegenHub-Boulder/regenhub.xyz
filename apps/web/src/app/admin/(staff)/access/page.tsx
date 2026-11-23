@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { QuarantinedSlots, type QuarantinedSlot } from "@/components/admin/QuarantinedSlots";
+import { QuarantinedSlots } from "@/components/admin/QuarantinedSlots";
+import { CLEAR_EXPLAINED, explainQuarantine, type QuarantineRow, type SlotHolder } from "@/lib/lockQuarantine";
 import { createClient } from "@/lib/supabase/server";
 import { AdminTabs, type TabDef } from "@/components/admin/AdminTabs";
 import { LiveCodesSection, type CodeWithMember } from "@/components/admin/LiveCodesSection";
@@ -22,7 +23,7 @@ export default async function AccessPage() {
   const supabase = await createClient();
   const service = createServiceClient();
   const { data: quarantine, error: quarantineError } = await service.from("lock_slot_quarantine")
-    .select("slot, reason, quarantined_at").order("slot");
+    .select("slot, reason, quarantined_at, door_results").order("slot");
   if (quarantineError) throw quarantineError;
   const { data: writer, error: writerError } = await service.from("lock_slot_writer")
     .select("acquired_at, holder_label").eq("id", 1).maybeSingle();
@@ -72,6 +73,14 @@ export default async function AccessPage() {
   const codeRows = codes ?? [];
   const memberOptions = codesMembers ?? [];
   const slotRows = slotMembers ?? [];
+  // Who holds each quarantined slot now (Clear takes it off them), from the rows already read.
+  const holderOf = (slot: number): SlotHolder => {
+    const member = slotRows.find((m) => m.pin_code_slot === slot);
+    if (member) return { kind: "member", name: member.name };
+    const code = codeRows.find((c) => c.pin_slot === slot);
+    return code ? { kind: "guest", label: code.label ?? code.members?.name ?? null } : null;
+  };
+  const quarantined = ((quarantine ?? []) as QuarantineRow[]).map((row) => explainQuarantine(row, holderOf(row.slot), fmtBoulderDateTime));
 
   return (
     <div className="space-y-6">
@@ -104,7 +113,7 @@ export default async function AccessPage() {
                   <p>See “Stuck reservation recovery” under “Door-code writer reservation” in DEPLOYMENT.md.</p>
                 </div>
               )}
-              <QuarantinedSlots slots={(quarantine ?? []) as QuarantinedSlot[]} />
+              <QuarantinedSlots slots={quarantined} explainer={CLEAR_EXPLAINED} />
               <LockSyncSection
                 members={slotRows}
                 lastRun={(lastRun as LastRun | null) ?? null}

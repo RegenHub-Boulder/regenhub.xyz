@@ -200,7 +200,7 @@ async function handleDayPassImpl(msg: TelegramBot.Message) {
   const expiresAt = calculateDayPassExpiration();
 
   // Atomic slot claim. INSERT-with-retry; rollback (deactivate row + refund
-  // balance) on lock failure so the slot frees up for the next attempt.
+  // balance) on lock failure. The slot itself stays quarantined until an admin clears it (Door → Lock Sync).
   const allocation = await allocateSlotWithRetry<{ id: number }>({
     min: DAY_CODE_SLOT_MIN,
     max: DAY_CODE_SLOT_MAX,

@@ -84,7 +84,8 @@ export async function POST(request: Request) {
       lockStatus = formatLockStatus(lockResults);
     } catch (err) {
       console.error("[Admin QuickCode] Failed to set lock code:", err);
-      // Roll back so the slot frees up for retry.
+      // End the code. Its slot stays quarantined (a lock may hold it) until an admin clears it on Door → Lock Sync;
+      // a retry takes the next free slot.
       await supabase
         .from("day_codes")
         .update({ is_active: false, revoked_at: new Date().toISOString() })
