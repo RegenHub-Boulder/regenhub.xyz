@@ -22,7 +22,7 @@ describe("adminQueue (Waiting on you)", () => {
     expect(Object.fromEntries(all.map((i) => [i.key, i.href]))).toEqual({
       lastSyncFailures: "/admin/access?tab=sync", quarantinedSlots: "/admin/access?tab=sync", pastDue: "/admin/members?status=overdue",
       pendingApplications: "/admin/people?tab=applications", pendingFreeDays: "/admin/people?tab=freedays",
-      unbilledDesks: "/admin/members?status=no_subscription",
+      unbilledDesks: "/admin/members?status=unbilled_desk",
     });
     expect(all.find((i) => i.key === "pastDue")?.label).toBe("2 subscriptions past due");
   });
