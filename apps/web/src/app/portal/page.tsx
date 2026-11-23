@@ -303,12 +303,10 @@ export default async function PortalPage() {
       })
     : null;
 
-  // Hub Essentials (address, hours, Wi-Fi, keypad) opens by itself only on a newcomer's visit day: a free day booked
-  // or activated for today in Boulder, or a day-pass code live right now (the same code the day-pass hero shows).
-  // Every other day it starts closed, one click away, so the first-week page stays short.
-  const todayInBoulder = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Denver" }).format(new Date());
-  let visitingToday = !!freeDayClaim && ["reserved", "activated"].includes(freeDayClaim.status) &&
-    freeDayClaim.claimed_date === todayInBoulder;
+  // Hub Essentials (address, hours, Wi-Fi, keypad) opens by itself only on a newcomer's visit day: a door code live
+  // right now (a day pass, or a free day activated today; the same code the day-pass hero shows). Free days have no
+  // date any more, so a code is the only sign of the day. Every other day it starts closed, one click away.
+  let visitingToday = false;
   if (isNewMember && !visitingToday && !isFullMember) {
     const { data: liveCode } = await adminClient
       .from("day_codes")
@@ -397,9 +395,7 @@ export default async function PortalPage() {
                         <Calendar className="w-8 h-8 text-gold mb-3" />
                         <h3 className="font-semibold mb-1">Free day reserved</h3>
                         <p className="text-sm text-muted">
-                          {!freeDayClaim.claimed_date || freeDayClaim.claimed_date === new Intl.DateTimeFormat("en-CA", { timeZone: "America/Denver" }).format(new Date())
-                            ? "Tap to get your door code — visit any weekday"
-                            : `Reserved for ${new Date(freeDayClaim.claimed_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+                          Tap to get your door code — visit any weekday
                         </p>
                       </>
                     ) : (

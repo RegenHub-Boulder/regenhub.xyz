@@ -144,25 +144,6 @@ export default async function FreeDayPage({
     }
   }
 
-  // Check if a reserved claim's date has passed — mark as expired
-  if (claim.status === "reserved") {
-    // Compare in Mountain Time to match the rest of the system
-    const todayMT = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "America/Denver",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(new Date()); // YYYY-MM-DD
-
-    if (claim.claimed_date < todayMT) {
-      await admin
-        .from("free_day_claims")
-        .update({ status: "expired" })
-        .eq("id", claim.id);
-      claim = { ...claim, status: "expired" };
-    }
-  }
-
   return (
     <FreeDayForm
       claim={{
