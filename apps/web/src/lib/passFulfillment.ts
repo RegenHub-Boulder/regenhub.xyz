@@ -191,7 +191,7 @@ export async function fulfillPassPurchase(
       newBalance: typeof newBalance === "number" ? newBalance : null,
       siteUrl,
     });
-    sendEmail({ to: memberEmail, subject: tpl.subject, html: tpl.html, text: tpl.text })
+    sendEmail({ kind: "day_pass_receipt", to: memberEmail, subject: tpl.subject, html: tpl.html, text: tpl.text })
       .catch((err) => console.error("[PassFulfillment] Receipt email failed:", err));
   }
 

@@ -41,6 +41,8 @@ export const AuditAction = {
   PLAN_SWITCH_COMPLETED:  "plan_switch_completed",
   // Comms
   EMAIL_SENT:             "email_sent",
+  /** An admin sent a past-due member a payment reminder; payload { subscription_id, rail, sent, error? }. */
+  PAYMENT_REMINDER_SENT:  "payment_reminder_sent",
   BATCH_EMAIL_SENT:       "batch_email_sent",
   // Free-day
   FREE_DAY_APPROVED:      "free_day_approved",

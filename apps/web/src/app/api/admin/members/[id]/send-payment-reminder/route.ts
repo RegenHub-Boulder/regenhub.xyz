@@ -1,27 +1,25 @@
-import { requireAdmin } from "@/lib/admin";
+import { requireAdminMember } from "@/lib/admin";
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { sendEmail, paymentReminderEmail } from "@/lib/email";
+import { sendEmailDetailed, paymentReminderEmail } from "@/lib/email";
 import { planLabel } from "@/lib/plans";
+import { effectiveMonthlyCents } from "@/lib/stripeNet";
+import { logAction, AuditAction } from "@/lib/auditLog";
+import { membershipInvoices } from "@/lib/onchain/invoiceKind";
 
 /**
  * POST /api/admin/members/[id]/send-payment-reminder
  *
- * Sends the member an email asking them to update their payment method.
- * Only valid for members with a past_due subscription.
+ * Emails a past-due member: a card member to update their card, a USDC member to pay the open invoice. Used by the
+ * member page and "Send reminder" in What to do next. Each send is in the email log (kind payment_reminder) and,
+ * sent or not, audited (`payment_reminder_sent`, with the admin and the outcome), so the member page shows it.
  */
 export async function POST(
-  req: Request,
+  _req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  if (!await requireAdmin()) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const caller = await requireAdminMember();
+  if (!caller) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id: idParam } = await ctx.params;
   const memberId = parseInt(idParam, 10);
@@ -40,7 +38,7 @@ export async function POST(
   // Confirm there's a past_due sub to remind about
   const { data: sub } = await admin
     .from("subscriptions")
-    .select("plan_key, monthly_cents, net_cents, past_due_since")
+    .select("id, plan_key, payment_rail, monthly_cents, net_cents, past_due_since")
     .eq("member_id", memberId)
     .eq("status", "past_due")
     .order("created_at", { ascending: false })
@@ -54,6 +52,15 @@ export async function POST(
     );
   }
 
+  // A USDC member pays an invoice: name the oldest one still open, so the note says how much and since when.
+  const { data: invoice } = sub.payment_rail === "onchain"
+    ? await membershipInvoices((kindColumn) => {
+        const q = admin.from("onchain_invoices").select("amount_cents, due_at")
+          .eq("subscription_id", sub.id).eq("status", "open");
+        return (kindColumn ? q.eq("kind", "membership") : q).order("due_at", { ascending: true }).limit(1).maybeSingle();
+      })
+    : { data: null };
+
   const daysOverdue = sub.past_due_since
     ? Math.floor((Date.now() - new Date(sub.past_due_since).getTime()) / (24 * 60 * 60 * 1000))
     : null;
@@ -62,19 +69,33 @@ export async function POST(
   const tpl = paymentReminderEmail({
     name: member.name,
     planLabel: planLabel(sub.plan_key),
-    monthlyDollars: (typeof sub.net_cents === "number" ? sub.net_cents : sub.monthly_cents) / 100,
+    // Never above list: a USDC row's net_cents is the last amount paid, which lags a move to a cheaper plan.
+    monthlyDollars: effectiveMonthlyCents(sub) / 100,
     siteUrl,
     daysOverdue,
+    rail: sub.payment_rail === "onchain" ? "onchain" : "stripe",
+    openInvoice: invoice ? { amountCents: invoice.amount_cents, dueAt: invoice.due_at } : null,
   });
 
-  const sent = await sendEmail({
+  const result = await sendEmailDetailed({
+    kind: "payment_reminder",
+    memberId: member.id,
     to: member.email,
     subject: tpl.subject,
     html: tpl.html,
     text: tpl.text,
   });
 
-  if (!sent) {
+  await logAction({
+    action: AuditAction.PAYMENT_REMINDER_SENT,
+    actorMemberId: caller.member.id,
+    target: { table: "members", id: member.id },
+    payload: { subscription_id: sub.id, rail: sub.payment_rail, sent: result.ok, ...(result.ok ? {} : { error: (result.error ?? "").slice(0, 200) }) },
+  }, admin);
+
+  if (!result.ok) {
+    if (result.error === "email not configured") console.warn("[email] no email provider configured — skipping send");
+    else console.error("[email] payment reminder send error:", result.error);
     return NextResponse.json({ error: "Email send failed — check server logs" }, { status: 502 });
   }
   return NextResponse.json({ ok: true });

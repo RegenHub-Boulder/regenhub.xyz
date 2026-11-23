@@ -3,7 +3,7 @@ const { send } = vi.hoisted(() => ({ send: vi.fn() }));
 vi.mock("resend", () => ({ Resend: class { fetchRequest = vi.fn(); emails = { send }; } }));
 import { sendEmailDetailed } from "./email";
 afterEach(() => { vi.unstubAllEnvs(); send.mockReset(); });
-const input = { to: "test@example.com", subject: "test", html: "hello", idempotencyKey: "newsletter:1:1" };
+const input = { kind: "newsletter" as const, to: "test@example.com", subject: "test", html: "hello", idempotencyKey: "newsletter:1:1" };
 it("passes stable key through installed Resend SDK options and returns message id", async () => {
   vi.stubEnv("RESEND_API_KEY", "test-only"); send.mockResolvedValue({ data: { id: "msg" }, error: null });
   expect(await sendEmailDetailed(input)).toMatchObject({ ok: true, id: "msg" });

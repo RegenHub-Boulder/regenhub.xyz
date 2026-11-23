@@ -100,7 +100,7 @@ export async function POST(req: Request) {
 
   const results: { email: string; ok: boolean }[] = [];
   for (const a of recipients) {
-    const sent = await sendEmail({
+    const sent = await sendEmail({ kind: "admin_digest",
       to: a.email!,
       subject: tpl.subject,
       html: tpl.html,

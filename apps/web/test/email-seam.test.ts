@@ -36,7 +36,7 @@ it("the provider is a setting: an unknown one sends nothing, through either send
   vi.stubEnv("EMAIL_PROVIDER", "ses");
   expect(emailProvider()).toBeNull();
   expect(isEmailConfigured()).toBe(false);
-  const mail = { to: "a@example.test", subject: "s", html: "<p>h</p>" };
+  const mail = { kind: "newsletter" as const, to: "a@example.test", subject: "s", html: "<p>h</p>" };
   expect(await sendEmailDetailed(mail)).toMatchObject({ ok: false, error: expect.stringContaining("unknown EMAIL_PROVIDER") });
   expect(await sendEmail(mail)).toBe(false);
   expect(net).not.toHaveBeenCalled();
@@ -49,7 +49,7 @@ it("the provider is a setting: an unknown one sends nothing, through either send
 it("the staging outbox provider works only with the Techne stand-in on, never on regenhub.xyz", async () => {
   vi.stubEnv("EMAIL_PROVIDER", "outbox");
   vi.stubEnv("EMAIL_FROM", "RegenHub <hello@regenhub.test>");
-  const mail = { to: "a@example.test", subject: "staged", html: "<p>h</p>" };
+  const mail = { kind: "newsletter" as const, to: "a@example.test", subject: "staged", html: "<p>h</p>" };
   vi.stubEnv("TECHNE_STAGING_STANDIN", "1");
   vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://regenhub.xyz");
   expect(await sendEmailDetailed(mail)).toMatchObject({ ok: false, error: "email not configured" });

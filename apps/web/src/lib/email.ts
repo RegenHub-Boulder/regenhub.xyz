@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { recordEmail, type EmailKind } from "@/lib/emailLog";
 
 let resendClient: Resend | null = null;
 let resendTimeoutInstalled = false;
@@ -22,6 +23,10 @@ import { outboxProvider } from "@/lib/staging/outbox";
 import { defaultEmailFrom as defaultFrom, defaultEmailReplyTo as defaultReplyTo } from "@regenhub/shared";
 
 export interface SendEmailInput {
+  /** What this email is, for the email log (lib/emailLog.ts EMAIL_KINDS) and the member page that lists it. */
+  kind: EmailKind;
+  /** The member it's for, when the caller knows; the log also matches by email. */
+  memberId?: number | null;
   idempotencyKey?: string;
   to: string;
   subject: string;
@@ -154,7 +159,7 @@ export async function sendEmailDetailed(input: SendEmailInput): Promise<SendResu
     return { ok: false, rateLimited: false, quotaExceeded: false, error: `unknown EMAIL_PROVIDER "${process.env.EMAIL_PROVIDER}"` };
   }
   if (!provider.configured()) return { ok: false, rateLimited: false, quotaExceeded: false, error: "email not configured" };
-  return provider.send({
+  const result = await provider.send({
     from: input.from ?? defaultFrom(),
     to: input.to,
     subject: input.subject,
@@ -163,6 +168,19 @@ export async function sendEmailDetailed(input: SendEmailInput): Promise<SendResu
     replyTo: input.replyTo ?? defaultReplyTo(),
     idempotencyKey: input.idempotencyKey,
   });
+  // One row per send in email_log (migration 069): metadata only, never the body. Never throws; a missing table
+  // (069 not run yet) is skipped, so the send's result is the same either way.
+  await recordEmail({
+    member_id: input.memberId ?? null,
+    email: input.to,
+    kind: input.kind,
+    subject: input.subject,
+    provider: provider.name,
+    provider_id: result.ok ? result.id ?? null : null,
+    status: result.ok ? "sent" : "failed",
+    error: result.ok ? null : result.error ?? null,
+  });
+  return result;
 }
 
 
@@ -241,8 +259,9 @@ export function freeDayPlusMembershipApprovedEmail(args: { name: string; siteUrl
 }
 
 /**
- * Sent when admin pings a past-due member to update their payment method.
- * Links to /portal where they can open the Stripe Customer Portal.
+ * A past-due member's payment reminder: sent by an admin (member page, What to do next) and, for a card member, by
+ * the Stripe webhook when the subscription goes past due. A card member updates their card in the Stripe portal; a
+ * USDC member pays the open invoice from the portal (no card, no Stripe retries).
  */
 export function paymentReminderEmail(args: {
   name: string;
@@ -250,27 +269,50 @@ export function paymentReminderEmail(args: {
   monthlyDollars: number;
   siteUrl: string;
   daysOverdue: number | null;
+  rail?: "stripe" | "onchain";
+  /** USDC: the oldest open invoice, if one was found. */
+  openInvoice?: { amountCents: number; dueAt: string } | null;
 }) {
   const firstName = args.name.split(" ")[0];
   const link = `${args.siteUrl.replace(/\/$/, "")}/portal`;
+  const wrap = (body: string) => `
+      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
+        <p>Hi ${firstName},</p>
+        ${body}
+        <p>Reply to this email if anything&rsquo;s off &mdash; we&rsquo;re happy to chat.</p>
+        <p>&mdash; RegenHub</p>
+      </div>
+    `;
+  const button = (label: string) =>
+    `<p style="margin: 24px 0;"><a href="${link}" style="background: #4b5a2c; color: white; padding: 12px 20px; border-radius: 2px; text-decoration: none; display: inline-block;">${label}</a></p>`;
+  const footer = `\n\nReply to this email if anything's off — we're happy to chat.\n\n— RegenHub`;
+
+  if (args.rail === "onchain") {
+    const inv = args.openInvoice;
+    const due = inv ? new Date(inv.dueAt).toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "America/Denver" }) : null;
+    const line = inv
+      ? `your ${args.planLabel} membership has an invoice of ${(inv.amountCents / 100).toFixed(2)} USDC that was due ${due} and is still open.`
+      : `your ${args.planLabel} membership has an invoice that is still open.`;
+    return {
+      subject: "Your RegenHub membership payment is due",
+      html: wrap(`
+        <p>Quick note &mdash; ${line}</p>
+        ${button("Review and pay")}
+        <p>Open the portal, connect your verified wallet, and RegenHub will prepare the exact USDC transfer for you to approve.</p>`),
+      text: `Hi ${firstName},\n\nQuick note — ${line}\n\nReview and pay: ${link}\n\nOpen the portal, connect your verified wallet, and RegenHub will prepare the exact USDC transfer for you to approve.${footer}`,
+    };
+  }
+
   const overdueLine = args.daysOverdue
     ? `Your card has been failing for ${args.daysOverdue} day${args.daysOverdue === 1 ? "" : "s"}.`
     : `Your last payment didn't go through.`;
   return {
     subject: "Update your RegenHub payment method",
-    html: `
-      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
-        <p>Hi ${firstName},</p>
+    html: wrap(`
         <p>Quick note &mdash; your ${args.planLabel} subscription ($${args.monthlyDollars}/mo) needs attention. ${overdueLine} Stripe will keep retrying for a few days but it&rsquo;s easiest to just update your card.</p>
-        <p style="margin: 24px 0;">
-          <a href="${link}" style="background: #4b5a2c; color: white; padding: 12px 20px; border-radius: 2px; text-decoration: none; display: inline-block;">Update payment method</a>
-        </p>
-        <p>Click the link, sign in, then hit &ldquo;Manage subscription&rdquo; &mdash; that opens the Stripe portal where you can swap your card.</p>
-        <p>Reply to this email if anything&rsquo;s off &mdash; we&rsquo;re happy to chat.</p>
-        <p>&mdash; RegenHub</p>
-      </div>
-    `,
-    text: `Hi ${firstName},\n\nQuick note — your ${args.planLabel} subscription ($${args.monthlyDollars}/mo) needs attention. ${overdueLine} Stripe will keep retrying for a few days but it's easiest to just update your card.\n\nUpdate payment method: ${link}\n\nClick the link, sign in, then hit "Manage subscription" — that opens the Stripe portal where you can swap your card.\n\nReply to this email if anything's off — we're happy to chat.\n\n— RegenHub`,
+        ${button("Update payment method")}
+        <p>Click the link, sign in, then hit &ldquo;Manage subscription&rdquo; &mdash; that opens the Stripe portal where you can swap your card.</p>`),
+    text: `Hi ${firstName},\n\nQuick note — your ${args.planLabel} subscription ($${args.monthlyDollars}/mo) needs attention. ${overdueLine} Stripe will keep retrying for a few days but it's easiest to just update your card.\n\nUpdate payment method: ${link}\n\nClick the link, sign in, then hit "Manage subscription" — that opens the Stripe portal where you can swap your card.${footer}`,
   };
 }
 

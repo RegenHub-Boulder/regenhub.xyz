@@ -391,7 +391,7 @@ async function announceNewMember(
       isDeskTier,
       siteUrl,
     });
-    sendEmail({ to: member.email, subject: tpl.subject, html: tpl.html, text: tpl.text })
+    sendEmail({ kind: "welcome", to: member.email, subject: tpl.subject, html: tpl.html, text: tpl.text })
       .catch((err) => console.error("[Webhook] Welcome email failed:", err));
   }
 }

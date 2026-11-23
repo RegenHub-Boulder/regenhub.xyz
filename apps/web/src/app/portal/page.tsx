@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { effectiveMonthlyCents } from "@/lib/stripeNet";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { Card, CardContent } from "@/components/ui/card";
@@ -461,7 +462,7 @@ export default async function PortalPage() {
                   Membership
                   {activeSubscription.plan_key && (
                     <span className="text-muted font-normal ml-2 text-sm">
-                      · {planLabel(activeSubscription.plan_key)} · ${((typeof activeSubscription.net_cents === "number" ? activeSubscription.net_cents : activeSubscription.monthly_cents) / 100)}/mo
+                      · {planLabel(activeSubscription.plan_key)} · ${effectiveMonthlyCents(activeSubscription) / 100}/mo
                     </span>
                   )}
                 </h3>

@@ -172,7 +172,8 @@ export async function sendBatch(
       processed++;
       // An earlier dispatch may have been accepted even when this replay is rejected.
       const recovering = claim.first_attempt_at != null;
-      const result = await sendEmailDetailed(claim.payload);
+      // kind "newsletter": not written to email_log (this issue's newsletter_sends row is the record).
+      const result = await sendEmailDetailed({ ...claim.payload, kind: "newsletter" });
       const update: Record<string, unknown> = result.ok
         ? { status: "sent", sent_at: new Date().toISOString(), resend_id: result.id ?? null, last_error: null, attempts: claim.attempts + 1 }
         : recovering || result.ambiguous

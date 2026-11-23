@@ -439,6 +439,7 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
       ? freeDayPlusMembershipApprovedEmail({ name: claim.name, siteUrl })
       : freeDayApprovedEmail({ name: claim.name, siteUrl });
     sendEmail({
+      kind: "free_day_approved",
       to: claim.email,
       subject: tpl.subject,
       html: tpl.html,
@@ -571,6 +572,7 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
     const tpl = membershipApprovedEmail({ name: application.name, siteUrl });
     sendEmail({
+      kind: "membership_approved",
       to: application.email,
       subject: tpl.subject,
       html: tpl.html,

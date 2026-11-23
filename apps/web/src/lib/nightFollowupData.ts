@@ -234,7 +234,7 @@ async function sendRows(
         if (error) throw new Error(`couldn't save the note before sending: ${error.message}`);
         if (!kept?.length) continue; // another click moved this row on: its outcome is theirs to write
       }
-      const mail = { to: r.email, ...note, idempotencyKey: `night-followup-${r.id}` };
+      const mail = { kind: "night_followup" as const, to: r.email, ...note, idempotencyKey: `night-followup-${r.id}` };
       let res = await sendEmailDetailed(mail);
       if (!res.ok && res.rateLimited) {
         await new Promise((ok) => setTimeout(ok, 1100));
