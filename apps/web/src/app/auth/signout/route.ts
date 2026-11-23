@@ -7,6 +7,7 @@ import { safeNextPath } from "@/lib/safeNext";
 import { endWebSession } from "@/lib/techne/webSession";
 import { techneOAuth } from "@/lib/techne/oauth/client";
 import { sameSiteForm } from "@/lib/techne/guard";
+import { VIEW_AS_COOKIE } from "@/lib/viewAs";
 
 /**
  * Sign-out ends every session this origin can hold: the portal (Supabase) session, and the Techne sign-in this
@@ -62,6 +63,8 @@ export async function POST(request: Request) {
   for (const name of [REGENOS_SESSION_COOKIE, REGENOS_PENDING_COOKIE]) {
     cookieStore.delete({ name, path: "/", secure: true });
   }
+  // An admin's portal preview (lib/viewAs.ts) ends with the session, so the next person here isn't left read-only.
+  cookieStore.delete({ name: VIEW_AS_COOKIE, path: "/" });
 
   redirect(next ?? "/auth/login");
 }

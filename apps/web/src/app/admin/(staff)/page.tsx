@@ -113,6 +113,7 @@ export default async function AdminHome() {
         <Link href="/admin/access?tab=codes" className="hover:text-foreground">Quick door code</Link>
         <Link href="/admin/members" className="hover:text-foreground">Find a member</Link>
         <Link href="/admin/members/new" className="hover:text-foreground">Add a member</Link>
+        <Link href="/admin/view-as" className="hover:text-foreground">View the portal as…</Link>
       </nav>
     </div>
   );

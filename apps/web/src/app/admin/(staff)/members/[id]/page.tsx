@@ -206,6 +206,13 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
             {member.pin_code_slot ? ` slot ${member.pin_code_slot}` : " no slot"}
           </span>
         </div>
+        {/* Their portal as they see it, read-only, codes masked; every view is audited (lib/viewAs.ts). */}
+        <form action="/api/admin/view-as" method="post">
+          <input type="hidden" name="member_id" value={member.id} />
+          <button type="submit" className="text-sm text-sage hover:underline" data-testid="view-portal-as-member">
+            See their portal (read-only) →
+          </button>
+        </form>
       </header>
 
       <MemberDetailTabs>

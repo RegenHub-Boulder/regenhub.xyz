@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { usePreview, PREVIEW_TITLE } from "@/components/portal/PreviewContext";
 
 /**
  * Asked once, on /portal, of a member who could be listed and hasn't answered (`show_in_directory` is null): where
@@ -11,6 +12,7 @@ import { Button } from "@/components/ui/button";
  * member can change it any time on /portal/profile.
  */
 export function DirectoryAsk() {
+  const preview = usePreview();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [said, setSaid] = useState<boolean | null>(null);
@@ -62,10 +64,10 @@ export function DirectoryAsk() {
         {error && <p className="text-sm text-danger">{error}</p>}
       </div>
       <div className="flex gap-2 shrink-0">
-        <Button type="button" disabled={busy} onClick={() => answer(true)} className="btn-primary-glass">
+        <Button type="button" disabled={busy || preview} title={preview ? PREVIEW_TITLE : undefined} onClick={() => answer(true)} className="btn-primary-glass">
           Yes, list me
         </Button>
-        <Button type="button" disabled={busy} onClick={() => answer(false)} className="btn-glass">
+        <Button type="button" disabled={busy || preview} title={preview ? PREVIEW_TITLE : undefined} onClick={() => answer(false)} className="btn-glass">
           No thanks
         </Button>
       </div>

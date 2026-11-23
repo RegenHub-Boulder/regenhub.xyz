@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CreditCard, Loader2 } from "lucide-react";
+import { usePreview, PREVIEW_TITLE } from "@/components/portal/PreviewContext";
 
 export function ManageSubscriptionButton() {
+  const preview = usePreview();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,7 +30,7 @@ export function ManageSubscriptionButton() {
 
   return (
     <>
-      <Button onClick={open} disabled={busy} className="btn-glass gap-2 text-sm">
+      <Button onClick={open} disabled={busy || preview} title={preview ? PREVIEW_TITLE : undefined} className="btn-glass gap-2 text-sm">
         {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
         Manage subscription
       </Button>

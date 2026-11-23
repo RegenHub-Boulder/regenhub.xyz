@@ -15,6 +15,8 @@ import { onchainPassesOpen } from "@/lib/onchain/invoiceKind";
 import { Ticket, Clock, ShoppingCart, Key, ArrowRight, CheckCircle, XCircle, Receipt, Gift } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { currentViewAs } from "@/lib/viewAsServer";
+import { NotInPreview } from "@/components/portal/ViewAsBar";
 
 export const metadata = { title: "Guest passes — RegenHub" };
 
@@ -23,6 +25,9 @@ interface PageProps {
 }
 
 export default async function PassesPage({ searchParams }: PageProps) {
+  // An admin's portal preview (lib/viewAs.ts) shows only the member home: this page would read (and here and there
+  // act on) the admin's own account, so it stops before any of that.
+  if (await currentViewAs()) return <NotInPreview />;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");

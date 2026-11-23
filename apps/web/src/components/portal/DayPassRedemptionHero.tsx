@@ -2,7 +2,6 @@ import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Key, MapPin, Clock, ArrowRight, Sparkles } from "lucide-react";
-import { createServiceClient } from "@/lib/supabase/admin";
 
 interface Member {
   id: number;
@@ -11,8 +10,16 @@ interface Member {
   day_passes_balance: number;
 }
 
+/** The member's day code live right now (read by lib/portalHome.ts); a preview passes a placeholder code. */
+export interface ActiveDayCode {
+  code: string;
+  expires_at: string;
+}
+
 interface Props {
   member: Member;
+  activeCode: ActiveDayCode | null;
+  nowMs: number;
 }
 
 const KEYPAD_STEPS = [
@@ -45,23 +52,8 @@ function formatRemaining(expiresIso: string, nowMs: number): string {
  * Returns null for Full members (they have a permanent code) and for day-pass
  * members with no balance + no active code (they need to buy or get approved).
  */
-export async function DayPassRedemptionHero({ member }: Props) {
+export function DayPassRedemptionHero({ member, activeCode, nowMs }: Props) {
   if (member.member_type !== "day_pass") return null;
-
-  const admin = createServiceClient();
-  /* eslint-disable react-hooks/purity -- server component, renders once per request */
-  const nowMs = Date.now();
-  const nowIso = new Date(nowMs).toISOString();
-  /* eslint-enable react-hooks/purity */
-  const { data: activeCode } = await admin
-    .from("day_codes")
-    .select("code, pin_slot, expires_at, label")
-    .eq("member_id", member.id)
-    .eq("is_active", true)
-    .gt("expires_at", nowIso)
-    .order("expires_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
 
   // No active code AND no balance → nothing actionable here; the regular
   // upgrade prompts elsewhere on the page handle this case.

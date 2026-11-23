@@ -91,10 +91,12 @@ describe("POST /auth/signout", () => {
     );
     // Every deletion must itself satisfy the `__Host-` prefix contract, or the
     // browser refuses to apply it and the stale cookie survives sign-out.
-    for (const del of cookieDeletes) {
+    for (const del of cookieDeletes.filter((d) => d.name.startsWith("__Host-"))) {
       expect(del.path).toBe("/");
       expect(del.secure).toBe(true);
     }
+    // An admin's portal preview (lib/viewAs.ts) ends with the session.
+    expect(cookieDeletes).toContainEqual({ name: "rh_view_as", path: "/" });
   });
 
   it("still completes sign-out and expires cookies when the AppView revoke call fails", async () => {
