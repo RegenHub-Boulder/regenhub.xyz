@@ -59,6 +59,8 @@ export function isMissingTable(error: { code?: string; message?: string } | null
     || /relation .*email_log.* does not exist|could not find the table .*email_log/i.test(error.message ?? "");
 }
 
+const LOG_TIMEOUT_MS = 2000;
+
 type Client = Pick<ReturnType<typeof createServiceClient>, "from">;
 
 /**
@@ -69,7 +71,9 @@ export async function recordEmail(entry: EmailLogEntry, client?: Client): Promis
   if (entry.kind === "newsletter") return "skipped";
   try {
     const db = client ?? createServiceClient();
-    const { error } = await db.from("email_log").insert({
+    // Bounded: the mail has already gone, so a slow database must not hold up the sender (night follow-ups, bulk
+    // group messages). Past the limit the row is given up, as with any failed write.
+    const insert = db.from("email_log").insert({
       member_id: entry.member_id ?? null,
       email: entry.email.trim().toLowerCase(),
       kind: entry.kind,
@@ -79,9 +83,14 @@ export async function recordEmail(entry: EmailLogEntry, client?: Client): Promis
       status: entry.status,
       error: entry.error ? entry.error.replace(/\s+/g, " ").slice(0, 200) : null,
     });
+    const timedOut = new Promise<{ error: { message: string } }>((resolve) => {
+      const t = setTimeout(() => resolve({ error: { message: `timed out after ${LOG_TIMEOUT_MS} ms` } }), LOG_TIMEOUT_MS);
+      (t as { unref?: () => void }).unref?.();
+    });
+    const { error } = await Promise.race([Promise.resolve(insert), timedOut]) as { error: { code?: string; message?: string } | null };
     if (!error) return "logged";
     if (isMissingTable(error)) return "no_table";
-    console.error("[email log] write failed:", error.message);
+    console.error("[email log] write failed:", error.message ?? error);
     return "failed";
   } catch (err) {
     console.error("[email log] write failed:", err instanceof Error ? err.message : err);

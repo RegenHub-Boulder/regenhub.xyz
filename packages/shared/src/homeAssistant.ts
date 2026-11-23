@@ -234,7 +234,7 @@ export async function setUserCode(slot: number, code: string): Promise<LockResul
     return results;
   } catch (error) {
     // Keep what went wrong (e.g. "All locks failed: lock.front_door_lock: HA 502 …"): the admin's Door page shows it.
-    const detail = (error instanceof Error ? error.message : String(error)).replace(/\s+/g, " ").slice(0, 300);
+    const detail = (error instanceof Error ? error.message : String(error)).replace(/\s+/g, " ").slice(0, 120);
     await quarantineSlot(slot, `SET threw or timed out; clear required before reuse (${detail})`);
     throw error;
   }

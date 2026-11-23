@@ -32,7 +32,7 @@ export interface SendEmailInput {
 async function logEmail(input: SendEmailInput, result: { id: string | null; error: string | null }) {
   try {
     const { db } = await import("./db/supabase.js");
-    const { error } = await db.from("email_log").insert({
+    const insert = db.from("email_log").insert({
       email: input.to.trim().toLowerCase(),
       kind: input.kind,
       subject: input.subject.slice(0, 300),
@@ -41,6 +41,10 @@ async function logEmail(input: SendEmailInput, result: { id: string | null; erro
       status: result.error ? "failed" : "sent",
       error: result.error ? result.error.replace(/\s+/g, " ").slice(0, 200) : null,
     });
+    // Bounded: the mail has gone; a slow database must not hold up the bot.
+    const timedOut = new Promise<{ error: { code?: string; message: string } }>((resolve) =>
+      setTimeout(() => resolve({ error: { message: "timed out" } }), 2000).unref());
+    const { error } = await Promise.race([Promise.resolve(insert), timedOut]) as { error: { code?: string; message: string } | null };
     if (error && error.code !== "42P01" && error.code !== "PGRST205") console.error("[email log] write failed:", error.message);
   } catch (err) {
     console.error("[email log] write failed:", err instanceof Error ? err.message : err);

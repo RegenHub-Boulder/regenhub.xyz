@@ -101,6 +101,13 @@ describe("Send reminder, with migration 069", () => {
     expect(mail.html).toContain("($30/mo)");
   });
 
+  it("sends nothing while a USDC payment is on its way", async () => {
+    await db.sql("update onchain_invoices set status = 'submitted', submitted_at = now() where subscription_id = 50");
+    expect((await remind()).status).toBe(409);
+    expect(stagingOutboxMails()).toEqual([]);
+    expect(await db.sql("select id from email_log")).toEqual([]);
+  });
+
   it("newsletters aren't logged here (newsletter_sends is their record)", async () => {
     expect(await recordEmail({ email: "a@example.test", kind: "newsletter", subject: "Issue", provider: "outbox", status: "sent" }, db as never))
       .toBe("skipped");

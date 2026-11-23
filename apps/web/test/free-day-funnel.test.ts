@@ -101,6 +101,16 @@ describe("free days, grouped by where the person is", () => {
     expect((html.match(/data-group="review"/g) ?? []).length).toBe(2);
   });
 
+  it("someone with an older member row who bought a desk after the free day joined; they weren't already a member", () => {
+    const placed = placeClaim(
+      { id: 2, email: "y@example.test", name: "Y", claimed_date: null, status: "activated", created_at: ago(30), activated_at: ago(29) },
+      { member: { member_type: "hot_desk", disabled: false, created_at: ago(300) },
+        subscriptions: [{ plan_key: "hot_desk", status: "active", monthly_cents: 25000, created_at: ago(10), canceled_at: null }],
+        passBuys: [], entries: [] });
+    expect(placed.group).toBe("joined");
+    expect(placed.line).toMatch(/joined Hot Desk/);
+  });
+
   it("never formats a missing or broken date", () => {
     expect(fmtDay(null)).toBeNull();
     expect(fmtDay("not a date")).toBeNull();

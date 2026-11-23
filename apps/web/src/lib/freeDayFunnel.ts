@@ -83,8 +83,13 @@ function memberAt(p: FreeDayPerson, at: string): string | null {
   const sub = p.subscriptions.find((s) => s.monthly_cents >= MEMBER_MIN_MONTHLY_CENTS && Date.parse(s.created_at) <= t
     && (LIVE.includes(s.status) || (s.canceled_at != null && Date.parse(s.canceled_at) > t)));
   if (sub) return planLabel(sub.plan_key);
+  // The member type is today's, so it says "member then" only when no subscription started since (a desk bought after
+  // the free day sets the type too: that person joined, they weren't already a member).
   const m = p.member;
-  if (m && !m.disabled && DESK_TYPES.includes(m.member_type ?? "") && Date.parse(m.created_at) < t) return memberTypeLabel(m.member_type);
+  const startedSince = p.subscriptions.some((s) => Date.parse(s.created_at) >= t);
+  if (m && !m.disabled && !startedSince && DESK_TYPES.includes(m.member_type ?? "") && Date.parse(m.created_at) < t) {
+    return memberTypeLabel(m.member_type);
+  }
   return null;
 }
 

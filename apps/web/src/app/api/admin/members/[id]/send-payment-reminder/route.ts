@@ -52,14 +52,19 @@ export async function POST(
     );
   }
 
-  // A USDC member pays an invoice: name the oldest one still open, so the note says how much and since when.
-  const { data: invoice } = sub.payment_rail === "onchain"
+  // A USDC member pays an invoice: name the oldest one unpaid, so the note says how much and since when. One with a
+  // payment on its way (submitted, detected) means there's nothing to nudge.
+  const { data: unpaid } = sub.payment_rail === "onchain"
     ? await membershipInvoices((kindColumn) => {
-        const q = admin.from("onchain_invoices").select("amount_cents, due_at")
-          .eq("subscription_id", sub.id).eq("status", "open");
-        return (kindColumn ? q.eq("kind", "membership") : q).order("due_at", { ascending: true }).limit(1).maybeSingle();
+        const q = admin.from("onchain_invoices").select("amount_cents, due_at, status")
+          .eq("subscription_id", sub.id).in("status", ["open", "submitted", "detected"]);
+        return (kindColumn ? q.eq("kind", "membership") : q).order("due_at", { ascending: true });
       })
-    : { data: null };
+    : { data: [] as { amount_cents: number; due_at: string; status: string }[] };
+  if ((unpaid ?? []).some((i) => i.status !== "open")) {
+    return NextResponse.json({ error: "A USDC payment for this membership is already on its way; no reminder sent." }, { status: 409 });
+  }
+  const invoice = (unpaid ?? [])[0] ?? null;
 
   const daysOverdue = sub.past_due_since
     ? Math.floor((Date.now() - new Date(sub.past_due_since).getTime()) / (24 * 60 * 60 * 1000))
