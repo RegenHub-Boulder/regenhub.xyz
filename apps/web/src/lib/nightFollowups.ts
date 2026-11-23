@@ -110,7 +110,8 @@ export function rsvpPeople<M extends FollowupMember>(facts: {
     const t = techne.get(did);
     const ownEmail = t?.email_confirmed ? t.email?.trim().toLowerCase() || undefined : undefined;
     const byEmailLink = t?.member_id != null ? byId.get(t.member_id) : undefined;
-    const member = byDid.get(did) ?? (byEmailLink && byEmailLink.email?.trim().toLowerCase() === ownEmail ? byEmailLink : undefined);
+    // Two missing addresses are no match: an email link needs this account's confirmed email to still be the member's.
+    const member = byDid.get(did) ?? (byEmailLink && ownEmail && byEmailLink.email?.trim().toLowerCase() === ownEmail ? byEmailLink : undefined);
     return { member, techne: t, email: member?.email?.trim().toLowerCase() || ownEmail };
   };
 }

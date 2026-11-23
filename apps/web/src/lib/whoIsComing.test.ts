@@ -69,3 +69,12 @@ describe("who's coming", () => {
     expect(planWords({ member_type: "day_pass" }, [{ status: "active", monthly_cents: 4000, plan_key: "custom" }])).toBe("Paid plan");
   });
 });
+
+describe("who's coming: edges", () => {
+  it("never links by email when both addresses are missing (a member with no email, an unconfirmed account)", () => {
+    const noEmail = member(9, "Nia", null, "hot_desk", null);
+    const stale = techne("did:plc:stale", { handle: "stale.techne.town", member_id: 9, email: "x@example.test", email_confirmed: false });
+    const [p] = whoIsComing([{ did: "did:plc:stale", at: "" }], { members: [noEmail], people: [stale], subs: [] }, { withEmails: true });
+    expect([p.name, p.kind, p.email]).toEqual(["@stale.techne.town", "guest", undefined]);
+  });
+});

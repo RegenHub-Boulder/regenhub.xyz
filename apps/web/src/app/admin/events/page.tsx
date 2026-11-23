@@ -163,7 +163,11 @@ export default async function ManageEventsPage({
   ]).then(async ([attendance, viewer]) => ({
     attendance,
     lists: await readWhoIsComing(createServiceClient(), attendance, { withEmails: viewer.isAdmin }),
-  }));
+  })).catch((err) => {
+    // Never the whole page: each night in the window says "Couldn't load who's coming".
+    console.error("[admin/events] who's coming read failed:", err);
+    return { attendance: events.map(() => null), lists: events.map(() => null) };
+  });
   // Each event's config and listing in the collective's repo, so an edit keeps the config and a removal
   // deletes exactly what is there.
   const own = events.filter((e) => e.did === collective);
