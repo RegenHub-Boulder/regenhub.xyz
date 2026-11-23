@@ -15,6 +15,7 @@ import { CheckCircle2, Loader2, Wallet } from "lucide-react";
 import { RegenHubWalletProvider } from "@/components/web3/RegenHubWalletProvider";
 import { GaslessPaymentReview } from "@/components/web3/GaslessPaymentReview";
 import { pollOnchainPayment } from "@/lib/onchain/clientConfirmation";
+import { PAYMENT_CONFIRMED_MESSAGE, QueuedAuthorizationError, messageAfterSignedFailure } from "@/lib/onchain/paymentMessages";
 import { linkWalletWithSignature, WalletLinkError } from "@/lib/onchain/walletLink";
 import {
   assertExpectedAuthorization,
@@ -101,7 +102,7 @@ function OnchainBillingCardInner(props: Props) {
         }
       },
     })) {
-      setMessage("Payment confirmed — membership is active.");
+      setMessage(PAYMENT_CONFIRMED_MESSAGE);
       setTimeout(() => window.location.reload(), 1_500);
       return;
     }
@@ -120,7 +121,7 @@ function OnchainBillingCardInner(props: Props) {
       throw new Error(relayed.error ?? "Could not submit gasless payment");
     }
     if (!relayed.txHash) {
-      throw new Error(relayed.warning ?? "Payment authorization is queued; RegenHub will keep retrying it. Do not authorize again.");
+      throw new QueuedAuthorizationError(relayed.warning ?? "Payment authorization is queued; RegenHub will keep retrying it. Do not authorize again.");
     }
     await confirmPayment(relayed.txHash);
   }, [confirmPayment, props.invoice]);
@@ -201,10 +202,14 @@ function OnchainBillingCardInner(props: Props) {
       setAuthorization(null);
       await submitPayment(signature);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Payment authorization failed");
-      setMessage(signed
-        ? "Your authorization was saved. Do not authorize again; RegenHub will retry the gas-sponsored submission."
-        : "The payment was not submitted. Review the authorization before trying again.");
+      if (signed) {
+        const after = messageAfterSignedFailure(cause);
+        setError(after.error);
+        setMessage(after.message);
+      } else {
+        setError(cause instanceof Error ? cause.message : "Payment authorization failed");
+        setMessage("The payment was not submitted. Review the authorization before trying again.");
+      }
     } finally {
       setBusy(false);
     }
@@ -231,7 +236,7 @@ function OnchainBillingCardInner(props: Props) {
       },
     }).then((paid) => {
       if (paid) {
-        setMessage("Payment confirmed — membership is active.");
+        setMessage(PAYMENT_CONFIRMED_MESSAGE);
         setTimeout(() => window.location.reload(), 1_500);
       } else {
         setMessage("Payment is still awaiting OP safe confirmation. Do not pay again; reopen this page to resume checking.");

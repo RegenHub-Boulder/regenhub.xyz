@@ -172,7 +172,10 @@ describe("crediting", () => {
     const { body } = await start();
     chainPays(30_000_000n);
     expect((await submit(body.invoice.id)).body).toMatchObject({ status: "paid", wasNew: true });
-    expect(await submit(body.invoice.id)).toMatchObject({ status: 404 }); // paid: no longer open
+    // Already paid with this very transaction: answered paid (a poll that lost the race), credited once.
+    const again = await submit(body.invoice.id);
+    expect(again).toMatchObject({ status: 200, body: { status: "paid" } });
+    expect(again.body).not.toHaveProperty("wasNew");
     expect((await processOnchainInvoice(db as never, body.invoice.id))).toMatchObject({ status: "paid", wasNew: false });
     await runCron();
 

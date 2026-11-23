@@ -31,6 +31,11 @@ export async function POST(request: Request) {
   if (invoice?.status === "void" || invoice?.status === "expired") {
     return reportPaymentAfterVoid(admin, session.member.id, invoice.id, txHash, invoice.status);
   }
+  // The payment may have finished (the relay or the billing sweep verified it) before this poll landed.
+  // Only the transaction already recorded on the invoice counts; nothing is written.
+  if (invoice?.status === "paid" && invoice.submitted_tx_hash === txHash) {
+    return NextResponse.json({ status: "paid", txHash });
+  }
   if (!invoice || !["open", "submitted", "detected", "exception"].includes(invoice.status)) {
     return NextResponse.json({ error: "Open invoice not found" }, { status: 404 });
   }
