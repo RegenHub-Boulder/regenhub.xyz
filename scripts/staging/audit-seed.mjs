@@ -211,6 +211,17 @@ async function seed(pg, people) {
 
   // T482_STUCK_WRITER (writer lease): the door-code writer as production had it 11-20 to 11-23, a Web PIN writer that
   // died mid-change and was never heard from again, and two door-code changes that couldn't start behind it.
+  // T482_WHO=1 (with T482_JOIN, migration 074: who approves): the steward is a site admin but NOT a co-op member, so
+  // signing in as them shows "Co-op members approve"; Ana (co-op, not an admin) signs in to approve. Kai was vouched
+  // for in the chat by someone whose Telegram isn't linked, and a free day was approved by @sky in the chat.
+  if (process.env.T482_WHO && process.env.T482_JOIN) {
+    await q("update members set is_coop_member = false where email = 'steward@regenhub.test'");
+    await q(`update applications set vouched_by = null, vouched_by_telegram_id = 4242, vouched_by_telegram = 'river'
+      where email = 'kai@example.test'`);
+    await q(`insert into free_day_claims(email, name, status, about, approved_by, approved_by_telegram_id, created_at) values
+      ('rio-chat@example.test', 'Rio Chat (sample)', 'reserved', 'Weaving.', '@sky', 6060, $1)`, [ago(0.3)]);
+  }
+
   if (process.env.T482_STUCK_WRITER) {
     const lease = (await q("select to_regclass('public.lock_slot_writer') as t, exists(select 1 from information_schema.columns where table_name = 'lock_slot_writer' and column_name = 'renewed_at') as r")).rows[0];
     if (lease.t) {

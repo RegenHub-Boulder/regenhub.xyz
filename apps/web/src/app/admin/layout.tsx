@@ -47,7 +47,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <div className="flex items-center gap-6">
             <MobileNav links={links} />
             <Link href="/" className="text-forest font-bold text-lg">RegenHub</Link>
-            <Badge>Admin</Badge>
+            <Badge>{isAdmin || !canApprove ? "Admin" : "Approvals"}</Badge>
             <div className="hidden sm:flex gap-4 text-sm">
               {links
                 .filter((l) => !l.accent) // accent links (Portal) render separately below
