@@ -129,7 +129,7 @@ const missingColumn = (e: { code?: string; message?: string } | null) =>
 
 /**
  * The daily lapse (run by /api/cron/lifecycle-nudges). Each claim still `reserved` FREE_DAY_LAPSE_DAYS after it was
- * approved (`approved_at`, migration 071; before 070 runs nothing lapses), each inside its own PIN-writer reservation
+ * approved (`approved_at`, migration 071; before 071 runs nothing lapses), each inside its own PIN-writer reservation
  * so it is ordered with both doors without holding them up:
  *   - if a door code was issued to that day-pass member since (they used the pass on /portal/passes before the two
  *     doors were one), the claim is marked used with that code: they had their free day;
@@ -160,7 +160,7 @@ export async function lapseFreeDays(admin: Service, now = new Date()): Promise<{
 
 async function lapseOne(admin: Service, claim: ClaimRow & { approved_at: string }): Promise<"used" | "lapsed" | null> {
   const [m] = await membersByEmail(admin, claim.email, "id, email, member_type, disabled, day_passes_balance");
-  // From the claim, not approved_at: 070 stamps claims approved before it with the day it ran, and a free-day code
+  // From the claim, not approved_at: 071 stamps claims approved before it with the day it ran, and a free-day code
   // issued between their real approval and then must still count.
   const code = m && m.member_type === "day_pass" ? await codeIssuedSince(admin, m.id, claim.created_at) : null;
   if (code) return (await markClaimUsed(admin, claim.id, code.id, new Date(code.issued_at))) ? "used" : null;

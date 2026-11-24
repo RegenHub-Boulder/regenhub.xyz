@@ -280,7 +280,7 @@ describe("an unused free day lapses", () => {
   });
 
   it("before migration 071 nothing lapses (no approval time to count from), and nothing breaks", async () => {
-    db = await makePgDb({ before: "070" });
+    db = await makePgDb({ before: "071" });
     vi.mocked(createServiceClient).mockReturnValue({ ...db, auth: { signInWithOtp: async () => ({ error: null }) } } as never);
     await ask("old@example.test", "Ola Old");
     await approve("old@example.test");
