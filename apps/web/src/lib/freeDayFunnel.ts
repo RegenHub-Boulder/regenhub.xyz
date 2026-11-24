@@ -31,7 +31,7 @@ export interface FreeDayClaimRow {
 export function freeDayApprovedByWords(claim: Pick<FreeDayClaimRow, "status" | "approved_by">): string | null {
   const by = claim.approved_by?.trim();
   // "auto: …" is the free-day rule (/api/freeday), said elsewhere on the line; nobody tapped.
-  if (!by || by.startsWith("auto") || claim.status === "pending" || claim.status === "cancelled") return null;
+  if (!by || by === "auto" || by.startsWith("auto:") || claim.status === "pending" || claim.status === "cancelled") return null;
   return `Approved by ${by.startsWith("@") ? `${by} in the chat` : by}`;
 }
 

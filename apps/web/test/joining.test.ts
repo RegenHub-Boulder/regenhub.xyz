@@ -470,7 +470,7 @@ describe("who approves (migration 074): anyone in the members' chat, co-op membe
       expect((await call({ id: 5 }, null)).reply).toMatch(/Link your Telegram/);
       await old.sql(`insert into members(id, name, email, member_type) values (2, 'Bea', 'bea@hub.test', 'hub_friend')`);
       await old.sql(`select setval('members_id_seq', 100)`);
-      expect((await call({ id: 8 }, { id: 2 })).reply).toBe("Until migration 074 runs, a site admin approves from the chat; then anyone here can.");
+      expect((await call({ id: 8 }, { id: 2 })).reply).toBe("Until migration 074 runs, only a site admin (with their Telegram linked, account on) approves from the chat; then anyone here can.");
       expect(await call({ id: 6 }, { id: 1 })).toEqual({ handled: true });
       expect((await old.sql(`select status, approved_by from applications where id = 9`))[0]).toEqual({ status: "approved", approved_by: 1 });
       await old.sql(`insert into free_day_claims(id, email, name, status) values (4, 'f@x.test', 'F', 'pending')`);

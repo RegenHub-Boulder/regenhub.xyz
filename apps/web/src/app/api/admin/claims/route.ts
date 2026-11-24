@@ -8,8 +8,8 @@ import { sendEmail, freeDayApprovedEmail, freeDayDeclinedEmail } from "@/lib/ema
 import { usuallyHere } from "@/lib/firstVisit";
 
 /**
- * People → Free days. Who (migration 074): a site admin or a co-op member sees them; approving or turning down a
- * waiting request is a co-op member's (lib/approval.ts canApproveOnSite), in the chat anyone in it.
+ * People → Free days. Who (migration 074): a site admin or a co-op member sees them; every change (approve, turn
+ * down, cancel, move back to waiting) is a co-op member's (lib/approval.ts canApproveOnSite), in the chat anyone in it.
  */
 export async function GET() {
   if (!await requireApprovalsViewer()) {
@@ -58,13 +58,13 @@ export async function PATCH(request: Request) {
     .eq("id", id)
     .single();
 
-  // A free day is approved only from waiting (the one approval below), never set straight to approved by hand.
-  if (status === "reserved" && prev && prev.status !== "pending") {
-    return NextResponse.json({ error: "Only a waiting request can be approved: move it back to waiting first." }, { status: 409 });
-  }
   // Every decision on a free day (approve, turn down, cancel, move back) is a co-op member's (migration 074).
   if (!member.canApprove) {
     return NextResponse.json({ error: `${COOP_APPROVES} or turn down free days on the site.` }, { status: 403 });
+  }
+  // A free day is approved only from waiting (the one approval below), never set straight to approved by hand.
+  if (status === "reserved" && prev && prev.status !== "pending") {
+    return NextResponse.json({ error: "Only a waiting request can be approved: move it back to waiting first." }, { status: 409 });
   }
 
   // Approving: the one function the chat card's button calls too (@regenhub/shared approveFreeDay, migration 074):

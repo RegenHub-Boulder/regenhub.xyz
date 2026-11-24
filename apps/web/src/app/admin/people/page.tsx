@@ -91,7 +91,8 @@ export default async function PeoplePage({
   } else {
     // The service client: a co-op member who isn't a site admin reads this list too (the gate is above).
     const { data } = await admin.from("applications").select("*").order("created_at", { ascending: false });
-    const apps = (data ?? []) as JoinApplication[];
+    // An old custom-price checkout link is a site admin's (send-checkout-email): not sent to anyone else's browser.
+    const apps = ((data ?? []) as JoinApplication[]).map((a) => (isAdmin ? a : { ...a, stripe_checkout_url: null }));
     // Names for who they said knows them, who vouched, and who decided.
     const ids = new Set<number>();
     for (const a of apps) {

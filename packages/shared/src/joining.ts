@@ -32,7 +32,7 @@ export const JOIN_REFUSAL_WORDS: Record<JoinRefusal, string> = {
   not_members_chat: "Approving and vouching happen in the members' chat.",
   waiting_for_072: "Vouching and approving start once migration 072 runs.",
   chat_not_allowed: "This account can't approve: it's switched off on the site.",
-  chat_waiting_for_074: "Until migration 074 runs, a site admin approves from the chat; then anyone here can.",
+  chat_waiting_for_074: "Until migration 074 runs, only a site admin (with their Telegram linked, account on) approves from the chat; then anyone here can.",
   waiting_for_074: "Link your Telegram on your portal profile first: approving from the chat without a link starts once migration 074 runs.",
   failed: "Something went wrong. Try again, or use People → Applications.",
 };
@@ -127,16 +127,16 @@ const tapperArgs = (t: ChatTapper) => ({
   p_telegram_id: t.telegramId, p_telegram_username: t.username, p_member: t.memberId,
 });
 
-/**
- * Someone in the members' chat taps "I know them". The caller checked `isMembersChat`. Before 074 a linked member
- * vouches through 072's function and an unlinked tapper is told to link first.
- */
 /** The chat's words for a refusal: not_allowed there means a switched-off account (074), or 072's rule before it. */
 function inChat<T>(out: JoinOutcome<T>, before074 = false): JoinOutcome<T> {
   if (out.ok || out.reason !== "not_allowed") return out;
   return refuse(before074 ? "chat_waiting_for_074" : "chat_not_allowed");
 }
 
+/**
+ * Someone in the members' chat taps "I know them". The caller checked `isMembersChat`. Before 074 a linked member
+ * vouches through 072's function and an unlinked tapper is told to link first.
+ */
 export async function vouchInChat(db: JoinDb, applicationId: number, tapper: ChatTapper): Promise<JoinOutcome<{ already: boolean }>> {
   const { data, error } = await db.rpc("chat_vouch_for_application", { p_application: applicationId, ...tapperArgs(tapper) });
   if (missingFunction(error)) {

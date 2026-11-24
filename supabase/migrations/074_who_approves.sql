@@ -58,21 +58,18 @@ returns boolean language sql stable set search_path = public as $$
                  where m.id = p_member and coalesce(m.is_coop_member, false) and not coalesce(m.disabled, false));
 $$;
 
--- Is this the applicant acting on their own application? By the member row (email or sign-in), or, for a chat tap,
--- by the Telegram id on the applicant's own member row or the Telegram handle they gave on the application.
+-- Is this the applicant acting on their own application? By a member row that is theirs (email or sign-in): the one
+-- acting, or for a chat tap the one bound to that Telegram id; or by the Telegram handle they gave on the application.
 create or replace function application_is_own(p_application integer, p_member integer, p_telegram_username text,
                                               p_telegram_id bigint)
 returns boolean language sql stable set search_path = public as $$
   select exists (
     select 1 from applications a
     where a.id = p_application and (
-      exists (select 1 from members m where m.id = p_member
-              and (lower(coalesce(m.email, '')) = lower(a.email)
-                   or (m.supabase_user_id is not null and m.supabase_user_id = a.supabase_user_id)))
-      or (p_telegram_id is not null and exists (
-            select 1 from members m where m.telegram_user_id = p_telegram_id
-              and (lower(coalesce(m.email, '')) = lower(a.email)
-                   or (m.supabase_user_id is not null and m.supabase_user_id = a.supabase_user_id))))
+      exists (select 1 from members m
+              where (m.id = p_member or (p_telegram_id is not null and m.telegram_user_id = p_telegram_id))
+                and (lower(coalesce(m.email, '')) = lower(a.email)
+                     or (m.supabase_user_id is not null and m.supabase_user_id = a.supabase_user_id)))
       or (nullif(lower(trim(regexp_replace(coalesce(p_telegram_username, ''), '^@+', ''))), '') is not null
           and lower(trim(regexp_replace(coalesce(p_telegram_username, ''), '^@+', '')))
             = lower(trim(regexp_replace(coalesce(a.telegram, ''), '^@+', ''))))));
