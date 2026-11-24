@@ -82,7 +82,7 @@ export function DropOff({ leaks }: { leaks: LeakFunnels }) {
           <tbody>
             {leaks.doors.map((d) => (
               <tr key={d.door} className="border-b border-rule align-top" data-door={d.door}>
-                <th scope="row" className="py-1.5 pr-3 text-left font-medium">{d.label}</th>
+                <th scope="row" className="py-1.5 pr-3 text-left font-medium min-w-[11rem]">{d.label}</th>
                 {d.read ? (
                   <>
                     <td className="py-1.5 px-2 text-right font-semibold">{d.started}</td>
@@ -100,8 +100,8 @@ export function DropOff({ leaks }: { leaks: LeakFunnels }) {
       </div>
       <p className="text-xs text-muted mt-2">
         Under each count: % of the step before · % of the start. A step counts everyone who got at least that far.
-        {already.length > 0 && <> Already members when they came through, not counted: {already.map((d) => `${d.alreadyMembers} ${DOOR_SHORT[d.door]}`).join(", ")}.</>}
-        {noRow.length > 0 && <> No member row, so counted at the start only: {noRow.map((d) => `${d.noMemberRow} ${DOOR_SHORT[d.door]}`).join(", ")}.</>}
+        {already.length > 0 && <> Already members when they came through, not counted: {already.map((d) => people(d.alreadyMembers, d.door)).join(", ")}.</>}
+        {noRow.length > 0 && <> No member row, so counted at the start only: {noRow.map((d) => people(d.noMemberRow, d.door)).join(", ")}.</>}
       </p>
       <details className="mt-3" data-testid="drop-off-months">
         <summary className="text-xs text-muted cursor-pointer hover:text-foreground">By month started</summary>
@@ -117,9 +117,10 @@ export function DropOff({ leaks }: { leaks: LeakFunnels }) {
   );
 }
 
-const DOOR_SHORT: Record<(typeof DOORS)[number]["key"], string> = {
-  free_day: "free days",
-  day_pass: "pass buyers",
-  gifted: "given passes",
-  rsvp: "RSVPs",
+const DOOR_SHORT: Record<(typeof DOORS)[number]["key"], [string, string]> = {
+  free_day: ["free day", "free days"],
+  day_pass: ["pass buyer", "pass buyers"],
+  gifted: ["person given passes", "people given passes"],
+  rsvp: ["RSVP", "RSVPs"],
 };
+const people = (n: number, door: (typeof DOORS)[number]["key"]) => `${n} ${DOOR_SHORT[door][n === 1 ? 0 : 1]}`;
