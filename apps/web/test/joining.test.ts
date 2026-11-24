@@ -199,6 +199,7 @@ describe("apply → vouch → approve", () => {
       const res = await statusRoute(new Request("http://x", { method: "PATCH", body: JSON.stringify({ id, status }) }));
       expect(res.status, status).toBe(409);
     }
+    expect((await statusRoute(new Request("http://x", { method: "PATCH", body: JSON.stringify({ id: 9999, status: "closed" }) }))).status).toBe(404);
     const [pat] = await db.sql<{ id: number }>(`select id from members where email = 'pat@x.test'`);
     const back = await switchRoute(new Request("http://x", { method: "PATCH", body: JSON.stringify({ level: "member", approved: false }) }), params(pat.id));
     expect(back.status).toBe(200);

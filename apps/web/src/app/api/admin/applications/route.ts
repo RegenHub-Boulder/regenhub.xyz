@@ -60,6 +60,8 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Failed to update" }, { status: 500 });
   }
   if (status && !(moved ?? []).length) {
+    const { data: there } = await supabase.from("applications").select("id").eq("id", id).maybeSingle();
+    if (!there) return NextResponse.json({ error: "Application not found" }, { status: 404 });
     return NextResponse.json({ error: "They're approved: to undo it, use Take approval back on their member page." }, { status: 409 });
   }
 
