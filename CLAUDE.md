@@ -99,7 +99,7 @@ supabase/
     ├── 066_night_followups.sql       # night follow-ups: decisions, sends, opt-outs
     ├── 068_techne_people.sql         # every Techne sign-in: the person, their email, the stay-in-touch list
     ├── 069_email_log.sql             # every email sent one person at a time (metadata only)
-    └── 070_free_day_approved_at.sql  # when a free day was approved (its 90-day lapse counts from there)
+    └── 071_free_day_approved_at.sql  # when a free day was approved (its 90-day lapse counts from there)
 DEPLOYMENT.md               # Full infra guide for agents + humans
 ```
 
@@ -357,7 +357,7 @@ approval live once in `packages/shared/src/freeDayEmails.ts`; web and bot both i
   claim needing review gets "We got your free day request"; a declined one a kind note (email_log kinds
   `free_day_received` / `free_day_declined` / `free_day_already_member`).
   **Lapse:** an approved claim unused `FREE_DAY_LAPSE_DAYS` (90, `packages/shared/src/prices.ts`) after approval
-  (`approved_at`, stamped by migration 070's trigger; claims approved before 070 start their 90 days when it runs;
+  (`approved_at`, stamped by migration 071's trigger; claims approved before 070 start their 90 days when it runs;
   before it runs nothing lapses) becomes `expired` in the daily `/api/cron/lifecycle-nudges` run, each claim in its
   own PIN-writer reservation (its pass taken back; one with an unrevoked door code issued since is marked used
   instead), audited `free_day_lapsed`; asking again reopens the same row (one per email).

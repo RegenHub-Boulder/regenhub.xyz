@@ -9,7 +9,7 @@
  * So the second door finds the claim used (or no pass left) and says so; it never issues a second free code.
  *
  * Someone already a member (lib/memberStanding.ts) isn't taken as a claim. An approved claim nobody used within
- * FREE_DAY_LAPSE_DAYS of its approval lapses (`expired`, by the daily lifecycle cron; migration 070 stamps
+ * FREE_DAY_LAPSE_DAYS of its approval lapses (`expired`, by the daily lifecycle cron; migration 071 stamps
  * `approved_at`) and the pass goes back, so the person can ask again; asking again reopens the same row (one claim
  * row per email, migration 014).
  */
@@ -129,7 +129,7 @@ const missingColumn = (e: { code?: string; message?: string } | null) =>
 
 /**
  * The daily lapse (run by /api/cron/lifecycle-nudges). Each claim still `reserved` FREE_DAY_LAPSE_DAYS after it was
- * approved (`approved_at`, migration 070; before 070 runs nothing lapses), each inside its own PIN-writer reservation
+ * approved (`approved_at`, migration 071; before 070 runs nothing lapses), each inside its own PIN-writer reservation
  * so it is ordered with both doors without holding them up:
  *   - if a door code was issued to that day-pass member since (they used the pass on /portal/passes before the two
  *     doors were one), the claim is marked used with that code: they had their free day;
@@ -140,7 +140,7 @@ export async function lapseFreeDays(admin: Service, now = new Date()): Promise<{
   const cutoff = new Date(now.getTime() - FREE_DAY_LAPSE_DAYS * 86_400_000).toISOString();
   const { data: stale, error } = await admin.from("free_day_claims").select(`${CLAIM_COLUMNS}, approved_at`)
     .eq("status", "reserved").lt("approved_at", cutoff).order("id", { ascending: true });
-  if (missingColumn(error)) return { lapsed: 0, used: 0, waitingFor: "070_free_day_approved_at.sql" };
+  if (missingColumn(error)) return { lapsed: 0, used: 0, waitingFor: "071_free_day_approved_at.sql" };
   if (error) throw new Error(`free-day lapse read failed: ${error.message}`);
   let lapsed = 0, used = 0;
   let failed = 0;

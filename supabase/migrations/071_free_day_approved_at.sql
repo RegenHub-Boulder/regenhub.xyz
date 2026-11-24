@@ -1,4 +1,4 @@
--- Migration 070: when a free day was approved (T-482 round 4).
+-- migration 071: when a free day was approved (T-482 round 4).
 --
 -- An approved free day nobody uses lapses FREE_DAY_LAPSE_DAYS (90) after approval (lib/freeDayClaim.ts
 -- lapseFreeDays, run by the daily lifecycle cron), and the approval email says "within the next 90 days". The clock

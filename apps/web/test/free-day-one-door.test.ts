@@ -244,7 +244,7 @@ describe("an unused free day lapses", () => {
     await approve("new@example.test");
     const old = new Date(Date.now() - (FREE_DAY_LAPSE_DAYS + 1) * DAY).toISOString();
     await db.sql("update free_day_claims set created_at = $1, approved_at = $1 where email in ('lu@example.test', 'ed@example.test')", [old]);
-    // Asked long ago but approved only lately: the 90 days run from approval (migration 070), so it doesn't lapse.
+    // Asked long ago but approved only lately: the 90 days run from approval (migration 071), so it doesn't lapse.
     await db.sql("update free_day_claims set created_at = $1 where email = 'new@example.test'", [old]);
     // Lu's one code attempt failed at the lock (revoked, pass refunded): that was never a free day.
     const lu = await memberOf("lu@example.test");
@@ -279,13 +279,13 @@ describe("an unused free day lapses", () => {
     expect((await claimOf("ed@example.test")).status).toBe("activated");
   });
 
-  it("before migration 070 nothing lapses (no approval time to count from), and nothing breaks", async () => {
+  it("before migration 071 nothing lapses (no approval time to count from), and nothing breaks", async () => {
     db = await makePgDb({ before: "070" });
     vi.mocked(createServiceClient).mockReturnValue({ ...db, auth: { signInWithOtp: async () => ({ error: null }) } } as never);
     await ask("old@example.test", "Ola Old");
     await approve("old@example.test");
     await db.sql("update free_day_claims set created_at = now() - interval '200 days' where email = 'old@example.test'");
-    expect(await lapseFreeDays(db as never)).toEqual({ lapsed: 0, used: 0, waitingFor: "070_free_day_approved_at.sql" });
+    expect(await lapseFreeDays(db as never)).toEqual({ lapsed: 0, used: 0, waitingFor: "071_free_day_approved_at.sql" });
     expect((await claimOf("old@example.test")).status).toBe("reserved");
   });
 });
