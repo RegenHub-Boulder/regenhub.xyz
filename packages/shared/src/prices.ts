@@ -16,7 +16,7 @@ export const PLAN_MONTHLY_CENTS = {
   cold_desk: 50000,
 } as const;
 
-/** An unused free day lapses this many days after it was approved (lapseFreeDays, migration 070's approved_at); the
+/** An unused free day lapses this many days after it was approved (lapseFreeDays, migration 071's approved_at); the
  *  person can then ask again. One constant: change it here. */
 export const FREE_DAY_LAPSE_DAYS = 90;
 
