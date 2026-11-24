@@ -269,6 +269,7 @@ export async function makePgDb({ before = "\uffff" }: { before?: string } = {}) 
         if (operator !== "is" || v !== null) throw new Error(`pgDb: not(${operator}, ${String(v)}) unsupported`);
         return filter(`${ident(col)} is not null`);
       },
+      ilike: (col: string, v: unknown) => filter(`${ident(col)} ilike ${param(v)}`),
       lt: (col: string, v: unknown) => filter(`${ident(col)} < ${param(v)}`),
       lte: (col: string, v: unknown) => filter(`${ident(col)} <= ${param(v)}`),
       gt: (col: string, v: unknown) => filter(`${ident(col)} > ${param(v)}`),

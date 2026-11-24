@@ -132,11 +132,15 @@ async function seed(pg, people) {
     ["bea@example.test", "Bea Bought (sample)", "activated", null, 30, "Ceramicist.", "Needs a laptop day.", 29],
     ["jo@example.test", "Jo Joined (sample)", "activated", null, 40, "Climate founder.", "Looking for a home base.", 39],
     ["cy@example.test", "Cy (sample)", "cancelled", null, 5, "Crypto.", "Mailing address.", null],
+    // Round 4: approved 100 days ago and never used, so it lapsed (lib/freeDayClaim.ts lapseFreeDays).
+    ["lu@example.test", "Lu Lapsed (sample)", "expired", null, 100, "Documentary editor.", "Wanted a quiet day.", null],
   ];
   for (const [email, name, status, date, d, about, why, act] of claims) {
     await q(`insert into free_day_claims(email, name, status, claimed_date, about, why_join, created_at, activated_at, invited_by_member_id)
       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, [email, name, status, date, about, why, ago(d), act == null ? null : ago(act), email === "pat@example.test" ? ana : null]);
   }
+  // The approval trigger (off for the seed) gives a reserved claim its one pass: Sam's is waiting.
+  await q("update members set day_passes_balance = 1 where email = 'sam-sample@example.test'");
   await q("insert into access_logs(member_id, method, result, created_at) values ($1, 'daycode', 'granted', $2)", [id["eve@example.test"], ago(10)]);
   await q("insert into access_logs(member_id, method, result, created_at) values ($1, 'daycode', 'granted', $2)", [id["bea@example.test"], ago(29)]);
   await q("insert into purchases(member_id, kind, amount_cents, passes_granted, email, created_at) values ($1, 'day_pass', 3000, 1, 'bea@example.test', $2)", [id["bea@example.test"], ago(20)]);

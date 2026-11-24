@@ -10,7 +10,10 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { makePgDb, type PgDb } from "./pgDb";
-import { readFreeDays } from "@/lib/freeDayData";
+import { readFreeDays, readFreeDayFacts } from "@/lib/freeDayData";
+import { freeDaysByMonth } from "@/lib/freeDayFunnel";
+import { monthOf } from "@/lib/scoreboard";
+import { MONTH_CSV_COLUMNS, MONTH_NOTES, monthByMonth, monthCsv, monthsSince } from "@/lib/scoreboardMonths";
 import { placeClaim, fmtDay, fmtDateOnly, type FreeDayGroup } from "@/lib/freeDayFunnel";
 import { FreeDaysList } from "@/components/admin/FreeDaysList";
 
@@ -123,3 +126,39 @@ describe("free days, grouped by where the person is", () => {
 });
 
 const FREE_DAY_KEYS: FreeDayGroup[] = ["review", "not_yet", "came_in", "joined", "already_member", "closed"];
+
+describe("free days on the scoreboard, month by month", () => {
+  it("counts claims by the month asked, and what came of them, from the same facts as the admin list", async () => {
+    const facts = await readFreeDayFacts(db as never);
+    const months = monthsSince("2026-01", new Date());
+    const byMonth = freeDaysByMonth(facts, months, (iso) => monthOf(iso));
+    const total = [...byMonth.values()].reduce((a, m) => ({
+      claimed: a.claimed + m.claimed, cameIn: a.cameIn + m.cameIn, boughtPass: a.boughtPass + m.boughtPass, joined: a.joined + m.joined,
+    }), { claimed: 0, cameIn: 0, boughtPass: 0, joined: 0 });
+    // 10 claims; came in: Cam, Eve (door only), Bea, Jo; Bea bought a pass 10 days after; Jo joined 15 days after.
+    // Mo and Dana were members already: never "joined".
+    expect(total).toEqual({ claimed: 10, cameIn: 4, boughtPass: 1, joined: 1 });
+    expect(byMonth.get(monthOf(ago(1)))!.claimed).toBeGreaterThanOrEqual(1);
+  });
+
+  it("the month table and its CSV carry the free-day columns; unreadable claims leave them blank", async () => {
+    const facts = await readFreeDayFacts(db as never);
+    const empty = { subs: [], members: [], interests: [], unsubscribes: [], applications: [], purchases: [], doors: [], followUps: [] };
+    const rows = monthByMonth({ ...empty, freeDays: facts }, new Date(), "2026-07");
+    expect(rows.reduce((n, r) => n + (r.freeDays?.claimed ?? 0), 0)).toBe(facts.filter((f) => f.claim.created_at >= "2026-07").length);
+    const headers = MONTH_CSV_COLUMNS.map((c) => c.header);
+    expect(headers).toEqual(expect.arrayContaining(["Free days asked for (claims)", "Free days: came in (of those claims)",
+      "Free days: bought a day pass within 60 days", "Free days: joined within 60 days"]));
+    expect(MONTH_NOTES.some((n) => n.startsWith("Free days:"))).toBe(true);
+    const blank = monthByMonth({ ...empty, freeDays: null }, new Date(), "2026-07");
+    expect(blank[0].freeDays).toBeNull();
+    expect(monthCsv(blank).split("\r\n")[1].split(",")[headers.indexOf("Free days asked for (claims)")]).toBe("");
+  });
+
+  it("a lapsed claim is closed, and says so", () => {
+    const placed = placeClaim({ id: 3, email: "l@example.test", name: "L", claimed_date: null, status: "expired", created_at: ago(95) },
+      { member: null, subscriptions: [], passBuys: [], entries: [] });
+    expect(placed.group).toBe("closed");
+    expect(placed.line).toMatch(/lapsed, not used within 90 days$/);
+  });
+});

@@ -8,12 +8,21 @@ import {
 } from "@/lib/email";
 import { logAction } from "@/lib/auditLog";
 import { hasBearerSecret } from "@/lib/secretAuth";
+import { lapseFreeDays, FREE_DAY_LAPSE_DAYS } from "@/lib/freeDayClaim";
+import { nextOpenNight } from "@/lib/nightFollowups";
+import { fetchCollectiveEvents } from "@/lib/regenos/events";
 
 /**
  * POST /api/cron/lifecycle-nudges
  *
- * Daily cron that finds day-pass members at key lifecycle moments and sends
- * ONE warm nudge. Three nudge types, most-specific-first:
+ * Daily cron. First it lapses approved free days nobody used within
+ * FREE_DAY_LAPSE_DAYS of approval (lib/freeDayClaim.ts lapseFreeDays: status
+ * `expired`, the unused pass taken back, so the person can ask again), each
+ * inside the PIN writer so it is ordered with both doors to a free-day code.
+ *
+ * Then it finds day-pass members at key lifecycle moments and sends
+ * ONE warm nudge. The two after a visit name the next night anyone can come
+ * to (lib/nightFollowups.ts nextOpenNight). Three nudge types, most-specific-first:
  *
  *   balance_empty        — visited at least once (≥2 days ago), balance now 0,
  *                          no sub. Still-warm membership pitch — the 2-day
@@ -75,6 +84,15 @@ export async function POST(req: Request) {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
   const now = Date.now();
 
+  // Lapse unused free days. A failure is reported, never blocks the nudges.
+  let freeDays: { lapsed: number; used: number } | { error: string };
+  try {
+    freeDays = await lapseFreeDays(admin, new Date(now));
+  } catch (err) {
+    console.error("[LifecycleNudges] free-day lapse failed:", err);
+    freeDays = { error: err instanceof Error ? err.message : String(err) };
+  }
+
   // Candidate pool: active day-pass members with an email.
   const { data: members } = await admin
     .from("members")
@@ -84,7 +102,7 @@ export async function POST(req: Request) {
     .not("email", "is", null);
 
   if (!members || members.length === 0) {
-    return NextResponse.json({ checked: 0, nudged: 0 });
+    return NextResponse.json({ checked: 0, nudged: 0, free_days: freeDays, lapse_days: FREE_DAY_LAPSE_DAYS });
   }
   const memberIds = members.map((m) => m.id);
 
@@ -161,6 +179,13 @@ export async function POST(req: Request) {
 
   const results: Array<{ member_id: number; type: NudgeType; sent: boolean; reason?: string }> = [];
 
+  // The next open night, read once and only when an after-visit note may go out. Techne down = the next Happy Hour.
+  let nextNight: ReturnType<typeof nextOpenNight> | undefined;
+  if (candidates.some((c) => c.type !== "never_visited")) {
+    const upcoming = await fetchCollectiveEvents({ after: new Date(now).toISOString() }).catch(() => null);
+    nextNight = nextOpenNight(upcoming ?? [], new Date(now), siteUrl);
+  }
+
   for (const { member: m, type, visits: visitsN } of candidates) {
     if (results.filter((r) => r.sent).length >= MAX_SENDS_PER_RUN) break;
 
@@ -182,8 +207,8 @@ export async function POST(req: Request) {
     }
 
     const tpl =
-      type === "balance_empty" ? nudgeBalanceEmptyEmail({ name: m.name, siteUrl })
-      : type === "first_visit_followup" ? nudgeComeBackEmail({ name: m.name, balance: m.day_passes_balance, siteUrl })
+      type === "balance_empty" ? nudgeBalanceEmptyEmail({ name: m.name, siteUrl, nextNight })
+      : type === "first_visit_followup" ? nudgeComeBackEmail({ name: m.name, balance: m.day_passes_balance, siteUrl, nextNight })
       : nudgeNeverVisitedEmail({ name: m.name, balance: m.day_passes_balance, siteUrl });
 
     const kind = type === "balance_empty" ? "nudge_balance_empty" : type === "first_visit_followup" ? "nudge_come_back" : "nudge_never_visited";
@@ -211,6 +236,7 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({
+    free_days: freeDays,
     checked: members.length,
     eligible: candidates.length,
     nudged: sentCount,

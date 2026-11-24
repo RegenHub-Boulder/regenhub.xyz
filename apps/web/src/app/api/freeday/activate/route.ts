@@ -2,6 +2,7 @@ import { withWebLockWriter } from "@/lib/lockWriter";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { codeIssuedSince, codeStillWorks, findClaim, freeDayUsedLine, markClaimUsed, membersByEmail } from "@/lib/freeDayClaim";
 import {
   allocateSlotWithRetry,
   setUserCode,
@@ -95,29 +96,7 @@ export async function POST() {
   return withWebLockWriter(async () => {
     const admin = createServiceClient();
 
-    // Find user's claim (by supabase_user_id or email fallback)
-    let { data: claim } = await admin
-      .from("free_day_claims")
-      .select("*")
-      .eq("supabase_user_id", user.id)
-      .single();
-
-    if (!claim && user.email) {
-      const { data: emailClaim } = await admin
-        .from("free_day_claims")
-        .select("*")
-        .eq("email", user.email)
-        .is("supabase_user_id", null)
-        .single();
-
-      if (emailClaim) {
-        await admin
-          .from("free_day_claims")
-          .update({ supabase_user_id: user.id })
-          .eq("id", emailClaim.id);
-        claim = { ...emailClaim, supabase_user_id: user.id };
-      }
-    }
+    const claim = await findClaim(admin, user);
 
     if (!claim) {
       return NextResponse.json(
@@ -126,15 +105,12 @@ export async function POST() {
       );
     }
 
-    // Already activated — return the existing code
-    if (claim.status === "activated" && claim.day_code_id) {
-      const { data: existingCode } = await admin
-        .from("day_codes")
-        .select("code, expires_at")
-        .eq("id", claim.day_code_id)
-        .single();
-
-      if (existingCode) {
+    // Already used. The same code back while it still works (a reload on the day); after that, a plain no.
+    if (claim.status === "activated") {
+      const { data: existingCode } = claim.day_code_id
+        ? await admin.from("day_codes").select("code, expires_at, is_active").eq("id", claim.day_code_id).maybeSingle()
+        : { data: null };
+      if (existingCode && codeStillWorks(existingCode)) {
         return NextResponse.json({
           code: existingCode.code,
           expires_at: existingCode.expires_at,
@@ -142,6 +118,7 @@ export async function POST() {
           already_activated: true,
         });
       }
+      return NextResponse.json({ error: freeDayUsedLine(claim.activated_at, false) }, { status: 409 });
     }
 
     if (claim.status !== "reserved") {
@@ -168,19 +145,35 @@ export async function POST() {
     const code = generateRandomCode();
     const expiresAt = calculateFreeDayExpiration();
 
-    // The free-day approval trigger (migration 016) auto-creates a day_pass
-    // member when status flips to 'reserved' — so by the time we get here the
-    // member row exists. Look it up so we can link day_code.member_id correctly
-    // (without this the unlock event lands in access_logs as "unattributed").
-    const { data: linkedMember } = await admin
-      .from("members")
-      .select("id, disabled")
-      .eq("email", claim.email)
-      .maybeSingle();
+    // The free-day approval trigger (migration 016/036) made (or found) the member row for this email when the claim
+    // was approved, and gave it the free day's one pass. Link day_code.member_id to it (else the unlock lands in
+    // access_logs as "unattributed") and spend that pass, so /portal/passes can't turn it into a second free day.
+    const [linkedMember] = await membersByEmail(admin, claim.email);
 
     if (linkedMember?.disabled) {
       return NextResponse.json({ error: "Member is disabled" }, { status: 403 });
     }
+
+    let passSpent = false;
+    if (linkedMember) {
+      const { data: left, error: spendErr } = await admin.rpc("decrement_day_pass_balance", { p_member_id: linkedMember.id, p_amount: 1 });
+      if (spendErr || left === -1) {
+        // No pass left: it went on a code from Day passes (before the two doors were one). That was the free day.
+        const used = linkedMember.member_type === "day_pass" ? await codeIssuedSince(admin, linkedMember.id, claim.created_at) : null;
+        if (used) {
+          await markClaimUsed(admin, claim.id, used.id, new Date(used.issued_at));
+          return NextResponse.json({ error: freeDayUsedLine(used.issued_at, false) }, { status: 409 });
+        }
+        return NextResponse.json(
+          { error: "Your free day pass isn't in your account. Reply to your approval email and we'll sort it out." },
+          { status: 409 }
+        );
+      }
+      passSpent = true;
+    }
+    const refund = async () => {
+      if (passSpent) await admin.rpc("increment_day_pass_balance", { p_member_id: linkedMember!.id, p_amount: 1 });
+    };
 
     // Atomic slot claim: INSERT-with-retry against the partial unique index.
     // If a concurrent request claims the chosen slot first, retry with the
@@ -213,6 +206,7 @@ export async function POST() {
     });
 
     if (!allocation.ok) {
+      await refund();
       if (!allocation.exhausted) console.error("[FreeDay] DB insert error:", allocation.error);
       return NextResponse.json(
         {
@@ -237,21 +231,14 @@ export async function POST() {
         .from("day_codes")
         .update({ is_active: false, revoked_at: new Date().toISOString() })
         .eq("id", allocation.data.id);
+      await refund();
       return NextResponse.json(
         { error: LOCK_FAILURE_MSG },
         { status: 502 }
       );
     }
 
-    // Update claim status
-    await admin
-      .from("free_day_claims")
-      .update({
-        status: "activated",
-        day_code_id: allocation.data.id,
-        activated_at: new Date().toISOString(),
-      })
-      .eq("id", claim.id);
+    await markClaimUsed(admin, claim.id, allocation.data.id);
 
     // Notify Telegram (fire-and-forget)
     notifyTelegram(claim.name);

@@ -95,6 +95,12 @@ function MonthByMonth({ rows }: { rows: MonthRow[] }) {
         </>
       ) },
     ] },
+    { title: "Free days", cols: [
+      { label: "Claimed", cell: (r) => r.freeDays?.claimed ?? <span className="text-muted">—</span> },
+      { label: "Came in", cell: (r) => r.freeDays?.cameIn ?? <span className="text-muted">—</span> },
+      { label: "Bought a pass", cell: (r) => r.freeDays?.boughtPass ?? <span className="text-muted">—</span> },
+      { label: "Joined", cell: (r) => r.freeDays?.joined ?? <span className="text-muted">—</span> },
+    ] },
     { title: "Day passes bought", cols: [
       { label: "Single, card", cell: (r) => r.passes.singleCard },
       { label: "Single, USDC", cell: (r) => r.passes.singleUsdc },

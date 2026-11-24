@@ -216,6 +216,10 @@ export function pglitePostgrest(pg: PGlite, users: Map<string, FakeAuthUser>) {
         ? json(200, { ...user, aud: "authenticated", role: "authenticated", app_metadata: {}, user_metadata: {} })
         : json(401, { code: 401, msg: "invalid JWT" });
     }
+    // PostgREST hands each request's headers to SQL as `request.headers`: the door-code guard (migration 053) reads
+    // the PIN-writer token from there.
+    const writer = headers.get("x-lock-writer-token");
+    await pg.query("select set_config('request.headers', $1, false)", [JSON.stringify(writer ? { "x-lock-writer-token": writer } : {})]);
     const rpc = path.match(/^\/rest\/v1\/rpc\/([a-z_][a-z0-9_]*)$/);
     if (rpc) {
       const body = bodyText ? JSON.parse(bodyText) as Record<string, unknown> : {};

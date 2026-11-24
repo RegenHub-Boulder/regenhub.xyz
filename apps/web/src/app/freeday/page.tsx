@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { ALREADY_MEMBER, codeStillWorks, findClaim, isAlreadyMember } from "@/lib/freeDayClaim";
 import FreeDayForm from "./FreeDayForm";
 import type { Metadata } from "next";
 import { OG_IMAGES } from "@/lib/metadata";
@@ -57,31 +58,20 @@ export default async function FreeDayPage({
     return <FreeDayForm inviter={inviter} />;
   }
 
-  // Check if user is already a full member (cold_desk/hot_desk/hub_friend)
-  const { data: existingMember } = await admin
-    .from("members")
-    .select("id, member_type")
-    .eq("supabase_user_id", user.id)
-    .single();
-
-  if (
-    existingMember &&
-    existingMember.member_type !== "day_pass"
-  ) {
+  // Already a member (lib/memberStanding.ts: a desk or hub friend, or a $30+ plan): no free day needed.
+  if (await isAlreadyMember(admin, user.email ?? "", user.id)) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center px-6">
         <Card className="glass-panel-strong max-w-md w-full">
-          <CardContent className="p-10 text-center">
+          <CardContent className="p-10 text-center" data-testid="freeday-already-member">
             <CheckCircle className="w-12 h-12 text-sage mx-auto mb-4" />
             <h1 className="text-2xl font-bold text-forest mb-3">
-              You&apos;re Already a Member!
+              You&apos;re already a member
             </h1>
-            <p className="text-muted mb-6">
-              No need for a free day pass — you have full access to RegenHub.
-            </p>
+            <p className="text-muted mb-6">{ALREADY_MEMBER}</p>
             <Link href="/portal">
               <Button className="btn-primary-glass gap-2">
-                Go to Your Portal
+                Go to your portal
                 <ArrowRight className="w-4 h-4" />
               </Button>
             </Link>
@@ -91,52 +81,29 @@ export default async function FreeDayPage({
     );
   }
 
-  // Authenticated — check for an existing claim
-  // Try by supabase_user_id first
-  let { data: claim } = await admin
-    .from("free_day_claims")
-    .select("*")
-    .eq("supabase_user_id", user.id)
-    .single();
+  const claim = await findClaim(admin, user);
 
-  // Auto-link by email if no claim found by user_id
-  if (!claim && user.email) {
-    const { data: emailClaim } = await admin
-      .from("free_day_claims")
-      .select("*")
-      .eq("email", user.email)
-      .is("supabase_user_id", null)
-      .single();
-
-    if (emailClaim) {
-      await admin
-        .from("free_day_claims")
-        .update({ supabase_user_id: user.id })
-        .eq("id", emailClaim.id);
-      claim = { ...emailClaim, supabase_user_id: user.id };
-    }
-  }
-
-  if (!claim) {
-    // Authenticated but no claim — show the date picker form with email locked
+  // No claim, or a lapsed one (approved, never used within FREE_DAY_LAPSE_DAYS): the form, email locked.
+  if (!claim || claim.status === "expired") {
     return (
       <FreeDayForm
         authenticatedEmail={user.email ?? undefined}
         inviter={inviter}
+        lapsed={claim?.status === "expired"}
       />
     );
   }
 
-  // If activated, fetch the existing door code
+  // Used: the code back while it still works (the same day); after that, the page says the free day is used.
   let existingCode: { code: string; expires_at: string | null } | undefined;
   if (claim.status === "activated" && claim.day_code_id) {
     const { data: codeData } = await admin
       .from("day_codes")
-      .select("code, expires_at")
+      .select("code, expires_at, is_active")
       .eq("id", claim.day_code_id)
-      .single();
+      .maybeSingle();
 
-    if (codeData) {
+    if (codeData && codeStillWorks(codeData)) {
       existingCode = {
         code: codeData.code,
         expires_at: codeData.expires_at,

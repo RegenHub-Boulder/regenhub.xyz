@@ -111,15 +111,21 @@ async function batchFacts(admin: Admin, dids: string[]) {
     ...rows.members.flatMap((m) => (m.email ? [m.email.trim().toLowerCase()] : [])),
     ...rows.people.flatMap((p) => (p.email && p.email_confirmed ? [p.email.trim().toLowerCase()] : [])),
   ])];
-  const [subs, holds] = await Promise.all([
+  const [subs, holds, claims] = await Promise.all([
     rsvpSubs(admin, rows.members),
     emails.length ? admin.rpc("night_followup_holds", { p_emails: emails }) : Promise.resolve({ data: [], error: null }),
+    // Who has (or had) a free day: a guest without one is offered it. A lapsed claim doesn't count; a failed read
+    // offers it to no one rather than to someone who already had one.
+    emails.length ? admin.from("free_day_claims").select("email, status").in("email", emails) : Promise.resolve({ data: [], error: null }),
   ]);
   if (holds.error) throw holds.error;
+  if (claims.error) console.error("[night followups] free-day read failed; no free-day line:", claims.error.message);
   return {
     ...rows,
     subs,
     holds: new Map(((holds.data ?? []) as { email: string; reason: HeldReason }[]).map((h) => [h.email, h.reason])),
+    freeDayHad: claims.error ? null : new Set(((claims.data ?? []) as { email: string; status: string }[])
+      .filter((c) => c.status !== "expired").map((c) => c.email.trim().toLowerCase())) as ReadonlySet<string> | null,
   };
 }
 
@@ -204,7 +210,8 @@ export async function readNightFollowups(admin: Admin, events: readonly Collecti
     const night = nightValues({ name: n.name, startAt: n.startAt!, series: n.series }, events, now, siteBase());
     const previews: NightFollowupView["previews"] = {};
     for (const v of ["guest", "member"] as const) {
-      const p = batch.send.find((x) => x.variant === v);
+      // A guest offered the free day, if there is one, so the steward sees that line too.
+      const p = batch.send.find((x) => x.variant === v && x.offerFreeDay) ?? batch.send.find((x) => x.variant === v);
       if (p) previews[v] = { name: p.name, ...renderFollowup(v, personValues(p, night, siteBase()), { optOutUrl: "#", unsubscribeUrl: "#" }) };
     }
     return { ...base, send: batch.send.map(row), held: batch.held.map(row), noEmail: batch.noEmail, previews };
@@ -235,7 +242,7 @@ const NO_SIGNING_KEY = "Email links can't be signed on this server (no unsubscri
 async function sendRows(
   admin: Admin,
   rows: readonly SentRow[],
-  people: ReadonlyMap<string, { greetName: string; askForPage: boolean }>,
+  people: ReadonlyMap<string, { greetName: string; askForPage: boolean; offerFreeDay?: boolean }>,
   night: () => Promise<ReturnType<typeof nightValues>>,
 ): Promise<number> {
   let sent = 0;
@@ -297,7 +304,7 @@ export async function decideNightFollowups(
   if (readErr) return { ok: false, status: 500, error: "Couldn't record that. Nothing was sent." };
   if (already) return { ok: false, status: 409, error: ALREADY_DECIDED };
   let people: { member_id: number | null; email: string; variant: FollowupVariant }[] = [];
-  const byEmail = new Map<string, { greetName: string; askForPage: boolean }>();
+  const byEmail = new Map<string, { greetName: string; askForPage: boolean; offerFreeDay?: boolean }>();
   if (input.decision === "send") {
     const a = await fetchAttendance(event.uri);
     if (!a) return { ok: false, status: 503, error: "Couldn't read the night's RSVPs from Techne. Try again in a moment." };
@@ -307,7 +314,7 @@ export async function decideNightFollowups(
     if (chosen.length === 0) return { ok: false, status: 400, error: "No one to send to. Skip the night instead." };
     if (!canSignEmailLinks()) return { ok: false, status: 500, error: NO_SIGNING_KEY };
     people = chosen.map((p) => ({ member_id: p.memberId, email: p.email, variant: p.variant }));
-    for (const p of chosen) byEmail.set(p.email, { greetName: p.greetName, askForPage: p.askForPage });
+    for (const p of chosen) byEmail.set(p.email, { greetName: p.greetName, askForPage: p.askForPage, offerFreeDay: p.offerFreeDay });
   }
   const { data, error } = await admin.rpc("decide_night_followups", {
     p_event_uri: event.uri,
@@ -353,7 +360,7 @@ export async function retryNightFollowups(admin: Admin, eventUri: string, stewar
   // now, for which the member's name is read. A failed read leaves the greeting plain rather than strand the claim.
   const rows = claimed;
   const unsaved = rows.filter((r) => r.html == null).flatMap((r) => (r.member_id ? [r.member_id] : []));
-  const people = new Map<string, { greetName: string; askForPage: boolean }>();
+  const people = new Map<string, { greetName: string; askForPage: boolean; offerFreeDay?: boolean }>();
   if (unsaved.length) {
     const { data: members, error: mErr } = await admin.from("members").select("id, name, show_in_directory").in("id", unsaved);
     if (mErr) console.error("[night followups] retry: members read failed, sending with a plain greeting:", mErr);

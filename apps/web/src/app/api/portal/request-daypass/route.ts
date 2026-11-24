@@ -2,6 +2,7 @@ import { withWebLockWriter } from "@/lib/lockWriter";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { claimByEmail, freeDayUsedLine, markClaimUsed } from "@/lib/freeDayClaim";
 import {
   allocateSlotWithRetry,
   setUserCode,
@@ -61,7 +62,7 @@ export async function POST(request: Request) {
   return withWebLockWriter(async () => {
     const { data: member } = await supabase
       .from("members")
-      .select("id, member_type, disabled, day_passes_balance")
+      .select("id, email, member_type, disabled, day_passes_balance")
       .eq("supabase_user_id", user.id)
       .single();
 
@@ -104,8 +105,12 @@ export async function POST(request: Request) {
     );
 
     if (rpcError || newBalance === -1) {
+      // A free day already used (here or on /freeday) is the usual reason a day-pass member has none: say that.
+      const claim = !isFullMember && member.email ? await claimByEmail(admin, member.email) : null;
       return NextResponse.json(
-        { error: "No day passes remaining — contact an admin to top up" },
+        { error: claim?.status === "activated"
+          ? freeDayUsedLine(claim.activated_at, true)
+          : "No day passes left. Buy one below to get a door code." },
         { status: 400 }
       );
     }
@@ -164,6 +169,13 @@ export async function POST(request: Request) {
         .eq("id", allocation.data.id);
       await admin.rpc("increment_day_pass_balance", { p_member_id: member.id, p_amount: 1 });
       return NextResponse.json({ error: LOCK_FAILURE_MSG }, { status: 502 });
+    }
+
+    // One door (lib/freeDayClaim.ts): an approved free day not yet used is the pass just spent. Mark it, so
+    // /freeday can't issue a second free code.
+    if (!isFullMember && member.email) {
+      const claim = await claimByEmail(admin, member.email);
+      if (claim?.status === "reserved") await markClaimUsed(admin, claim.id, allocation.data.id);
     }
 
     return NextResponse.json({

@@ -25,6 +25,12 @@ import {
 } from "lucide-react";
 import HubEssentials from "@/components/portal/HubEssentials";
 import regenHubFull from "@/assets/regenhub-full.svg";
+import { DAY_PASS_MEMBER_CENTS, DAY_PASS_PUBLIC_CENTS, MEMBERSHIP_FROM_CENTS, formatCents } from "@/lib/plans";
+import { FREE_DAY_LAPSE_DAYS } from "@regenhub/shared/prices";
+
+const DAY_PASS = formatCents(DAY_PASS_PUBLIC_CENTS);
+const DAY_PASS_MEMBER = formatCents(DAY_PASS_MEMBER_CENTS);
+const MEMBERSHIP_FROM = formatCents(MEMBERSHIP_FROM_CENTS);
 
 export type FreeDayClaim = {
   id: number;
@@ -45,6 +51,8 @@ type Props = {
   existingCode?: { code: string; expires_at: string | null };
   /** Inviter info from ?ref= query param */
   inviter?: { name: string; invite_code: string };
+  /** Their last free day was approved but never used, and lapsed: the form asks again. */
+  lapsed?: boolean;
 };
 
 function formatDate(dateStr: string): string {
@@ -68,6 +76,7 @@ export default function FreeDayForm({
   claim,
   existingCode,
   inviter,
+  lapsed,
 }: Props) {
   const router = useRouter();
 
@@ -85,6 +94,7 @@ export default function FreeDayForm({
   const [submittedStatus, setSubmittedStatus] = useState<string | null>(null);
   const [activating, setActivating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [alreadyMember, setAlreadyMember] = useState(false);
 
   // Activation result
   const [doorCode, setDoorCode] = useState<string | null>(
@@ -119,6 +129,7 @@ export default function FreeDayForm({
         }),
       });
       const json = await res.json();
+      setAlreadyMember(!!json.already_member);
       if (!res.ok) throw new Error(json.error ?? "Failed to submit");
 
       if (json.authenticated) {
@@ -227,9 +238,9 @@ export default function FreeDayForm({
     );
   }
 
-  // ── Render: Expired claim ───────────────────────────────────
+  // ── Render: Used (the code from that day has run out) ───────
 
-  if (claim?.status === "expired") {
+  if (claim?.status === "activated" && !doorCode) {
     return (
       <div className="px-6 py-12">
         <div className="max-w-2xl mx-auto space-y-8">
@@ -246,7 +257,7 @@ export default function FreeDayForm({
               Hope You Enjoyed Your Day!
             </h1>
             <p className="text-muted">
-              Your free day has been used. Here&apos;s how to come back.
+              You&apos;ve had your free day. Here&apos;s how to come back.
             </p>
           </div>
 
@@ -255,9 +266,9 @@ export default function FreeDayForm({
               <CardContent className="p-6">
                 <Ticket className="w-8 h-8 text-gold mb-3" />
                 <h3 className="font-semibold mb-1">Day Passes</h3>
-                <p className="text-2xl font-bold text-gold mb-2">$30/day</p>
+                <p className="text-2xl font-bold text-gold mb-2">{DAY_PASS}/day</p>
                 <p className="text-sm text-muted mb-4">
-                  Come back anytime with a day pass. $25 for contributing members. No commitment, just buy a pass and get a door code.
+                  Come back anytime with a day pass. {DAY_PASS_MEMBER} for members. No commitment, just buy a pass and get a door code.
                 </p>
                 <Link href="/portal/passes">
                   <Button className="btn-primary-glass w-full gap-2">
@@ -272,7 +283,7 @@ export default function FreeDayForm({
               <CardContent className="p-6">
                 <Key className="w-8 h-8 text-sage mb-3" />
                 <h3 className="font-semibold mb-1">Become a Member</h3>
-                <p className="text-2xl font-bold text-gold mb-2">From $30/mo</p>
+                <p className="text-2xl font-bold text-gold mb-2">From {MEMBERSHIP_FROM}/mo</p>
                 <p className="text-sm text-muted mb-4">
                   Monthly day passes that accumulate, member rate on extras, members-only events. Desk membership too if you want a permanent code.
                 </p>
@@ -298,7 +309,7 @@ export default function FreeDayForm({
 
   // ── Render: Activated — show door code ──────────────────────
 
-  if (claim?.status === "activated" || doorCode) {
+  if (doorCode) {
     return (
       <div className="px-6 py-12">
         <div className="max-w-2xl mx-auto space-y-8">
@@ -352,7 +363,7 @@ export default function FreeDayForm({
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="text-center">
                 <Ticket className="w-6 h-6 text-gold mx-auto mb-2" />
-                <p className="text-sm font-medium mb-1">Day Pass — $30 ($25 members)</p>
+                <p className="text-sm font-medium mb-1">Day Pass — {DAY_PASS} ({DAY_PASS_MEMBER} members)</p>
                 <p className="text-xs text-muted mb-3">No commitment, just show up</p>
                 <Link href="/portal/passes">
                   <Button size="sm" className="btn-primary-glass gap-1.5 text-xs">
@@ -362,7 +373,7 @@ export default function FreeDayForm({
               </div>
               <div className="text-center">
                 <Key className="w-6 h-6 text-sage mx-auto mb-2" />
-                <p className="text-sm font-medium mb-1">Membership — from $30/mo</p>
+                <p className="text-sm font-medium mb-1">Membership — from {MEMBERSHIP_FROM}/mo</p>
                 <p className="text-xs text-muted mb-3">Monthly day passes + member rate</p>
                 <Link href="/membership">
                   <Button size="sm" className="btn-glass gap-1.5 text-xs">
@@ -452,6 +463,12 @@ export default function FreeDayForm({
             see if it&apos;s right for you.
           </p>
         </div>
+
+        {lapsed && (
+          <p className="text-center text-sm text-muted" data-testid="freeday-lapsed">
+            Your last free day wasn&apos;t used within {FREE_DAY_LAPSE_DAYS} days, so it lapsed. You can ask again below.
+          </p>
+        )}
 
         {/* Invite badge */}
         {isInvited && (
@@ -580,7 +597,12 @@ export default function FreeDayForm({
                 />
               </div>
 
-              {error && <p className="text-sm text-danger">{error}</p>}
+              {error && (
+                <p className="text-sm text-danger">
+                  {error}
+                  {alreadyMember && <> <Link href="/portal" className="underline">Go to your portal</Link></>}
+                </p>
+              )}
 
               <Button
                 type="submit"

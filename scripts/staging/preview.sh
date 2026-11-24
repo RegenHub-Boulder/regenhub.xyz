@@ -18,6 +18,8 @@
 # /admin/events, and sends mail to the staging outbox (EMAIL_PROVIDER=outbox; /staging/outbox shows the latest).
 # T482_AUDIT=1 (alone) runs the stand-in on the real schema with sample rows for every /portal and /admin screen
 # (audit-seed.mjs); scripts/staging/audit-shots.mjs captures and counts them. The steward is an admin there.
+# T482_FREEDAY=1 (with T482_AUDIT=1, T-482 round 4) runs a Home Assistant stand-in on B+5 (ha-standin.mjs) so a door
+# code can be issued end to end, and sends mail to the staging outbox; scripts/staging/round4-shots.mjs drives it.
 # T482_SCOREBOARD=1 also seeds the fictional rows /admin/scoreboard reads (scoreboard-seed.mjs); sign in as the steward.
 # T482_STUCK_WRITER=1 (with T482_AUDIT) also seeds a door-code writer that died on 11-20 (silent past its lease) and two
 # failed door-code changes; T482_HA_STUB=1 points HA_URL at scripts/staging/ha-stub.mjs (127.0.0.1:B+6, never the real
@@ -29,7 +31,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 S="${T482_STATE:-$HOME/.cache/t482}"
 BUILD="${T482_BUILD:-$S}"
 B="${T482_PORT_BASE:-18590}"
-P_APPVIEW=$((B + 1)) P_PG=$((B + 2)) P_STANDIN=$((B + 3)) P_SUPA=$((B + 4))
+P_APPVIEW=$((B + 1)) P_PG=$((B + 2)) P_STANDIN=$((B + 3)) P_SUPA=$((B + 4)) P_HA=$((B + 5))
 PG="$BUILD/pgenv/bin"
 STATE="$S/state"
 mkdir -p "$STATE" && chmod 700 "$STATE"
@@ -59,6 +61,11 @@ if [ -n "${T497_FOLLOWUPS:-}" ]; then
   export EMAIL_PROVIDER=outbox EMAIL_FROM="RegenHub (staging) <hello@regenhub.test>" NEWSLETTER_UNSUBSCRIBE_SECRET=staging-only
 fi
 
+if [ -n "${T482_FREEDAY:-}" ]; then
+  node "$ROOT/scripts/staging/ha-standin.mjs" --port "$P_HA" > "$S/ha-standin.log" 2>&1 & pids+=($!)
+  export HA_URL="http://127.0.0.1:$P_HA/api" HA_TOKEN=staging-only HA_LOCK_ENTITIES=lock.front_door_lock,lock.back_door_lock
+  export EMAIL_PROVIDER=outbox EMAIL_FROM="RegenHub (staging) <hello@regenhub.test>" NEWSLETTER_UNSUBSCRIBE_SECRET=staging-only
+fi
 if [ -n "${T482_HA_STUB:-}" ]; then
   node "$ROOT/scripts/staging/ha-stub.mjs" --port "$((B + 6))" --log "$S/ha-stub.log" > "$S/ha-stub.out" 2>&1 & pids+=($!)
   export HA_URL="http://127.0.0.1:$((B + 6))/api" HA_TOKEN=staging-only HA_LOCK_ENTITIES=lock.front_door_lock,lock.back_door_lock

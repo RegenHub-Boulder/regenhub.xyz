@@ -11,6 +11,7 @@ import { DAY_CODE_SLOT_MAX, DAY_CODE_SLOT_MIN } from "@regenhub/shared";
 import { PLANS, formatCents, isDeskPlan } from "./plans";
 import { dateIn, zonedTimeToUtc } from "./series";
 import { effectiveMonthlyCents } from "./stripeNet";
+import { FREE_DAY_CONVERSION_DAYS, freeDaysByMonth, type ClaimFacts, type FreeDayClaimRow, type FreeDayMonth } from "./freeDayFunnel";
 import { isGoodStanding } from "./membershipRevenue";
 import {
   FOLLOWUP_JOIN_DAYS, SCOREBOARD_TZ, canceledOn, firstStartedAt, funnelByMonth, isPayingMember, monthOf, started, subscriptionFlow,
@@ -445,6 +446,8 @@ export interface MonthRow {
   visits: VisitMonth;
   list: ListMonth;
   applications: number;
+  /** Free days asked for this month and what came of them (lib/freeDayFunnel.ts); null when the claims couldn't be read. */
+  freeDays: FreeDayMonth | null;
   passes: PassMonth;
   memberships: {
     /** Subscriptions started / ended this month (subscriptionFlow; a plan change by a new subscription is both). */
@@ -489,6 +492,8 @@ export interface MonthInput {
   followUps: readonly FollowupMonth[] | null;
   /** Plans changed in place (the audit log), for day plan → desk; null when unreadable (that column is blank). */
   planChanges?: readonly PlanChange[] | null;
+  /** Every free-day claim with what happened after it (lib/freeDayData.ts readFreeDayFacts); null when unreadable. */
+  freeDays?: readonly { claim: FreeDayClaimRow; facts: ClaimFacts }[] | null;
 }
 
 export function monthByMonth(input: MonthInput, now: Date, from: string = MONTH_TABLE_FROM): MonthRow[] {
@@ -502,6 +507,7 @@ export function monthByMonth(input: MonthInput, now: Date, from: string = MONTH_
   const l2p = listToPass(input, months);
   const p2m = passToMember(input, months);
   const d2d = input.planChanges === null ? null : dayPlanToDesk(input.subs, months, input.planChanges);
+  const free = input.freeDays ? freeDaysByMonth(input.freeDays, months, monthOf) : null;
   const nights = input.followUps ? new Map(input.followUps.map((f) => [f.month, { base: f.followedUp, converted: f.joined }])) : null;
   return months.map((m) => ({
     month: m,
@@ -509,6 +515,7 @@ export function monthByMonth(input: MonthInput, now: Date, from: string = MONTH_
     visits: visits.get(m)!,
     list: list.get(m)!,
     applications: funnel.get(m)!.applications,
+    freeDays: free ? free.get(m)! : null,
     passes: passes.get(m)!,
     memberships: {
       started: flow.get(m)!.started,
@@ -534,6 +541,7 @@ export const MONTH_NOTES: readonly string[] = [
   "Member days: each member counted once per day they opened the door with their own code or key. Day-code days: each day code (guest passes, day passes, free days) counted once per day it opened the door (a code slot reused for two guests on one day counts once). Unlocks with no member and no day code (a key, the inside handle, a code no member held when it was used) aren't counted.",
   "Site visits aren't tracked yet.",
   "Stay-in-touch list: distinct emails signed up by month end, minus those unsubscribed by then (the newsletter list adds members on top). Added: emails whose first signup was that month, by where they signed up. Rebuilt from today's list, so a signup removed later (\"No thanks\") drops out of earlier months too.",
+  `Free days: claims asked for that month (any outcome; a lapsed claim asked again counts in the month it was asked again). Came in: of them, used the free day or opened the door since. Bought a day pass / joined: of them, within ${FREE_DAY_CONVERSION_DAYS} days of asking (joined = first $30+ plan; someone already a member when they asked doesn't count).`,
   "Day passes: purchases, card and USDC; a five-pack (no longer sold) is one purchase of 5 passes (the headline counts passes). A refund isn't subtracted.",
   "New and cancelled: subscriptions started and ended that month, card and USDC (a plan change made by a new subscription is one of each). First-time: members whose first subscription started that month.",
   `Paying at month end, by plan: the headline's paying members ($30+/mo plans, paying something; a full comp isn't paying), each once, under their largest plan, so the plans add up to the total. Rebuilt from today's rows at today's plan and price (a plan changed in place shows its current plan for earlier months). Net revenue at month end is the headline's definition.`,
@@ -556,6 +564,10 @@ export const MONTH_CSV_COLUMNS: readonly { header: string; value: (r: MonthRow) 
   { header: "Stay-in-touch list at month end (emails)", value: (r) => r.list.size },
   { header: "Added to the list this month (emails)", value: (r) => r.list.added },
   ...LIST_SOURCES.map((s) => ({ header: `Added this month from ${s.label}`, value: (r: MonthRow) => r.list.bySource[s.key] })),
+  { header: "Free days asked for (claims)", value: (r) => r.freeDays?.claimed ?? "" },
+  { header: "Free days: came in (of those claims)", value: (r) => r.freeDays?.cameIn ?? "" },
+  { header: `Free days: bought a day pass within ${FREE_DAY_CONVERSION_DAYS} days`, value: (r) => r.freeDays?.boughtPass ?? "" },
+  { header: `Free days: joined within ${FREE_DAY_CONVERSION_DAYS} days`, value: (r) => r.freeDays?.joined ?? "" },
   { header: "Membership applications", value: (r) => r.applications },
   { header: "Single day passes bought by card", value: (r) => r.passes.singleCard },
   { header: "Single day passes bought in USDC", value: (r) => r.passes.singleUsdc },

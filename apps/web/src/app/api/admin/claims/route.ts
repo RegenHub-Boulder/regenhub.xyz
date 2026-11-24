@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { sendEmail, freeDayApprovedEmail, freeDayPlusMembershipApprovedEmail } from "@/lib/email";
+import { sendEmail, freeDayApprovedEmail, freeDayPlusMembershipApprovedEmail, freeDayDeclinedEmail } from "@/lib/email";
 
 export async function GET() {
   if (!await requireAdmin()) {
@@ -52,10 +52,10 @@ export async function PATCH(request: Request) {
     .eq("id", id)
     .single();
 
-  const { error } = await admin
-    .from("free_day_claims")
-    .update({ status })
-    .eq("id", id);
+  // Conditional on the status read above, so two clicks can't both send the approval (or decline) email.
+  let update = admin.from("free_day_claims").update({ status }).eq("id", id);
+  if (prev) update = update.eq("status", prev.status);
+  const { data: moved, error } = await update.select("id");
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -63,7 +63,8 @@ export async function PATCH(request: Request) {
 
   // On approval transition: optionally flip the membership-approval flag on
   // the member, and fire the appropriate email.
-  const isApprovalTransition = prev && prev.status === "pending" && status === "reserved" && prev.email;
+  const changed = (moved ?? []).length > 0;
+  const isApprovalTransition = changed && prev && prev.status === "pending" && status === "reserved" && prev.email;
 
   if (isApprovalTransition && approve_for_membership) {
     // The free-day trigger has already created (or found) a day_pass member
@@ -98,6 +99,13 @@ export async function PATCH(request: Request) {
       html: tpl.html,
       text: tpl.text,
     }).catch((err) => console.error("[AdminClaims] email send failed:", err));
+  }
+
+  // Turned down before it was approved: a kind note, so they aren't left waiting.
+  if (changed && prev && prev.status === "pending" && status === "cancelled" && prev.email) {
+    const tpl = freeDayDeclinedEmail({ name: prev.name, siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz" });
+    await sendEmail({ kind: "free_day_declined", to: prev.email, ...tpl })
+      .catch((err) => console.error("[AdminClaims] decline email failed:", err));
   }
 
   return NextResponse.json({ success: true });

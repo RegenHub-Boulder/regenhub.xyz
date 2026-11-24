@@ -98,7 +98,8 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
     await pg.exec(`
       alter table members add column member_type text not null default 'day_pass', add column show_in_directory boolean;
       create table subscriptions (id serial primary key, member_id integer references members(id), status text not null,
-        monthly_cents integer not null, plan_key text);`);
+        monthly_cents integer not null, plan_key text);
+      create table free_day_claims (id serial primary key, email text not null unique, status text not null);`);
     await pg.exec(await migration("066_night_followups.sql"));
     // Ana: a desk member, page not set up. Sam: a day-pass guest. Lee: unsubscribed from the newsletter. Kim: no
     // member row (Techne only). The steward has no member row at all.
@@ -219,6 +220,10 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
     expect(sam.html).toContain("/api/newsletter/unsubscribe?email=sam%40example.test");
     expect(sam.html).toContain("/api/followups/optout?email=sam%40example.test");
     expect(edge.mails.find((m) => m.to === "ana@example.test")!.html).not.toContain("/membership");
+    // A guest who never had a free day is offered one; a member isn't.
+    expect(sam.html).toContain(`<a href="${SITE}/freeday"`);
+    expect(sam.html).toContain("Your first day here is free");
+    expect(edge.mails.find((m) => m.to === "ana@example.test")!.html).not.toContain("/freeday");
     expect(await rows()).toEqual([
       { email: "ana@example.test", variant: "member", status: "sent", held_reason: null },
       { email: "sam@example.test", variant: "guest", status: "sent", held_reason: null },
@@ -237,6 +242,8 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
     await signInAs(KIM.did);
     expect((await pg.query("select email, email_confirmed, member_id from techne_people where did = $1", [KIM.did])).rows)
       .toEqual([{ email: "kim@example.test", email_confirmed: true, member_id: null }]);
+    // Kim already had a free day (Sam never asked): only Sam's note offers one. A lapsed claim would count as never.
+    await pg.query("insert into free_day_claims (email, status) values ('kim@example.test', 'activated'), ('sam@example.test', 'expired')");
     const uri = await pastNight("Civic Tech Night", 20, [SAM, KIM, JO]);
     await signInAs(STEWARD.did);
     const night = (await nightOnPage(uri))!;
@@ -246,6 +253,8 @@ describe("night follow-ups (stand-in Techne, PGlite, Resend at the edge)", () =>
     const kim = edge.mails.find((m) => m.to === "kim@example.test")!;
     expect(kim.subject).toBe("Thanks for coming to Civic Tech Night");
     expect(kim.html).toContain("Hi there,"); // no display name: never "Hi @kim-fu…"
+    expect(kim.html).not.toContain("/freeday");
+    expect(edge.mails.find((m) => m.to === "sam@example.test")!.html).toContain("/freeday");
     expect(kim.html).toContain("/api/followups/optout?email=kim%40example.test");
     expect((await pg.query("select email, member_id, status from night_followups where email = 'kim@example.test'")).rows)
       .toEqual([{ email: "kim@example.test", member_id: null, status: "sent" }]);

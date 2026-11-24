@@ -99,7 +99,8 @@ supabase/
     ├── 066_night_followups.sql       # night follow-ups: decisions, sends, opt-outs
     ├── 068_techne_people.sql         # every Techne sign-in: the person, their email, the stay-in-touch list
     ├── 069_email_log.sql             # every email sent one person at a time (metadata only)
-    └── 070_lock_writer_lease.sql     # the door-code writer becomes a 2-minute lease, taken over when stale
+    ├── 070_lock_writer_lease.sql     # the door-code writer becomes a 2-minute lease, taken over when stale
+    └── 071_free_day_approved_at.sql  # when a free day was approved (its 90-day lapse counts from there)
 DEPLOYMENT.md               # Full infra guide for agents + humans
 ```
 
@@ -337,8 +338,9 @@ applicant an acknowledgment, and pings the Telegram group with two buttons:
 
 Member-facing lifecycle emails (all in `apps/web/src/lib/email.ts`, sent from the Stripe
 webhook): welcome on first activation, payment-reminder on past_due transition, warm exit on
-subscription end. The free-day email templates are **duplicated** in `apps/bot/src/email.ts` —
-edit both or they drift.
+subscription end. The free-day emails (received, approved, approved + membership, declined) and the membership
+approval live once in `packages/shared/src/freeDayEmails.ts`; web and bot both import them. Prices are typed once, in
+`packages/shared/src/prices.ts` (`lib/plans.ts` reads them via `@regenhub/shared/prices`).
 
 ### People → Free days and Door → quarantined slots (T-482 round 3)
 - **Free days** (`/admin/people?tab=freedays`, `lib/freeDayFunnel.ts` pure + `lib/freeDayData.ts`): claims have no
@@ -346,6 +348,23 @@ edit both or they drift.
   and no longer limits activation). Grouped by where the person is: to review (default; the admin home's count), not in
   yet, came in (activated or a granted door entry), bought a pass or joined since, already a member when they claimed,
   closed; one line each. Audit and ranked next fixes: `AUDIT-FREE-DAY.md`. Test: `test/free-day-funnel.test.ts`.
+- **One free day, one door** (round 4, `lib/freeDayClaim.ts`; test `test/free-day-one-door.test.ts`): approval gives
+  one pass (the 016/036 trigger) and the approval email links to `/freeday`. `/freeday` → "Get my door code" spends
+  that pass and marks the claim `activated`; a code from `/portal/passes` (or the bot's /daypass) while the claim is
+  `reserved` marks it used too. The second door answers "You've had your free day…" (or hands back the same code
+  while it still works), never a second free code. A member in standing (`lib/memberStanding.ts`) is told "You're
+  already a member; your door code is on your portal" and no claim is written; signed out, the page answers as for
+  anyone (so the form can't be used to learn who is a member) and the address gets "You don't need a free day". A
+  claim needing review gets "We got your free day request"; a declined one a kind note (email_log kinds
+  `free_day_received` / `free_day_declined` / `free_day_already_member`).
+  **Lapse:** an approved claim unused `FREE_DAY_LAPSE_DAYS` (90, `packages/shared/src/prices.ts`) after approval
+  (`approved_at`, stamped by migration 071's trigger; claims approved before 071 start their 90 days when it runs;
+  before it runs nothing lapses) becomes `expired` in the daily `/api/cron/lifecycle-nudges` run, each claim in its
+  own PIN-writer reservation (its pass taken back; one with an unrevoked door code issued since is marked used
+  instead), audited `free_day_lapsed`; asking again reopens the same row (one per email).
+  Night follow-ups offer the free day to guests with no claim (or only a lapsed one); the after-visit nudges name the
+  next open night (`nextOpenNight`). Scoreboard: free days asked, came in, bought a pass / joined within 60 days, per
+  month and in the CSV (`freeDaysByMonth`).
 - **Quarantined slots** (Door → Lock Sync, `lib/lockQuarantine.ts`): each slot in plain words (which, since when, why,
   what each lock said, who loses a code if cleared); identical ones (same day, reason, nobody holding them) are one
   entry. Clear per slot, per entry, or all: one POST `/api/admin/lock-quarantine` `{ slots }` that clears them one at a

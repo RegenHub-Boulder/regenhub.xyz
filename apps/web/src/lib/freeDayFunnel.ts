@@ -9,6 +9,7 @@
 import { MEMBER_MIN_MONTHLY_CENTS, STANDING_MEMBER_TYPES } from "@/lib/memberStanding";
 import { planLabel } from "@/lib/plans";
 import { memberTypeLabel } from "@/lib/memberTypeLabel";
+import { FREE_DAY_LAPSE_DAYS } from "@regenhub/shared/prices";
 
 export interface FreeDayClaimRow {
   id: number;
@@ -43,7 +44,7 @@ export const FREE_DAY_GROUPS: { key: FreeDayGroup; label: string; empty: string 
   { key: "came_in", label: "Came in", empty: "Nobody who came in is still deciding." },
   { key: "joined", label: "Bought or joined since", empty: "No one has bought a pass or joined since their free day yet." },
   { key: "already_member", label: "Already members", empty: "No claims from people who were already members." },
-  { key: "closed", label: "Closed", empty: "No cancelled or expired claims." },
+  { key: "closed", label: "Closed", empty: "No declined or lapsed claims." },
 ];
 
 export interface PlacedClaim {
@@ -93,18 +94,38 @@ function memberAt(p: FreeDayPerson, at: string): string | null {
   return null;
 }
 
+/** What happened after one claim, read from the person's rows: what the admin list and the scoreboard both count. */
+export interface ClaimFacts {
+  /** A member in standing when they claimed (by plan or desk): no free day needed. Their plan's label, or null. */
+  alreadyMember: string | null;
+  /** Came in: the claim was used (a free-day code) or a door entry since. When, if known. */
+  cameIn: boolean;
+  cameInAt: string | null;
+  /** First day pass bought since the claim. */
+  boughtAt: string | null;
+  /** First $30+ subscription made since the claim. */
+  joined: { plan_key: string; created_at: string } | null;
+}
+
+export function claimFacts(claim: FreeDayClaimRow, person: FreeDayPerson): ClaimFacts {
+  const joined = person.subscriptions
+    .filter((s) => s.monthly_cents >= MEMBER_MIN_MONTHLY_CENTS && after(s.created_at, claim.created_at))
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))[0] ?? null;
+  const enteredAt = first(person.entries.filter((d) => after(d, claim.created_at)));
+  return {
+    alreadyMember: memberAt(person, claim.created_at),
+    cameIn: claim.status === "activated" || enteredAt != null,
+    cameInAt: claim.activated_at ?? enteredAt,
+    boughtAt: first(person.passBuys.filter((d) => after(d, claim.created_at))),
+    joined,
+  };
+}
+
 export function placeClaim(claim: FreeDayClaimRow, person: FreeDayPerson): PlacedClaim {
   const claimed = fmtDay(claim.created_at) ?? "—";
   const legacyDay = fmtDateOnly(claim.claimed_date);
   const legacy = legacyDay ? `originally requested for ${legacyDay}` : null;
-  const already = memberAt(person, claim.created_at);
-  const joinedSub = person.subscriptions
-    .filter((s) => s.monthly_cents >= MEMBER_MIN_MONTHLY_CENTS && after(s.created_at, claim.created_at))
-    .sort((a, b) => a.created_at.localeCompare(b.created_at))[0];
-  const boughtAt = first(person.passBuys.filter((d) => after(d, claim.created_at)));
-  const enteredAt = first(person.entries.filter((d) => after(d, claim.created_at)));
-  const cameInAt = claim.activated_at ?? enteredAt;
-  const cameIn = claim.status === "activated" || enteredAt != null;
+  const { alreadyMember: already, cameIn, cameInAt, boughtAt, joined: joinedSub } = claimFacts(claim, person);
   const cameInPart = cameIn ? `came in${fmtDay(cameInAt) ? ` ${fmtDay(cameInAt)}` : ""}` : "hasn't come in";
 
   const place = (group: FreeDayGroup, line: string): PlacedClaim => ({ claim, group, line, legacy });
@@ -114,8 +135,9 @@ export function placeClaim(claim: FreeDayClaimRow, person: FreeDayPerson): Place
       ? `Asked ${claimed} · already a member (${already}): no free day needed`
       : `Asked ${claimed} · waiting for review`);
   }
-  if (claim.status === "cancelled") return place("closed", `Asked ${claimed} · cancelled`);
-  if (claim.status === "expired") return place("closed", `Asked ${claimed} · expired`);
+  if (claim.status === "cancelled") return place("closed", `Asked ${claimed} · declined or cancelled`);
+  // Lapsed: approved, never used within FREE_DAY_LAPSE_DAYS (lib/freeDayClaim.ts). They may ask again.
+  if (claim.status === "expired") return place("closed", `Asked ${claimed} · lapsed, not used within ${FREE_DAY_LAPSE_DAYS} days`);
   if (already) return place("already_member", `Already a member (${already}) when they claimed ${claimed}`);
   if (joinedSub) {
     return place("joined", `${cap(cameInPart)} · joined ${planLabel(joinedSub.plan_key)} ${fmtDay(joinedSub.created_at)}`);
@@ -124,6 +146,40 @@ export function placeClaim(claim: FreeDayClaimRow, person: FreeDayPerson): Place
   if (cameIn) return place("came_in", `${cap(cameInPart)} · no pass or membership yet`);
   const via = claim.invited_by ? ` with ${claim.invited_by}'s invite` : "";
   return place("not_yet", `Claimed ${claimed}${via} · approved, hasn't come in yet`);
+}
+
+/** Days after a claim within which a day pass or a first membership counts as its conversion (scoreboard). */
+export const FREE_DAY_CONVERSION_DAYS = 60;
+
+export interface FreeDayMonth {
+  /** Claims asked for this month (any outcome; a lapsed claim asked again counts in the month it was asked again). */
+  claimed: number;
+  /** Of them, came in (any time since). */
+  cameIn: number;
+  /** Of them, bought a day pass within FREE_DAY_CONVERSION_DAYS. */
+  boughtPass: number;
+  /** Of them, not already members, whose first $30+ subscription started within FREE_DAY_CONVERSION_DAYS. */
+  joined: number;
+}
+
+/** The scoreboard's free-day columns: each claim counted in the month (`monthOf`, Denver) it was asked for. */
+export function freeDaysByMonth(
+  claims: readonly { claim: FreeDayClaimRow; facts: ClaimFacts }[],
+  months: readonly string[],
+  monthOf: (iso: string) => string,
+): Map<string, FreeDayMonth> {
+  const out = new Map(months.map((m) => [m, { claimed: 0, cameIn: 0, boughtPass: 0, joined: 0 }]));
+  const within = (at: string | null | undefined, from: string) =>
+    at != null && Date.parse(at) >= Date.parse(from) && Date.parse(at) <= Date.parse(from) + FREE_DAY_CONVERSION_DAYS * 86_400_000;
+  for (const { claim, facts } of claims) {
+    const row = out.get(monthOf(claim.created_at));
+    if (!row) continue;
+    row.claimed += 1;
+    if (facts.cameIn) row.cameIn += 1;
+    if (within(facts.boughtAt, claim.created_at)) row.boughtPass += 1;
+    if (!facts.alreadyMember && within(facts.joined?.created_at, claim.created_at)) row.joined += 1;
+  }
+  return out;
 }
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
