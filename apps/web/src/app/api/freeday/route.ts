@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { ALREADY_MEMBER, isAlreadyMember } from "@/lib/freeDayClaim";
+import { freeDayAlreadyMemberEmail, freeDayReceivedEmail, sendEmail } from "@/lib/email";
 
 /** Post an informational notification for invited free days */
 async function notifyTelegramInvited(claim: {
@@ -105,6 +107,13 @@ async function notifyTelegramApplication(claim: {
   }
 }
 
+/** Whether an email of this kind went to this address in the last day (email_log, 069): one answer a day is enough. */
+async function sentRecently(admin: ReturnType<typeof createServiceClient>, email: string, kind: string): Promise<boolean> {
+  const { data, error } = await admin.from("email_log").select("id").eq("email", email).eq("kind", kind).eq("status", "sent")
+    .gte("sent_at", new Date(Date.now() - 86_400_000).toISOString()).limit(1);
+  return !error && (data ?? []).length > 0;
+}
+
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
@@ -169,46 +178,91 @@ export async function POST(req: Request) {
     );
   }
 
-  // Check if email already has a claim
-  const { data: existing } = await admin
-    .from("free_day_claims")
-    .select("id, status")
-    .eq("email", normalizedEmail)
-    .single();
-
-  if (existing) {
-    return NextResponse.json(
-      { error: "This email has already claimed a free day" },
-      { status: 409 }
-    );
-  }
-
   // Check if user is already authenticated
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Insert the claim — claimed_date is now NULL by design (visit any weekday)
-  const status = inviter ? "reserved" : "pending";
-  const { data: inserted, error: dbError } = await admin
-    .from("free_day_claims")
-    .insert({
+  const signedInAs = user?.email?.trim().toLowerCase() ?? null;
+  const ownEmail = signedInAs === normalizedEmail;
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
+  const answer = (status: string) => NextResponse.json({ submitted: true, authenticated: !!user, status });
+  const sendSignInLink = async () => {
+    const { error: authError } = await admin.auth.signInWithOtp({
       email: normalizedEmail,
-      name: name.trim(),
-      claimed_date: null,
-      status,
-      supabase_user_id: user?.id ?? null,
-      invited_by_member_id: inviter?.id ?? null,
-      about: about?.trim() || null,
-      why_join: why_join?.trim() || null,
-      know_at_hub: know_at_hub?.trim() || null,
-      telegram: telegramHandle,
-    })
-    .select("id")
-    .single();
+      options: { emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/auth/callback?next=/freeday`, shouldCreateUser: true },
+    });
+    if (authError) console.error("[FreeDay] Magic link error:", authError);
+  };
+
+  // A member doesn't need a free day: no claim is written (existing claims are left as they are). The person signed in
+  // is told about themselves. For any other address the page answers exactly as for a new request, so nobody can use
+  // this form to learn who is a member or who has asked before; that address's owner gets the answer by email.
+  if (user && await isAlreadyMember(admin, signedInAs ?? "", user.id)) {
+    return NextResponse.json({ error: ALREADY_MEMBER, already_member: true }, { status: 409 });
+  }
+  // Signed in, a free day is asked for the address you're signed in with (the form locks it), never someone else's.
+  if (user && !ownEmail) {
+    return NextResponse.json({ error: "Sign out to ask for a free day with another email." }, { status: 400 });
+  }
+  const quietly = inviter ? "reserved" : "pending";
+  if (!ownEmail && await isAlreadyMember(admin, normalizedEmail)) {
+    if (!await sentRecently(admin, normalizedEmail, "free_day_already_member")) {
+      const tpl = freeDayAlreadyMemberEmail({ name: name.trim(), siteUrl });
+      await sendEmail({ kind: "free_day_already_member", to: normalizedEmail, ...tpl })
+        .catch((err) => console.error("[FreeDay] member email failed:", err));
+    }
+    return answer(quietly);
+  }
+
+  // One claim row per email (migration 014). A lapsed one (approved, never used) is asked for again on the same row.
+  const { data: existing } = await admin
+    .from("free_day_claims")
+    .select("id, status")
+    .eq("email", normalizedEmail)
+    .maybeSingle();
+
+  if (existing && existing.status !== "expired") {
+    if (ownEmail) {
+      return NextResponse.json({ error: "This email has already claimed a free day" }, { status: 409 });
+    }
+    // Signed out: the same answer as a new request, and a sign-in link, which shows the owner where their claim is.
+    if (!user) await sendSignInLink();
+    return answer(quietly);
+  }
+
+  // claimed_date is NULL by design (visit any weekday).
+  const status = inviter ? "reserved" : "pending";
+  const fields = {
+    email: normalizedEmail,
+    name: name.trim(),
+    claimed_date: null,
+    status,
+    supabase_user_id: user?.id ?? null,
+    invited_by_member_id: inviter?.id ?? null,
+    about: about?.trim() || null,
+    why_join: why_join?.trim() || null,
+    know_at_hub: know_at_hub?.trim() || null,
+    telegram: telegramHandle,
+  };
+  const { data: inserted, error: dbError } = existing
+    ? await admin
+      .from("free_day_claims")
+      .update({ ...fields, created_at: new Date().toISOString(), day_code_id: null, activated_at: null, approved_by: null })
+      .eq("id", existing.id)
+      .eq("status", "expired")
+      .select("id")
+      .single()
+    : await admin
+      .from("free_day_claims")
+      .insert(fields)
+      .select("id")
+      .single();
 
   if (dbError || !inserted) {
-    // Handle unique constraint violation (race condition)
-    if (dbError?.code === "23505") {
+    // Handle unique constraint violation (race condition), or a reopen another request got to first
+    if (dbError?.code === "23505" || (existing && dbError?.code === "PGRST116")) {
+      // Another request got there first: signed out, the same answer as any request.
+      if (!ownEmail) return answer(quietly);
       return NextResponse.json(
         { error: "This email has already claimed a free day" },
         { status: 409 }
@@ -216,6 +270,13 @@ export async function POST(req: Request) {
     }
     console.error("[FreeDay] DB error:", dbError);
     return NextResponse.json({ error: "Failed to save claim" }, { status: 500 });
+  }
+
+  // A claim a person has to review: tell them it arrived.
+  if (status === "pending") {
+    const tpl = freeDayReceivedEmail({ name: name.trim(), siteUrl });
+    await sendEmail({ kind: "free_day_received", to: normalizedEmail, ...tpl })
+      .catch((err) => console.error("[FreeDay] received email failed:", err));
   }
 
   // Notify Telegram (fire-and-forget)
@@ -239,23 +300,7 @@ export async function POST(req: Request) {
     });
   }
 
-  // If already authenticated, no need for magic link
-  if (user) {
-    return NextResponse.json({ submitted: true, authenticated: true, status });
-  }
-
-  // Send magic link so they can sign in and activate
-  const { error: authError } = await admin.auth.signInWithOtp({
-    email: normalizedEmail,
-    options: {
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/auth/callback?next=/freeday`,
-      shouldCreateUser: true,
-    },
-  });
-
-  if (authError) {
-    console.error("[FreeDay] Magic link error:", authError);
-  }
-
-  return NextResponse.json({ submitted: true, authenticated: false, status });
+  // Signed out: a sign-in link so they can see where it stands and get their code.
+  if (!user) await sendSignInLink();
+  return answer(status);
 }

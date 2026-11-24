@@ -1,4 +1,4 @@
-import { withLockWriter } from "@regenhub/shared";
+import { freeDayUsedLine, withLockWriter } from "@regenhub/shared";
 import TelegramBot from "node-telegram-bot-api";
 import { db, findMemberByTelegram, resolveSender, resolveAdminSender, type MemberRow } from "./db/supabase.js";
 import { sendEmail, freeDayApprovedEmail, freeDayPlusMembershipApprovedEmail, membershipApprovedEmail } from "./email.js";
@@ -193,6 +193,16 @@ async function handleDayPassImpl(msg: TelegramBot.Message) {
   });
 
   if (rpcError || newBalance === -1) {
+    // A day-pass member whose free day is used is told so (the web's words, apps/web/src/lib/freeDayClaim.ts), not
+    // sent to an admin for a top-up.
+    if (user.member_type === "day_pass" && user.email) {
+      const { data: claim } = await db.from("free_day_claims").select("status, activated_at")
+        .eq("email", user.email.trim().toLowerCase()).maybeSingle();
+      if (claim?.status === "activated") {
+        const site = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz").replace(/\/+$/, "");
+        return bot.sendMessage(msg.chat.id, freeDayUsedLine(claim.activated_at, "elsewhere", `${site}/portal/passes`));
+      }
+    }
     return bot.sendMessage(msg.chat.id, "No day passes remaining. Contact an admin to top up.");
   }
 
@@ -236,6 +246,14 @@ async function handleDayPassImpl(msg: TelegramBot.Message) {
       .eq("id", allocation.data.id);
     await db.rpc("increment_day_pass_balance", { p_member_id: user.id, p_amount: 1 });
     return bot.sendMessage(msg.chat.id, `⚠️ ${LOCK_FAILURE_MSG}`);
+  }
+
+  // One door for a free day (apps/web/src/lib/freeDayClaim.ts): an approved free day not yet used is the pass just
+  // spent, so /freeday can't issue a second free code.
+  if (user.member_type === "day_pass" && user.email) {
+    await db.from("free_day_claims")
+      .update({ status: "activated", day_code_id: allocation.data.id, activated_at: new Date().toISOString() })
+      .eq("email", user.email.trim().toLowerCase()).eq("status", "reserved");
   }
 
   const remaining = newBalance as number;

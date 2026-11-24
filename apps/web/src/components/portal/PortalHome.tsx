@@ -20,6 +20,7 @@ import { OnchainBillingCard } from "@/components/portal/OnchainBillingCard";
 import { RemoveWalletButton } from "@/components/portal/RemoveWalletButton";
 import { isOnchainBillingConfigured, NATIVE_USDC_ADDRESS, TREASURY_ADDRESS } from "@/lib/onchain/config";
 import type { PortalHomeView } from "@/lib/portalHome";
+import { FREE_DAY_LAPSE_DAYS } from "@regenhub/shared/prices";
 
 /**
  * The member home (T-482): what a member comes for, most often first. The door (their code, a guest code), then
@@ -208,8 +209,8 @@ function PortalHomeBody({ view }: { view: PortalHomeView }) {
                     {freeDayClaim.status === "activated" ? (
                       <>
                         <Zap className="w-8 h-8 text-gold mb-3" />
-                        <h3 className="font-semibold mb-1">Free day active</h3>
-                        <p className="text-sm text-muted">View your door code</p>
+                        <h3 className="font-semibold mb-1">Free day used</h3>
+                        <p className="text-sm text-muted">Your code that day, or how to come back</p>
                       </>
                     ) : freeDayClaim.status === "reserved" ? (
                       <>
@@ -218,6 +219,12 @@ function PortalHomeBody({ view }: { view: PortalHomeView }) {
                         <p className="text-sm text-muted">
                           Tap to get your door code — visit any weekday
                         </p>
+                      </>
+                    ) : freeDayClaim.status === "expired" ? (
+                      <>
+                        <Calendar className="w-8 h-8 text-sage mb-3" />
+                        <h3 className="font-semibold mb-1">Free day lapsed</h3>
+                        <p className="text-sm text-muted">It wasn&apos;t used within {FREE_DAY_LAPSE_DAYS} days. Tap to ask again.</p>
                       </>
                     ) : (
                       <>

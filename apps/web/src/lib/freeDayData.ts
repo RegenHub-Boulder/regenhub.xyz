@@ -1,6 +1,6 @@
 import type { createServiceClient } from "@/lib/supabase/admin";
 import { readAll } from "@/lib/supabase/readAll";
-import { groupClaims, type FreeDayClaimRow, type FreeDayPerson } from "@/lib/freeDayFunnel";
+import { claimFacts, groupClaims, type FreeDayClaimRow, type FreeDayPerson } from "@/lib/freeDayFunnel";
 
 type Service = ReturnType<typeof createServiceClient>;
 
@@ -12,6 +12,17 @@ type MemberRow = { id: number; email: string | null; supabase_user_id: string | 
  * A free-day door code carries the member id (activate route), so its entry is in access_logs under that member.
  */
 export async function readFreeDays(admin: Service) {
+  const { rows, personFor } = await readFreeDayPeople(admin);
+  return groupClaims(rows, personFor);
+}
+
+/** Every claim with what happened after it (lib/freeDayFunnel.ts claimFacts): the scoreboard's free-day columns. */
+export async function readFreeDayFacts(admin: Service) {
+  const { rows, personFor } = await readFreeDayPeople(admin);
+  return rows.map((claim) => ({ claim, facts: claimFacts(claim, personFor(claim)) }));
+}
+
+async function readFreeDayPeople(admin: Service) {
   const claims = await readAll<FreeDayClaimRow & { supabase_user_id: string | null; invited_by_member_id: number | null }>("free-day claims",
     (from, to) => admin.from("free_day_claims")
       .select("id, email, name, claimed_date, status, created_at, activated_at, about, why_join, supabase_user_id, invited_by_member_id")
@@ -42,19 +53,26 @@ export async function readFreeDays(admin: Service) {
       .select("member_id, created_at").in("member_id", ids).eq("result", "granted").order("id").range(from, to)),
   ]);
 
+  // Grouped by member once, so each claim's person is a lookup, not a scan.
+  const group = <T extends { member_id: number }>(rows: T[]) => {
+    const out = new Map<number, T[]>();
+    for (const r of rows) out.set(r.member_id, [...(out.get(r.member_id) ?? []), r]);
+    return out;
+  };
+  const [subsOf, buysOf, entriesOf] = [group(subs), group(buys), group(entries)];
   const personFor = (c: FreeDayClaimRow): FreeDayPerson => {
     const m = memberOf(c as FreeDayClaimRow & { supabase_user_id: string | null });
     if (!m) return { member: null, subscriptions: [], passBuys: [], entries: [] };
     return {
       member: { member_type: m.member_type, disabled: m.disabled, created_at: m.created_at },
-      subscriptions: subs.filter((s) => s.member_id === m.id),
-      passBuys: buys.filter((b) => b.member_id === m.id).map((b) => b.created_at),
-      entries: entries.filter((e) => e.member_id === m.id).map((e) => e.created_at),
+      subscriptions: subsOf.get(m.id) ?? [],
+      passBuys: (buysOf.get(m.id) ?? []).map((b) => b.created_at),
+      entries: (entriesOf.get(m.id) ?? []).map((e) => e.created_at),
     };
   };
   const rows: FreeDayClaimRow[] = claims.map((c) => ({
     ...c,
     invited_by: c.invited_by_member_id ? byId.get(c.invited_by_member_id)?.name ?? null : null,
   }));
-  return groupClaims(rows, personFor);
+  return { rows, personFor };
 }

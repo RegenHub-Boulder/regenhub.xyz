@@ -50,6 +50,8 @@ export const AuditAction = {
   // Free-day
   FREE_DAY_APPROVED:      "free_day_approved",
   FREE_DAY_REJECTED:      "free_day_rejected",
+  /** An approved free day unused for FREE_DAY_LAPSE_DAYS (lib/freeDayClaim.ts lapseFreeDays). */
+  FREE_DAY_LAPSED:        "free_day_lapsed",
   // Application
   APPLICATION_APPROVED:   "application_approved",
   APPLICATION_REJECTED:   "application_rejected",

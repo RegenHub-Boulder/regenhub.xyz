@@ -5,11 +5,13 @@
 // which re-exports these for convenience.
 
 import type { MemberType, PlanKey, PurchaseKind } from "./supabase/types";
+// The prices themselves are typed once, in @regenhub/shared (packages/shared/src/prices.ts), so the bot's emails read
+// the same numbers.
+import { DAY_PASS_MEMBER_CENTS, DAY_PASS_PUBLIC_CENTS, PLAN_MONTHLY_CENTS } from "@regenhub/shared/prices";
 
 // ---------- Day pass pricing ----------
 
-export const DAY_PASS_MEMBER_CENTS = 2500;
-export const DAY_PASS_PUBLIC_CENTS = 3000;
+export { DAY_PASS_MEMBER_CENTS, DAY_PASS_PUBLIC_CENTS };
 
 export function dayPassCentsFor(isMember: boolean): number {
   return isMember ? DAY_PASS_MEMBER_CENTS : DAY_PASS_PUBLIC_CENTS;
@@ -45,7 +47,7 @@ export const PASS_KINDS: Record<
 export const PLANS = {
   cold_desk: {
     label: "Cold Desk",
-    defaultMonthlyCents: 50000,
+    defaultMonthlyCents: PLAN_MONTHLY_CENTS.cold_desk,
     grantsMemberType: "cold_desk" as MemberType,
     productIdEnvKey: "STRIPE_PRODUCT_COLD_DESK",
     selfServe: true,
@@ -54,7 +56,7 @@ export const PLANS = {
   },
   hot_desk: {
     label: "Hot Desk",
-    defaultMonthlyCents: 25000,
+    defaultMonthlyCents: PLAN_MONTHLY_CENTS.hot_desk,
     grantsMemberType: "hot_desk" as MemberType,
     productIdEnvKey: "STRIPE_PRODUCT_HOT_DESK",
     selfServe: true,
@@ -63,7 +65,7 @@ export const PLANS = {
   },
   member_5day: {
     label: "Member + 5 days/mo",
-    defaultMonthlyCents: 10000,
+    defaultMonthlyCents: PLAN_MONTHLY_CENTS.member_5day,
     grantsMemberType: "day_pass" as MemberType,
     productIdEnvKey: "STRIPE_PRODUCT_MEMBER_5DAY",
     monthlyDayPasses: 5,
@@ -72,7 +74,7 @@ export const PLANS = {
   },
   member_2day: {
     label: "Member + 2 days/mo",
-    defaultMonthlyCents: 5000,
+    defaultMonthlyCents: PLAN_MONTHLY_CENTS.member_2day,
     grantsMemberType: "day_pass" as MemberType,
     productIdEnvKey: "STRIPE_PRODUCT_MEMBER_2DAY",
     monthlyDayPasses: 2,
@@ -81,7 +83,7 @@ export const PLANS = {
   },
   member_basic: {
     label: "Member + 1 day/mo",
-    defaultMonthlyCents: 3000,
+    defaultMonthlyCents: PLAN_MONTHLY_CENTS.member_basic,
     grantsMemberType: "day_pass" as MemberType,
     productIdEnvKey: "STRIPE_PRODUCT_MEMBER_BASIC",
     monthlyDayPasses: 1,

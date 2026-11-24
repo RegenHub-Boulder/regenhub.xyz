@@ -112,7 +112,7 @@ export async function loadPortalHome(
       .from("free_day_claims")
       .select("id, claimed_date, status")
       .eq("supabase_user_id", who.userId)
-      .in("status", ["pending", "reserved", "activated"])
+      .in("status", ["pending", "reserved", "activated", "expired"])
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();

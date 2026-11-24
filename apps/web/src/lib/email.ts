@@ -21,6 +21,7 @@ function getResend(): Resend | null {
 
 import { outboxProvider } from "@/lib/staging/outbox";
 import { defaultEmailFrom as defaultFrom, defaultEmailReplyTo as defaultReplyTo } from "@regenhub/shared";
+import { DAY_PASS_MEMBER_CENTS, DAY_PASS_PUBLIC_CENTS, MEMBERSHIP_FROM_CENTS, formatCents } from "@/lib/plans";
 
 export interface SendEmailInput {
   /** What this email is, for the email log (lib/emailLog.ts EMAIL_KINDS) and the member page that lists it. */
@@ -188,75 +189,16 @@ export async function sendEmailDetailed(input: SendEmailInput): Promise<SendResu
 // Templates
 // ============================================================
 
-/**
- * Sent when an admin approves a free-day claim. Tells the applicant they
- * have a day pass waiting in their account, where to redeem it, and what
- * to expect when they arrive.
- */
-export function freeDayApprovedEmail(args: { name: string; siteUrl: string }) {
-  const firstName = args.name.split(" ")[0];
-  const base = args.siteUrl.replace(/\/$/, "");
-  return {
-    subject: "Your RegenHub day pass is ready",
-    html: `
-      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
-        <p>Hi ${firstName},</p>
-        <p>You&rsquo;re cleared to visit RegenHub — <strong>a day pass is waiting in your account.</strong></p>
-        <p>When you&rsquo;re ready to come in any weekday between 8&nbsp;AM and 6&nbsp;PM:</p>
-        <p style="margin: 20px 0;">
-          <a href="${base}/portal/passes" style="background: #4b5a2c; color: white; padding: 12px 20px; border-radius: 2px; text-decoration: none; display: inline-block;">Get my door code</a>
-        </p>
-        <p>You&rsquo;ll sign in with your email (no password — we&rsquo;ll send you a one-time link), tap <strong>Generate code</strong>, and get a 6-digit PIN valid until 6&nbsp;PM that day. It works on both 2nd-floor door keypads — front and back.</p>
-        <h3 style="margin-top: 28px;">When you arrive</h3>
-        <p style="margin: 6px 0;"><strong>Address:</strong> 1515 Walnut St, Suite 200, Boulder, CO</p>
-        <p style="margin: 6px 0;"><strong>Hours:</strong> Monday&ndash;Friday, 8&nbsp;AM&ndash;6&nbsp;PM</p>
-        <p style="margin: 6px 0;">The street-level door is unlocked during open hours — head up to the 2nd floor. Type your code followed by the <strong>#</strong> key at the keypad, wait for the green LED and click, then pull the handle within 5 seconds. We&rsquo;ll be around — please say hi.</p>
-        <p>Any questions, just reply to this email — replies go straight to us.</p>
-        <p>See you soon,<br>RegenHub</p>
-      </div>
-    `,
-    text: `Hi ${firstName},\n\nYou're cleared to visit RegenHub — a day pass is waiting in your account.\n\nWhen you're ready to come in any weekday between 8 AM and 6 PM, sign in at:\n${base}/portal/passes\n\nWe'll email you a one-time sign-in link (no password). Tap "Generate code" and you'll get a 6-digit PIN valid until 6 PM that day. It works on both 2nd-floor door keypads — front and back.\n\nWhen you arrive:\nAddress: 1515 Walnut St, Suite 200, Boulder, CO\nHours: Monday–Friday, 8 AM–6 PM\nThe street-level door is unlocked during open hours — head up to the 2nd floor. Type your code followed by # at the keypad, wait for the green LED and click, then pull the handle within 5 seconds. We'll be around — please say hi.\n\nAny questions, just reply to this email — replies go straight to us.\n\nSee you soon,\nRegenHub`,
-  };
-}
-
-/**
- * Sent when admin approves a free-day claim AND clears the applicant to
- * subscribe to a contributing membership. Combines the freeday email above
- * with a separate /membership invitation.
- */
-export function freeDayPlusMembershipApprovedEmail(args: { name: string; siteUrl: string }) {
-  const firstName = args.name.split(" ")[0];
-  const base = args.siteUrl.replace(/\/$/, "");
-  return {
-    subject: "You're approved for a free day + RegenHub membership",
-    html: `
-      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
-        <p>Hi ${firstName},</p>
-        <p>Welcome — you&rsquo;re approved on two fronts:</p>
-        <p><strong>1. Your day pass — already in your account.</strong> Come any weekday between 8&nbsp;AM and 6&nbsp;PM. When you&rsquo;re ready, sign in and tap <strong>Generate code</strong>:</p>
-        <p style="margin: 16px 0;">
-          <a href="${base}/portal/passes" style="background: #4b5a2c; color: white; padding: 10px 18px; border-radius: 2px; text-decoration: none; display: inline-block;">Get my door code</a>
-        </p>
-        <p><strong>2. RegenHub membership.</strong> You&rsquo;re also cleared to sign up for a contributing membership when you&rsquo;re ready:</p>
-        <ul style="line-height: 1.7; padding-left: 20px;">
-          <li><strong>Member + 1 day/mo</strong> &mdash; $30/mo, 1 coworking day per month, member rate on extras</li>
-          <li><strong>Member + 2 days/mo</strong> &mdash; $50/mo</li>
-          <li><strong>Member + 5 days/mo</strong> &mdash; $100/mo</li>
-          <li><strong>Hot Desk</strong> &mdash; $250/mo, permanent door code + 24/7 access to any open desk</li>
-          <li><strong>Cold Desk</strong> &mdash; $500/mo, your own reserved desk + permanent door code + 24/7 access</li>
-        </ul>
-        <p>Day passes accumulate &mdash; they never expire. Plus members get day passes at $25 instead of $30, and access to members-only events. Full Access tiers (Hot/Cold Desk) auto-allocate your PIN on signup.</p>
-        <p style="margin: 16px 0;">
-          <a href="${base}/membership" style="background: #4b5a2c; color: white; padding: 10px 18px; border-radius: 2px; text-decoration: none; display: inline-block;">See membership tiers</a>
-        </p>
-        <p><strong>Address:</strong> 1515 Walnut St, Suite 200, Boulder, CO</p>
-        <p>Any questions, just reply.</p>
-        <p>See you soon,<br>RegenHub</p>
-      </div>
-    `,
-    text: `Hi ${firstName},\n\nWelcome — you're approved on two fronts:\n\n1. Your day pass is already in your account. Come any weekday between 8 AM and 6 PM. Sign in at ${base}/portal/passes and tap "Generate code" to get your 6-digit PIN.\n\n2. RegenHub membership. You're also cleared to sign up for any tier when you're ready:\n- Member + 1 day/mo — $30/mo, 1 coworking day per month, member rate on extras\n- Member + 2 days/mo — $50/mo\n- Member + 5 days/mo — $100/mo\n- Hot Desk — $250/mo, permanent door code + 24/7 access to any open desk\n- Cold Desk — $500/mo, your own reserved desk + permanent door code + 24/7 access\n\nDay passes accumulate — they never expire. Plus members get day passes at $25 instead of $30, and access to members-only events. Full Access tiers (Hot/Cold Desk) auto-allocate your PIN on signup.\n\nSee tiers: ${base}/membership\n\nAddress: 1515 Walnut St, Suite 200, Boulder, CO\n\nAny questions, just reply.\n\nSee you soon,\nRegenHub`,
-  };
-}
+// The free-day emails and the membership approval live in @regenhub/shared (packages/shared/src/freeDayEmails.ts), so
+// the bot sends the same words and prices.
+export {
+  freeDayApprovedEmail,
+  freeDayPlusMembershipApprovedEmail,
+  freeDayReceivedEmail,
+  freeDayDeclinedEmail,
+  freeDayAlreadyMemberEmail,
+  membershipApprovedEmail,
+} from "@regenhub/shared";
 
 /**
  * A past-due member's payment reminder: sent by an admin (member page, What to do next) and, for a card member, by
@@ -410,38 +352,6 @@ export function adminDigestEmail(d: DigestData): { subject: string; html: string
   };
 }
 
-/**
- * Sent when admin approves an existing member to subscribe (via the
- * member-detail admin toggle, not the freeday flow). Skips the freeday
- * pitch since they're already on the inside.
- */
-export function membershipApprovedEmail(args: { name: string; siteUrl: string }) {
-  const firstName = args.name.split(" ")[0];
-  const base = args.siteUrl.replace(/\/$/, "");
-  return {
-    subject: "You're cleared to subscribe to RegenHub membership",
-    html: `
-      <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
-        <p>Hi ${firstName},</p>
-        <p>You&rsquo;re approved to subscribe to a RegenHub membership whenever you&rsquo;re ready. Five tiers:</p>
-        <ul style="line-height: 1.7; padding-left: 20px;">
-          <li><strong>Member + 1 day/mo</strong> &mdash; $30/mo, 1 coworking day per month, member rate on extras</li>
-          <li><strong>Member + 2 days/mo</strong> &mdash; $50/mo</li>
-          <li><strong>Member + 5 days/mo</strong> &mdash; $100/mo</li>
-          <li><strong>Hot Desk</strong> &mdash; $250/mo, permanent door code + 24/7 access to any open desk</li>
-          <li><strong>Cold Desk</strong> &mdash; $500/mo, your own reserved desk + permanent door code + 24/7 access</li>
-        </ul>
-        <p>Day passes accumulate &mdash; they never expire. Plus members get day passes at $25 instead of $30, and access to members-only events. Full Access tiers (Hot/Cold Desk) auto-allocate your PIN on signup.</p>
-        <p style="margin: 16px 0;">
-          <a href="${base}/membership" style="background: #4b5a2c; color: white; padding: 10px 18px; border-radius: 2px; text-decoration: none; display: inline-block;">See membership tiers</a>
-        </p>
-        <p>Any questions, just reply.</p>
-        <p>&mdash; RegenHub</p>
-      </div>
-    `,
-    text: `Hi ${firstName},\n\nYou're approved to subscribe to a RegenHub membership whenever you're ready. Five tiers:\n\n- Member + 1 day/mo — $30/mo, 1 coworking day per month, member rate on extras\n- Member + 2 days/mo — $50/mo\n- Member + 5 days/mo — $100/mo\n- Hot Desk — $250/mo, permanent door code + 24/7 access to any open desk\n- Cold Desk — $500/mo, your own reserved desk + permanent door code + 24/7 access\n\nDay passes accumulate — they never expire. Plus members get day passes at $25 instead of $30, and access to members-only events. Full Access tiers (Hot/Cold Desk) auto-allocate your PIN on signup.\n\nSee tiers: ${base}/membership\n\nAny questions, just reply.\n\n— RegenHub`,
-  };
-}
 
 /**
  * Sent the moment someone submits a membership application, so the funnel
@@ -504,7 +414,7 @@ export function welcomeNewMemberEmail(args: {
         <p>A few things worth knowing:</p>
         <ul style="line-height: 1.7; padding-left: 20px;">
           <li><strong>The space:</strong> 1515 Walnut St, Suite 200 (2nd floor), Boulder. The street door is unlocked 8 AM &ndash; 6 PM weekdays.</li>
-          <li><strong>Day passes for guests:</strong> $25 at the member rate, from your portal.</li>
+          <li><strong>Day passes for guests:</strong> ${formatCents(DAY_PASS_MEMBER_CENTS)} at the member rate, from your portal.</li>
           <li><strong>Community:</strong> most coordination happens in our Telegram group — add your handle in <a href="${base}/portal/profile" style="color: #4b5a2c;">your profile</a> and say hi.</li>
           <li><strong>Billing:</strong> manage your card or plan any time from the portal.</li>
         </ul>
@@ -512,7 +422,7 @@ export function welcomeNewMemberEmail(args: {
         <p>&mdash; RegenHub</p>
       </div>
     `,
-    text: `Hi ${firstName},\n\nWelcome aboard — your ${args.planLabel} membership ($${args.monthlyDollars}/mo) is active. We're glad you're here.\n\n${accessLine}\n\n${accessCta}: ${accessLink}\n\nA few things worth knowing:\n- The space: 1515 Walnut St, Suite 200 (2nd floor), Boulder. The street door is unlocked 8 AM – 6 PM weekdays.\n- Day passes for guests: $25 at the member rate, from your portal.\n- Community: most coordination happens in our Telegram group — add your handle at ${base}/portal/profile and say hi.\n- Billing: manage your card or plan any time from the portal.\n\nReply to this email any time — it goes straight to us. See you at the hub.\n\n— RegenHub`,
+    text: `Hi ${firstName},\n\nWelcome aboard — your ${args.planLabel} membership ($${args.monthlyDollars}/mo) is active. We're glad you're here.\n\n${accessLine}\n\n${accessCta}: ${accessLink}\n\nA few things worth knowing:\n- The space: 1515 Walnut St, Suite 200 (2nd floor), Boulder. The street door is unlocked 8 AM – 6 PM weekdays.\n- Day passes for guests: ${formatCents(DAY_PASS_MEMBER_CENTS)} at the member rate, from your portal.\n- Community: most coordination happens in our Telegram group — add your handle at ${base}/portal/profile and say hi.\n- Billing: manage your card or plan any time from the portal.\n\nReply to this email any time — it goes straight to us. See you at the hub.\n\n— RegenHub`,
   };
 }
 
@@ -699,6 +609,20 @@ export function approvalCheckoutEmail(args: {
 // Lifecycle nudges (Bet 1) — warm, short, one idea per email
 // ============================================================
 
+/** The next night anyone can come to (lib/nightFollowups.ts nextOpenNight). */
+export interface NextNight { name: string; when: string; url: string }
+
+const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/** One line after a visit naming the next open night; empty when there is none to name. */
+function nightLine(n?: NextNight): { html: string; text: string } {
+  if (!n) return { html: "", text: "" };
+  return {
+    html: `<p>The next night anyone can come to is ${escHtml(n.name)}, ${escHtml(n.when)}: <a href="${escHtml(n.url)}" style="color: #4b5a2c;">details</a>. Come say hi.</p>`,
+    text: `The next night anyone can come to is ${n.name}, ${n.when}: ${n.url}. Come say hi.\n\n`,
+  };
+}
+
 /** Member was approved + has a pass but never came in. */
 export function nudgeNeverVisitedEmail(args: { name: string; balance: number; siteUrl: string }) {
   const firstName = args.name.split(" ")[0];
@@ -714,19 +638,20 @@ export function nudgeNeverVisitedEmail(args: { name: string; balance: number; si
         <p style="margin: 20px 0;">
           <a href="${base}/portal/passes" style="background: #4b5a2c; color: white; padding: 12px 20px; border-radius: 2px; text-decoration: none; display: inline-block;">Get my door code</a>
         </p>
-        <p>No pressure, no expiration — your pass keeps. We'd just love to meet you.</p>
+        <p>No pressure. We'd just love to meet you.</p>
         <p>Any questions, just reply.</p>
         <p>See you soon,<br>RegenHub</p>
       </div>
     `,
-    text: `Hi ${firstName},\n\nJust a friendly nudge — you still have ${passes} sitting in your RegenHub account, ready whenever you are.\n\nWe're open Monday–Friday, 8 AM–6 PM at 1515 Walnut St, Suite 200, Boulder. When you're ready to come in, grab your door code:\n${base}/portal/passes\n\nNo pressure, no expiration — your pass keeps. We'd just love to meet you.\n\nAny questions, just reply.\n\nSee you soon,\nRegenHub`,
+    text: `Hi ${firstName},\n\nJust a friendly nudge — you still have ${passes} sitting in your RegenHub account, ready whenever you are.\n\nWe're open Monday–Friday, 8 AM–6 PM at 1515 Walnut St, Suite 200, Boulder. When you're ready to come in, grab your door code:\n${base}/portal/passes\n\nNo pressure. We'd just love to meet you.\n\nAny questions, just reply.\n\nSee you soon,\nRegenHub`,
   };
 }
 
 /** Member visited at least once, hasn't been back in a bit. */
-export function nudgeComeBackEmail(args: { name: string; balance: number; siteUrl: string }) {
+export function nudgeComeBackEmail(args: { name: string; balance: number; siteUrl: string; nextNight?: NextNight }) {
   const firstName = args.name.split(" ")[0];
   const base = args.siteUrl.replace(/\/$/, "");
+  const night = nightLine(args.nextNight);
   const passLine = args.balance > 0
     ? `You still have ${args.balance === 1 ? "a day pass" : `${args.balance} day passes`} in your account — `
     : "";
@@ -739,19 +664,23 @@ export function nudgeComeBackEmail(args: { name: string; balance: number; siteUr
         <p style="margin: 20px 0;">
           <a href="${base}/portal/passes" style="background: #4b5a2c; color: white; padding: 12px 20px; border-radius: 2px; text-decoration: none; display: inline-block;">Plan my next visit</a>
         </p>
-        <p>And if RegenHub is starting to feel like your kind of place, membership starts at $30/month with a coworking day included — <a href="${base}/membership" style="color: #4b5a2c;">have a look at the tiers</a> whenever you're curious.</p>
+        ${night.html}
+        <p>And if RegenHub is starting to feel like your kind of place, membership starts at ${formatCents(MEMBERSHIP_FROM_CENTS)}/month with a coworking day included — <a href="${base}/membership" style="color: #4b5a2c;">have a look at the tiers</a> whenever you're curious.</p>
         <p>Any questions, just reply.</p>
         <p>Warmly,<br>RegenHub</p>
       </div>
     `,
-    text: `Hi ${firstName},\n\nIt was lovely having you at the hub — we'd love to see you again. ${passLine}the door's open Monday–Friday, 8 AM–6 PM.\n\nPlan your next visit: ${base}/portal/passes\n\nAnd if RegenHub is starting to feel like your kind of place, membership starts at $30/month with a coworking day included — see the tiers at ${base}/membership whenever you're curious.\n\nAny questions, just reply.\n\nWarmly,\nRegenHub`,
+    text: `Hi ${firstName},\n\nIt was lovely having you at the hub — we'd love to see you again. ${passLine}the door's open Monday–Friday, 8 AM–6 PM.\n\nPlan your next visit: ${base}/portal/passes\n\n${night.text}And if RegenHub is starting to feel like your kind of place, membership starts at ${formatCents(MEMBERSHIP_FROM_CENTS)}/month with a coworking day included — see the tiers at ${base}/membership whenever you're curious.\n\nAny questions, just reply.\n\nWarmly,\nRegenHub`,
   };
 }
 
 /** Member used their last pass. The moment of maximum motivation. */
-export function nudgeBalanceEmptyEmail(args: { name: string; siteUrl: string }) {
+export function nudgeBalanceEmptyEmail(args: { name: string; siteUrl: string; nextNight?: NextNight }) {
   const firstName = args.name.split(" ")[0];
   const base = args.siteUrl.replace(/\/$/, "");
+  const night = nightLine(args.nextNight);
+  const from = formatCents(MEMBERSHIP_FROM_CENTS);
+  const pass = formatCents(DAY_PASS_PUBLIC_CENTS);
   return {
     subject: `${firstName}, the easy way back into the hub`,
     html: `
@@ -759,15 +688,16 @@ export function nudgeBalanceEmptyEmail(args: { name: string; siteUrl: string }) 
         <p>Hi ${firstName},</p>
         <p>You've used up your day passes — thanks for spending those days with us. If RegenHub is working for you, here are the two easy ways back in:</p>
         <ul style="line-height: 1.8; padding-left: 20px;">
-          <li><strong>Become a member from $30/month</strong> — includes a coworking day every month (they accumulate and never expire), member pricing on extras, and members-only events. <a href="${base}/membership" style="color: #4b5a2c;">See the tiers</a></li>
-          <li><strong>Grab a single day pass</strong> for $30 whenever you need one. <a href="${base}/portal/passes" style="color: #4b5a2c;">Buy a pass</a></li>
+          <li><strong>Become a member from ${from}/month</strong> — includes a coworking day every month (they accumulate and never expire), member pricing on extras, and members-only events. <a href="${base}/membership" style="color: #4b5a2c;">See the tiers</a></li>
+          <li><strong>Grab a single day pass</strong> for ${pass} whenever you need one. <a href="${base}/portal/passes" style="color: #4b5a2c;">Buy a pass</a></li>
         </ul>
         <p>The membership math works out better after one visit a month — and it supports the cooperative.</p>
+        ${night.html}
         <p>Any questions, just reply — happy to help you pick.</p>
         <p>Warmly,<br>RegenHub</p>
       </div>
     `,
-    text: `Hi ${firstName},\n\nYou've used up your day passes — thanks for spending those days with us. If RegenHub is working for you, here are the two easy ways back in:\n\n1. Become a member from $30/month — includes a coworking day every month (they accumulate and never expire), member pricing on extras, and members-only events. See tiers: ${base}/membership\n\n2. Grab a single day pass for $30 whenever you need one: ${base}/portal/passes\n\nThe membership math works out better after one visit a month — and it supports the cooperative.\n\nAny questions, just reply — happy to help you pick.\n\nWarmly,\nRegenHub`,
+    text: `Hi ${firstName},\n\nYou've used up your day passes — thanks for spending those days with us. If RegenHub is working for you, here are the two easy ways back in:\n\n1. Become a member from ${from}/month — includes a coworking day every month (they accumulate and never expire), member pricing on extras, and members-only events. See tiers: ${base}/membership\n\n2. Grab a single day pass for ${pass} whenever you need one: ${base}/portal/passes\n\nThe membership math works out better after one visit a month — and it supports the cooperative.\n\n${night.text}Any questions, just reply — happy to help you pick.\n\nWarmly,\nRegenHub`,
   };
 }
 

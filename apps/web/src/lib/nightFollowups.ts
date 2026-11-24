@@ -15,6 +15,7 @@
 
 import { FOLLOWUP_COPY, type FollowupVariant } from "@/lib/nightFollowupCopy";
 import { isMemberInStanding, type StandingSubscription } from "@/lib/memberStanding";
+import { MEMBERSHIP_FROM_CENTS, formatCents } from "@/lib/plans";
 import { getSeries, hasEnded, isCancelled, plannedNight, ruleDatesFrom, dateIn, type Series } from "@/lib/series";
 
 export type { FollowupVariant };
@@ -72,6 +73,8 @@ export interface FollowupPerson {
   variant: FollowupVariant;
   /** A member who hasn't set up their member page (not listed, and hasn't said no): their note asks them to. */
   askForPage: boolean;
+  /** A guest who has never had a free day (no claim, or only a lapsed one): their note offers it. */
+  offerFreeDay: boolean;
   held: HeldReason | null;
 }
 
@@ -128,7 +131,10 @@ export function followupBatch(input: {
   people?: readonly FollowupTechnePerson[];
   subs: readonly (StandingSubscription & { member_id: number })[];
   holds: ReadonlyMap<string, HeldReason>;
+  /** Lowercase emails that have (or had) a free day: any claim not lapsed. Left out = offer it to no one. */
+  freeDayHad?: ReadonlySet<string> | null;
 }): FollowupBatch {
+  const offer = (email: string) => input.freeDayHad != null && !input.freeDayHad.has(email);
   const personOf = rsvpPeople(input);
   const out: FollowupBatch = { send: [], held: [], noEmail: 0 };
   const found: FollowupPerson[] = [];
@@ -144,12 +150,13 @@ export function followupBatch(input: {
         did, memberId: m.id, name: m.name, greetName: m.name, email,
         variant: member ? "member" : "guest",
         askForPage: member && m.show_in_directory == null,
+        offerFreeDay: !member && offer(email),
         held: m.disabled ? "disabled" : (input.holds.get(email) ?? null),
       });
     } else {
       found.push({
         did, memberId: null, name: techneName(t!), greetName: t!.name ?? "",
-        email, variant: "guest", askForPage: false, held: input.holds.get(email) ?? null,
+        email, variant: "guest", askForPage: false, offerFreeDay: offer(email), held: input.holds.get(email) ?? null,
       });
     }
   }
@@ -214,6 +221,30 @@ export function nextNightOf(
   return { when: whenText(night.startsAt, series.timezone), url: `${base}/events/${series.slug}` };
 }
 
+/**
+ * The next night anyone can come to, for a note after a visit (the lifecycle "come back" emails, T-482 round 4): the
+ * soonest posted night in the next 3 weeks that isn't members-only, else the next Friday 420 Happy Hour (open to
+ * everyone; its series page). `upcoming` is the collective's calendar, or [] when Techne couldn't be read.
+ */
+export function nextOpenNight(
+  upcoming: readonly { name: string; startAt: string | null; status?: string | null; url: string | null; series?: Series | null }[],
+  now: Date,
+  siteUrl: string,
+): { name: string; when: string; url: string } {
+  const base = siteUrl.replace(/\/+$/, "");
+  const until = now.getTime() + 21 * 86_400_000;
+  const posted = upcoming
+    .filter((e) => e.startAt && !isCancelled(e) && !e.series?.membersOnly && Date.parse(e.startAt) > now.getTime() && Date.parse(e.startAt) < until)
+    .sort((a, b) => Date.parse(a.startAt!) - Date.parse(b.startAt!))[0];
+  if (posted?.startAt) {
+    const url = posted.url ? (posted.url.startsWith("/") ? `${base}${posted.url}` : posted.url) : `${base}/events`;
+    return { name: posted.series?.name ?? posted.name, when: whenText(posted.startAt, posted.series?.timezone ?? TZ), url };
+  }
+  const happy = getSeries("happy-hour")!;
+  const next = nextNightOf(happy, [], now, base);
+  return { name: happy.name, ...next };
+}
+
 // ── The note ──────────────────────────────────────────────────────────────────
 
 export interface NoteValues {
@@ -227,7 +258,9 @@ export interface NoteValues {
   studioUrl: string;
   eventsUrl: string;
   membershipUrl: string;
+  membershipFrom: string;
   profileUrl?: string;
+  freeDayUrl?: string;
 }
 
 /** Everything a note needs about one night, the same for everyone who gets it. */
@@ -236,7 +269,7 @@ export function nightValues(
   upcoming: Parameters<typeof nextNightOf>[1],
   now: Date,
   siteUrl: string,
-): Omit<NoteValues, "first" | "profileUrl"> {
+): Omit<NoteValues, "first" | "profileUrl" | "freeDayUrl"> {
   const base = siteUrl.replace(/\/+$/, "");
   const studio = getSeries("studio-night")!;
   const nextStudio = nextNightOf(studio, upcoming, now, base);
@@ -251,17 +284,24 @@ export function nightValues(
     studioUrl: nextStudio.url,
     eventsUrl: `${base}/events`,
     membershipUrl: `${base}/membership`,
+    membershipFrom: formatCents(MEMBERSHIP_FROM_CENTS),
   };
 }
 
 /** The values for one person. */
 export function personValues(
-  person: Pick<FollowupPerson, "greetName" | "askForPage">,
-  night: Omit<NoteValues, "first" | "profileUrl">,
+  person: Pick<FollowupPerson, "greetName" | "askForPage"> & { offerFreeDay?: boolean },
+  night: Omit<NoteValues, "first" | "profileUrl" | "freeDayUrl">,
   siteUrl: string,
 ): NoteValues {
   const first = person.greetName.trim().split(/\s+/)[0] || "there";
-  return { ...night, first, profileUrl: person.askForPage ? `${siteUrl.replace(/\/+$/, "")}/portal/profile` : undefined };
+  const base = siteUrl.replace(/\/+$/, "");
+  return {
+    ...night,
+    first,
+    profileUrl: person.askForPage ? `${base}/portal/profile` : undefined,
+    freeDayUrl: person.offerFreeDay ? `${base}/freeday` : undefined,
+  };
 }
 
 const esc = (s: string) =>

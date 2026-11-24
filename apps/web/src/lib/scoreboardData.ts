@@ -9,6 +9,7 @@ import { fetchAttendance, fetchCollectiveEvents } from "@/lib/regenos/events";
 import { mapLimit } from "@/lib/mapLimit";
 import { isMissingColumn, membershipInvoices } from "@/lib/onchain/invoiceKind";
 import { dateIn } from "@/lib/series";
+import { readFreeDayFacts } from "@/lib/freeDayData";
 import { readAll } from "@/lib/supabase/readAll";
 import { handleFor } from "@/lib/techne/did";
 import { AuditAction } from "@/lib/auditLog";
@@ -167,7 +168,7 @@ async function planChangesLogged(admin: Admin): Promise<PlanChange[] | null> {
  * so no Denver-local row of the first month is cut; months outside are ignored by the counts).
  */
 async function readRows(admin: Admin, since: string, doorsSince: string) {
-  const [rawSubs, members, interests, unsubscribes, applications, purchases, doors, followups, planChanges] = await Promise.all([
+  const [rawSubs, members, interests, unsubscribes, applications, purchases, doors, followups, planChanges, freeDays] = await Promise.all([
     readAll<SubRow>("subscriptions", (f, t) => admin.from("subscriptions")
       .select("id, member_id, plan_key, status, monthly_cents, net_cents, payment_rail, created_at, canceled_at, updated_at, " +
         "cancel_at_period_end, admin_canceled_at, admin_cancel_mode, past_due_since, current_period_end")
@@ -186,6 +187,11 @@ async function readRows(admin: Admin, since: string, doorsSince: string) {
       .eq("result", "granted").gte("created_at", doorsSince).order("id", { ascending: true }).range(f, t)),
     followupsSent(admin, since),
     planChangesLogged(admin),
+    // The free-day columns (lib/freeDayFunnel.ts, the same facts as People → Free days); a failed read blanks them.
+    readFreeDayFacts(admin).catch((e) => {
+      console.error("[scoreboard] free-day read failed", e);
+      return null;
+    }),
   ]);
 
   const canceledOnchain = rawSubs.filter((s) => s.payment_rail === "onchain" && s.status === "canceled").map((s) => s.id);
@@ -195,7 +201,7 @@ async function readRows(admin: Admin, since: string, doorsSince: string) {
   // email if they have joined since, so "followed up → joined" sees them.
   const memberByEmail = new Map(members.flatMap((m) => (m.email ? [[m.email.trim().toLowerCase(), m.id] as const] : [])));
   const notes = followups?.map((f) => (f.member_id == null ? { ...f, member_id: memberByEmail.get(f.email) ?? null } : f)) ?? null;
-  return { subs, members, interests, unsubscribes, applications, purchases, doors, notes, planChanges };
+  return { subs, members, interests, unsubscribes, applications, purchases, doors, notes, planChanges, freeDays };
 }
 
 type Rows = Awaited<ReturnType<typeof readRows>>;
@@ -208,6 +214,7 @@ const monthRows = (rows: Rows, now: Date): MonthRow[] => monthByMonth({
   applications: rows.applications, purchases: rows.purchases, doors: rows.doors,
   followUps: rows.notes ? followupFunnel(rows.notes, rows.subs, monthsSince(MONTH_TABLE_FROM, now)) : null,
   planChanges: rows.planChanges,
+  freeDays: rows.freeDays,
 }, now);
 
 /** Where reading starts: the earlier of the six-month lists and the month table. */

@@ -45,6 +45,7 @@ const ACTION_LABELS: Record<string, string> = {
   payment_reminder_sent:  "Payment reminder sent",
   batch_email_sent:       "Batch email sent",
   free_day_approved:      "Free-day request approved",
+  free_day_lapsed:        "Free day lapsed unused",
   application_approved:   "Application approved",
 };
 

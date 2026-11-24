@@ -11,6 +11,7 @@ import { BuyPassButton } from "@/components/portal/BuyPassButton";
 import { CryptoPassButton } from "@/components/portal/CryptoPassButton";
 import { isContributingMember as contributingMember } from "@/lib/dayPassPrice";
 import { dayPassCentsFor } from "@/lib/plans";
+import { claimByEmail, freeDayUsedLine } from "@/lib/freeDayClaim";
 import { onchainPassesOpen } from "@/lib/onchain/invoiceKind";
 import { Ticket, Clock, ShoppingCart, Key, ArrowRight, CheckCircle, XCircle, Receipt, Gift } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -91,7 +92,8 @@ export default async function PassesPage({ searchParams }: PageProps) {
 
   const isFullMember = member.member_type !== "day_pass";
 
-  const [{ data: activeCodes }, { data: recentPurchases }, { data: recentGrants }, isContributingMember, passesReady] = await Promise.all([
+
+  const [{ data: activeCodes }, { data: recentPurchases }, { data: recentGrants }, isContributingMember, passesReady, freeDay] = await Promise.all([
     supabase
       .from("day_codes")
       .select("*")
@@ -115,7 +117,10 @@ export default async function PassesPage({ searchParams }: PageProps) {
     contributingMember(supabase, member.id).catch(() => false),
     // USDC passes need the relayer and migration 063; until then, offer the card only.
     onchainPassesOpen(supabase),
+    // One door for a free day (lib/freeDayClaim.ts): once it's used, the empty state says so.
+    !isFullMember && liveBalance === 0 && member.email ? claimByEmail(createServiceClient(), member.email).catch(() => null) : null,
   ]);
+  const freeDayUsedAt = freeDay?.status === "activated" ? freeDay.activated_at : undefined;
   const passCents = dayPassCentsFor(isContributingMember);
   // The USDC flow is the gasless one (as on /membership), so it needs the relayer too.
   const usdcEnabled = passesReady;
@@ -191,8 +196,10 @@ export default async function PassesPage({ searchParams }: PageProps) {
             />
           </div>
           {liveBalance === 0 && !isFullMember && (
-            <p className="text-sm text-muted mt-4">
-              No passes remaining — grab one below to get a door code.
+            <p className="text-sm text-muted mt-4" data-testid="passes-empty">
+              {freeDayUsedAt !== undefined
+                ? freeDayUsedLine(freeDayUsedAt, true)
+                : "No passes remaining — grab one below to get a door code."}
             </p>
           )}
           {liveBalance === 0 && isFullMember && (
