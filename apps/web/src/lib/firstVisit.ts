@@ -47,11 +47,15 @@ export const missingPlanColumn = (e: { code?: string; message?: string } | null 
  * to). No Markdown, so a name can't break the message. Answers whether Telegram took it; never throws.
  */
 export async function postToMembersChat(text: string): Promise<{ ok: boolean; error?: string }> {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+  // TELEGRAM_API_URL: staging's stand-in (scripts/staging/telegram-standin.mjs), which needs no bot token; staging
+  // leaves TELEGRAM_BOT_TOKEN unset so the app's other Telegram posts stay off. Unset everywhere else.
+  const standIn = process.env.TELEGRAM_API_URL?.replace(/\/+$/, "");
+  const api = standIn || "https://api.telegram.org";
+  const token = process.env.TELEGRAM_BOT_TOKEN || (standIn ? "standin" : undefined);
   const chatId = process.env.TELEGRAM_GROUP_CHAT_ID;
   if (!token || !chatId) return { ok: false, error: "Telegram not configured" };
   try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    const res = await fetch(`${api}/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true }),

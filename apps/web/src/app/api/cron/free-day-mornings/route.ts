@@ -20,11 +20,11 @@ export async function POST(req: Request) {
   if (!secret) return NextResponse.json({ error: "CRON_SECRET is not set" }, { status: 503 });
   if (!hasBearerSecret(req, secret)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const admin = createServiceClient();
   const now = new Date();
   const { date: today, hour } = boulderToday(now);
   if (hour < 7 || hour >= 12) return NextResponse.json({ today, sent: 0, skipped: "outside 7 AM to noon in Boulder" });
 
-  const admin = createServiceClient();
   const { data, error } = await admin.from("free_day_claims")
     .select("id, name, email, plan_reminded_on")
     .eq("status", "reserved").eq("planned_day", today);

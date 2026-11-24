@@ -58,6 +58,7 @@ The `.dockerignore` has an exception (`!**/.env.production`) so the file is avai
 | `SUPABASE_DB_URL` | Web (runtime) | Full `postgres://` connection string (supabase_admin role, host-exposed Postgres port on compute-1). **Only** used by the MCP's `list_migrations`/`run_migration`. Unset = those two tools report "not configured" and everything else is unaffected. |
 | `MIGRATIONS_DIR` | Web (runtime) | Optional override for where `supabase/migrations/` lives. The Dockerfile copies it into the image and `lib/migrations.ts` finds it from either possible cwd — you shouldn't need this. |
 | `TELEGRAM_BOT_TOKEN` | Bot (runtime) | |
+| `TELEGRAM_API_URL` | Web (runtime) | **Staging only**: the members'-chat stand-in (`scripts/staging/telegram-standin.mjs`) the first-visit posts go to. Production leaves it unset. |
 | `REGENOS_BASE_URL` | Web (runtime) | regenOS AppView base URL, no trailing slash. Unset = events fall back to the Luma embed and one-login stays off. |
 | `REGENOS_COLLECTIVE_DID` | Web (runtime) | The RegenHub collective's `did:plc:…`. Required alongside the base URL for the events swap. |
 | `REGENOS_WEB_URL` | Web (runtime) | **No longer read** (T-482): the calendar feed is regenhub.xyz's own `/events.ics`. Safe to remove from Coolify. |
@@ -378,6 +379,30 @@ approval live once in `packages/shared/src/freeDayEmails.ts`; web and bot both i
   "Waiting on you" shows a stuck writer (who, since when) and the last day's failures; Lock Sync lists them
   (`lib/lockWriterStatus.ts`). Tests: `lib/lockWriterLease.test.ts` (real Postgres), the lock-quarantine route test.
   Deploy order and the pre-070 recovery: DEPLOYMENT.md "Door-code writer lease".
+
+### First visits (T-482, migration 073)
+Of 68 free days granted, 30 came in. `lib/firstVisit.ts` (words: `packages/shared/src/firstVisitWords.ts`):
+- **The members' chat hears a first-timer walk in.** After a door entry is written (`/api/access-events`, and the
+  `sync-access-logs` poll, whose rows carry no slot so it never alerts), `welcomeFirstVisit` posts "👋 Sam just came in
+  for their first day (free day). Invited by Ana. Anyone around to say hi?" (or "Came to <night>" from a night
+  follow-up). Only a granted entry written within 15 min of happening (no backfills), only someone we can name (the
+  member on the code, or a free-day claim's code), only their first granted entry (an earlier row = lower id, so both
+  doors logging one arrival post once); a member row off a day code counts only if made in the last 90 days, and a
+  "Guest by …" code never. Once per person: a `first_visit_alerts` row is written before the post. First name only; no
+  code, email or phone. Plain text to `TELEGRAM_GROUP_CHAT_ID` (`postToMembersChat`). Before 073 runs: nothing posted.
+- **Who's usually here**: from 8 weeks of granted entries (aggregate, no names), per weekday the share of days someone
+  was in by 10 AM and the median first arrival → "Most weekdays someone's in by 8am; Fridays are quieter."
+  (`usuallyHereLine`, tested; null under 10 weekdays with anyone in). Cached 6 h per server. On `/freeday` and in the
+  approval email (web and bot) and the morning email.
+- **`/freeday` before the code** (`components/freeday/FirstVisitGuide.tsx`): who's usually here, **Tell us when you're
+  coming** (next 5 weekdays; `POST /api/freeday/plan` stores `free_day_claims.planned_day` and posts "Sam plans to come
+  in Thursday for their free day"; the same day again posts nothing, at most 3 posts per claim; the free day still
+  works any weekday), getting in (the keypad copy), what to bring. After the code: the line and what to bring.
+- **The morning of**: `POST /api/cron/free-day-mornings` (CRON_SECRET; **schedule daily at 7:00 America/Denver**) sends
+  "See you at RegenHub today" to reserved claims planned for today, only 7 AM–noon Boulder time, once per claim and day
+  (`plan_reminded_on`), kind `free_day_morning` in email_log.
+- Test: `test/first-visit.test.ts`. Staging: `T482_AUDIT=1 T482_FREEDAY=1 scripts/staging/preview.sh`, then
+  `scripts/staging/first-visit-shots.mjs` (the chat stand-in's page shows what the chat got).
 
 ### Admin "Cancel membership" (both rails)
 `/admin/members/[id]` → Billing → Cancel membership (`lib/membershipCancel.ts`). Each request is one row in
