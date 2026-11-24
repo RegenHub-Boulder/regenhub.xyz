@@ -102,7 +102,8 @@ supabase/
     ├── 069_email_log.sql             # every email sent one person at a time (metadata only)
     ├── 070_lock_writer_lease.sql     # the door-code writer becomes a 2-minute lease, taken over when stale
     ├── 071_free_day_approved_at.sql  # when a free day was approved (its 90-day lapse counts from there)
-    └── 072_one_approval.sql          # one approval + desk access, the vouch, the chat card, the 12 h re-post
+    ├── 072_one_approval.sql          # one approval + desk access, the vouch, the chat card, the 12 h re-post
+    └── 074_who_approves.sql          # anyone in the members' chat approves; co-op members on the site
 DEPLOYMENT.md               # Full infra guide for agents + humans
 ```
 
@@ -358,15 +359,32 @@ Aaron, 11-24: "at least one member to vouch for new members"; approval stays in 
   "Approve") and the site (`POST /api/portal/applications/[id]/vouch` from the portal's "Someone says you know them"
   card or People → Applications; `POST /api/admin/applications/[id]/approve`) run the same functions, and the card
   is redrawn from the database after each (`refreshApplicationCard`; `applications.chat_message_id`).
-- **Vouch:** any member who may vouch (072's `member_can_vouch`: in standing per `lib/memberStanding.ts`, a co-op owner
-  or a site admin), never for themselves; the first vouch stays. **Approve:** needs a vouch, and a site admin
-  (`member_can_approve`). Approval finds or makes the day-pass member row and turns `member_approved` on; the
+- **Who vouches and approves (migration 074; Aaron, 11-24: "any member in the core group (telegram) can approve…
+  on the website, they need to be a co-op member"):** **In the members' chat** (`TELEGRAM_GROUP_CHAT_ID`) anyone in it
+  taps "I know them", Approve, or "✅ Approve free day"; the card says "Anyone here can approve." The bot hands every
+  card tap to `handleApprovalTap` (`packages/shared/src/joining.ts`), which refuses a tap from any other chat or a DM
+  (`isMembersChat`) and records the tapper by their linked member row (`resolveSender`), else their Telegram id and
+  @username (`applications.vouched_by_telegram*` / `approved_by_telegram*`, `free_day_claims.approved_by_member_id` /
+  `approved_by_telegram_id`, and the audit payload). SQL: `chat_vouch_for_application`, `chat_approve_application`,
+  `chat_approve_free_day`. **On the site** (People → Applications / Free days, the portal's "Someone says you know
+  them", desk access and a desk's custom price on the member page) only a co-op member (`is_coop_member`, not
+  disabled): one rule, `canApproveOnSite` (`lib/approval.ts`), and 074's `member_can_approve` in SQL
+  (`vouch_for_application`, `approve_application`, `approve_free_day`). A co-op member who isn't a site admin reaches
+  `/admin/people` (Applications and Free days only; nav "Approvals" in the portal, "People" in admin;
+  `requireApprovalsViewer` in `lib/admin.ts`); a site admin who isn't one sees the lists with "Co-op members approve"
+  in place of Approve / I know them / Reject. Admin pages say who approved: a name, or "@username in the chat"
+  (`approverWords`). Never your own application (member row, or the Telegram handle on the application); still one
+  vouch before approval. `member_can_vouch` (072) is now only who an applicant may name. MCP `audit_approvals` lists
+  who approves on the site and which admins can't. Before 074 runs: a linked chat member approves under 072's rule
+  (site admin), an unlinked one is told to link first, a co-op approval on the site answers 503 "once migration 074
+  runs", free days take the old update. **Deploy order:** web, bot, then `run_migration("074_who_approves.sql")`. Approval finds or makes the day-pass member row and turns `member_approved` on; the
   `/api/admin/applications` PATCH refuses `approved` and never moves an approved application (conditional update);
   "Take approval back" on the member page closes it, so they can apply again. The approval email (`membershipApprovedEmail`) points to the
   portal, where an approved member picks any day plan ($30/$50/$100, card or USDC; `components/portal/DayPlanPicker.tsx`).
 - **Desks are an upgrade:** a member asks from the portal ("Talk to us about a desk", `POST /api/portal/desk-ask`:
-  `desk_asked_at`, audited, posted to the chat, on Today and `/admin/members?status=desk_ask`). A steward who
-  `canApproveDesks` (`lib/approval.ts`: site admin + ops admin; Aaron and Carey) turns desk access on from the member
+  `desk_asked_at`, audited, posted to the chat, on Today and `/admin/members?status=desk_ask`). A co-op member who is
+  a site admin (`canApproveOnSite`; Aaron, 11-24: "co-op members should be able to approve folks for hot desks"; one
+  flag for hot and cold; never from the chat, since it hands out a 24/7 door code) turns desk access on from the member
   page (Joining card; `PATCH .../approve-membership` `{level:"desk"}`). The gate is one function, `planGate`
   (`lib/approval.ts`), in `/api/membership/subscribe`, `/api/membership/onchain` and `/api/portal/change-plan`.
 - **Custom pricing** is on the member page (Joining → Custom price…, `POST /api/admin/members/[id]/custom-price`, the

@@ -13,7 +13,14 @@ import { makePgDb, type PgDb } from "./pgDb";
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createServiceClient: vi.fn() }));
-vi.mock("@/lib/admin", () => ({ requireAdmin: vi.fn(async () => ({ id: "00000000-0000-0000-0000-00000000a0a0" })) }));
+// The steward who approves on People → Free days: a co-op member (migration 074), seeded as member 9000 below.
+vi.mock("@/lib/admin", () => ({
+  requireAdmin: vi.fn(async () => ({ id: "00000000-0000-0000-0000-00000000a0a0" })),
+  requireApprovalsViewer: vi.fn(async () => ({
+    user: { id: "00000000-0000-0000-0000-00000000a0a0" },
+    member: { id: 9000, name: "Sky Steward", isAdmin: true, canApprove: true },
+  })),
+}));
 vi.mock("@regenhub/shared", async (importOriginal) => ({
   ...await importOriginal<typeof import("@regenhub/shared")>(),
   // The door locks are the one outside system here.
@@ -43,6 +50,7 @@ function nextWeekdayNoon() {
 
 beforeEach(async () => {
   db = await makePgDb();
+  await db.sql(`insert into members(id, name, email, member_type, is_admin, is_coop_member) values (9000, 'Sky Steward', 'sky@hub.test', 'hub_friend', true, true)`);
   signedIn = null;
   // Supabase Auth (the sign-in link email) is GoTrue, outside the database: a stand-in that says it sent.
   vi.mocked(createServiceClient).mockReturnValue({ ...db, auth: { signInWithOtp: async () => ({ error: null }) } } as never);

@@ -236,7 +236,8 @@ export async function doorDb(): Promise<PGlite> {
     create role anon; create role authenticated; create role service_role bypassrls;
     create table members (
       id serial primary key, name text not null, email text unique, did text unique,
-      supabase_user_id uuid, disabled boolean not null default false, is_admin boolean not null default false
+      supabase_user_id uuid, disabled boolean not null default false, is_admin boolean not null default false,
+      is_coop_member boolean not null default false
     );
     create table admin_actions (
       id bigserial primary key, actor_member_id integer references members(id) on delete set null,

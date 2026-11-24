@@ -133,7 +133,8 @@ it("no API route checks members.is_admin by hand", () => {
 
 it("every admin route imports its guard from lib/admin", () => {
   const unguarded = ADMIN_ROUTES.filter(
-    (f) => !/import \{[^}]*\brequireAdmin(Member)?\b[^}]*\} from "@\/lib\/admin"/.test(readFileSync(join(API, f), "utf8")),
+    // requireApprovalsViewer: People → Applications / Free days, a site admin or a co-op member (migration 074).
+    (f) => !/import \{[^}]*\b(requireAdmin(Member)?|requireApprovalsViewer)\b[^}]*\} from "@\/lib\/admin"/.test(readFileSync(join(API, f), "utf8")),
   );
   expect(unguarded).toEqual([]);
 });
@@ -152,14 +153,18 @@ describe("active admin: the guard hands the route the right identity", () => {
     expect(await res.json()).toMatchObject({ sent_to: USER.email });
   }, 30_000);
 
-  it("applications PATCH stamps rejected_by with the admin's member id", async () => {
+  it("applications PATCH stamps rejected_by with the co-op member's id; a site admin who isn't one can't reject", async () => {
     // The conditional update answers the row it moved (an approved application isn't moved: 409).
-    const session = makeSupabaseMock({ auth: { user: USER }, selects: { members: { data: ADMIN }, applications: { data: [{ id: 5 }] } } });
-    vi.mocked(createClient).mockResolvedValue(session as never);
+    signInAs({ user: USER, member: ADMIN });
     const { PATCH } = await import("./applications/route");
-    const res = await PATCH(new Request("http://localhost/x", { method: "PATCH", body: JSON.stringify({ id: 5, status: "rejected" }) }));
+    const reject = () => PATCH(new Request("http://localhost/x", { method: "PATCH", body: JSON.stringify({ id: 5, status: "rejected" }) }));
+    expect((await reject()).status).toBe(403);
+    signInAs({ user: USER, member: { ...ADMIN, is_coop_member: true } });
+    const service = makeSupabaseMock({ selects: { applications: { data: [{ id: 5 }] } } });
+    vi.mocked(createServiceClient).mockReturnValue(service as never);
+    const res = await reject();
     expect(res.status).toBe(200);
-    const updates = session.from.mock.results
+    const updates = service.from.mock.results
       .map((r) => (r.value as { update: ReturnType<typeof vi.fn> }).update.mock.calls)
       .flat();
     expect(updates).toContainEqual([expect.objectContaining({ status: "rejected", rejected_by: 42 })]);
