@@ -401,7 +401,11 @@ describe("who approves (migration 074): anyone in the members' chat, co-op membe
     // A disabled member row can't act from the chat either.
     await db.sql(`update members set disabled = true where id = 3`);
     const out = await handleApprovalTap(db, { data: `app_approve_${id}`, chatId: -100, messageId: 1, from: { id: 1003 } }, deps(async () => ({ id: 3 })));
-    expect(out.reply).toMatch(/co-op members approve/i);
+    expect(out.reply).toBe("This account can't approve: it's switched off on the site.");
+    // The applicant's own member row is bound to a Telegram id: that id can't vouch for them, handle or none.
+    await db.sql(`insert into members(name, email, member_type, telegram_user_id) values ('Pat', 'pat@x.test', 'day_pass', 8080)`);
+    await db.sql(`update applications set vouched_by = null, vouched_at = null, vouched_by_telegram_id = null, vouched_by_telegram = null where id = $1`, [id]);
+    expect((await tap(`app_vouch_${id}`, { id: 8080 })).reply).toBe("You can't vouch for yourself.");
   });
 
   it("free days: anyone in the chat (Telegram recorded), a co-op member on the site, not a site admin who isn't one", async () => {
@@ -464,6 +468,9 @@ describe("who approves (migration 074): anyone in the members' chat, co-op membe
       const call = (from: { id: number }, member: { id: number } | null) => handleApprovalTap(old,
         { data: "app_approve_9", chatId: -100, messageId: 1, from }, { ...deps(async () => member) });
       expect((await call({ id: 5 }, null)).reply).toMatch(/Link your Telegram/);
+      await old.sql(`insert into members(id, name, email, member_type) values (2, 'Bea', 'bea@hub.test', 'hub_friend')`);
+      await old.sql(`select setval('members_id_seq', 100)`);
+      expect((await call({ id: 8 }, { id: 2 })).reply).toBe("Until migration 074 runs, a site admin approves from the chat; then anyone here can.");
       expect(await call({ id: 6 }, { id: 1 })).toEqual({ handled: true });
       expect((await old.sql(`select status, approved_by from applications where id = 9`))[0]).toEqual({ status: "approved", approved_by: 1 });
       await old.sql(`insert into free_day_claims(id, email, name, status) values (4, 'f@x.test', 'F', 'pending')`);

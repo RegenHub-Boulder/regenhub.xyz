@@ -19,7 +19,7 @@ type DbError = { code?: string; message: string } | null;
 /** A refusal code from migration 072's functions, or "waiting_for_072" when the functions aren't there yet. */
 export type JoinRefusal =
   | "not_found" | "not_pending" | "not_a_member" | "not_coop" | "own_application" | "no_vouch" | "not_allowed"
-  | "not_members_chat" | "waiting_for_072" | "waiting_for_074" | "failed";
+  | "not_members_chat" | "chat_not_allowed" | "chat_waiting_for_074" | "waiting_for_072" | "waiting_for_074" | "failed";
 
 export const JOIN_REFUSAL_WORDS: Record<JoinRefusal, string> = {
   not_found: "That application isn't there any more.",
@@ -31,6 +31,8 @@ export const JOIN_REFUSAL_WORDS: Record<JoinRefusal, string> = {
   not_allowed: "On the site, co-op members approve. Anyone in the members' chat can approve there.",
   not_members_chat: "Approving and vouching happen in the members' chat.",
   waiting_for_072: "Vouching and approving start once migration 072 runs.",
+  chat_not_allowed: "This account can't approve: it's switched off on the site.",
+  chat_waiting_for_074: "Until migration 074 runs, a site admin approves from the chat; then anyone here can.",
   waiting_for_074: "Link your Telegram on your portal profile first: approving from the chat without a link starts once migration 074 runs.",
   failed: "Something went wrong. Try again, or use People → Applications.",
 };
@@ -129,13 +131,19 @@ const tapperArgs = (t: ChatTapper) => ({
  * Someone in the members' chat taps "I know them". The caller checked `isMembersChat`. Before 074 a linked member
  * vouches through 072's function and an unlinked tapper is told to link first.
  */
+/** The chat's words for a refusal: not_allowed there means a switched-off account (074), or 072's rule before it. */
+function inChat<T>(out: JoinOutcome<T>, before074 = false): JoinOutcome<T> {
+  if (out.ok || out.reason !== "not_allowed") return out;
+  return refuse(before074 ? "chat_waiting_for_074" : "chat_not_allowed");
+}
+
 export async function vouchInChat(db: JoinDb, applicationId: number, tapper: ChatTapper): Promise<JoinOutcome<{ already: boolean }>> {
   const { data, error } = await db.rpc("chat_vouch_for_application", { p_application: applicationId, ...tapperArgs(tapper) });
   if (missingFunction(error)) {
     if (tapper.memberId == null) return refuse("waiting_for_074");
-    return vouchForApplication(db, applicationId, tapper.memberId);
+    return inChat(await vouchForApplication(db, applicationId, tapper.memberId), true);
   }
-  if (error) return refuse(refusalOf(error));
+  if (error) return inChat(refuse(refusalOf(error)));
   return { ok: true, already: data === "already" };
 }
 
@@ -149,9 +157,9 @@ export async function approveInChat(db: JoinDb, args: ApproveArgs & { tapper: Ch
   const { data, error } = await db.rpc("chat_approve_application", { p_application: args.applicationId, ...tapperArgs(args.tapper) });
   if (missingFunction(error)) {
     if (args.tapper.memberId == null) return refuse<ApprovedOutcome>("waiting_for_074");
-    return approveApplication(db, { ...args, approverMemberId: args.tapper.memberId, via: "chat" });
+    return inChat(await approveApplication(db, { ...args, approverMemberId: args.tapper.memberId, via: "chat" }), true);
   }
-  if (error) return refuse<ApprovedOutcome>(refusalOf(error));
+  if (error) return inChat(refuse<ApprovedOutcome>(refusalOf(error)));
   return approved(data, args);
 }
 
@@ -168,7 +176,7 @@ export async function approveFreeDay(db: JoinDb, claimId: number, by: FreeDayApp
     ? await db.rpc("approve_free_day", { p_claim: claimId, p_member: by.site.memberId })
     : await db.rpc("chat_approve_free_day", { p_claim: claimId, ...tapperArgs(by.chat) });
   if (!missingFunction(error)) {
-    if (error) return refuse(refusalOf(error));
+    if (error) return "chat" in by ? inChat(refuse(refusalOf(error))) : refuse(refusalOf(error));
     const row = data as { name: string; email: string; already: boolean; status: string };
     return { ok: true, ...row };
   }

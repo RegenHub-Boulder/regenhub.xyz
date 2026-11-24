@@ -62,8 +62,8 @@ export async function PATCH(request: Request) {
   if (status === "reserved" && prev && prev.status !== "pending") {
     return NextResponse.json({ error: "Only a waiting request can be approved: move it back to waiting first." }, { status: 409 });
   }
-  const deciding = prev?.status === "pending" && (status === "reserved" || status === "cancelled");
-  if (deciding && !member.canApprove) {
+  // Every decision on a free day (approve, turn down, cancel, move back) is a co-op member's (migration 074).
+  if (!member.canApprove) {
     return NextResponse.json({ error: `${COOP_APPROVES} or turn down free days on the site.` }, { status: 403 });
   }
 
@@ -72,7 +72,8 @@ export async function PATCH(request: Request) {
   if (prev?.status === "pending" && status === "reserved") {
     const result = await approveFreeDay(admin, id, { site: { memberId: member.id, name: member.name } });
     if (!result.ok) {
-      return NextResponse.json({ error: result.message, reason: result.reason }, { status: result.reason === "not_found" ? 404 : 409 });
+      const code = result.reason === "not_found" ? 404 : result.reason === "not_allowed" ? 403 : 409;
+      return NextResponse.json({ error: result.message, reason: result.reason }, { status: code });
     }
     if (!result.already && result.email) {
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";

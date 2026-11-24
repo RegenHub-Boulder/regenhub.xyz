@@ -8,7 +8,8 @@
 --     Telegram is linked, else by their Telegram id and username.
 --   The site (People -> Applications / Free days): a co-op member (members.is_coop_member), not disabled. The app's
 --     one rule is lib/approval.ts canApproveOnSite; member_can_approve below is the same rule in SQL.
--- Desks are unchanged (site admin + ops admin, in the app: canApproveDesks).
+-- Desks (Aaron, 11-24: "co-op members should be able to approve folks for hot desks"): desk access and a desk's custom
+-- price follow the site's rule too, in the app (the member page); never from the chat, since a desk is a 24/7 door code.
 --
 -- New columns:
 --   applications.vouched_by_telegram_id / vouched_by_telegram     an unlinked chat member who vouched
@@ -33,7 +34,7 @@
 --          drop function chat_approve_application(integer, bigint, text, integer);
 --          drop function chat_vouch_for_application(integer, bigint, text, integer);
 --          drop function approve_application_core(integer, integer, bigint, text, text, boolean);
---          drop function application_is_own(integer, integer, text);
+--          drop function application_is_own(integer, integer, text, bigint);
 --          then re-run 072's definitions of member_can_approve, vouch_for_application and approve_application;
 --          alter table free_day_claims drop column approved_by_member_id, drop column approved_by_telegram_id;
 --          alter table applications drop column vouched_by_telegram_id, drop column vouched_by_telegram,
@@ -58,8 +59,9 @@ returns boolean language sql stable set search_path = public as $$
 $$;
 
 -- Is this the applicant acting on their own application? By the member row (email or sign-in), or, for a chat tap,
--- by the Telegram handle they gave on the application.
-create or replace function application_is_own(p_application integer, p_member integer, p_telegram_username text)
+-- by the Telegram id on the applicant's own member row or the Telegram handle they gave on the application.
+create or replace function application_is_own(p_application integer, p_member integer, p_telegram_username text,
+                                              p_telegram_id bigint)
 returns boolean language sql stable set search_path = public as $$
   select exists (
     select 1 from applications a
@@ -67,6 +69,10 @@ returns boolean language sql stable set search_path = public as $$
       exists (select 1 from members m where m.id = p_member
               and (lower(coalesce(m.email, '')) = lower(a.email)
                    or (m.supabase_user_id is not null and m.supabase_user_id = a.supabase_user_id)))
+      or (p_telegram_id is not null and exists (
+            select 1 from members m where m.telegram_user_id = p_telegram_id
+              and (lower(coalesce(m.email, '')) = lower(a.email)
+                   or (m.supabase_user_id is not null and m.supabase_user_id = a.supabase_user_id))))
       or (nullif(lower(trim(regexp_replace(coalesce(p_telegram_username, ''), '^@+', ''))), '') is not null
           and lower(trim(regexp_replace(coalesce(p_telegram_username, ''), '^@+', '')))
             = lower(trim(regexp_replace(coalesce(a.telegram, ''), '^@+', ''))))));
@@ -82,7 +88,7 @@ begin
   if not found then raise exception 'not_found' using errcode = 'P0001'; end if;
   if app.status <> 'pending' then raise exception 'not_pending' using errcode = 'P0001'; end if;
   if not member_can_approve(p_member) then raise exception 'not_coop' using errcode = 'P0001'; end if;
-  if application_is_own(p_application, p_member, null) then raise exception 'own_application' using errcode = 'P0001'; end if;
+  if application_is_own(p_application, p_member, null, null) then raise exception 'own_application' using errcode = 'P0001'; end if;
   if app.vouched_by is not null or app.vouched_by_telegram_id is not null then return 'already'; end if;
   update applications set vouched_by = p_member, vouched_at = now(), updated_at = now() where id = p_application;
   insert into admin_actions (actor_member_id, action, target_table, target_id, payload)
@@ -107,7 +113,7 @@ begin
   if exists (select 1 from members where id = p_member and coalesce(disabled, false)) then
     raise exception 'not_allowed' using errcode = 'P0001';
   end if;
-  if application_is_own(p_application, p_member, p_telegram_username) then
+  if application_is_own(p_application, p_member, p_telegram_username, p_telegram_id) then
     raise exception 'own_application' using errcode = 'P0001';
   end if;
   if app.vouched_by is not null or app.vouched_by_telegram_id is not null then return 'already'; end if;
@@ -151,7 +157,8 @@ begin
                      or exists (select 1 from members where id = p_approver and coalesce(disabled, false))) then
     raise exception 'not_allowed' using errcode = 'P0001';
   end if;
-  if application_is_own(p_application, p_approver, case when p_site then null else v_tg end) then
+  if application_is_own(p_application, p_approver, case when p_site then null else v_tg end,
+                        case when p_site then null else p_telegram_id end) then
     raise exception 'own_application' using errcode = 'P0001';
   end if;
 
@@ -248,7 +255,7 @@ begin
 end;
 $$;
 
-revoke all on function application_is_own(integer, integer, text) from public, anon, authenticated;
+revoke all on function application_is_own(integer, integer, text, bigint) from public, anon, authenticated;
 revoke all on function vouch_for_application(integer, integer) from public, anon, authenticated;
 revoke all on function chat_vouch_for_application(integer, bigint, text, integer) from public, anon, authenticated;
 revoke all on function approve_application_core(integer, integer, bigint, text, text, boolean) from public, anon, authenticated;

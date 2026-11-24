@@ -38,8 +38,10 @@ export function relTime(iso: string | null | undefined): string {
  * before. An old approval with a checkout link keeps Copy / Email again. Vouch, Approve and Reject are a co-op
  * member's (`canApprove`, migration 074); a site admin who isn't one sees "Co-op members approve" in their place.
  */
-export function ApplicationActions({ application, names = {}, canApprove }: {
+export function ApplicationActions({ application, names = {}, canApprove, isAdmin }: {
   application: JoinApplication; names?: Record<number, string>; canApprove: boolean;
+  /** A site admin: the old checkout link's Email it again (send-checkout-email is a site admin's route). */
+  isAdmin: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -110,7 +112,7 @@ export function ApplicationActions({ application, names = {}, canApprove }: {
           {application.status === "rejected" && application.rejected_by && (
             <span>Rejected by {names[application.rejected_by] ?? "a steward"} · {relTime(application.rejected_at)}.</span>
           )}
-          {application.stripe_checkout_url && !application.checkout_completed_at && (
+          {isAdmin && application.stripe_checkout_url && !application.checkout_completed_at && (
             <>
               <Button size="sm" variant="ghost" className="gap-1.5" onClick={() => {
                 void navigator.clipboard.writeText(application.stripe_checkout_url ?? "");

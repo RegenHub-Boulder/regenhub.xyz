@@ -41,7 +41,7 @@ export function ClaimActions({ claimId, currentStatus, canApprove }: Props) {
 
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
-      {currentStatus === "pending" && !canApprove && (
+      {!canApprove && currentStatus === "pending" && (
         <span className="text-xs text-muted" data-testid="coop-approves">{COOP_APPROVES}.</span>
       )}
       {currentStatus === "pending" && canApprove && (
@@ -64,7 +64,7 @@ export function ClaimActions({ claimId, currentStatus, canApprove }: Props) {
           </Button>
         </>
       )}
-      {currentStatus === "reserved" && (
+      {canApprove && currentStatus === "reserved" && (
         <Button
           size="sm"
           disabled={busy}
@@ -74,7 +74,7 @@ export function ClaimActions({ claimId, currentStatus, canApprove }: Props) {
           <X className="w-3 h-3" /> Cancel
         </Button>
       )}
-      {currentStatus === "cancelled" && (
+      {canApprove && currentStatus === "cancelled" && (
         <Button
           size="sm"
           disabled={busy}

@@ -22,6 +22,7 @@ export function ApplicationsFilter({
   names = {},
   nowMs,
   canApprove,
+  isAdmin,
 }: {
   applications: JoinApplication[];
   /** The page's "now" (server render): which ones are late. */
@@ -30,6 +31,7 @@ export function ApplicationsFilter({
   names?: Record<number, string>;
   /** A co-op member (lib/approval.ts canApproveOnSite): vouch, approve and turn down. Otherwise the lists only. */
   canApprove: boolean;
+  isAdmin: boolean;
 }) {
   const [activeTab, setActiveTab] = useState<string>("pending");
   const [search, setSearch] = useState("");
@@ -148,7 +150,7 @@ export function ApplicationsFilter({
                 </p>
               )}
 
-              <ApplicationActions application={app} names={names} canApprove={canApprove} />
+              <ApplicationActions application={app} names={names} canApprove={canApprove} isAdmin={isAdmin} />
             </div>
           ))}
         </div>

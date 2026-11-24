@@ -111,7 +111,7 @@ export default async function PeoplePage({
           They pick a day plan themselves.{isAdmin ? " Desks and custom prices are on each member’s page." : ""}
         </p>
         {/* eslint-disable-next-line react-hooks/purity -- server component, renders once per request */}
-        <ApplicationsFilter applications={apps} names={names} nowMs={Date.now()} canApprove={canApprove} />
+        <ApplicationsFilter applications={apps} names={names} nowMs={Date.now()} canApprove={canApprove} isAdmin={isAdmin} />
       </div>
     );
   }

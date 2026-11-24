@@ -30,7 +30,8 @@ export interface FreeDayClaimRow {
 /** "Approved by Carey" / "Approved by @sam in the chat"; null when nobody is recorded (the rule, or before 074). */
 export function freeDayApprovedByWords(claim: Pick<FreeDayClaimRow, "status" | "approved_by">): string | null {
   const by = claim.approved_by?.trim();
-  if (!by || claim.status === "pending" || claim.status === "cancelled") return null;
+  // "auto: …" is the free-day rule (/api/freeday), said elsewhere on the line; nobody tapped.
+  if (!by || by.startsWith("auto") || claim.status === "pending" || claim.status === "cancelled") return null;
   return `Approved by ${by.startsWith("@") ? `${by} in the chat` : by}`;
 }
 
