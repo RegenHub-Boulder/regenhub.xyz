@@ -23,6 +23,8 @@
 # runs a Telegram stand-in on B+7 (telegram-standin.mjs: the members' chat, its page shows what it got) and eight weeks
 # of morning door entries for "who's usually here"; scripts/staging/first-visit-shots.mjs drives the first visit.
 # T482_SCOREBOARD=1 also seeds the fictional rows /admin/scoreboard reads (scoreboard-seed.mjs); sign in as the steward.
+# T497_LEAKS=1 (with T482_SCOREBOARD=1) adds production-shaped rows for "Where people drop off" (leak-seed.mjs);
+# scripts/staging/leak-shots.mjs checks and captures it.
 # T482_STUCK_WRITER=1 (with T482_AUDIT) also seeds a door-code writer that died on 11-20 (silent past its lease) and two
 # failed door-code changes; T482_HA_STUB=1 points HA_URL at scripts/staging/ha-stub.mjs (127.0.0.1:B+6, never the real
 # locks; its calls are logged to $T482_STATE/ha-stub.log), so Clear on Door → Lock Sync runs end to end.
@@ -55,7 +57,7 @@ export DATABASE_URL="postgres://postgres@127.0.0.1:$P_PG/t482" BIND_ADDR="127.0.
 for _ in $(seq 60); do curl -sf "http://127.0.0.1:$P_APPVIEW/health" >/dev/null && break; sleep 1; done
 node "$ROOT/scripts/staging/seed.mjs" --appview "http://127.0.0.1:$P_APPVIEW" --out "$STATE" > "$S/seed.log"
 node "$ROOT/scripts/staging/techne-standin.mjs" --port "$P_STANDIN" --appview "http://127.0.0.1:$P_APPVIEW" --state "$STATE" > "$S/standin.log" 2>&1 & pids+=($!)
-node "$ROOT/scripts/staging/supabase-standin.mjs" --port "$P_SUPA" --state "$STATE" ${T482_SCOREBOARD:+--scoreboard} ${T497_FOLLOWUPS:+--followups} ${T482_AUDIT:+--audit} > "$S/supabase-standin.log" 2>&1 & pids+=($!)
+node "$ROOT/scripts/staging/supabase-standin.mjs" --port "$P_SUPA" --state "$STATE" ${T482_SCOREBOARD:+--scoreboard} ${T497_LEAKS:+--leaks} ${T497_FOLLOWUPS:+--followups} ${T482_AUDIT:+--audit} > "$S/supabase-standin.log" 2>&1 & pids+=($!)
 for _ in $(seq 20); do curl -sf -o /dev/null "http://127.0.0.1:$P_STANDIN/signin" && break; sleep 0.5; done
 node "$ROOT/scripts/staging/seed-rsvps.mjs" --standin "http://127.0.0.1:$P_STANDIN" --state "$STATE" >> "$S/seed.log"
 if [ -n "${T497_FOLLOWUPS:-}" ]; then

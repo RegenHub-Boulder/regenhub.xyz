@@ -29,7 +29,7 @@ import {
 } from "./migrationTools";
 
 const SERVER_NAME = "regenhub";
-const SERVER_VERSION = "0.8.1";
+const SERVER_VERSION = "0.8.2";
 
 /**
  * Build the MCP tool surface. Phase 1 = `ping`. Future tools gate on the caller's

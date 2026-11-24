@@ -13,6 +13,8 @@ import { readFreeDayFacts } from "@/lib/freeDayData";
 import { readAll } from "@/lib/supabase/readAll";
 import { handleFor } from "@/lib/techne/did";
 import { AuditAction } from "@/lib/auditLog";
+import { readLeakFunnels } from "@/lib/leakFunnelData";
+import type { LeakFunnels } from "@/lib/leakFunnel";
 import {
   SCOREBOARD_GOALS, SCOREBOARD_TZ, canceledSince, dayPassPool, followupFunnel, funnelByMonth, goalPace, goalProgress, headlineText, lastMonths,
   lastVisits, passBuyersNeverSubscribed, subscriptionFlow, turnoutBySeries,
@@ -29,6 +31,8 @@ import {
 type Admin = ReturnType<typeof createServiceClient>;
 
 const TURNOUT_PAST_DAYS = 60;
+/** How far back "Where people drop off" reads the nights' RSVPs: before the first night posted on Techne. */
+export const LEAK_NIGHTS_FROM = "2026-01-01T00:00:00Z";
 /** How far back "last visit" looks. */
 const VISIT_LOOKBACK_DAYS = 365;
 
@@ -173,7 +177,7 @@ async function readRows(admin: Admin, since: string, doorsSince: string) {
       .select("id, member_id, plan_key, status, monthly_cents, net_cents, payment_rail, created_at, canceled_at, updated_at, " +
         "cancel_at_period_end, admin_canceled_at, admin_cancel_mode, past_due_since, current_period_end")
       .order("id", { ascending: true }).range(f, t)),
-    readAll<MemberRow>("members", (f, t) => admin.from("members").select("id, name, email, member_type, disabled, did")
+    readAll<MemberRow>("members", (f, t) => admin.from("members").select("id, name, email, member_type, disabled, did, created_at")
       .order("id", { ascending: true }).range(f, t)),
     // All of it: the list's size at each month end counts everyone who ever signed up.
     readAll<InterestRow>("interests", (f, t) => admin.from("interests").select("id, email, source_path, member_id, created_at")
@@ -230,8 +234,68 @@ export async function readMonthTable(admin: Admin, now = new Date()): Promise<Mo
   return monthRows(await readRows(admin, since, doorsSince), now);
 }
 
-export async function readScoreboard(admin: Admin, now = new Date()) {
+/**
+ * The collective's own past nights since LEAK_NIGHTS_FROM with who went (the RSVP door). Read strictly, so a calendar
+ * that comes back short is unread (null) rather than quietly missing nights; listed events of other groups aren't
+ * RegenHub's nights. Going counts already read for the page (`known`) are reused.
+ */
+/** The calendar read behind pastNights, started early so it runs beside the other reads. */
+const leakCalendar = (now: Date) =>
+  fetchCollectiveEvents({ after: LEAK_NIGHTS_FROM, before: now.toISOString(), ownOnly: true, strict: true }).catch((e) => {
+    console.error("[scoreboard] nights read failed; the RSVP door is unread", e);
+    return null;
+  });
+
+async function pastNights(now: Date, calendar: ReturnType<typeof leakCalendar>, known: readonly TurnoutEvent[] | null): Promise<TurnoutEvent[] | null> {
+  const events = await calendar;
+  if (!events) return null;
+  const seen = new Map((known ?? []).map((e) => [e.uri, e]));
+  const past = events.filter((e) => e.startAt && Date.parse(e.startAt) < now.getTime());
+  const going = await mapLimit(past, 6, async (e) => {
+    const k = seen.get(e.uri);
+    return k && k.going != null ? { goingDids: k.goingDids ?? [] } : fetchAttendance(e.uri);
+  });
+  // A night whose RSVPs couldn't be read leaves the door unread, rather than counting nobody.
+  if (going.some((g) => g == null)) return null;
+  return past.map((e, i) => ({ uri: e.uri, name: e.name, startAt: e.startAt, url: e.url, seriesName: null, going: null, goingDids: going[i]!.goingDids ?? [] }));
+}
+
+/** "Where people drop off" from rows already read; null (and logged) when it fails, so the rest of the page stands. */
+const leaksFrom = async (
+  admin: Admin, rows: Rows, calendar: ReturnType<typeof leakCalendar>, known: TurnoutEvent[] | null, now: Date,
+): Promise<LeakFunnels | null> => {
+  try {
+    const nights = await pastNights(now, calendar, known).catch((e) => {
+      console.error("[scoreboard] nights read failed; the RSVP door is unread", e);
+      return null;
+    });
+    return await readLeakFunnels(admin, rows, nights, now);
+  } catch (e) {
+    console.error("[scoreboard] drop-off read failed", e);
+    return null;
+  }
+};
+
+/** "Where people drop off" alone (its CSV download): the same rows and counts as the page's. */
+export async function readLeaks(admin: Admin, now = new Date()): Promise<LeakFunnels> {
+  const { since, doorsSince } = readBounds(now);
+  const [rows, nights] = await Promise.all([
+    readRows(admin, since, doorsSince),
+    pastNights(now, leakCalendar(now), null).catch((e) => {
+      console.error("[scoreboard] nights read failed; the RSVP door is unread", e);
+      return null;
+    }),
+  ]);
+  return readLeakFunnels(admin, rows, nights, now);
+}
+
+/**
+ * Everything /admin/scoreboard shows. `leaks` adds "Where people drop off" (the scoreboard page and the MCP summary
+ * ask for it; the admin home doesn't, since it reads every night's RSVPs and asks Stripe about card renewals).
+ */
+export async function readScoreboard(admin: Admin, now = new Date(), opts: { leaks?: boolean } = {}) {
   const { months, since, doorsSince } = readBounds(now);
+  const calendar = opts.leaks ? leakCalendar(now) : null;
   const [rows, newsletter, events] = await Promise.all([
     readRows(admin, since, doorsSince),
     newsletterNumbers(admin),
@@ -240,6 +304,7 @@ export async function readScoreboard(admin: Admin, now = new Date()) {
       return null;
     }),
   ]);
+  const leaksRead = calendar ? leaksFrom(admin, rows, calendar, events, now) : Promise.resolve(null);
   const { subs, members, purchases } = rows;
 
   // Last visits only for the people on the follow-up lists and the leavers the actions name: find who, then read.
@@ -273,6 +338,7 @@ export async function readScoreboard(admin: Admin, now = new Date()) {
     }),
   ]);
   const all = recommendedActions({ now, subs, members, visits, passBuyers, events, goal, handles });
+  const leaks = await leaksRead;
   const actions = visibleActions(all, states, now);
   return {
     today,
@@ -290,6 +356,7 @@ export async function readScoreboard(admin: Admin, now = new Date()) {
     passBuyers,
     turnout: events ? turnoutBySeries(events, now, TURNOUT_PAST_DAYS) : null,
     newsletter,
+    leaks,
     text: headlineText({ today, goal, flow, funnel, followUps, pool, newsletter, actions: actions.open }),
   };
 }

@@ -18,8 +18,8 @@ export async function readFreeDays(admin: Service) {
 
 /** Every claim with what happened after it (lib/freeDayFunnel.ts claimFacts): the scoreboard's free-day columns. */
 export async function readFreeDayFacts(admin: Service) {
-  const { rows, personFor } = await readFreeDayPeople(admin);
-  return rows.map((claim) => ({ claim, facts: claimFacts(claim, personFor(claim)) }));
+  const { rows, personFor, memberIdFor } = await readFreeDayPeople(admin);
+  return rows.map((claim) => ({ claim, facts: claimFacts(claim, personFor(claim)), memberId: memberIdFor(claim) }));
 }
 
 async function readFreeDayPeople(admin: Service) {
@@ -74,5 +74,7 @@ async function readFreeDayPeople(admin: Service) {
     ...c,
     invited_by: c.invited_by_member_id ? byId.get(c.invited_by_member_id)?.name ?? null : null,
   }));
-  return { rows, personFor };
+  // The claim's member row (the scoreboard's "Where people drop off" follows them by it), or null.
+  const memberIdFor = (c: FreeDayClaimRow) => memberOf(c as FreeDayClaimRow & { supabase_user_id: string | null })?.id ?? null;
+  return { rows, personFor, memberIdFor };
 }

@@ -279,6 +279,19 @@ largest plan, so the plans add up to the headline's total. `MONTH_NOTES` holds
 each definition, shown under the table. **By plan now**: paying, net, comped, past due per plan (`planBreakdown`; its
 total is the headline's). **Download CSV** = `GET /api/admin/scoreboard/months` (staff only, counts only, each header
 says what it counts); the MCP `scoreboard_summary` carries the same CSV. Staging checks it in `scoreboard-shots.mjs`.
+**Where people drop off** (T-497, Michael 11-24: "find the biggest leak"; `lib/leakFunnel.ts` pure + tested, reads in
+`lib/leakFunnelData.ts`; `components/admin/DropOff.tsx`): one funnel per way in (free day approved, first day pass card
+or USDC, passes given on the member page, RSVP'd going to one of the collective's own past nights as a non-member),
+then came in → joined → paid a 2nd/3rd/4th month (the RSVP door first: got a free day or day pass). Each person once
+per door, from their first time; already members then are left out; a step counts everyone who got at least that far.
+Paid months: USDC = paid membership invoices; card = Stripe paid invoices with `billing_reason` create/cycle (read-only,
+per page load), or months elapsed when Stripe can't be read (the notes say which). By month started, with "too early"
+until a step's window (30/30/60/90/120/150 days from month end) closes; the biggest-drop sentence counts only settled
+people whose step can be seen (no member row: only a free day's code being used, or a pass under their email, shows). CSV: `GET /api/admin/scoreboard/leaks`; the MCP
+`scoreboard_summary` carries it. Only `/admin/scoreboard` and the MCP compute it (`readScoreboard(..., { leaks: true })`),
+not the admin home. Gifts are read from `passes_granted` audit rows, which the add-passes route writes since T-497
+(earlier gifts aren't known). Staging: `T482_SCOREBOARD=1 T497_LEAKS=1 scripts/staging/preview.sh` (production-shaped
+rows, `leak-seed.mjs`), then `scripts/staging/leak-shots.mjs`.
 **What to do next** (on the admin home `/admin`, "Today", since T-482; the scoreboard links to it): recommended actions from `lib/scoreboardActions.ts` (pure, tested), fed by
 the same rows and counts: past due (one-click payment reminder), set to end, left in the last 90 days (names what's
 new since: `MEMBER_NEWS`), new in the last 30 days (welcome, next Studio Night), day-pass buyers with 2+ passes or a

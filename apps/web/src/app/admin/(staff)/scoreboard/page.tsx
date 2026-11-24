@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import { CopyTextBlock } from "@/components/admin/CopyTextBlock";
+import { DropOff } from "@/components/admin/DropOff";
 import { planLabel } from "@/lib/plans";
 import { SCOREBOARD_GOALS, SCOREBOARD_TZ, usd, type TurnoutEvent } from "@/lib/scoreboard";
 import { readScoreboard } from "@/lib/scoreboardData";
@@ -216,7 +217,7 @@ function EventLine({ e }: { e: TurnoutEvent }) {
 
 export default async function ScoreboardPage() {
   if (!await requireAdmin()) redirect("/portal");
-  const s = await readScoreboard(createServiceClient());
+  const s = await readScoreboard(createServiceClient(), new Date(), { leaks: true });
   const { goal, pace } = s;
   const r = goal.revenue;
 
@@ -295,6 +296,13 @@ export default async function ScoreboardPage() {
 
       <Section title="Headline" note="A few plain lines for the meeting doc.">
         <CopyTextBlock text={s.text} />
+      </Section>
+
+      <Section
+        title="Where people drop off"
+        note={<>From each way in to a member who keeps paying. <a href="/api/admin/scoreboard/leaks" className="text-sage hover:underline" data-testid="download-leaks-csv" download>Download CSV</a></>}
+      >
+        {s.leaks ? <DropOff leaks={s.leaks} /> : <p className="text-sm text-muted">Couldn&apos;t work this out right now.</p>}
       </Section>
 
       <Section

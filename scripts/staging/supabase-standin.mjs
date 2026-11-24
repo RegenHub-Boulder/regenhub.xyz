@@ -14,7 +14,8 @@
 // --audit (T-482 portal/admin audit) builds the REAL schema instead (every migration in supabase/migrations, on a
 // small stub of Supabase's auth schema) and fills every portal and admin screen with sample rows (audit-seed.mjs);
 // the steward is an admin there. It stands alone: don't combine it with the other flags.
-// Usage: node supabase-standin.mjs --port 18604 --state <dir> [--scoreboard] [--member-pages] [--followups] [--luma-bridge] | [--audit]
+// --leaks (with --scoreboard) adds the drop-off funnel's production-shaped sample rows (leak-seed.mjs, T-497).
+// Usage: node supabase-standin.mjs --port 18604 --state <dir> [--scoreboard [--leaks]] [--member-pages] [--followups] [--luma-bridge] | [--audit]
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { readFileSync, readdirSync } from "node:fs";
@@ -120,6 +121,12 @@ if (process.argv.includes("--member-pages")) {
 if (process.argv.includes("--scoreboard")) {
   const { seedScoreboard } = await import(join(ROOT, "scripts/staging/scoreboard-seed.mjs"));
   await seedScoreboard(pg);
+}
+
+// --leaks (T-497, with --scoreboard): production-shaped fictional rows for "Where people drop off".
+if (process.argv.includes("--leaks")) {
+  const { seedLeaks } = await import(join(ROOT, "scripts/staging/leak-seed.mjs"));
+  await seedLeaks(pg);
 }
 
 // --luma-bridge (T-482): the interests list, unsubscribes and a draft issue for the Luma CSV import, the steward as admin.

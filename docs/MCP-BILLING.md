@@ -89,8 +89,8 @@ Example: `billing_summary({})`
 
 ### `scoreboard_summary` and `recommended_actions` (T-497)
 Not billing tools, but read the same way (scope `read`; code in `lib/mcp/scoreboardTools.ts`). `scoreboard_summary`
-is `/admin/scoreboard` as text: the headline, goal pace, the month-by-month table as CSV (the Download CSV), by plan now, event turnout; no
-names. `recommended_actions({ limit?, include_dismissed? })` is the admin home's (/admin) "What to do next" list, ranked, each with
+is `/admin/scoreboard` as text: the headline, goal pace, the month-by-month table as CSV (the Download CSV), "where people drop off" (each way in as a funnel, the biggest
+drop, and its CSV by month started), by plan now, event turnout; no names. `recommended_actions({ limit?, include_dismissed? })` is the admin home's (/admin) "What to do next" list, ranked, each with
 who (name and member id, never an email), why, the step and a stable id. Mark them Done / Not now on /admin.
 
 Example: `recommended_actions({ limit: 8 })`
