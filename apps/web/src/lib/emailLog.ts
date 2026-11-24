@@ -20,6 +20,7 @@ export const EMAIL_KINDS = {
   free_day_approved: "Free day approved",
   free_day_declined: "Free day request declined",
   free_day_already_member: "Free day asked for a member's email",
+  free_day_morning: "Free day: the morning they said they'd come",
   welcome: "Welcome",
   payment_failed: "Payment failed",
   payment_reminder: "Payment reminder",

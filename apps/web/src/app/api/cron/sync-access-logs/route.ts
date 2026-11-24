@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { hasBearerSecret } from "@/lib/secretAuth";
+import { welcomeFirstVisit, type DoorEntry } from "@/lib/firstVisit";
 
 /**
  * POST /api/cron/sync-access-logs
@@ -123,19 +124,22 @@ export async function POST(req: Request) {
         });
         if (attributedForThisLock) continue;
 
-        const { error } = await admin.from("access_logs").insert({
+        const { data: row, error } = await admin.from("access_logs").insert({
           method: "pin",
           slot: null,
           member_id: null,
           result: "granted",
           note: `HA:${entity}`,
           created_at: s.last_changed,
-        });
+        }).select("id, member_id, slot, result, created_at").single();
         if (error) {
           console.error(`[SyncAccessLogs] insert error for ${entity} @ ${s.last_changed}:`, error);
           errored++;
         } else {
           inserted++;
+          // The same first-visit check as a pushed entry. These rows carry no slot or member today, so it says
+          // nothing; and an entry backfilled more than 15 minutes late never alerts (lib/firstVisit.ts FRESH_MS).
+          if (row) await welcomeFirstVisit(admin, row as DoorEntry);
         }
       }
     } catch (err) {

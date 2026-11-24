@@ -13,6 +13,10 @@
     "./prices": {
       "import": "./dist/prices.js",
       "types": "./dist/prices.d.ts"
+    },
+    "./firstVisitWords": {
+      "import": "./dist/firstVisitWords.js",
+      "types": "./dist/firstVisitWords.d.ts"
     }
   },
   "scripts": {
