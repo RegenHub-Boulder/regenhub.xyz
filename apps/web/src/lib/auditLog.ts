@@ -12,8 +12,11 @@ export const AuditAction = {
   // Member-state changes
   MEMBERSHIP_APPROVED:    "membership_approved",
   MEMBERSHIP_REVOKED:     "membership_revoked",
-  FULL_ACCESS_APPROVED:   "full_access_approved",
-  FULL_ACCESS_REVOKED:    "full_access_revoked",
+  /** Desk access on/off (the member page; canApproveDesks). Older rows say full_access_approved/_revoked. */
+  DESK_ACCESS_ON:         "desk_access_on",
+  DESK_ACCESS_OFF:        "desk_access_off",
+  /** The member asked about a desk from the portal. */
+  DESK_ASKED:             "desk_asked",
   MEMBER_DISABLED:        "member_disabled",
   MEMBER_DELETED:         "member_deleted",
   MEMBER_AUTH_RELINKED:   "member_auth_relinked",

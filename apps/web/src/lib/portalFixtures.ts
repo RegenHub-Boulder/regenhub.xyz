@@ -31,7 +31,9 @@ function member(nowMs: number, over: Partial<PortalMember> & Pick<PortalMember, 
     is_admin: false,
     disabled: false,
     day_passes_balance: 0,
-    approved_for_daily: false,
+    approved: false,
+    desk_access: false,
+    desk_asked_at: null,
     profile_photo_url: null,
     bio: "Sample member for the portal preview.",
     telegram_username: "@sample",
@@ -71,6 +73,7 @@ function view(nowMs: number, over: Partial<PortalHomeView>): PortalHomeView {
     interestSignupAt: null,
     subscription: null,
     askDirectory: false,
+    vouchAsks: [],
     onchainWallet: null,
     onchainInvoice: null,
     idleWallet: null,
@@ -88,7 +91,7 @@ const dayPlan = (key: "member_basic" | "member_2day" | "member_5day", dollars: n
   shows: `${PLANS[key].label}: ${passes === 1 ? "a pass" : `${passes} passes`} ready, the plan card with Change plan.`,
   nav: { memberType: "day_pass", steward: false },
   view: (now) => view(now, {
-    member: member(now, { name: "Riley Example", member_type: "day_pass", day_passes_balance: passes, approved_for_daily: true }),
+    member: member(now, { name: "Riley Example", member_type: "day_pass", day_passes_balance: passes, approved: true }),
     subscription: plan(now, key),
   }),
 });
@@ -110,7 +113,7 @@ export const PORTAL_FIXTURES: readonly PortalFixture[] = [
     shows: "No passes left, approved to join: the pick-your-plan card.",
     nav: { memberType: "day_pass", steward: false },
     view: (now) => view(now, {
-      member: member(now, { name: "Casey Example", member_type: "day_pass", approved_for_daily: true, created_at: iso(now - 30 * DAY) }),
+      member: member(now, { name: "Casey Example", member_type: "day_pass", approved: true, created_at: iso(now - 30 * DAY) }),
     }),
   },
   dayPlan("member_basic", 30, 1),
@@ -119,7 +122,7 @@ export const PORTAL_FIXTURES: readonly PortalFixture[] = [
     ...dayPlan("member_5day", 100, 4),
     shows: "Member + 5 days/mo with a day code live today (placeholder code).",
     view: (now) => view(now, {
-      member: member(now, { name: "Riley Example", member_type: "day_pass", day_passes_balance: 4, approved_for_daily: true }),
+      member: member(now, { name: "Riley Example", member_type: "day_pass", day_passes_balance: 4, approved: true }),
       subscription: plan(now, "member_5day"),
       dayCode: { code: PLACEHOLDER_CODE, expires_at: iso(now + 4 * 3_600_000) },
     }),
@@ -185,7 +188,7 @@ export const PORTAL_FIXTURES: readonly PortalFixture[] = [
     shows: "No member row yet: the application under review.",
     nav: { memberType: null, steward: false },
     view: (now) => view(now, {
-      application: { status: "pending", email: "applicant@example.test", membership_interest: "hot_desk" },
+      application: { status: "pending", email: "applicant@example.test", known_by_member_id: 1, vouched_at: null },
     }),
   },
   {

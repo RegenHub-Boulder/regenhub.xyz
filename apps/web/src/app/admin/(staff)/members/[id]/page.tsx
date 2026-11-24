@@ -1,4 +1,6 @@
-import { requireAdmin } from "@/lib/admin";
+import { requireAdminMember } from "@/lib/admin";
+import { approvalOf, canApproveDesks, type ApprovalRow } from "@/lib/approval";
+import { escapeLike } from "@/lib/supabase/escapeLike";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { redirect, notFound } from "next/navigation";
@@ -30,7 +32,8 @@ function fmtShortDate(iso: string) {
 }
 
 export default async function EditMemberPage({ params }: { params: Promise<{ id: string }> }) {
-  if (!await requireAdmin()) redirect("/portal");
+  const auth = await requireAdminMember();
+  if (!auth) redirect("/portal");
   const { id } = await params;
   const supabase = await createClient();
 
@@ -67,26 +70,18 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
 
   const pastDue = activeSubscription?.status === "past_due";
 
-  // Resolve approver names (membership + desk) for audit display
-  const approverIds = [
-    member.approved_for_daily_by,
-    member.approved_for_full_by,
-  ].filter((id): id is number => typeof id === "number");
-  const uniqueApproverIds = Array.from(new Set(approverIds));
-  let approverNameMap = new Map<number, string>();
-  if (uniqueApproverIds.length > 0) {
-    const { data: approvers } = await supabase
-      .from("members")
-      .select("id, name")
-      .in("id", uniqueApproverIds);
-    approverNameMap = new Map((approvers ?? []).map((a) => [a.id, a.name]));
+  // The one approval and desk access (lib/approval.ts), who did each, and who vouched on their application.
+  const approval = approvalOf(member as ApprovalRow);
+  const { data: application } = member.email
+    ? await supabase.from("applications").select("*").ilike("email", escapeLike(member.email)).order("created_at", { ascending: false }).limit(1).maybeSingle()
+    : { data: null };
+  const vouch = application as { vouched_by?: number | null; vouched_at?: string | null } | null;
+  const peopleIds = [approval.memberBy, approval.deskBy, vouch?.vouched_by ?? null].filter((x): x is number => typeof x === "number");
+  let names = new Map<number, string>();
+  if (peopleIds.length > 0) {
+    const { data: people } = await supabase.from("members").select("id, name").in("id", [...new Set(peopleIds)]);
+    names = new Map((people ?? []).map((a) => [a.id, a.name]));
   }
-  const approvedByName = member.approved_for_daily_by
-    ? approverNameMap.get(member.approved_for_daily_by) ?? null
-    : null;
-  const approvedForFullByName = member.approved_for_full_by
-    ? approverNameMap.get(member.approved_for_full_by) ?? null
-    : null;
 
   // Fetch admin_actions targeting this member (joined with actor name) for the Activity tab.
   // Service client after the page-level active-admin check above.
@@ -187,16 +182,10 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
               {activeSubscription.cancel_at_period_end && " · canceling"}
             </Badge>
           )}
-          {member.approved_for_daily && !member.approved_for_full && !activeSubscription && (
+          {approval.member && !activeSubscription && (
             <Badge className="text-xs bg-ok/10 text-ok border-ok/40">
               <ShieldCheck className="w-3 h-3 mr-0.5 inline" />
-              Approved (Daily)
-            </Badge>
-          )}
-          {member.approved_for_full && !activeSubscription && (
-            <Badge className="text-xs bg-gold/10 text-gold border-gold/20">
-              <ShieldCheck className="w-3 h-3 mr-0.5 inline" />
-              Approved (Full)
+              {approval.desk ? "Approved, desk access" : "Approved"}
             </Badge>
           )}
           {member.disabled && (
@@ -229,14 +218,16 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
               <MemberForm member={member} />
               <MembershipApprovalCard
                 memberId={member.id}
-                memberName={member.name}
                 memberEmail={member.email}
-                approved={member.approved_for_daily}
-                approvedAt={member.approved_for_daily_at}
-                approvedByName={approvedByName}
-                approvedForFull={member.approved_for_full}
-                approvedForFullAt={member.approved_for_full_at}
-                approvedForFullByName={approvedForFullByName}
+                approved={approval.member}
+                approvedAt={approval.memberAt}
+                approvedByName={approval.memberBy ? names.get(approval.memberBy) ?? null : null}
+                vouch={vouch?.vouched_by ? { name: names.get(vouch.vouched_by) ?? "A member", at: vouch.vouched_at ?? null } : null}
+                desk={approval.desk}
+                deskAt={approval.deskAt}
+                deskByName={approval.deskBy ? names.get(approval.deskBy) ?? null : null}
+                deskAskedAt={approval.deskAskedAt}
+                canDesks={canApproveDesks({ is_admin: true, is_ops_admin: auth.member.isOpsAdmin })}
                 hasActiveSubscription={!!activeSubscription}
               />
             </>

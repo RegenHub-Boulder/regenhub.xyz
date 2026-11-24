@@ -3,21 +3,23 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CheckCircle, Clock, CreditCard, HandHeart, ArrowRight, MessageCircle, Sparkles } from "lucide-react";
 import type { ApplicationStatus } from "@/lib/supabase/types";
+import { DayPlanPicker } from "@/components/portal/DayPlanPicker";
 
 type AppStatus = ApplicationStatus | null | undefined;
 
 interface Props {
   memberType: string; // cold_desk | hot_desk | hub_friend | day_pass
-  approvedForDaily: boolean;
+  /** The one approval (lib/approval.ts): they may pick any day plan. */
+  approved: boolean;
+  /** Desk access: they may pick a desk. */
+  deskAccess: boolean;
   applicationStatus?: AppStatus;
-  applicationInterest?: string | null;
+  /** A member has vouched on their application (072). */
+  vouched?: boolean;
   /** True when the member already has an active/paying subscription. */
   hasActiveSubscription: boolean;
-}
-
-function prettyInterest(v?: string | null): string | null {
-  if (!v) return null;
-  return v.replace(/_/g, " ");
+  /** Their sign-in email, for the card checkout. */
+  email?: string;
 }
 
 /**
@@ -32,10 +34,12 @@ function prettyInterest(v?: string | null): string | null {
  */
 export function MembershipStatusCard({
   memberType,
-  approvedForDaily,
+  approved,
+  deskAccess,
   applicationStatus,
-  applicationInterest,
+  vouched,
   hasActiveSubscription,
+  email,
 }: Props) {
   // Active paying members: the subscription-management card already shows their
   // plan + status, so don't duplicate.
@@ -88,39 +92,46 @@ export function MembershipStatusCard({
 
   // ---- day_pass (free / intro) members: show their funnel position ----
 
-  // Approval supersedes an old application row: if they're cleared, point them at plans.
-  if (approvedForDaily) {
+  // Approved: pick a day plan right here (T-482 round 5), by card or USDC. Desk access too: the desks as well.
+  if (approved) {
     return (
-      <Card className="glass-panel border border-ok/40 bg-ok/10">
-        <CardContent className="p-6 flex items-start gap-4">
-          <CheckCircle className="w-7 h-7 text-ok shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <h3 className="font-semibold mb-1">You&apos;re approved to join — pick your plan</h3>
-            <p className="text-sm text-muted mb-3">
-              You&apos;re cleared to become a contributing member. Choose a tier to start your membership —
-              it sets up automatic monthly billing and unlocks member events and day-pass pricing.
-            </p>
-            <Link href="/membership">
-              <Button className="btn-primary-glass gap-2 text-sm">Choose a plan <ArrowRight className="w-4 h-4" /></Button>
-            </Link>
+      <Card className="glass-panel border border-ok/40" data-testid="pick-plan">
+        <CardContent className="p-6 space-y-4">
+          <div className="flex items-start gap-3">
+            <CheckCircle className="w-6 h-6 text-ok shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-semibold mb-1">You&apos;re in. Pick your plan</h3>
+              <p className="text-sm text-muted">
+                Every plan has the member demos and Studio Night; they differ in coworking days. Days you don&apos;t use carry over.
+              </p>
+            </div>
           </div>
+          <DayPlanPicker email={email} />
+          {deskAccess ? (
+            <>
+              <p className="text-sm font-medium pt-2">Your desk access is on</p>
+              <DayPlanPicker email={email} desks />
+            </>
+          ) : (
+            <p className="text-xs text-muted">Want a desk later? Once you&apos;re on a plan you can ask about one here.</p>
+          )}
         </CardContent>
       </Card>
     );
   }
 
   if (applicationStatus === "pending") {
-    const interest = prettyInterest(applicationInterest);
     return (
       <Card className="glass-panel border border-warn/40 bg-warn/10">
         <CardContent className="p-6 flex items-start gap-4">
           <Clock className="w-7 h-7 text-warn shrink-0 mt-0.5" />
           <div className="flex-1">
-            <h3 className="font-semibold mb-1">Your membership application is under review</h3>
-            <p className="text-sm text-muted">
-              Thanks for applying{interest ? <> for <span className="capitalize">{interest}</span></> : ""}!
-              We approve members by hand so we can welcome each one personally — we&apos;ll be in touch soon.
-              In the meantime, you can still use day passes and come to events.
+            <h3 className="font-semibold mb-1">Your application is in</h3>
+            <p className="text-sm text-muted" data-testid="application-waiting">
+              {vouched
+                ? "A member has vouched for you. A steward approves next, within a day."
+                : "Next, one member who knows you vouches. Haven't met us yet? Come to a night or a free day."}{" "}
+              Then you pick a day plan here.
             </p>
           </div>
         </CardContent>
@@ -154,8 +165,8 @@ export function MembershipStatusCard({
           <h3 className="font-semibold mb-1">Ready to become a member?</h3>
           <p className="text-sm text-muted mb-3">
             You&apos;re on day passes right now. Members get Studio Night and the Friday member demos, coworking
-            days each month and day passes at the member rate. Full Access ($250 Hot Desk / $500 Cold Desk) adds a
-            permanent door code and 24/7 access. Apply to join and we&apos;ll get you set up.
+            days each month and day passes at the member rate. Applying takes a minute: a member vouches, a steward
+            approves, then you pick a plan.
           </p>
           <div className="flex gap-2 flex-wrap">
             <Link href="/apply">

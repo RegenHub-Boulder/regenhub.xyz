@@ -221,13 +221,23 @@ async function welcome(admin: Service, entry: DoorEntry, now: Date): Promise<Wel
 
 type Claim = { id: number; name: string; email: string; invited_by_member_id: number | null };
 
-/** The name of the last night this person got a follow-up note for (migration 066), or null. */
+/**
+ * The name of the last night this person got a follow-up note for (migration 066), or null. By member, then by email:
+ * a guest's note has no member_id (they weren't one yet), and a free day the rule approved for them (lib/freeDayRule.ts,
+ * "came to a night") makes their member row only afterwards.
+ */
 async function lastNight(admin: Service, memberId: number | null, email: string | null): Promise<string | null> {
-  const filter = memberId != null ? { col: "member_id", v: memberId } : email ? { col: "email", v: email.toLowerCase() } : null;
-  if (!filter) return null;
-  const { data, error } = await admin.from("night_followups").select("batch_id").eq(filter.col, filter.v)
-    .eq("status", "sent").order("id", { ascending: false }).limit(1).maybeSingle();
-  if (error || !data) return null;
+  const filters = [
+    ...(memberId != null ? [{ col: "member_id", v: memberId as number | string }] : []),
+    ...(email ? [{ col: "email", v: email.trim().toLowerCase() as number | string }] : []),
+  ];
+  let data: unknown = null;
+  for (const f of filters) {
+    const r = await admin.from("night_followups").select("batch_id").eq(f.col, f.v)
+      .eq("status", "sent").order("id", { ascending: false }).limit(1).maybeSingle();
+    if (!r.error && r.data) { data = r.data; break; }
+  }
+  if (!data) return null;
   const { data: batch } = await admin.from("night_followup_batches").select("event_name")
     .eq("id", (data as { batch_id: number }).batch_id).maybeSingle();
   return (batch as { event_name: string } | null)?.event_name ?? null;

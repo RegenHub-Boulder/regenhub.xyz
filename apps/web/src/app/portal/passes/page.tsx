@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { PLANS, formatCents } from "@/lib/plans";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { getStripe, isStripeConfigured, PASS_KINDS } from "@/lib/stripe";
@@ -372,9 +373,8 @@ export default async function PassesPage({ searchParams }: PageProps) {
         </Card>
       )}
 
-      {/* Full Access upgrade prompt — only for contributing members who don't
-          have a sub yet (day-pass members see the "Become a Member" card above
-          instead, which is the more on-ramp-friendly next step). */}
+      {/* Desks are an upgrade for members on a day plan: they ask from the portal home (DeskAsk). Day-pass members
+          see the "Become a Member" card above instead. */}
       {!isFullMember && isContributingMember && (
         <Card className="glass-panel border border-forest/20">
           <CardContent className="p-6">
@@ -383,12 +383,12 @@ export default async function PassesPage({ searchParams }: PageProps) {
               <div className="flex-1">
                 <h3 className="font-semibold mb-1">Ready for your own desk?</h3>
                 <p className="text-sm text-muted mb-4">
-                  Full Access members get a permanent door code and 24/7 access.
-                  Hot Desk is $250/month, Cold Desk (reserved) is $500/month.
+                  A desk comes with your own door code, any hour. A hot desk is {formatCents(PLANS.hot_desk.defaultMonthlyCents)} a
+                  month, a cold desk (your own) {formatCents(PLANS.cold_desk.defaultMonthlyCents)}. Ask from your portal and a steward will talk with you.
                 </p>
-                <Link href="/membership">
+                <Link href="/portal">
                   <Button className="btn-glass gap-2 text-sm">
-                    See Full Access tiers
+                    Talk to us about a desk
                     <ArrowRight className="w-4 h-4" />
                   </Button>
                 </Link>

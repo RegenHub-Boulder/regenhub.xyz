@@ -22,6 +22,8 @@
 # code can be issued end to end, and sends mail to the staging outbox; scripts/staging/round4-shots.mjs drives it. It also
 # runs a Telegram stand-in on B+7 (telegram-standin.mjs: the members' chat, its page shows what it got) and eight weeks
 # of morning door entries for "who's usually here"; scripts/staging/first-visit-shots.mjs drives the first visit.
+# T482_JOIN=1 (with T482_AUDIT=1, T-482 round 5) adds each state of joining (audit-seed.mjs): a late application, one
+# vouched and ready, Sam approved without a plan, Dee (signs in as Lee) on a day plan; scripts/staging/joining-shots.mjs.
 # T482_SCOREBOARD=1 also seeds the fictional rows /admin/scoreboard reads (scoreboard-seed.mjs); sign in as the steward.
 # T497_LEAKS=1 (with T482_SCOREBOARD=1) adds production-shaped rows for "Where people drop off" (leak-seed.mjs);
 # scripts/staging/leak-shots.mjs checks and captures it.

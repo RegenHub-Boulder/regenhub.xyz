@@ -101,7 +101,8 @@ supabase/
     ├── 068_techne_people.sql         # every Techne sign-in: the person, their email, the stay-in-touch list
     ├── 069_email_log.sql             # every email sent one person at a time (metadata only)
     ├── 070_lock_writer_lease.sql     # the door-code writer becomes a 2-minute lease, taken over when stale
-    └── 071_free_day_approved_at.sql  # when a free day was approved (its 90-day lapse counts from there)
+    ├── 071_free_day_approved_at.sql  # when a free day was approved (its 90-day lapse counts from there)
+    └── 072_one_approval.sql          # one approval + desk access, the vouch, the chat card, the 12 h re-post
 DEPLOYMENT.md               # Full infra guide for agents + humans
 ```
 
@@ -131,6 +132,10 @@ DEPLOYMENT.md               # Full infra guide for agents + humans
   069 runs". The past-due banner there has **Send reminder** (`/api/admin/members/[id]/send-payment-reminder`, the
   same route as What to do next's): audited `payment_reminder_sent`; a USDC member's note names the open invoice; the
   amount is `effectiveMonthlyCents` (a USDC row's `net_cents` is the last amount paid, so it lags a cheaper plan).
+
+- Joining fields (migration 072, see "Joining" below): `members.member_approved` (the one approval: any day plan),
+  `desk_access` (a desk), `desk_asked_at`; `applications.known_by_member_id`, `how_found`, `vouched_by`/`vouched_at`,
+  `chat_message_id`, `chat_reposted_at`. `approved_for_daily`/`approved_for_full` stay one release, kept equal by a trigger.
 
 - Member page fields on `members` (migration 065): `show_in_directory` (the opt-in: null = not asked, false = no, true = listed while in standing; co-op owners defaulted on), `working_on`, `links` (≤5 URLs), `show_rsvps`. See "Member pages and the directory" below.
 
@@ -338,21 +343,55 @@ pointed at `/membership`; members are thanked, told the next Studio Night, and (
 - Staging: `T497_FOLLOWUPS=1 scripts/staging/preview.sh` seeds a night that just ended with sample RSVPs and sends to
   the staging outbox; `scripts/staging/followups-shots.mjs` drives review, previews and Send.
 
-### Membership application flow (approve + notify)
-`/apply` (sign-in required) → `/api/portal/application` upserts the application, emails the
-applicant an acknowledgment, and pings the Telegram group with two buttons:
-- **✅ Approve (standard rate)** — bot callback `app_approve_<id>`: flips `approved_for_daily`
-  (+`approved_for_full` for desk interest), copies `applications.telegram` →
-  `members.telegram_username` (degrades gracefully on handle conflict), emails the applicant
-  to self-serve at `/membership`.
-- **Custom pricing →** — links to People → Applications (`/admin/people?tab=applications`; the old
-  `/admin/applications` redirects there); approving there generates a Stripe
-  checkout session AND auto-emails the link (`approvalCheckoutEmail`), pings the group, and the
-  UI has an "Email link to applicant" resend button (`send-checkout-email` route).
+### Joining: apply, one vouch, one approval, a day plan (T-482 round 5, migration 072)
+Aaron, 11-24: "at least one member to vouch for new members"; approval stays in the members' chat; answer within 24 h.
+- **Apply** (`/apply`, sign-in as before: Techne first, email link fallback): name, email, what they work on, how they
+  found us, an optional Telegram handle, and "Who here knows you?" (a type-ahead of members who may vouch,
+  `lib/vouchers.ts` via `GET /api/portal/members/search`: 2+ letters, ids and names only, a member not listed in the
+  directory shown and matched as "First L."; or "Nobody yet"). No level. `/api/portal/application` saves `how_found`
+  and `known_by_member_id` (only someone who may vouch), posts the chat card and emails "we reply within a day". An
+  approved applicant can't re-apply (409; `/apply` sends them to the portal); an edit of a waiting one changes the
+  answers, not the card; applying again after a rejection or close starts over (new vouch, card and clock).
+- **One code path** (`packages/shared/src/joining.ts`): `vouchForApplication` and `approveApplication` call 072's SQL
+  functions (`vouch_for_application`, `approve_application`: one transaction each, audited `application_vouched` /
+  `membership_approved` with `via` chat|site). The bot's buttons (`app_vouch_<id>` "I know them", `app_approve_<id>`
+  "Approve") and the site (`POST /api/portal/applications/[id]/vouch` from the portal's "Someone says you know them"
+  card or People → Applications; `POST /api/admin/applications/[id]/approve`) run the same functions, and the card
+  is redrawn from the database after each (`refreshApplicationCard`; `applications.chat_message_id`).
+- **Vouch:** any member who may vouch (072's `member_can_vouch`: in standing per `lib/memberStanding.ts`, a co-op owner
+  or a site admin), never for themselves; the first vouch stays. **Approve:** needs a vouch, and a site admin
+  (`member_can_approve`). Approval finds or makes the day-pass member row and turns `member_approved` on; the
+  `/api/admin/applications` PATCH refuses `approved` and never moves an approved application (conditional update);
+  "Take approval back" on the member page closes it, so they can apply again. The approval email (`membershipApprovedEmail`) points to the
+  portal, where an approved member picks any day plan ($30/$50/$100, card or USDC; `components/portal/DayPlanPicker.tsx`).
+- **Desks are an upgrade:** a member asks from the portal ("Talk to us about a desk", `POST /api/portal/desk-ask`:
+  `desk_asked_at`, audited, posted to the chat, on Today and `/admin/members?status=desk_ask`). A steward who
+  `canApproveDesks` (`lib/approval.ts`: site admin + ops admin; Aaron and Carey) turns desk access on from the member
+  page (Joining card; `PATCH .../approve-membership` `{level:"desk"}`). The gate is one function, `planGate`
+  (`lib/approval.ts`), in `/api/membership/subscribe`, `/api/membership/onchain` and `/api/portal/change-plan`.
+- **Custom pricing** is on the member page (Joining → Custom price…, `POST /api/admin/members/[id]/custom-price`, the
+  same Stripe checkout path), not an application path. Old application checkout links keep Copy / Email again
+  (`send-checkout-email`, MCP `send_checkout_email`).
+- **24 hours:** the bot's scheduler re-posts each application or free-day card still waiting at 12 h, once
+  (`repostWaitingCards`, `chat_reposted_at`, last 72 h only); Today lists anything over 24 h as late, with its age
+  (`lib/adminQueue.ts lateItems`); People → Applications shows waiting ones oldest first.
+- **Free days, the middle rule** (`lib/freeDayRule.ts`, one constant `FREE_DAY_AUTO_APPROVE` = known | always | never):
+  approved at once when we know the person (a night follow-up row: they RSVP'd going to a night that happened, from a
+  steward's batch; a member's invite; or 7+ days on the stay-in-touch list and not unsubscribed). A bare Techne RSVP
+  doesn't count: its createdAt is the author's own, so one written today to last week's night looks real; anyone else's waits for one tap in the
+  chat ("✅ Approve free day"; the old "Free day + Membership" button is gone, a stale one approves the free day only).
+  The rule in words is on People → Free days. A free-day code ends 6 PM Boulder time that day; after 6 PM there's no code.
+- **072 is additive and works before it runs:** `members.member_approved`/`desk_access` (+ `_at`, `_by`) and
+  `desk_asked_at` are backfilled from `approved_for_daily`/`approved_for_full`, and a trigger keeps both pairs equal
+  for one release. Reads select `*` and use `approvalOf` (old flags when the new ones are missing); before 072 vouching
+  and approving answer "start once migration 072 runs". **Deploy order:** web, bot, then `run_migration("072_one_approval.sql")`.
+  Subtract: a follow-up drops `approved_for_*`, the mirror trigger and `approvalOf`'s fallback (owner: whoever runs 072).
+- Staging: `T482_AUDIT=1 T482_JOIN=1 scripts/staging/preview.sh`, then `scripts/staging/joining-shots.mjs`. Tests:
+  `test/joining.test.ts`.
 
 Member-facing lifecycle emails (all in `apps/web/src/lib/email.ts`, sent from the Stripe
 webhook): welcome on first activation, payment-reminder on past_due transition, warm exit on
-subscription end. The free-day emails (received, approved, approved + membership, declined) and the membership
+subscription end. The free-day emails (received, approved, declined) and the membership
 approval live once in `packages/shared/src/freeDayEmails.ts`; web and bot both import them. Prices are typed once, in
 `packages/shared/src/prices.ts` (`lib/plans.ts` reads them via `@regenhub/shared/prices`).
 

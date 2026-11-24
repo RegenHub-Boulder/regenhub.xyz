@@ -4,11 +4,11 @@ import { isBilled } from "@/lib/membershipRevenue";
  * Status filter for the /admin/members directory. Shared by the auth-user
  * rows and the legacy (no auth account) rows so the two can't drift.
  */
-export type MemberStatusFilter = "all" | "active" | "disabled" | "no_subscription" | "unbilled_desk" | "overdue";
+export type MemberStatusFilter = "all" | "active" | "disabled" | "no_subscription" | "unbilled_desk" | "overdue" | "desk_ask";
 
 export const DESK_MEMBER_TYPES = ["cold_desk", "hot_desk"] as const;
 
-interface FilterMember { disabled: boolean; member_type?: string | null }
+interface FilterMember { disabled: boolean; member_type?: string | null; desk_asked_at?: string | null; desk_access?: boolean | null }
 
 /**
  * A hot or cold desk member, not disabled, with no billed subscription (BILLED_STATUSES) on either rail. The one
@@ -45,6 +45,9 @@ export function matchesStatusFilter(
       return !!member && !member.disabled && !subscription;
     case "unbilled_desk":
       return isUnbilledDesk(member, subscription);
+    case "desk_ask":
+      // Asked about a desk from the portal, desk access not on yet (the admin home's "asked about a desk").
+      return !!member && !member.disabled && !!member.desk_asked_at && !member.desk_access;
     case "overdue":
       // Past due on either rail (Stripe or on-chain). Disabled members are
       // included on purpose: their billing can still be live.

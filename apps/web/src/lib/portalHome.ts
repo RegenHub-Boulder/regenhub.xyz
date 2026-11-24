@@ -4,6 +4,7 @@ import { isListed } from "@/lib/memberDirectory";
 import { startOfDayIn } from "@/lib/series";
 import { AuditAction, logAction } from "@/lib/auditLog";
 import type { ApplicationStatus } from "@/lib/supabase/types";
+import { approvalOf, type ApprovalRow } from "@/lib/approval";
 import type { ActiveDayCode } from "@/components/portal/DayPassRedemptionHero";
 
 /**
@@ -26,7 +27,12 @@ export interface PortalMember {
   is_admin: boolean | null;
   disabled?: boolean | null;
   day_passes_balance: number | null;
-  approved_for_daily: boolean | null;
+  /** The one approval: may pick any day plan (lib/approval.ts). */
+  approved: boolean;
+  /** Desk access, turned on by a steward: may pick a desk. */
+  desk_access: boolean;
+  /** When they asked about a desk from here (null = not asked). */
+  desk_asked_at: string | null;
   profile_photo_url: string | null;
   bio: string | null;
   telegram_username: string | null;
@@ -36,8 +42,13 @@ export interface PortalMember {
 export interface PortalApplication {
   status: ApplicationStatus;
   email: string;
-  membership_interest: string;
+  /** Migration 072: the member they said knows them, and the vouch. Absent before it runs. */
+  known_by_member_id?: number | null;
+  vouched_at?: string | null;
 }
+
+/** An application naming this member as someone who knows them, still waiting for a vouch. */
+export interface VouchAsk { id: number; name: string; about: string | null }
 
 export interface PortalSubscription {
   id: number;
@@ -77,6 +88,8 @@ export interface PortalHomeView {
   interestSignupAt: string | null;
   subscription: PortalSubscription | null;
   askDirectory: boolean;
+  /** Applications naming this member, waiting for their "I know them". */
+  vouchAsks: VouchAsk[];
   onchainWallet: { address: string; verification_method: string } | null;
   onchainInvoice: PortalOnchainInvoice | null;
   idleWallet: { id: number; address: string } | null;
@@ -156,6 +169,16 @@ export async function loadPortalHome(
       .eq("member_id", member.id)
       .in("status", PAYING_STATUSES);
     askDirectory = isListed({ ...member, show_in_directory: true } as Parameters<typeof isListed>[0], paying ?? []);
+  }
+
+  // Who named this member on their application and is still waiting for a vouch. Before 072 the column is missing:
+  // nothing to ask.
+  let vouchAsks: VouchAsk[] = [];
+  if (member && !member.disabled) {
+    const { data } = await service.from("applications").select("id, name, about")
+      .eq("known_by_member_id", member.id).eq("status", "pending").is("vouched_by", null)
+      .order("created_at", { ascending: true }).limit(5);
+    vouchAsks = (data ?? []) as VouchAsk[];
   }
 
   let onchainWallet: PortalHomeView["onchainWallet"] = null;
@@ -240,6 +263,7 @@ export async function loadPortalHome(
     interestSignupAt,
     subscription,
     askDirectory,
+    vouchAsks,
     onchainWallet,
     onchainInvoice,
     idleWallet,
@@ -259,7 +283,7 @@ export async function loadMemberPortalHome(memberId: number, adminMemberId: numb
   const { data: member } = await service.from("members").select("*").eq("id", memberId).maybeSingle();
   if (!member) return null;
   const { data: application } = member.supabase_user_id
-    ? await service.from("applications").select("status, email, membership_interest")
+    ? await service.from("applications").select("*")
       .eq("supabase_user_id", member.supabase_user_id).order("created_at", { ascending: false }).limit(1).maybeSingle()
     : { data: null };
 
@@ -280,8 +304,11 @@ export async function loadMemberPortalHome(memberId: number, adminMemberId: numb
   return maskCodes({ ...view, preview: true });
 }
 
+type PortalMemberRow = Omit<PortalMember, "approved" | "desk_access" | "desk_asked_at"> & ApprovalRow;
+
 /** Only the fields the home uses, copied one by one, so a wider `select("*")` can't carry more into the view. */
-export function toPortalMember(row: PortalMember): PortalMember {
+export function toPortalMember(row: PortalMemberRow): PortalMember {
+  const approval = approvalOf(row);
   return {
     id: row.id,
     name: row.name,
@@ -292,7 +319,9 @@ export function toPortalMember(row: PortalMember): PortalMember {
     is_admin: row.is_admin,
     disabled: row.disabled,
     day_passes_balance: row.day_passes_balance,
-    approved_for_daily: row.approved_for_daily,
+    approved: approval.member,
+    desk_access: approval.desk,
+    desk_asked_at: approval.deskAskedAt,
     profile_photo_url: row.profile_photo_url,
     bio: row.bio,
     telegram_username: row.telegram_username,

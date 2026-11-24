@@ -6,6 +6,8 @@ import HubEssentials from "@/components/portal/HubEssentials";
 import InviteCard from "@/components/portal/InviteCard";
 import { ManageSubscriptionButton } from "@/components/portal/ManageSubscriptionButton";
 import { CancelPlanSwitchButton, ChangePlanButton } from "@/components/portal/ChangePlanButton";
+import { DeskAsk } from "@/components/portal/DeskAsk";
+import { VouchAsk } from "@/components/portal/VouchAsk";
 import { OnboardingChecklist } from "@/components/portal/OnboardingChecklist";
 import { DirectoryAsk } from "@/components/portal/DirectoryAsk";
 import { RevealPin } from "@/components/portal/RevealPin";
@@ -13,7 +15,7 @@ import { DayPassRedemptionHero } from "@/components/portal/DayPassRedemptionHero
 import { MembershipStatusCard } from "@/components/portal/MembershipStatusCard";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { PreviewProvider } from "@/components/portal/PreviewContext";
-import { planLabel, getPlan } from "@/lib/plans";
+import { planLabel, getPlan, isDeskPlan } from "@/lib/plans";
 import { effectiveMonthlyCents } from "@/lib/stripeNet";
 import { memberTypeLabel } from "@/lib/memberTypeLabel";
 import { OnchainBillingCard } from "@/components/portal/OnchainBillingCard";
@@ -65,12 +67,13 @@ function PortalHomeBody({ view }: { view: PortalHomeView }) {
           <StatusIcon className={`w-10 h-10 ${statusColor} mx-auto mb-4`} />
           <h2 className="text-xl font-semibold mb-2">Application {application.status === "pending" ? "Under Review" : application.status === "approved" ? "Approved" : "Not Approved"}</h2>
           <p className="text-muted text-sm mb-4">
-            {application.status === "pending" && "We've received your application and will be in touch soon."}
-            {application.status === "approved" && "Your application was approved! An admin is setting up your access."}
+            {application.status === "pending" && (application.vouched_at
+              ? "A member has vouched for you. A steward approves next, within a day."
+              : "Next, one member who knows you vouches. Haven't met us yet? Come to a night or a free day.")}
+            {application.status === "approved" && "You're approved. Reload in a moment to pick your plan."}
             {application.status === "rejected" && "Your application wasn't approved this time. Reach out on Telegram to learn more."}
           </p>
           <p className="text-xs text-muted mb-1">Submitted as: {application.email}</p>
-          <p className="text-xs text-muted">Interested in: <span className="capitalize">{application.membership_interest.replace(/_/g, " ")}</span></p>
         </div>
       );
     }
@@ -254,12 +257,16 @@ function PortalHomeBody({ view }: { view: PortalHomeView }) {
         </>
       )}
 
+      {view.vouchAsks.length > 0 && <VouchAsk asks={view.vouchAsks} />}
+
       <MembershipStatusCard
         memberType={member.member_type}
-        approvedForDaily={!!member.approved_for_daily}
+        approved={member.approved}
+        deskAccess={member.desk_access}
         applicationStatus={application?.status}
-        applicationInterest={application?.membership_interest}
+        vouched={!!application?.vouched_at}
         hasActiveSubscription={!!activeSubscription}
+        email={userEmail ?? undefined}
       />
 
       {askDirectory && <DirectoryAsk />}
@@ -342,6 +349,7 @@ function PortalHomeBody({ view }: { view: PortalHomeView }) {
                     currentMonthlyCents={activeSubscription.monthly_cents}
                     currentPeriodEnd={activeSubscription.current_period_end}
                     hasDiscount={(activeSubscription.discount_cents ?? 0) > 0}
+                    deskAccess={member.desk_access}
                   />
                 )}
                 {pendingSwitch && activeSubscription.payment_rail === "stripe" && (
@@ -350,6 +358,14 @@ function PortalHomeBody({ view }: { view: PortalHomeView }) {
                 {activeSubscription.payment_rail === "stripe" && <ManageSubscriptionButton />}
               </div>
             </div>
+            {/* Desks are an upgrade for members: ask, a steward talks with you and turns desk access on. */}
+            {!isDeskPlan(activeSubscription.plan_key) && (
+              <div className="mt-4 border-t border-rule pt-4">
+                {member.desk_access
+                  ? <p className="text-sm text-muted" data-testid="desk-access-on">Your desk access is on: Change plan to pick a hot or cold desk.</p>
+                  : <DeskAsk askedAt={member.desk_asked_at} />}
+              </div>
+            )}
             {activeSubscription.payment_rail === "onchain" && view.preview && (
               <div className="mt-4 text-sm text-muted space-y-1" data-testid="onchain-preview">
                 <p>Pays in USDC.{onchainInvoice ? ` Open invoice: $${(onchainInvoice.amount_cents / 100).toFixed(2)}, ${onchainInvoice.status}.` : " Nothing due."}</p>

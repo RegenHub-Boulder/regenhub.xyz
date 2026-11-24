@@ -169,6 +169,35 @@ async function seed(pg, people) {
     ('zed@example.test', 'Zed (sample)', 'Crypto trader.', 'Wanted a mailing address.', 'cold_desk', 'rejected', null, $4)`,
   [ago(0.5), ago(2), ago(36), ago(20)]);
 
+  // T482_JOIN=1 (T-482 round 5, one way to join): each state of an application, an approved member who hasn't picked a
+  // plan, and a member on a day plan who can ask about a desk. Triggers are off here, so old and new flags are both set.
+  if (process.env.T482_JOIN) {
+    const dee = await m("dee@example.test"), mira = await m("mira@example.test"), sam = await m("sam-sample@example.test");
+    const hrs = (h) => new Date(Date.now() - h * 3600000).toISOString();
+    await q(`update applications set known_by_member_id = $1, how_found = 'Dee brought me to a Civic Tech Night', created_at = $2,
+      about = 'Runs a small solar co-op.' where email = 'olu@example.test'`, [dee, hrs(30)]);
+    await q(`update applications set how_found = 'Searched for coworking in Boulder', created_at = $1 where email = 'pia@example.test'`, [hrs(2)]);
+    await q(`insert into applications(email, name, about, how_found, status, created_at, known_by_member_id, vouched_by, vouched_at)
+      values ('kai@example.test', 'Kai (sample)', 'Builds tools for watershed data.', 'Agents Building Night', 'pending', $1, $2, $2, $3)`,
+    [hrs(5), mira, hrs(1)]);
+    await q(`update applications set known_by_member_id = $1, vouched_by = $1, vouched_at = $2, approved_by = $3 where email = 'bo@example.test'`, [mira, ago(36), steward]);
+    // Sam: vouched for by Ana, approved yesterday by the steward; hasn't picked a plan.
+    await q(`insert into applications(email, name, about, how_found, status, created_at, known_by_member_id, vouched_by, vouched_at, approved_by, supabase_user_id)
+      values ('sam-sample@example.test', 'Sam Sample', 'Makes maps of who grows what.', 'A free day', 'approved', $1, $2, $2, $3, $4, null)`,
+    [ago(1.2), ana, ago(1.1), steward]);
+    await q(`update members set member_approved = true, member_approved_at = $1, member_approved_by = $2,
+      approved_for_daily = true, approved_for_daily_at = $1, approved_for_daily_by = $2 where id = $3`, [ago(1), steward, sam]);
+    // Dee (on the $30 plan) signs in as Lee's sample Techne account, to ask about a desk.
+    const lee = people.find((p) => p.name.startsWith("Lee"));
+    if (lee) await q("update members set did = $1, member_approved = true, approved_for_daily = true where id = $2", [lee.did, dee]);
+    // Gus (approved, on day passes) asked about a desk two days ago: Today's "asked about a desk".
+    await q(`update members set member_approved = true, approved_for_daily = true, member_approved_at = $1, desk_asked_at = $2
+      where email = 'gus@example.test'`, [ago(4), ago(2)]);
+    // Two free-day requests waiting: one over a day (late), one fresh.
+    await q(`insert into free_day_claims(email, name, status, about, why_join, created_at) values
+      ('lu-wait@example.test', 'Lu Waiting (sample)', 'pending', 'Ceramics studio.', 'Curious about the space.', $1)`, [hrs(27)]);
+  }
+
   // The door: the last lock sync failed on one slot; one slot is quarantined.
   await q(`insert into lock_sync_runs(triggered_by, synced, failed, partial, results, created_at)
     values ($1, 9, 1, 0, '[{"slot":4,"door":"back","ok":false,"error":"timeout (sample)"}]', $2)`, [steward, ago(0.4)]);

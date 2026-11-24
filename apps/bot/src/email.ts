@@ -78,4 +78,4 @@ export async function sendEmail(input: SendEmailInput): Promise<boolean> {
   }
 }
 
-export { freeDayApprovedEmail, freeDayPlusMembershipApprovedEmail, membershipApprovedEmail } from "@regenhub/shared";
+export { freeDayApprovedEmail } from "@regenhub/shared";

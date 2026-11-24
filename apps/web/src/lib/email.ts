@@ -193,7 +193,6 @@ export async function sendEmailDetailed(input: SendEmailInput): Promise<SendResu
 // the bot sends the same words and prices.
 export {
   freeDayApprovedEmail,
-  freeDayPlusMembershipApprovedEmail,
   freeDayReceivedEmail,
   freeDayDeclinedEmail,
   freeDayAlreadyMemberEmail,
@@ -361,24 +360,31 @@ export function adminDigestEmail(d: DigestData): { subject: string; html: string
  */
 export function applicationReceivedEmail(args: {
   name: string;
-  interestLabel: string;
+  /** Whether they named a member who knows them: then that member is asked to vouch. */
+  namedMember: string | null;
   siteUrl: string;
 }) {
-  const firstName = args.name.split(" ")[0];
+  const firstName = escapeHtml(args.name.split(" ")[0]);
   const base = args.siteUrl.replace(/\/$/, "");
+  const next = args.namedMember
+    ? `We&rsquo;ve asked ${escapeHtml(args.namedMember)} to vouch for you, then a steward approves.`
+    : `One member needs to vouch for you before we approve: come to a night or a free day and meet us.`;
+  const nextText = args.namedMember
+    ? `We've asked ${args.namedMember} to vouch for you, then a steward approves.`
+    : `One member needs to vouch for you before we approve: come to a night or a free day and meet us.`;
   return {
     subject: "We got your RegenHub application",
     html: `
       <div style="font-family: 'EB Garamond', Garamond, 'Iowan Old Style', Palatino, Georgia, serif; max-width: 560px; margin: 0 auto; padding: 24px; background: #f4f0e6; color: #27231d; line-height: 1.55;">
         <p>Hi ${firstName},</p>
-        <p>Thanks for applying to join RegenHub${args.interestLabel ? ` (${args.interestLabel})` : ""} — we&rsquo;ve got it.</p>
-        <p>We review applications by hand so we can welcome each member personally. You&rsquo;ll hear from us soon — usually within a day or two.</p>
-        <p>In the meantime you can check your status any time in your <a href="${base}/portal" style="color: #4b5a2c;">member portal</a>, and you&rsquo;re welcome at our public events.</p>
+        <p>Thanks for applying to join RegenHub. We reply within a day.</p>
+        <p>${next} Then you pick a day plan yourself, from your <a href="${base}/portal" style="color: #4b5a2c;">portal</a>.</p>
+        <p>Our nights are open to everyone: <a href="${base}/events" style="color: #4b5a2c;">see what&rsquo;s coming up</a>.</p>
         <p>Any questions, just reply to this email.</p>
-        <p>&mdash; RegenHub</p>
+        <p>RegenHub</p>
       </div>
     `,
-    text: `Hi ${firstName},\n\nThanks for applying to join RegenHub${args.interestLabel ? ` (${args.interestLabel})` : ""} — we've got it.\n\nWe review applications by hand so we can welcome each member personally. You'll hear from us soon — usually within a day or two.\n\nIn the meantime you can check your status any time at ${base}/portal, and you're welcome at our public events.\n\nAny questions, just reply to this email.\n\n— RegenHub`,
+    text: `Hi ${args.name.split(" ")[0]},\n\nThanks for applying to join RegenHub. We reply within a day.\n\n${nextText} Then you pick a day plan yourself, from your portal: ${base}/portal\n\nOur nights are open to everyone: ${base}/events\n\nAny questions, just reply to this email.\n\nRegenHub`,
   };
 }
 

@@ -61,7 +61,8 @@ export async function getOrCreateCustomer(
 }
 
 export interface ApprovalCheckoutInput {
-  application_id: number;
+  /** The application it came from, for links made before custom prices moved to the member page; else omitted. */
+  application_id?: number | null;
   member: Pick<Member, "id" | "name" | "email" | "stripe_customer_id">;
   planKey: PlanKey;
   monthlyCents: number;
@@ -93,6 +94,7 @@ export async function createApprovalCheckoutSession(
   if (!plan) throw new Error(`Unknown plan_key: ${input.planKey}`);
 
   const customer = await getOrCreateCustomer(input.member);
+  const appMeta: Record<string, string> = input.application_id ? { application_id: String(input.application_id) } : {};
 
   let couponId: string | undefined;
   if (input.discountCents && input.discountCents > 0) {
@@ -107,7 +109,7 @@ export async function createApprovalCheckoutSession(
       name: input.discountNote ?? `Promo for ${input.member.name}`,
       metadata: {
         member_id: String(input.member.id),
-        application_id: String(input.application_id),
+        ...appMeta,
       },
     });
     couponId = coupon.id;
@@ -128,18 +130,18 @@ export async function createApprovalCheckoutSession(
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     customer: customer.id,
-    client_reference_id: String(input.application_id),
+    client_reference_id: input.application_id ? String(input.application_id) : `member:${input.member.id}`,
     line_items: [{ price_data: priceData, quantity: 1 }],
     ...(couponId ? { discounts: [{ coupon: couponId }] } : {}),
     metadata: {
-      application_id: String(input.application_id),
+      ...appMeta,
       member_id: String(input.member.id),
       plan_key: input.planKey,
       monthly_cents: String(input.monthlyCents),
     },
     subscription_data: {
       metadata: {
-        application_id: String(input.application_id),
+        ...appMeta,
         member_id: String(input.member.id),
         plan_key: input.planKey,
         monthly_cents: String(input.monthlyCents),

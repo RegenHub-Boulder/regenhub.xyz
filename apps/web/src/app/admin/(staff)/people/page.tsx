@@ -6,10 +6,12 @@ import { InterestsSection, type InterestFilter } from "@/components/admin/Intere
 import { ApplicationsFilter } from "@/components/admin/ApplicationsFilter";
 import { FreeDaysList } from "@/components/admin/FreeDaysList";
 import { readFreeDays } from "@/lib/freeDayData";
+import { freeDayRuleWords } from "@/lib/freeDayRule";
 import { FREE_DAY_GROUPS, type FreeDayGroup } from "@/lib/freeDayFunnel";
 import { PeopleTabs, type PeopleTab } from "@/components/admin/PeopleTabs";
 import { peoplePending } from "@/lib/peoplePending";
-import type { Interest, Application } from "@/lib/supabase/types";
+import type { Interest } from "@/lib/supabase/types";
+import type { JoinApplication } from "@/components/admin/ApplicationActions";
 
 export const metadata = { title: "People — Admin" };
 
@@ -65,27 +67,34 @@ export default async function PeoplePage({
   } else if (tab === "freedays") {
     const { placed, counts } = await readFreeDays(admin);
     const show: FreeDayGroup = FREE_DAY_GROUPS.some((g) => g.key === params.show) ? (params.show as FreeDayGroup) : "review";
-    body = <FreeDaysList placed={placed} counts={counts} show={show} />;
+    body = (
+      <div className="space-y-4">
+        <p className="text-sm text-muted" data-testid="free-day-rule">{freeDayRuleWords()} A code is good for that one day, until 6 PM.</p>
+        <FreeDaysList placed={placed} counts={counts} show={show} />
+      </div>
+    );
   } else {
     const { data } = await supabase.from("applications").select("*").order("created_at", { ascending: false });
-    const apps = (data ?? []) as Application[];
-    // Who approved or rejected each one, by name.
-    const adminIds = new Set<number>();
+    const apps = (data ?? []) as JoinApplication[];
+    // Names for who they said knows them, who vouched, and who decided.
+    const ids = new Set<number>();
     for (const a of apps) {
-      if (a.approved_by) adminIds.add(a.approved_by);
-      if (a.rejected_by) adminIds.add(a.rejected_by);
+      for (const id of [a.known_by_member_id, a.vouched_by, a.approved_by, a.rejected_by]) if (id) ids.add(id);
     }
-    let adminNames: Record<number, string> = {};
-    if (adminIds.size > 0) {
-      const { data: admins } = await supabase.from("members").select("id, name").in("id", [...adminIds]);
-      adminNames = Object.fromEntries((admins ?? []).map((m) => [m.id, m.name]));
+    let names: Record<number, string> = {};
+    if (ids.size > 0) {
+      const { data: people } = await admin.from("members").select("id, name").in("id", [...ids]);
+      names = Object.fromEntries((people ?? []).map((m) => [m.id, m.name]));
     }
+    const waiting = apps.filter((a) => a.status === "pending");
     body = (
       <div className="space-y-4">
         <p className="text-sm text-muted">
-          {apps.length} total · {apps.filter((a) => a.status === "pending").length} pending review
+          {waiting.length} waiting · {waiting.filter((a) => !a.vouched_by).length} need a vouch. One member vouches, then
+          a steward approves; they pick a day plan themselves. Desks and custom prices are on each member&apos;s page.
         </p>
-        <ApplicationsFilter applications={apps} adminNames={adminNames} />
+        {/* eslint-disable-next-line react-hooks/purity -- server component, renders once per request */}
+        <ApplicationsFilter applications={apps} names={names} nowMs={Date.now()} />
       </div>
     );
   }

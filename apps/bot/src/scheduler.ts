@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import { db } from "./db/supabase.js";
-import { clearUserCode, withLockWriter } from "@regenhub/shared";
+import { clearUserCode, repostWaitingCards, withLockWriter } from "@regenhub/shared";
 
 const TIMEZONE = process.env.TIMEZONE ?? "America/Denver";
 
@@ -54,7 +54,18 @@ export function startScheduler() {
     }
   }, { timezone: TIMEZONE });
 
-  console.log(`[Scheduler] Running. Cleanup every 5 min (${TIMEZONE}).`);
+  // We answer within a day: an application or free-day request still waiting 12 hours after it came in is posted
+  // to the members' chat once more, "still waiting" (@regenhub/shared repostWaitingCards; once per card).
+  cron.schedule("*/15 * * * *", async () => {
+    try {
+      const done = await repostWaitingCards(db, new Date(), undefined, process.env.NEXT_PUBLIC_SITE_URL);
+      if (done.applications || done.freeDays) console.log(`[Scheduler] Re-posted ${done.applications} application(s), ${done.freeDays} free day(s).`);
+    } catch (error) {
+      console.error("[Scheduler] Re-post failed:", error);
+    }
+  }, { timezone: TIMEZONE });
+
+  console.log(`[Scheduler] Running. Cleanup every 5 min, waiting cards checked every 15 (${TIMEZONE}).`);
 }
 
 export async function expireOldCodes(client = db, clear = clearUserCode) {

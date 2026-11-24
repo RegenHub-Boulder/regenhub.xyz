@@ -25,7 +25,7 @@ interface Props {
  * Lightweight "get oriented" checklist shown to new members on /portal.
  *
  * Goal: help someone arriving for their first day pass — or stepping into a
- * full membership — get connected to the community and the space. Each item
+ * membership — get connected to the community and the space. Each item
  * has a one-line "why this matters" hint so it doesn't feel like a chore.
  */
 export function OnboardingChecklist({ hasPinCode, hasPhoto, hasBio, hasTelegram, needsPinCode }: Props) {

@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/admin";
+import { namedVoucher } from "@/lib/vouchers";
 import { Card, CardContent } from "@/components/ui/card";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { TechneDoor } from "@/components/auth/TechneDoor";
@@ -11,9 +14,9 @@ import { isSyntheticEmail } from "@/lib/regenos/syntheticEmail";
 import { techneConfig } from "@/lib/techne/config";
 
 export const metadata: Metadata = {
-  title: "Apply for Membership — RegenHub",
+  title: "Apply to join — RegenHub",
   description:
-    "Apply to join RegenHub Boulder. Tell us about you and which membership tier fits — we'll review and reach out.",
+    "Apply to join RegenHub Boulder in a minute. A member who knows you vouches, a steward approves, and you pick a day plan. We reply within a day.",
 };
 
 export default async function ApplyPage() {
@@ -33,7 +36,7 @@ export default async function ApplyPage() {
             <Link href="/">
               <Image src={regenHubFull} alt="RegenHub" height={80} className="h-20 w-auto mx-auto mb-6 hover:opacity-80 transition-opacity" />
             </Link>
-            <h1 className="text-3xl md:text-4xl font-bold text-forest mb-3">Apply for Membership</h1>
+            <h1 className="text-3xl md:text-4xl font-bold text-forest mb-3">Apply to join</h1>
             <p className="text-muted max-w-sm mx-auto">
               Sign in first so your application links to your account.
               {!config && " We'll email you a magic link and bring you right back here."}
@@ -63,24 +66,24 @@ export default async function ApplyPage() {
     );
   }
 
-  // Prefill from the applicant's account so they don't retype what we already
-  // know: name/telegram from their member record, and — if they've applied
-  // before — their full prior answers (this form upserts, so it's an edit).
+  // Prefill from the applicant's account so they don't retype what we already know: their name from their member
+  // record, and, if they've applied before, their answers (this form edits that application).
   const [{ data: member }, { data: application }] = await Promise.all([
     supabase.from("members").select("name, telegram_username").eq("supabase_user_id", user.id).maybeSingle(),
-    supabase
-      .from("applications")
-      .select("name, telegram, about, why_join, membership_interest")
-      .eq("supabase_user_id", user.id)
-      .maybeSingle(),
+    supabase.from("applications").select("*").eq("supabase_user_id", user.id).maybeSingle(),
   ]);
+  const app = application as { name?: string; about?: string | null; how_found?: string | null; telegram?: string | null; known_by_member_id?: number | null; status?: string } | null;
+  // Approved already: nothing to apply for; the portal is where they pick a plan.
+  if (app?.status === "approved") redirect("/portal");
+  let knownBy: { id: number; name: string } | null = null;
+  if (app?.known_by_member_id) knownBy = await namedVoucher(createServiceClient(), app.known_by_member_id, user.id);
 
   const initial = {
-    name: application?.name ?? member?.name ?? "",
-    telegram: application?.telegram ?? member?.telegram_username ?? "",
-    about: application?.about ?? "",
-    why_join: application?.why_join ?? "",
-    membership_interest: application?.membership_interest ?? "",
+    name: app?.name ?? member?.name ?? "",
+    about: app?.about ?? "",
+    how_found: app?.how_found ?? "",
+    telegram: app?.telegram ?? member?.telegram_username ?? "",
+    knownBy,
   };
 
   return (

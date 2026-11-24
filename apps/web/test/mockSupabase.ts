@@ -83,6 +83,7 @@ export function makeSupabaseMock(opts: SupabaseMockOpts = {}) {
       })),
       delete: vi.fn(() => ({ ...builder, then: makeThen(mutationResp) })),
       eq: vi.fn(() => builder),
+      neq: vi.fn(() => builder),
       ilike: vi.fn(() => builder),
       like: vi.fn(() => builder),
       is: vi.fn(() => builder),

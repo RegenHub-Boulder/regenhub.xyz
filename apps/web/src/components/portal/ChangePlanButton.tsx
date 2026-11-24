@@ -27,9 +27,11 @@ interface Props {
   /** End of the period already paid for: when a desk → daily switch takes effect. */
   currentPeriodEnd?: string | null;
   hasDiscount?: boolean;
+  /** Desk access (lib/approval.ts): without it a day-plan member isn't offered the desks; they ask about one. */
+  deskAccess?: boolean;
 }
 
-export function ChangePlanButton({ currentPlanKey, currentMonthlyCents, currentPeriodEnd, hasDiscount }: Props) {
+export function ChangePlanButton({ currentPlanKey, currentMonthlyCents, currentPeriodEnd, hasDiscount, deskAccess = false }: Props) {
   const router = useRouter();
   const preview = usePreview();
   const [open, setOpen] = useState(false);
@@ -42,7 +44,8 @@ export function ChangePlanButton({ currentPlanKey, currentMonthlyCents, currentP
   if (!current) return null;
 
   // From a desk, the self-serve move is to a daily plan; desk ↔ desk needs an admin.
-  const options = SELF_SERVE_PLANS.filter((p) => p.key !== currentPlanKey && !(current.desk && p.desk));
+  // From a day plan, the desks only with desk access.
+  const options = SELF_SERVE_PLANS.filter((p) => p.key !== currentPlanKey && !(current.desk && p.desk) && (current.desk || !p.desk || deskAccess));
   const whenPaidPeriodEnds = currentPeriodEnd ? formatDate(currentPeriodEnd) : "the end of the period you've paid for";
 
   async function switchTo(planKey: string) {

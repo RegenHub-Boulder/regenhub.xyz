@@ -18,6 +18,7 @@ import { FREE_DAY_LAPSE_DAYS } from "@regenhub/shared/prices";
 import { freeDayUsedLine as usedLine, shortDay, withLockWriter } from "@regenhub/shared";
 import { isMemberInStanding, PAYING_STATUSES } from "@/lib/memberStanding";
 import { AuditAction, logAction } from "@/lib/auditLog";
+import { escapeLike } from "@/lib/supabase/escapeLike";
 
 export { FREE_DAY_LAPSE_DAYS };
 
@@ -71,7 +72,7 @@ export async function membersByEmail(admin: Service, email: string, columns = "i
   const q = admin.from("members").select(columns);
   const { data } = e.includes("*")
     ? await q.in("email", [...new Set([e, e.toLowerCase()])])
-    : await q.ilike("email", e.replace(/[\\%_]/g, (c) => `\\${c}`));
+    : await q.ilike("email", escapeLike(e));
   const rows = (Array.isArray(data) ? data : data ? [data] : []) as unknown as MemberLite[];
   return rows.sort((a, b) => Number(b.email === e.toLowerCase()) - Number(a.email === e.toLowerCase()));
 }

@@ -21,10 +21,15 @@ interface Props {
 
 /** Map raw action verbs to human-readable labels. Falls back to the raw string. */
 const ACTION_LABELS: Record<string, string> = {
-  membership_approved:    "Approved for Daily membership",
-  membership_revoked:     "Daily approval revoked",
-  full_access_approved:   "Approved for Full Access",
-  full_access_revoked:    "Full Access approval revoked",
+  membership_approved:    "Approved as a member",
+  membership_revoked:     "Member approval taken back",
+  // Older rows, from before the one approval (072): the desk switch was called something else then.
+  full_access_approved:   "Desk access turned on",
+  full_access_revoked:    "Desk access turned off",
+  desk_access_on:         "Desk access turned on",
+  desk_access_off:        "Desk access turned off",
+  desk_asked:             "Asked about a desk",
+  application_vouched:    "Vouched for an application",
   member_disabled:        "Account disabled",
   member_deleted:         "Account deleted",
   passes_granted:         "Day passes granted",
@@ -59,8 +64,7 @@ function summary(row: ActionRow): string | null {
     case "passes_adjusted":
       return typeof p.amount === "number" && p.amount < 0 ? `${p.amount} day passes` : `+${p.amount ?? "?"} day passes`;
     case "membership_approved":
-    case "full_access_approved":
-      return p.implies_membership ? "Implies Daily approval" : null;
+      return p.via === "chat" ? "From the members' chat" : p.via === "site" ? "From People → Applications" : null;
     case "batch_email_sent":
       return typeof p.subject === "string" ? p.subject : null;
     case "onchain_payment_after_void":

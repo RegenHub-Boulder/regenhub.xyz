@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { getStripe, getPlan, isStripeConfigured, PLANS } from "@/lib/stripe";
 import { AuditAction, logAction } from "@/lib/auditLog";
 import { isDeskPlan } from "@/lib/plans";
+import { approvalOf, planGate } from "@/lib/approval";
 import {
   abandonOpenSwitch,
   adminCancelInProgress,
@@ -71,7 +72,7 @@ export async function POST(req: Request) {
   // Resolve member + their active subscription
   const { data: member } = await supabase
     .from("members")
-    .select("id, name, email, disabled")
+    .select("*")
     .eq("supabase_user_id", user.id)
     .single();
   if (!member) {
@@ -80,6 +81,12 @@ export async function POST(req: Request) {
 
   if (member.disabled) {
     return NextResponse.json({ error: "Member is disabled" }, { status: 403 });
+  }
+
+  // Onto a desk from a day plan: desk access first (a steward turns it on after a talk; lib/approval.ts).
+  if (isDeskPlan(targetKey)) {
+    const gate = planGate(approvalOf(member), targetKey);
+    if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: 403 });
   }
 
   const admin = createServiceClient();

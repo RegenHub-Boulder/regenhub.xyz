@@ -1,7 +1,8 @@
 import { freeDayUsedLine, withLockWriter, LockWriterBusyError, recordLockWriterFailure, readUsuallyHere } from "@regenhub/shared";
 import TelegramBot from "node-telegram-bot-api";
 import { db, findMemberByTelegram, resolveSender, resolveAdminSender, type MemberRow } from "./db/supabase.js";
-import { sendEmail, freeDayApprovedEmail, freeDayPlusMembershipApprovedEmail, membershipApprovedEmail } from "./email.js";
+import { sendEmail, freeDayApprovedEmail } from "./email.js";
+import { approveApplication, refreshApplicationCard, vouchForApplication } from "@regenhub/shared";
 import {
   allocateSlotWithRetry,
   setUserCode,
@@ -408,13 +409,10 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
   }
 
   // ── Free day approval (any group member can approve) ──
-  // Order matters: handle the more-specific callback first so its prefix
-  // doesn't get swallowed by the looser "freeday_approve_" match below.
-  if (data.startsWith("freeday_approve_membership_") || data.startsWith("freeday_approve_")) {
-    const withMembership = data.startsWith("freeday_approve_membership_");
-    const claimId = parseInt(
-      data.replace(withMembership ? "freeday_approve_membership_" : "freeday_approve_", ""),
-    );
+  // One button: a free day is only a free day. Joining is an application (vouch, then one approval). A card posted
+  // before T-482 round 5 may still carry "freeday_approve_membership_": it approves the free day only.
+  if (data.startsWith("freeday_approve_")) {
+    const claimId = parseInt(data.replace(/^freeday_approve_(membership_)?/, ""));
     const { data: claim } = await db
       .from("free_day_claims")
       .select("id, name, email, status")
@@ -428,192 +426,61 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
 
     // Flip the claim — trigger create_day_pass_member_on_approval auto-creates
     // a day_pass member row keyed by email if one doesn't exist yet.
-    await db
+    const { data: moved } = await db
       .from("free_day_claims")
       .update({ status: "reserved", approved_by: approver })
-      .eq("id", claimId);
+      .eq("id", claimId)
+      .eq("status", "pending")
+      .select("id");
+    if (!(moved ?? []).length) return bot.sendMessage(chatId, "Someone else just approved it.");
 
-    // If approving for membership too, flip the flag on the member.
-    // Resolve approver's member.id for audit, by Telegram id first (a recycled
-    // handle must not be credited with someone else's approval).
-    if (withMembership) {
-      const approverMemberId = (await resolveSender(query.from))?.id ?? null;
-      const { error: flagErr } = await db
-        .from("members")
-        .update({
-          approved_for_daily: true,
-          approved_for_daily_at: new Date().toISOString(),
-          approved_for_daily_by: approverMemberId,
-        })
-        .eq("email", claim.email);
-      if (flagErr) {
-        console.error("[FreeDay+Membership] Failed to set approval flag:", flagErr);
-      }
-    }
-
-    // Email the applicant — different template based on which button was hit.
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
     // The "who's usually here" line, from the door log (aggregate only); left out if the read fails.
     const usuallyHere = await readUsuallyHere(db).catch(() => null);
-    const tpl = withMembership
-      ? freeDayPlusMembershipApprovedEmail({ name: claim.name, siteUrl, usuallyHere })
-      : freeDayApprovedEmail({ name: claim.name, siteUrl, usuallyHere });
-    sendEmail({
-      kind: "free_day_approved",
-      to: claim.email,
-      subject: tpl.subject,
-      html: tpl.html,
-      text: tpl.text,
-    })
-      .then((ok) => {
-        if (ok) console.log(`[FreeDay] ${withMembership ? "+membership" : ""} email sent to ${claim.email}`);
-      })
+    const tpl = freeDayApprovedEmail({ name: claim.name, siteUrl, usuallyHere });
+    sendEmail({ kind: "free_day_approved", to: claim.email, subject: tpl.subject, html: tpl.html, text: tpl.text })
+      .then((ok) => { if (ok) console.log(`[FreeDay] email sent to ${claim.email}`); })
       .catch((err) => console.error("[FreeDay] Email send failed:", err));
 
-    // Edit the original message to show who approved
     const originalText = query.message?.text ?? "";
-    const tag = withMembership ? "*Approved + Membership*" : "*Approved (free day only)*";
     return bot.editMessageText(
-      `✅ ${tag} by ${approver} · email sent to ${claim.email}\n\n${originalText}`,
-      {
-        chat_id: chatId,
-        message_id: query.message!.message_id,
-        parse_mode: "Markdown",
-      }
+      `✅ Free day approved by ${approver} · email sent to ${claim.email}\n\n${originalText}`,
+      { chat_id: chatId, message_id: query.message!.message_id },
     );
   }
 
-  // ── Membership application approval (any group member can approve) ──
-  // Standard-rate approve for the tier they requested: flips the member's
-  // approval flags and emails them to self-serve at /membership. Custom
-  // pricing/discounts go through the admin panel ("Custom pricing →" button),
-  // which also generates + emails a Stripe checkout link.
-  if (data.startsWith("app_approve_")) {
-    const appId = parseInt(data.replace("app_approve_", ""));
-    const { data: application } = await db
-      .from("applications")
-      .select("id, name, email, status, membership_interest, supabase_user_id, telegram")
-      .eq("id", appId)
-      .single();
-    if (!application) return bot.sendMessage(chatId, "Application not found.");
-    if (application.status !== "pending") {
-      return bot.sendMessage(chatId, `Already ${application.status}.`);
-    }
-    const approver = username ? `@${username}` : query.from.first_name;
-
-    // Resolve approver's member.id for the audit trail (nullable if unknown),
-    // by Telegram id first, like every other sender check.
-    const approverMemberId = (await resolveSender(query.from))?.id ?? null;
-
-    // Carry the applicant's Telegram handle onto the member row so the bot
-    // recognizes them (/mycode etc.). The unique index on telegram_username
-    // may reject a duplicate — degrade to no-handle rather than failing the
-    // approval (mirrors migration 036's trigger behavior).
-    const applicantHandle =
-      application.telegram?.replace(/^@+/, "").trim() || null;
-
-    // Find or create the member row for this applicant (same as the web
-    // approve route) so the approval flags have somewhere to live.
-    let { data: member } = await db
-      .from("members")
-      .select("id, telegram_username")
-      .eq("email", application.email)
-      .maybeSingle();
-    if (!member) {
-      const insertMember = (withTelegram: boolean) =>
-        db
-          .from("members")
-          .insert({
-            name: application.name,
-            email: application.email,
-            member_type: "day_pass",
-            supabase_user_id: application.supabase_user_id ?? null,
-            ...(withTelegram && applicantHandle ? { telegram_username: applicantHandle } : {}),
-          })
-          .select("id, telegram_username")
-          .single();
-      let { data: created, error: createErr } = await insertMember(true);
-      if (createErr?.code === "23505" && applicantHandle) {
-        ({ data: created, error: createErr } = await insertMember(false));
-      }
-      if (createErr || !created) {
-        console.error("[AppApprove] Failed to create member:", createErr);
-        return bot.sendMessage(chatId, "Failed to create member row — approve via the admin panel.");
-      }
-      member = created;
-    } else if (applicantHandle && !member.telegram_username) {
-      // Existing member without a handle: backfill from the application.
-      const { error: tgErr } = await db
-        .from("members")
-        .update({ telegram_username: applicantHandle })
-        .eq("id", member.id);
-      if (tgErr && tgErr.code !== "23505") {
-        console.warn("[AppApprove] Telegram backfill failed:", tgErr.message);
-      }
-    }
-
-    // Desk-tier applicants get Full Access approval too, so /membership
-    // doesn't gate them behind "one more step" right after we approved them.
-    const wantsDesk =
-      application.membership_interest === "hot_desk" ||
-      application.membership_interest === "reserved_desk";
-    const now = new Date().toISOString();
-    const { error: flagErr } = await db
-      .from("members")
-      .update({
-        approved_for_daily: true,
-        approved_for_daily_at: now,
-        approved_for_daily_by: approverMemberId,
-        ...(wantsDesk
-          ? {
-              approved_for_full: true,
-              approved_for_full_at: now,
-              approved_for_full_by: approverMemberId,
-            }
-          : {}),
-      })
-      .eq("id", member.id);
-    if (flagErr) {
-      console.error("[AppApprove] Failed to set approval flags:", flagErr);
-      return bot.sendMessage(chatId, "Failed to set approval flags — approve via the admin panel.");
-    }
-
-    await db
-      .from("applications")
-      .update({
-        status: "approved",
-        approved_by: approverMemberId,
-        rejected_by: null,
-        rejected_at: null,
-      })
-      .eq("id", application.id);
-
-    // Email the applicant their next step (self-serve subscribe).
+  // ── Applications: a member vouches, then a steward approves (T-482 round 5) ──
+  // Both buttons run the same functions as the site (@regenhub/shared joining.ts → migration 072), so the chat and
+  // People → Applications can't disagree. The card is redrawn from the database after each tap.
+  if (data.startsWith("app_vouch_") || data.startsWith("app_approve_")) {
+    const vouching = data.startsWith("app_vouch_");
+    const appId = parseInt(data.replace(/^app_(vouch|approve)_/, ""));
+    const target = { chatId, messageId: query.message!.message_id };
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
-    const tpl = membershipApprovedEmail({ name: application.name, siteUrl });
-    sendEmail({
-      kind: "membership_approved",
-      to: application.email,
-      subject: tpl.subject,
-      html: tpl.html,
-      text: tpl.text,
-    })
-      .then((ok) => {
-        if (ok) console.log(`[AppApprove] Approval email sent to ${application.email}`);
-        else bot.sendMessage(chatId, `⚠️ Approved, but the email to ${application.email} didn't send — reach out to them directly.`);
-      })
-      .catch((err) => console.error("[AppApprove] Email send failed:", err));
-
-    const originalText = query.message?.text ?? "";
-    const tag = wantsDesk ? "*Approved (incl. Full Access)*" : "*Approved*";
-    return bot.editMessageText(
-      `✅ ${tag} by ${approver} · email sent to ${application.email}\n\n${originalText}`,
-      {
-        chat_id: chatId,
-        message_id: query.message!.message_id,
-        parse_mode: "Markdown",
-      }
-    );
+    // By Telegram id first, like every other sender check: a recycled handle can't vouch or approve as someone else.
+    const me = await resolveSender(query.from);
+    if (!me) {
+      return bot.sendMessage(chatId, `@${username || query.from.first_name}, I don't know you as a member yet: link your Telegram on your portal profile first.`);
+    }
+    if (vouching) {
+      const result = await vouchForApplication(db, appId, me.id);
+      if (!result.ok) return bot.sendMessage(chatId, result.message);
+      await refreshApplicationCard(db, appId, target, siteUrl);
+      return;
+    }
+    const result = await approveApplication(db, {
+      applicationId: appId,
+      approverMemberId: me.id,
+      via: "chat",
+      siteUrl,
+      send: (mail) => sendEmail(mail),
+    });
+    if (!result.ok) return bot.sendMessage(chatId, result.message);
+    await refreshApplicationCard(db, appId, target, siteUrl);
+    if (!result.already && !result.emailSent) {
+      return bot.sendMessage(chatId, `⚠️ Approved, but the email to ${result.email} didn't send: tell them to open their portal to pick a plan.`);
+    }
+    return;
   }
 
   // ── Admin callbacks ──
