@@ -165,6 +165,20 @@ async function seed(pg, people) {
   await q(`insert into lock_slot_quarantine(slot, reason, quarantined_at, door_results) values (4, 'SET incomplete; clear required before reuse', $1, $2)`,
     [ago(3), JSON.stringify([{ entity: "lock.front_door_lock", ok: true }, { entity: "lock.back_door_lock", ok: false, error: "timeout (sample)" }])]);
 
+  // T482_STUCK_WRITER (writer lease): the door-code writer as production had it 11-20 to 11-23, a Web PIN writer that
+  // died mid-change and was never heard from again, and two door-code changes that couldn't start behind it.
+  if (process.env.T482_STUCK_WRITER) {
+    const lease = (await q("select to_regclass('public.lock_slot_writer') as t, exists(select 1 from information_schema.columns where table_name = 'lock_slot_writer' and column_name = 'renewed_at') as r")).rows[0];
+    if (lease.t) {
+      const since = ago(2.7);
+      await q(`insert into lock_slot_writer(id, token, holder_label, acquired_at${lease.r ? ", renewed_at" : ""}) values (1, gen_random_uuid(), 'Web PIN writer', $1${lease.r ? ", $1" : ""})`, [since]);
+      for (const d of [0.3, 0.05]) {
+        await q(`insert into admin_actions(action, target_table, target_id, payload, created_at) values ('lock_writer_failed', 'lock_slot_writer', '1', $1, $2)`,
+          [JSON.stringify({ holder: "Web PIN writer", busy: true, error: "Another door-code change is running; try again in a minute.", held_by: "Web PIN writer", held_since: since }), ago(d)]);
+      }
+    }
+  }
+
   // Theo's emails (round 3), when migration 069 is there: what the member page's Emails list shows.
   if ((await q("select to_regclass('public.email_log') as t")).rows[0].t) {
     const theo = id["theo@example.test"];

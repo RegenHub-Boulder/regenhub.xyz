@@ -200,6 +200,15 @@ export function pglitePostgrest(pg: PGlite, users: Map<string, FakeAuthUser>) {
   };
   async function handle(url: URL, method: string, headers: Headers, bodyText: string | null): Promise<Response> {
     const path = url.pathname;
+    // PostgREST hands request headers to Postgres as `request.headers`; the door-code guard (migration 053) reads the
+    // PIN-writer token from there. Writes and RPCs carrying it run in a transaction that sets it, as PostgREST does.
+    const writerToken = headers.get("x-lock-writer-token");
+    const run = <T,>(sql: string, args: unknown[] = []) => writerToken
+      ? pg.transaction(async (tx) => {
+        await tx.query("select set_config('request.headers', $1, true)", [JSON.stringify({ "x-lock-writer-token": writerToken })]);
+        return tx.query<T>(sql, args);
+      })
+      : pg.query<T>(sql, args);
     if (path === "/auth/v1/user") {
       const token = headers.get("Authorization")?.replace(/^Bearer /, "") ?? "";
       const user = users.get(token);
@@ -221,10 +230,10 @@ export function pglitePostgrest(pg: PGlite, users: Map<string, FakeAuthUser>) {
         const proc = (await pg.query<{ retset: boolean }>(
           "select bool_or(proretset) retset from pg_proc where proname = $1 and pronamespace = 'public'::regnamespace", [rpc[1]])).rows[0];
         if (proc?.retset) {
-          const rows = await pg.query(`select * from ${ident(rpc[1])}(${named.join(", ")})`, args);
+          const rows = await run(`select * from ${ident(rpc[1])}(${named.join(", ")})`, args);
           return json(200, rows.rows);
         }
-        const result = await pg.query(`select ${ident(rpc[1])}(${named.join(", ")}) as result`, args);
+        const result = await run(`select ${ident(rpc[1])}(${named.join(", ")}) as result`, args);
         return json(200, (result.rows[0] as { result: unknown }).result);
       } catch (error) { return pgError(error); }
     }
@@ -269,7 +278,7 @@ export function pglitePostgrest(pg: PGlite, users: Map<string, FakeAuthUser>) {
             ? ` on conflict (${target}) do nothing`
             : ` on conflict (${target}) do update set ${cols.map((c) => `${ident(c)} = excluded.${ident(c)}`).join(", ")}`;
         }
-        const result = await pg.query(
+        const result = await run(
           `insert into ${name} (${cols.map(ident).join(", ")}) values ${values.join(", ")}${conflict}${returning}`, args);
         return returning ? shape(result.rows as Record<string, unknown>[], headers, method) : new Response(null, { status: 201 });
       }
@@ -279,11 +288,11 @@ export function pglitePostgrest(pg: PGlite, users: Map<string, FakeAuthUser>) {
           args.push(param(k, v));
           return `${ident(k)} = $${args.length}`;
         });
-        const result = await pg.query(`update ${name} set ${sets.join(", ")}${whereClause(params, args)}${returning}`, args);
+        const result = await run(`update ${name} set ${sets.join(", ")}${whereClause(params, args)}${returning}`, args);
         return returning ? shape(result.rows as Record<string, unknown>[], headers, method) : new Response(null, { status: 204 });
       }
       if (method === "DELETE") {
-        const result = await pg.query(`delete from ${name}${whereClause(params, args)}${returning}`, args);
+        const result = await run(`delete from ${name}${whereClause(params, args)}${returning}`, args);
         return returning ? shape(result.rows as Record<string, unknown>[], headers, method) : new Response(null, { status: 204 });
       }
     } catch (error) {

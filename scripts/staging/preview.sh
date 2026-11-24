@@ -21,6 +21,9 @@
 # T482_FREEDAY=1 (with T482_AUDIT=1, T-482 round 4) runs a Home Assistant stand-in on B+5 (ha-standin.mjs) so a door
 # code can be issued end to end, and sends mail to the staging outbox; scripts/staging/round4-shots.mjs drives it.
 # T482_SCOREBOARD=1 also seeds the fictional rows /admin/scoreboard reads (scoreboard-seed.mjs); sign in as the steward.
+# T482_STUCK_WRITER=1 (with T482_AUDIT) also seeds a door-code writer that died on 11-20 (silent past its lease) and two
+# failed door-code changes; T482_HA_STUB=1 points HA_URL at scripts/staging/ha-stub.mjs (127.0.0.1:B+6, never the real
+# locks; its calls are logged to $T482_STATE/ha-stub.log), so Clear on Door → Lock Sync runs end to end.
 # Env: T482_STATE (state dir, default ~/.cache/t482), T482_BUILD (where pgenv/, target/ and appview.env live;
 # default T482_STATE), T482_PORT_BASE.
 set -euo pipefail
@@ -62,6 +65,10 @@ if [ -n "${T482_FREEDAY:-}" ]; then
   node "$ROOT/scripts/staging/ha-standin.mjs" --port "$P_HA" > "$S/ha-standin.log" 2>&1 & pids+=($!)
   export HA_URL="http://127.0.0.1:$P_HA/api" HA_TOKEN=staging-only HA_LOCK_ENTITIES=lock.front_door_lock,lock.back_door_lock
   export EMAIL_PROVIDER=outbox EMAIL_FROM="RegenHub (staging) <hello@regenhub.test>" NEWSLETTER_UNSUBSCRIBE_SECRET=staging-only
+fi
+if [ -n "${T482_HA_STUB:-}" ]; then
+  node "$ROOT/scripts/staging/ha-stub.mjs" --port "$((B + 6))" --log "$S/ha-stub.log" > "$S/ha-stub.out" 2>&1 & pids+=($!)
+  export HA_URL="http://127.0.0.1:$((B + 6))/api" HA_TOKEN=staging-only HA_LOCK_ENTITIES=lock.front_door_lock,lock.back_door_lock
 fi
 
 COLLECTIVE="$(node -e 'console.log(require(process.argv[1]).collective)' "$STATE/seed.json")"

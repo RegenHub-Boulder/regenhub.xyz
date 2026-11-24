@@ -31,7 +31,10 @@ export {
   withoutFrontLocks,
 } from "./homeAssistant.js";
 
-export { withLockWriter, lockWriterFetch, quarantinedSlots, quarantineSlot, clearSlotSafely } from "./lockSlotSafety.js";
+export {
+  withLockWriter, lockWriterFetch, assertLockWriter, quarantinedSlots, quarantineSlot, clearSlotSafely, recordLockWriterFailure,
+  LockWriterBusyError, LOCK_WRITER_BUSY_MESSAGE, LOCK_WRITER_LEASE_SECONDS, LOCK_WRITER_RENEW_MS,
+} from "./lockSlotSafety.js";
 
 export { DAY_PASS_PUBLIC_CENTS, DAY_PASS_MEMBER_CENTS, PLAN_MONTHLY_CENTS, FREE_DAY_LAPSE_DAYS, dollars } from "./prices.js";
 export { freeDayUsedLine, shortDay } from "./freeDayWords.js";

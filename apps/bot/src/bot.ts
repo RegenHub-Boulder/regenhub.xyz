@@ -1,4 +1,4 @@
-import { freeDayUsedLine, withLockWriter } from "@regenhub/shared";
+import { freeDayUsedLine, withLockWriter, LockWriterBusyError, recordLockWriterFailure } from "@regenhub/shared";
 import TelegramBot from "node-telegram-bot-api";
 import { db, findMemberByTelegram, resolveSender, resolveAdminSender, type MemberRow } from "./db/supabase.js";
 import { sendEmail, freeDayApprovedEmail, freeDayPlusMembershipApprovedEmail, membershipApprovedEmail } from "./email.js";
@@ -1275,6 +1275,9 @@ async function runBotLockWriter<T>(chatId: number, work: () => Promise<T>) {
   try { return await withLockWriter(db, work, "Bot PIN writer"); }
   catch (error) {
     console.error("[LockWriter] Bot PIN operation unavailable:", error);
-    return bot.sendMessage(chatId, "Door-code operation unavailable. Retry later or contact an admin.");
+    // A busy acquire is recorded by withLockWriter itself; anything else is recorded here for the admin home.
+    if (error instanceof LockWriterBusyError) return bot.sendMessage(chatId, error.message);
+    await recordLockWriterFailure(db, "Bot PIN writer", error);
+    return bot.sendMessage(chatId, "The door-code change didn't go through; try again in a minute. If it keeps failing, tell an admin.");
   }
 }

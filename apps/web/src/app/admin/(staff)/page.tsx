@@ -7,6 +7,8 @@ import { readScoreboard } from "@/lib/scoreboardData";
 import { ACTION_RULES, type RecommendedAction } from "@/lib/scoreboardActions";
 import { SCOREBOARD_TZ, usd } from "@/lib/scoreboard";
 import { adminQueue } from "@/lib/adminQueue";
+import { lockWriterStatus, readLockWriter } from "@/lib/lockWriterStatus";
+import { fmtBoulderDateTime } from "@/lib/boulderTime";
 import { readAll } from "@/lib/supabase/readAll";
 import { BILLED_STATUSES } from "@/lib/membershipRevenue";
 import { DESK_MEMBER_TYPES, countUnbilledDesks } from "@/lib/adminMemberFilters";
@@ -34,7 +36,10 @@ export default async function AdminHome() {
     console.error(`[admin home] ${label} read failed:`, err);
     return null;
   });
-  const [s, apps, freeDays, desks, live, lastSync, quarantine] = await Promise.all([
+  // eslint-disable-next-line react-hooks/purity -- server component, renders once per request
+  const nowMs = Date.now();
+  const dayAgo = new Date(nowMs - 24 * 60 * 60 * 1000).toISOString();
+  const [s, apps, freeDays, desks, live, lastSync, quarantine, doorFailures, writer] = await Promise.all([
     settle("scoreboard", readScoreboard(admin)),
     admin.from("applications").select("id", { count: "exact", head: true }).eq("status", "pending"),
     admin.from("free_day_claims").select("id", { count: "exact", head: true }).eq("status", "pending"),
@@ -44,17 +49,21 @@ export default async function AdminHome() {
       .select("member_id, status").in("status", [...BILLED_STATUSES]).order("id").range(from, to))),
     admin.from("lock_sync_runs").select("failed").order("created_at", { ascending: false }).limit(1).maybeSingle(),
     admin.from("lock_slot_quarantine").select("slot", { count: "exact", head: true }),
+    admin.from("admin_actions").select("id", { count: "exact", head: true }).eq("action", "lock_writer_failed").gte("created_at", dayAgo),
+    readLockWriter(admin),
   ]);
+  const writerNow = writer.error ? null : lockWriterStatus(writer.data, nowMs, fmtBoulderDateTime);
   const queue = adminQueue({
     lastSyncFailures: lastSync.error ? null : (lastSync.data as { failed: number | null } | null)?.failed ?? 0,
     quarantinedSlots: count(quarantine),
+    doorWriteFailures: count(doorFailures),
     // Every past-due subscription, as Billing counts them; the item opens Members filtered to overdue (per member).
     pastDue: live && live.filter((r) => r.status === "past_due").length,
     pendingApplications: count(apps),
     pendingFreeDays: count(freeDays),
     // The same predicate as its link (/admin/members?status=unbilled_desk), so the count is the list.
     unbilledDesks: desks && live ? countUnbilledDesks(desks, live) : null,
-  });
+  }, writerNow?.state === "stuck" ? { holder: writerNow.holder, since: fmtBoulderDateTime(writerNow.since), recovers: writerNow.recovers } : null);
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: SCOREBOARD_TZ });
 
   return (
