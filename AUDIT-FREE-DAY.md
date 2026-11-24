@@ -1,5 +1,9 @@
 # Free day: the flow and the funnel (T-482 round 3, 2026-11-23)
 
+> **Since T-482 round 5 (11-24):** a free day for someone we know (a night, an invite, 7+ days on the list) is approved
+> at once (`lib/freeDayRule.ts`); the rest wait for one tap, "✅ Approve free day". The "Free day + Membership" button
+> below is gone: joining is an application with a member's vouch (CLAUDE.md "Joining").
+
 Aaron (11-23): "We stopped requiring people to select a day. They can just use their free day whenever they choose
 to... We want to do an audit of the free day flow and the funnel associated."
 

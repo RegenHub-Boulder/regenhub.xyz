@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
@@ -70,7 +71,9 @@ export default async function ApplyPage() {
     supabase.from("members").select("name").eq("supabase_user_id", user.id).maybeSingle(),
     supabase.from("applications").select("*").eq("supabase_user_id", user.id).maybeSingle(),
   ]);
-  const app = application as { name?: string; about?: string | null; how_found?: string | null; known_by_member_id?: number | null } | null;
+  const app = application as { name?: string; about?: string | null; how_found?: string | null; known_by_member_id?: number | null; status?: string } | null;
+  // Approved already: nothing to apply for; the portal is where they pick a plan.
+  if (app?.status === "approved") redirect("/portal");
   let knownBy: { id: number; name: string } | null = null;
   if (app?.known_by_member_id) {
     const { data: m } = await createServiceClient().from("members").select("id, name").eq("id", app.known_by_member_id).maybeSingle();

@@ -93,6 +93,11 @@ export async function POST(req: Request) {
     }
   }
 
+  // Approved already: editing the form must not put them back in the queue.
+  if (existing?.status === "approved") {
+    return NextResponse.json({ error: "You're already approved: pick a plan from your portal." }, { status: 409 });
+  }
+
   const values = {
     supabase_user_id: user.id,
     email,

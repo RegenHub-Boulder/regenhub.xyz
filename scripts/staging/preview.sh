@@ -20,6 +20,8 @@
 # (audit-seed.mjs); scripts/staging/audit-shots.mjs captures and counts them. The steward is an admin there.
 # T482_FREEDAY=1 (with T482_AUDIT=1, T-482 round 4) runs a Home Assistant stand-in on B+5 (ha-standin.mjs) so a door
 # code can be issued end to end, and sends mail to the staging outbox; scripts/staging/round4-shots.mjs drives it.
+# T482_JOIN=1 (with T482_AUDIT=1, T-482 round 5) adds each state of joining (audit-seed.mjs): a late application, one
+# vouched and ready, Sam approved without a plan, Dee (signs in as Lee) on a day plan; scripts/staging/joining-shots.mjs.
 # T482_SCOREBOARD=1 also seeds the fictional rows /admin/scoreboard reads (scoreboard-seed.mjs); sign in as the steward.
 # T482_STUCK_WRITER=1 (with T482_AUDIT) also seeds a door-code writer that died on 11-20 (silent past its lease) and two
 # failed door-code changes; T482_HA_STUB=1 points HA_URL at scripts/staging/ha-stub.mjs (127.0.0.1:B+6, never the real

@@ -36,6 +36,8 @@ export function ApplicationsFilter({
     if (activeTab !== "all") {
       result = result.filter((a) => a.status === activeTab);
     }
+    // Waiting: the oldest first, so the late ones lead.
+    if (activeTab === "pending") result = [...result].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter((a) =>
