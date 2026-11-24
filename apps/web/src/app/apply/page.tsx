@@ -68,10 +68,10 @@ export default async function ApplyPage() {
   // Prefill from the applicant's account so they don't retype what we already know: their name from their member
   // record, and, if they've applied before, their answers (this form edits that application).
   const [{ data: member }, { data: application }] = await Promise.all([
-    supabase.from("members").select("name").eq("supabase_user_id", user.id).maybeSingle(),
+    supabase.from("members").select("name, telegram_username").eq("supabase_user_id", user.id).maybeSingle(),
     supabase.from("applications").select("*").eq("supabase_user_id", user.id).maybeSingle(),
   ]);
-  const app = application as { name?: string; about?: string | null; how_found?: string | null; known_by_member_id?: number | null; status?: string } | null;
+  const app = application as { name?: string; about?: string | null; how_found?: string | null; telegram?: string | null; known_by_member_id?: number | null; status?: string } | null;
   // Approved already: nothing to apply for; the portal is where they pick a plan.
   if (app?.status === "approved") redirect("/portal");
   let knownBy: { id: number; name: string } | null = null;
@@ -84,6 +84,7 @@ export default async function ApplyPage() {
     name: app?.name ?? member?.name ?? "",
     about: app?.about ?? "",
     how_found: app?.how_found ?? "",
+    telegram: app?.telegram ?? member?.telegram_username ?? "",
     knownBy,
   };
 

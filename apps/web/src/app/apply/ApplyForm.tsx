@@ -18,6 +18,7 @@ type Props = {
     name?: string | null;
     about?: string | null;
     how_found?: string | null;
+    telegram?: string | null;
     knownBy?: { id: number; name: string } | null;
   };
 };
@@ -36,6 +37,7 @@ export default function ApplyForm({ authenticatedEmail, initial }: Props) {
     email: authenticatedEmail,
     about: initial?.about ?? "",
     how_found: initial?.how_found ?? "",
+    telegram: initial?.telegram ?? "",
   });
   // "Who here knows you?": a member picked from the list, or nobody yet.
   const [knownBy, setKnownBy] = useState<Pick | null>(initial?.knownBy ?? null);
@@ -78,6 +80,7 @@ export default function ApplyForm({ authenticatedEmail, initial }: Props) {
           ...(emailLocked ? {} : { email: form.email }),
           about: form.about,
           how_found: form.how_found,
+          telegram: form.telegram,
           known_by_member_id: nobody ? null : knownBy?.id ?? null,
         }),
       });
@@ -142,6 +145,12 @@ export default function ApplyForm({ authenticatedEmail, initial }: Props) {
           <div className="space-y-2">
             <Label htmlFor="how_found">How did you find us?</Label>
             <Input id="how_found" value={form.how_found} onChange={set("how_found")} placeholder="A friend, a night, a search…" className="glass-input" />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="telegram">Telegram (optional)</Label>
+            <Input id="telegram" value={form.telegram} onChange={set("telegram")} placeholder="@yourhandle" className="glass-input" />
+            <p className="text-xs text-muted">So the bot knows you in the members&apos; chat once you&apos;re in.</p>
           </div>
 
           <fieldset className="space-y-2">

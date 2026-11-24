@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { postApplicationCard } from "@regenhub/shared";
 import { sendEmail, applicationReceivedEmail } from "@/lib/email";
 import { missingColumn } from "@/lib/approval";
+import { namedVoucher } from "@/lib/vouchers";
 import { isSyntheticEmail } from "@/lib/regenos/syntheticEmail";
 
 export async function GET() {
@@ -30,8 +31,9 @@ export async function POST(req: Request) {
 
   // The short form (T-482 round 5): name, email, what they work on, how they found us, and who here knows them.
   // No level: once approved they pick any day plan themselves; desks are an upgrade for members.
-  const { name, about, how_found, known_by_member_id, email: bodyEmail } = body as {
+  const { name, about, how_found, known_by_member_id, telegram, email: bodyEmail } = body as {
     name?: string;
+    telegram?: string;
     about?: string;
     how_found?: string;
     known_by_member_id?: number | null;
@@ -53,15 +55,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Email is required" }, { status: 400 });
   }
 
-  // "Who here knows you?": a member who may vouch (lib: 072's member_can_vouch; the type-ahead offers only them).
+  // "Who here knows you?": a member who may vouch (lib/vouchers.ts, the type-ahead's own set), never themselves.
   let knownBy: { id: number; name: string } | null = null;
   if (known_by_member_id != null) {
-    const id = Number(known_by_member_id);
-    const { data: m } = await createServiceClient().from("members").select("id, name, disabled")
-      .eq("id", Number.isInteger(id) ? id : -1).maybeSingle();
-    if (!m || m.disabled) return NextResponse.json({ error: "Pick a member from the list, or \"Nobody yet\"." }, { status: 400 });
-    knownBy = { id: m.id, name: m.name };
+    knownBy = await namedVoucher(createServiceClient(), Number(known_by_member_id), user.id);
+    if (!knownBy) return NextResponse.json({ error: "Pick a member from the list, or \"Nobody yet\"." }, { status: 400 });
   }
+  const telegramHandle = (() => {
+    const t = telegram?.trim().replace(/^@+/, "") ?? "";
+    return /^[a-zA-Z0-9_]{5,32}$/.test(t) ? t : null;
+  })();
 
   // Application workflow fields (approval, plan, rate) are deliberately not
   // client-writable. Perform the validated write with the service client and
@@ -98,24 +101,31 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "You're already approved: pick a plan from your portal." }, { status: 409 });
   }
 
-  const values = {
+  const now = new Date().toISOString();
+  const values: Record<string, unknown> = {
     supabase_user_id: user.id,
     email,
     name: name.trim(),
     about: about?.trim() || null,
+    telegram: telegramHandle,
     how_found: how_found?.trim() || null,
     known_by_member_id: knownBy?.id ?? null,
     status: "pending" as const,
-    updated_at: new Date().toISOString(),
+    updated_at: now,
   };
+  // Applying again after a rejection (or a close) is a new application: a new vouch, a new card, a new clock.
+  if (existing && existing.status !== "pending") {
+    Object.assign(values, { created_at: now, vouched_by: null, vouched_at: null, chat_message_id: null, chat_reposted_at: null });
+  }
   const save = (row: Record<string, unknown>) => existing
     ? admin.from("applications").update(row).eq("id", existing.id).select().single()
     : admin.from("applications").insert(row).select().single();
   let { data, error } = await save(values);
   if (missingColumn(error)) {
     // Before migration 072: keep the two new answers in why_join so nothing they typed is lost.
-    const { how_found: found, known_by_member_id: _known, ...rest } = values;
-    void _known;
+    const NEW_072 = ["how_found", "known_by_member_id", "vouched_by", "vouched_at", "chat_message_id", "chat_reposted_at"];
+    const rest = Object.fromEntries(Object.entries(values).filter(([k]) => !NEW_072.includes(k)));
+    const found = values.how_found as string | null;
     const note = [found && `Found us: ${found}`, `Knows: ${knownBy?.name ?? "nobody yet"}`].filter(Boolean).join(". ");
     ({ data, error } = await save({ ...rest, why_join: note }));
   }

@@ -45,7 +45,7 @@ export default async function AdminHome() {
     admin.from("applications").select("id, name, created_at").eq("status", "pending"),
     admin.from("free_day_claims").select("id, name, created_at").eq("status", "pending"),
     // Before migration 072 the columns are missing: no desk asks yet, not "couldn't check".
-    admin.from("members").select("id", { count: "exact", head: true }).not("desk_asked_at", "is", null).eq("desk_access", false),
+    admin.from("members").select("id", { count: "exact", head: true }).not("desk_asked_at", "is", null).eq("desk_access", false).eq("disabled", false),
     settle("desk members", readAll<{ id: number; disabled: boolean; member_type: string }>("desk members", (from, to) => admin.from("members")
       .select("id, disabled, member_type").in("member_type", [...DESK_MEMBER_TYPES]).order("id").range(from, to))),
     settle("billed subscriptions", readAll<{ member_id: number; status: string }>("billed subscriptions", (from, to) => admin.from("subscriptions")

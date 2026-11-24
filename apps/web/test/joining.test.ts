@@ -112,6 +112,22 @@ describe("apply → vouch → approve", () => {
     expect(ack?.html).toContain("asked Carey Member to vouch");
   });
 
+  it("only someone who can vouch can be named; applying again after a rejection needs a new vouch", async () => {
+    as(5, "pat@x.test");
+    const named = await applyRoute(new Request("http://x", json({ name: "Pat", about: "x", known_by_member_id: 4 })));
+    expect(named.status).toBe(400); // Dan is on day passes: not someone who can vouch
+    const id = await apply(3);
+    as(3, "carey@hub.test");
+    await vouchRoute(new Request("http://x", { method: "POST" }), params(id));
+    as(2, "bo@hub.test");
+    await statusRoute(new Request("http://x", { method: "PATCH", body: JSON.stringify({ id, status: "rejected" }) }));
+    await apply(3);
+    const [row] = await db.sql(`select status, vouched_by, chat_reposted_at from applications where id = $1`, [id]);
+    expect(row).toEqual({ status: "pending", vouched_by: null, chat_reposted_at: null });
+    as(2, "bo@hub.test");
+    expect((await (await approveRoute(new Request("http://x", { method: "POST" }), params(id))).json()).reason).toBe("no_vouch");
+  });
+
   it("can't be approved without a vouch, from the site or the chat's function", async () => {
     const id = await apply(null);
     as(1, "ana@hub.test");
@@ -362,7 +378,10 @@ describe("the type-ahead", () => {
     const res = await searchRoute(new Request("http://x/api/portal/members/search?q=a"));
     expect((await res.json()).members).toEqual([]); // two letters at least
     const found = await (await searchRoute(new Request("http://x/api/portal/members/search?q=an"))).json();
-    expect(found.members).toEqual([{ id: 1, name: "Ana Admin" }]); // "Dan Daypass" matches too, but isn't a member
+    // "Dan Daypass" matches too, but isn't a member; Ana isn't listed in the directory, so first name and initial.
+    expect(found.members).toEqual([{ id: 1, name: "Ana A." }]);
+    await db.sql(`update members set show_in_directory = true where id = 1`);
+    expect((await (await searchRoute(new Request("http://x/api/portal/members/search?q=an"))).json()).members).toEqual([{ id: 1, name: "Ana Admin" }]);
     const d = await (await searchRoute(new Request("http://x/api/portal/members/search?q=da"))).json();
     expect(d.members).toEqual([]); // Dan is on day passes: not a member
     signedIn = null;

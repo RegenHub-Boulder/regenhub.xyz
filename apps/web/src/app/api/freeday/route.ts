@@ -5,7 +5,6 @@ import { ALREADY_MEMBER, isAlreadyMember } from "@/lib/freeDayClaim";
 import { freeDayAlreadyMemberEmail, freeDayApprovedEmail, freeDayReceivedEmail, sendEmail } from "@/lib/email";
 import { freeDayCard, postCard } from "@regenhub/shared";
 import { freeDayDecision, knownWords, whoKnows } from "@/lib/freeDayRule";
-import { currentTechne } from "@/lib/techne/webSession";
 
 /** Whether an email of this kind went to this address in the last day (email_log, 069): one answer a day is enough. */
 async function sentRecently(admin: ReturnType<typeof createServiceClient>, email: string, kind: string): Promise<boolean> {
@@ -104,10 +103,6 @@ export async function POST(req: Request) {
   if (user && !ownEmail) {
     return NextResponse.json({ error: "Sign out to ask for a free day with another email." }, { status: 400 });
   }
-  // The free-day rule (lib/freeDayRule.ts): approved at once when we know them, else one tap in the members' chat.
-  const known = await whoKnows(admin, { email: normalizedEmail, inviter, did: (await currentTechne(admin).catch(() => null))?.did ?? null })
-    .catch(() => null);
-  const autoApprove = freeDayDecision(known) === "approve";
   // Signed out, the page's answer doesn't depend on who the email belongs to (whether we know them, whether they're a
   // member or asked before): only on what the person typed (an invite link). The email tells its owner the rest.
   const quietly = inviter ? "reserved" : "pending";
@@ -137,6 +132,10 @@ export async function POST(req: Request) {
   }
 
   // claimed_date is NULL by design (visit any weekday).
+  // The free-day rule (lib/freeDayRule.ts): approved at once when we know them, else one tap in the members' chat.
+  // Asked only for a claim that will be written (after the answers above), so a repeat costs no extra reads.
+  const known = await whoKnows(admin, { email: normalizedEmail, inviter }).catch(() => null);
+  const autoApprove = freeDayDecision(known) === "approve";
   const status = autoApprove ? "reserved" : "pending";
   const fields = {
     email: normalizedEmail,

@@ -2,7 +2,7 @@ import { requireAdminMember } from "@/lib/admin";
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { logAction, AuditAction } from "@/lib/auditLog";
-import { canApproveDesks, deskAccessUpdate, missingColumn } from "@/lib/approval";
+import { approvalOf, canApproveDesks, deskAccessUpdate, missingColumn } from "@/lib/approval";
 
 /**
  * PATCH /api/admin/members/[id]/approve-membership — the member page's two switches (T-482 round 5).
@@ -38,6 +38,11 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   } else {
     if (body.approved) {
       return NextResponse.json({ error: "Approval comes from their application: a member vouches, then Approve." }, { status: 400 });
+    }
+    // Taking the approval back also ends desk access: for a member who has it, that's a desk steward's call.
+    const { data: row } = await admin.from("members").select("*").eq("id", memberId).maybeSingle();
+    if (approvalOf(row).desk && !canApproveDesks({ is_admin: true, is_ops_admin: auth.member.isOpsAdmin })) {
+      return NextResponse.json({ error: "They have desk access: a steward who approves desks takes this back." }, { status: 403 });
     }
     next = { member_approved: false, member_approved_at: null, member_approved_by: null, desk_access: false, desk_access_at: null, desk_access_by: null };
     old = { approved_for_daily: false, approved_for_daily_at: null, approved_for_daily_by: null, approved_for_full: false, approved_for_full_at: null, approved_for_full_by: null };

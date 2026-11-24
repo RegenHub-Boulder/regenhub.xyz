@@ -109,9 +109,11 @@ export function ApplicationActions({ application, names = {} }: { application: J
               </Button>
             </>
           )}
-          <Button size="sm" variant="ghost" className="gap-1.5" disabled={!!busy} onClick={() => patch("reopen", { status: "pending" })}>
-            Back to waiting
-          </Button>
+          {application.status !== "approved" && (
+            <Button size="sm" variant="ghost" className="gap-1.5" disabled={!!busy} onClick={() => patch("reopen", { status: "pending" })}>
+              Back to waiting
+            </Button>
+          )}
         </div>
       )}
 

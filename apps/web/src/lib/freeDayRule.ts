@@ -4,8 +4,10 @@
  * else's goes to the members' chat for one tap.
  *
  * Known means one of:
- *   - a night: they RSVP'd going to one of our nights (their Techne RSVP, or a night follow-up we sent or held for
- *     them, which only exists for someone who RSVP'd going);
+ *   - a night: they RSVP'd going to one of our nights that has already happened (a night follow-up we sent or held
+ *     for them, which only exists after a night, for someone who RSVP'd going; or the Techne RSVP of the account
+ *     whose confirmed email this is, to a night of ours that has started). An RSVP to a future night doesn't count:
+ *     anyone can make one in seconds;
  *   - an invite: a member invited them (`invited_by_member_id`, the invite link);
  *   - the list: they've been on the stay-in-touch list for LIST_DAYS days or more (and haven't unsubscribed).
  *
@@ -14,7 +16,7 @@
  * (api/freeday/activate, `freeDayCodeExpiry`).
  */
 import type { createServiceClient } from "@/lib/supabase/admin";
-import { listRecords } from "@/lib/techne/query";
+import { getRecords, listRecords } from "@/lib/techne/query";
 import { regenosCollectiveDid } from "@/lib/regenos/config";
 
 type Service = ReturnType<typeof createServiceClient>;
@@ -33,7 +35,7 @@ export type KnownBy =
 export function freeDayRuleWords(mode: FreeDayAutoApprove = FREE_DAY_AUTO_APPROVE): string {
   if (mode === "always") return "Every free day is approved at once.";
   if (mode === "never") return "Every free day waits for a member to approve it in the members' chat.";
-  return `A free day is approved at once when we know the person: they RSVP'd to one of our nights, a member invited them, or they've been on our list for ${LIST_DAYS} days or more. Anyone else's waits for a member to approve it in the members' chat.`;
+  return `A free day is approved at once when we know the person: they came to one of our nights (RSVP'd going), a member invited them, or they've been on our list for ${LIST_DAYS} days or more. Anyone else's waits for a member to approve it in the members' chat.`;
 }
 
 /** Why a claim was approved at once, for the chat card and the claim's approved_by. */
@@ -56,7 +58,7 @@ export function freeDayDecision(known: KnownBy | null, mode: FreeDayAutoApprove 
  */
 export async function whoKnows(
   admin: Service,
-  p: { email: string; inviter?: { name: string } | null; did?: string | null },
+  p: { email: string; inviter?: { name: string } | null },
   now = new Date(),
 ): Promise<KnownBy | null> {
   if (p.inviter) return { kind: "invite", inviter: p.inviter.name };
@@ -65,14 +67,11 @@ export async function whoKnows(
   const { data: followups } = await admin.from("night_followups").select("id").eq("email", email).limit(1);
   if ((followups ?? []).length) return { kind: "night" };
 
-  // Their own Techne RSVP to one of our nights: the DID they signed in with, or the one their Techne sign-in recorded
-  // for this email (confirmed emails only, as everywhere else).
-  let did = p.did ?? null;
-  if (!did) {
-    const { data: person } = await admin.from("techne_people").select("did").eq("email", email).eq("email_confirmed", true).limit(1);
-    did = ((person ?? [])[0] as { did?: string } | undefined)?.did ?? null;
-  }
-  if (did && await rsvpdToOurNight(did)) return { kind: "night" };
+  // The Techne RSVP of the account this email belongs to: the one their sign-in recorded for it, confirmed emails only
+  // (as everywhere else), never just whoever is signed in in this browser, so one account can't vouch for any email.
+  const { data: person } = await admin.from("techne_people").select("did").eq("email", email).eq("email_confirmed", true).limit(1);
+  const did = ((person ?? [])[0] as { did?: string } | undefined)?.did ?? null;
+  if (did && await rsvpdToOurPastNight(did, now)) return { kind: "night" };
 
   const cutoff = new Date(now.getTime() - LIST_DAYS * 86_400_000).toISOString();
   const { data: listed } = await admin.from("interests").select("created_at").eq("email", email)
@@ -85,14 +84,18 @@ export async function whoKnows(
   return null;
 }
 
-/** Whether this DID has an RSVP "going" to an event in the collective's own repo (Techne's public query). */
-async function rsvpdToOurNight(did: string): Promise<boolean> {
+/** Whether this DID has an RSVP "going" to a night in the collective's own repo that has already started. */
+async function rsvpdToOurPastNight(did: string, now: Date): Promise<boolean> {
   const collective = regenosCollectiveDid();
   if (!collective) return false;
   const rows = await listRecords<{ status?: string; subject?: { uri?: string } }>(
     { where: { all: [{ type: { is: "community.lexicon.calendar.rsvp" } }, { author: { is: did } }] } },
     { revalidate: 0 },
   ).catch(() => null);
-  return (rows ?? []).some((r) =>
-    (r.value.subject?.uri ?? "").startsWith(`at://${collective}/`) && !/notgoing|interested/i.test(r.value.status ?? "going"));
+  const uris = [...new Set((rows ?? [])
+    .filter((r) => (r.value.subject?.uri ?? "").startsWith(`at://${collective}/`) && !/notgoing|interested/i.test(r.value.status ?? "going"))
+    .map((r) => r.value.subject!.uri!))];
+  if (uris.length === 0) return false;
+  const events = await getRecords<{ startsAt?: string }>(uris, { revalidate: 300 }).catch(() => null);
+  return (events ?? []).some((e) => !!e.value.startsAt && Date.parse(e.value.startsAt) <= now.getTime());
 }
