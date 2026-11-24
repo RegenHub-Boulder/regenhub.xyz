@@ -26,27 +26,18 @@ function getTodayMountain(): string {
   return fmt.format(new Date()); // en-CA gives YYYY-MM-DD
 }
 
-/** 6 PM Mountain Time today (a free day ends at 6 PM), or null once it's past. */
+/**
+ * 6 PM Mountain Time today (a free day ends at 6 PM), or null once it's past. Worked out with Intl only, so it doesn't
+ * depend on the server's own time zone.
+ */
 function calculateFreeDayExpiration(): Date | null {
   const now = new Date();
-  const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone: TIMEZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  const parts = fmt.formatToParts(now);
-  const year = parseInt(parts.find((p) => p.type === "year")!.value);
-  const month = parseInt(parts.find((p) => p.type === "month")!.value);
-  const day = parseInt(parts.find((p) => p.type === "day")!.value);
-
-  // Build 6 PM local time via UTC offset calculation
-  const guess = new Date(Date.UTC(year, month - 1, day, 18, 0, 0));
-  const localStr = guess.toLocaleString("en-US", { timeZone: TIMEZONE });
-  const localAsUtc = new Date(localStr);
-  const offsetMs = guess.getTime() - localAsUtc.getTime();
-  const exp = new Date(guess.getTime() + offsetMs);
-
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: TIMEZONE, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
+  const part = (t: string) => parseInt(parts.find((p) => p.type === t)!.value);
+  // 18:00 UTC on Denver's date, and what hour that is in Denver (11 or 12): the difference is Denver's offset.
+  const guess = Date.UTC(part("year"), part("month") - 1, part("day"), 18, 0, 0);
+  const denverHour = parseInt(new Intl.DateTimeFormat("en-US", { timeZone: TIMEZONE, hour: "numeric", hourCycle: "h23" }).format(guess));
+  const exp = new Date(guess + (18 - denverHour) * 3_600_000);
   // Past 6 PM there is no free day left today: the code is good for that one day only (lib/freeDayRule.ts).
   return exp <= now ? null : exp;
 }

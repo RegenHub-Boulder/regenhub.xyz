@@ -77,6 +77,30 @@ describe("POST /api/freeday/activate", () => {
     expect(json.error).toBe("Unauthorized");
   });
 
+  it("a free day is that one day: after 6 PM there's no code until the next weekday (T-482 round 5)", async () => {
+    vi.setSystemTime(new Date("2026-06-09T01:30:00.000Z")); // Monday 7:30 PM in Boulder
+    const sb = makeSupabaseMock({ auth: { user: { id: "user-1", email: "guest@example.com" } } });
+    vi.mocked(createClient).mockResolvedValue(sb as never);
+    vi.mocked(createServiceClient).mockReturnValue(makeSupabaseMock({
+      selects: { free_day_claims: { data: reservedClaim }, members: { data: { id: 42 } } },
+    }) as never);
+
+    const res = await POST();
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/8 AM to 6 PM/);
+    expect(setUserCode).not.toHaveBeenCalled();
+  });
+
+  it("the code ends at 6 PM Boulder time that day, whatever the server's time zone", async () => {
+    const sb = makeSupabaseMock({ auth: { user: { id: "user-1", email: "guest@example.com" } } });
+    vi.mocked(createClient).mockResolvedValue(sb as never);
+    vi.mocked(createServiceClient).mockReturnValue(makeSupabaseMock({
+      selects: { free_day_claims: { data: reservedClaim }, members: { data: { id: 42 } } },
+    }) as never);
+    const json = await (await POST()).json();
+    expect(json.expires_at).toBe("2026-06-09T00:00:00.000Z"); // 6 PM MDT on June 8
+  });
+
   it("returns a code, programs the lock, and updates the claim on happy path", async () => {
     const sb = makeSupabaseMock({ auth: { user: { id: "user-1", email: "guest@example.com" } } });
     const admin = makeSupabaseMock({

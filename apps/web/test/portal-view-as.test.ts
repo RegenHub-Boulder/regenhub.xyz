@@ -195,7 +195,7 @@ describe("each kind of member", () => {
     expect(firstWeek).toContain('data-testid="directory-ask"');
     expect(await page("applicant")).toContain("Application <!-- -->Under Review");
     expect(await page("day-pass")).toContain("Free day reserved");
-    expect(await page("day-pass-used")).toContain("pick your plan");
+    expect(await page("day-pass-used")).toContain("Pick your plan");
     expect(await page("day-plan-30")).toContain("Member + 1 day/mo");
     expect(await page("day-plan-50")).toContain("Member + 2 days/mo");
     const steward = await page("coop-steward");

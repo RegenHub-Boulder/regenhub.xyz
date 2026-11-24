@@ -148,9 +148,9 @@ async function seed(opts: { rail?: "stripe" | "onchain"; plan?: string; disabled
   periodEnd = new Date(Math.floor((Date.now() + 4 * DAY) / 1000) * 1000).toISOString(); // Stripe has whole seconds
   await db.sql("insert into auth.users (id, email) values ($1, 'pat@example.test')", [USER_ID]);
   await asWriter(`insert into members (id, name, email, is_admin, member_type) values (1, 'Ada Admin', 'ada@example.test', true, 'hot_desk');
-    insert into members (id, name, email, member_type, pin_code_slot, pin_code, stripe_customer_id, supabase_user_id, disabled) values
+    insert into members (id, name, email, member_type, pin_code_slot, pin_code, stripe_customer_id, supabase_user_id, disabled, member_approved, desk_access) values
       (7, 'Pat Example', 'pat@example.test', '${desk ? plan : "day_pass"}', ${desk ? "12, '482913'" : "null, null"},
-       ${rail === "stripe" ? "'cus_test_7'" : "null"}, '${USER_ID}', ${opts.disabled ? "true" : "false"});`);
+       ${rail === "stripe" ? "'cus_test_7'" : "null"}, '${USER_ID}', ${opts.disabled ? "true" : "false"}, true, true);`);
   if (rail === "onchain") {
     await db.sql("insert into member_wallets (id, member_id, address, verification_method) values (3, 7, $1, 'signature')", [WALLET]);
   }
@@ -956,6 +956,11 @@ describe("upgrades and daily ↔ daily are unchanged", () => {
   it("daily → desk upgrades now, and the webhook grants a door code", async () => {
     await seed({ plan: "member_basic" });
     stripe.subscriptions.retrieve.mockResolvedValue(stripeSub("member_basic"));
+    // Desks are an upgrade a steward turns on (T-482 round 5): without desk access the switch is refused.
+    await db.sql("update members set desk_access = false where id = 7");
+    expect((await pick("hot_desk")).status).toBe(403);
+    expect(stripe.subscriptions.update).not.toHaveBeenCalled();
+    await db.sql("update members set desk_access = true where id = 7");
     expect((await pick("hot_desk")).status).toBe(200);
     expect(stripe.subscriptions.update).toHaveBeenCalledWith("sub_test_50", expect.objectContaining({ proration_behavior: "create_prorations" }));
     expect(stripe.subscriptionSchedules.create).not.toHaveBeenCalled();

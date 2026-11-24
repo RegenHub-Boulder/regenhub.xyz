@@ -18,7 +18,7 @@ export async function requireAdminMember() {
 
   const { data } = await supabase
     .from("members")
-    .select("id, name, is_admin, is_ops_admin, disabled")
+    .select("*")
     .eq("supabase_user_id", user.id)
     .single();
 

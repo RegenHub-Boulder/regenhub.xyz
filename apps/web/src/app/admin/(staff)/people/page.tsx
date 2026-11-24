@@ -93,7 +93,8 @@ export default async function PeoplePage({
           {waiting.length} waiting · {waiting.filter((a) => !a.vouched_by).length} need a vouch. One member vouches, then
           a steward approves; they pick a day plan themselves. Desks and custom prices are on each member&apos;s page.
         </p>
-        <ApplicationsFilter applications={apps} names={names} />
+        {/* eslint-disable-next-line react-hooks/purity -- server component, renders once per request */}
+        <ApplicationsFilter applications={apps} names={names} nowMs={Date.now()} />
       </div>
     );
   }

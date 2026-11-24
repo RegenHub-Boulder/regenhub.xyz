@@ -20,8 +20,11 @@ const statusTabs = ["all", "pending", "approved", "rejected", "closed"] as const
 export function ApplicationsFilter({
   applications,
   names = {},
+  nowMs,
 }: {
   applications: JoinApplication[];
+  /** The page's "now" (server render): which ones are late. */
+  nowMs: number;
   /** Member names by id: who they named, who vouched, who decided. */
   names?: Record<number, string>;
 }) {
@@ -110,7 +113,7 @@ export function ApplicationsFilter({
                 </div>
                 <div className="flex items-center gap-3 text-xs text-muted">
                   <span>{app.email}</span>
-                  <span className={app.status === "pending" && Date.now() - Date.parse(app.created_at) > ANSWER_WITHIN_HOURS * 3_600_000 ? "text-danger" : ""}>
+                  <span className={app.status === "pending" && nowMs - Date.parse(app.created_at) > ANSWER_WITHIN_HOURS * 3_600_000 ? "text-danger" : ""}>
                     {app.status === "pending" ? `waiting ${relTime(app.created_at).replace(" ago", "")}` : new Date(app.created_at).toLocaleDateString("en-US", {
                       timeZone: "America/Denver",
                       month: "short",

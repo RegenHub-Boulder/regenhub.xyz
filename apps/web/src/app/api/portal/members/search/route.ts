@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { isMemberInStanding, PAYING_STATUSES } from "@/lib/memberStanding";
+import { canApproveMembers } from "@/lib/approval";
 
 /**
  * GET /api/portal/members/search?q=ca — the apply form's "Who here knows you?" type-ahead (T-482 round 5).
@@ -32,7 +33,7 @@ export async function GET(req: Request) {
       .in("member_id", candidates.map((m) => m.id)).in("status", PAYING_STATUSES)
     : { data: [] };
   const members = candidates
-    .filter((m) => m.is_coop_member || m.is_admin
+    .filter((m) => m.is_coop_member || canApproveMembers(m)
       || isMemberInStanding(m, (subs ?? []).filter((s) => s.member_id === m.id)))
     .slice(0, 6)
     .map((m) => ({ id: m.id, name: m.name }));
