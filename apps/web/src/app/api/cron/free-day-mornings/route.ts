@@ -56,6 +56,8 @@ export async function POST(req: Request) {
     if (result.ok) sent += 1;
     else {
       failed += 1;
+      // Let the next run this morning try again (same idempotency key, so a send that did go isn't doubled).
+      await admin.from("free_day_claims").update({ plan_reminded_on: c.plan_reminded_on }).eq("id", c.id).eq("plan_reminded_on", today);
       console.error(`[free-day mornings] claim ${c.id} send failed:`, result.error);
     }
   }

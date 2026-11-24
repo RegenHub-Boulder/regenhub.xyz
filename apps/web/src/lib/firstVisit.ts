@@ -59,7 +59,8 @@ export async function postToMembersChat(text: string): Promise<{ ok: boolean; er
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true }),
-      signal: AbortSignal.timeout(5_000),
+      // The door webhook waits for this: keep it short.
+      signal: AbortSignal.timeout(3_000),
     });
     if (!res.ok) return { ok: false, error: `Telegram ${res.status}` };
     return { ok: true };
@@ -77,6 +78,7 @@ let cached: { at: number; line: string | null } | null = null;
 export async function usuallyHere(admin: Service, now = new Date()): Promise<string | null> {
   if (cached && now.getTime() - cached.at < HOURS_6) return cached.line;
   try {
+    // Throws on a failed read, so a failure isn't cached as "nothing to say".
     const line = await readUsuallyHere(admin, now);
     cached = { at: now.getTime(), line };
     return line;
@@ -149,11 +151,14 @@ async function welcome(admin: Service, entry: DoorEntry, now: Date): Promise<Wel
       .eq("id", memberId).maybeSingle();
     if (!member) return { posted: false, why: "no member" };
     const onDayCode = isDayCodeSlot(entry.slot);
+    // A day code on a desk or hub-friend member is one they made for a guest (portal or bot): not their first day.
+    if (onDayCode && !claimOfCode && member.member_type !== "day_pass") return { posted: false, why: "a member's guest" };
     const isNew = Date.parse(member.created_at) > now.getTime() - NEW_MEMBER_DAYS * 86_400_000;
     if (!onDayCode && !isNew) return { posted: false, why: "long-standing member" };
-    const { count } = await admin.from("access_logs").select("id", { count: "exact", head: true })
+    const { count, error: countErr } = await admin.from("access_logs").select("id", { count: "exact", head: true })
       .eq("member_id", memberId).eq("result", "granted").lt("id", entry.id);
-    if ((count ?? 0) > 0) return { posted: false, why: "been before" };
+    if (countErr || count == null) return { posted: false, why: "couldn't check earlier visits" };
+    if (count > 0) return { posted: false, why: "been before" };
     kind = claimOfCode ? "free_day" : onDayCode || member.member_type === "day_pass" ? "day_pass" : "new_member";
     personKey = `member:${memberId}`;
     name = member.name;
@@ -164,9 +169,10 @@ async function welcome(admin: Service, entry: DoorEntry, now: Date): Promise<Wel
   } else {
     // A free-day code with no member row (claims from before the approval made one): the first entry on that code.
     if (!claimOfCode || !code) return { posted: false, why: "not a free-day code" };
-    const { count } = await admin.from("access_logs").select("id", { count: "exact", head: true })
+    const { count, error: countErr } = await admin.from("access_logs").select("id", { count: "exact", head: true })
       .eq("slot", entry.slot!).eq("result", "granted").gte("created_at", code.issued_at).lt("id", entry.id);
-    if ((count ?? 0) > 0) return { posted: false, why: "code used before" };
+    if (countErr || count == null) return { posted: false, why: "couldn't check earlier visits" };
+    if (count > 0) return { posted: false, why: "code used before" };
     kind = "free_day";
     personKey = `claim:${claimOfCode.id}`;
     name = claimOfCode.name;
@@ -175,6 +181,12 @@ async function welcome(admin: Service, entry: DoorEntry, now: Date): Promise<Wel
 
   // "Before" is an earlier row (a lower id), so two doors logging one arrival at once can't each see the other as a
   // past visit; the first-written of them is the one announced, and first_visit_alerts holds it to once.
+
+  // Announced already on their free-day claim (a code with no member row, before they had one): not again.
+  if (claim && personKey !== `claim:${claim.id}`) {
+    const { data: earlier } = await admin.from("first_visit_alerts").select("person_key").eq("claim_id", claim.id).limit(1);
+    if ((earlier ?? []).length) return { posted: false, why: "already greeted" };
+  }
 
   // Context: who invited them, else the last night they were thanked for coming to.
   let invitedBy: string | null = null;

@@ -176,6 +176,34 @@ describe("the members' chat hears a first visit", () => {
     expect(chat).toEqual([]);
   });
 
+  it("a guest code a new hub friend made on the portal isn't the hub friend's first day", async () => {
+    await db.sql("insert into members (name, email, member_type) values ('Hana Friend', 'hana@example.test', 'hub_friend')");
+    const [{ id }] = await db.sql<{ id: number }>("select id from members where email = 'hana@example.test'");
+    await asWriter(`insert into day_codes (member_id, label, code, pin_slot, expires_at, issued_at, is_active)
+        values (${id}, 'Sam', '515151', 151, now() + interval '1 day', now() - interval '1 hour', true)`);
+    expect(await (await enter(151)).json()).toMatchObject({ attributed: true, first_visit: false });
+    expect(chat).toEqual([]);
+  });
+
+  it("a free-day guest announced on their claim isn't announced again once they have a member row", async () => {
+    // An older claim: its code has no member row (from before the approval made one, so it skips `reserved` here).
+    await db.sql(`insert into free_day_claims (email, name, status, claimed_date) values ('kai@example.test', 'Kai Early', 'pending', null)`);
+    const [{ id: claimId }] = await db.sql<{ id: number }>("select id from free_day_claims where email = 'kai@example.test'");
+    await asWriter(`insert into day_codes (member_id, label, code, pin_slot, expires_at, issued_at, is_active)
+        values (null, 'Free Day: Kai Early', '616161', 161, now() + interval '1 day', now() - interval '1 hour', true)`);
+    await db.sql("update free_day_claims set status = 'activated', day_code_id = (select id from day_codes where pin_slot = 161) where id = $1", [claimId]);
+    expect(await (await enter(161)).json()).toMatchObject({ attributed: false, first_visit: true });
+    expect(chat).toEqual(["👋 Kai just came in for their first day (free day). Anyone around to say hi?"]);
+
+    // Later Kai has a member row and a day-pass code of their own.
+    await db.sql("insert into members (name, email, member_type) values ('Kai Early', 'kai@example.test', 'day_pass')");
+    const [{ id }] = await db.sql<{ id: number }>("select id from members where email = 'kai@example.test'");
+    await asWriter(`insert into day_codes (member_id, code, pin_slot, expires_at, issued_at, is_active)
+        values (${id}, '717171', 171, now() + interval '1 day', now() - interval '1 minute', true)`);
+    expect(await (await enter(171)).json()).toMatchObject({ attributed: true, first_visit: false });
+    expect(chat).toHaveLength(1);
+  });
+
   it("an unattributed unlock (the HA poll writes no slot) says nothing", async () => {
     const res = await accessEvent(json({ method: "pin", result: "granted" }, "ha-secret"));
     expect(await res.json()).toMatchObject({ ok: true, attributed: false, first_visit: false });

@@ -151,7 +151,7 @@ export function usuallyHereFromEntries(entries: string[], now: Date): string | n
   return usuallyHereLine(weekdayArrivals(entries, now));
 }
 
-/** Reads the window's granted entry times (paged past PostgREST's row cap) and words them. Null on a failed read. */
+/** Reads the window's granted entry times (paged past PostgREST's row cap) and words them. Throws on a failed read. */
 export async function readUsuallyHere(
   // The slice of a Supabase client this needs (web service client or the bot's).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -163,7 +163,7 @@ export async function readUsuallyHere(
   for (let from = 0; ; from += 500) {
     const { data, error } = await client.from("access_logs").select("id, created_at").eq("result", "granted")
       .gte("created_at", since).order("id", { ascending: true }).range(from, from + 499);
-    if (error) return null;
+    if (error) throw new Error(`access_logs read: ${error.message}`);
     const rows = (data ?? []) as { created_at: string }[];
     times.push(...rows.map((r) => r.created_at));
     if (rows.length < 500) break;

@@ -382,11 +382,12 @@ approval live once in `packages/shared/src/freeDayEmails.ts`; web and bot both i
 
 ### First visits (T-482, migration 073)
 Of 68 free days granted, 30 came in. `lib/firstVisit.ts` (words: `packages/shared/src/firstVisitWords.ts`):
-- **The members' chat hears a first-timer walk in.** After a door entry is written (`/api/access-events`, and the
-  `sync-access-logs` poll, whose rows carry no slot so it never alerts), `welcomeFirstVisit` posts "👋 Sam just came in
+- **The members' chat hears a first-timer walk in.** After HA pushes a door entry (`/api/access-events`; the
+  `sync-access-logs` poll writes no slot or member, so it can't name anyone and isn't wired), `welcomeFirstVisit` posts "👋 Sam just came in
   for their first day (free day). Invited by Ana. Anyone around to say hi?" (or "Came to <night>" from a night
   follow-up). Only a granted entry written within 15 min of happening (no backfills), only someone we can name (the
-  member on the code, or a free-day claim's code), only their first granted entry (an earlier row = lower id, so both
+  member on the code, or a free-day claim's code; a day code on a desk or hub-friend member is their guest's), only
+  their first granted entry (an earlier row = lower id, so both
   doors logging one arrival post once); a member row off a day code counts only if made in the last 90 days, and a
   "Guest by …" code never. Once per person: a `first_visit_alerts` row is written before the post. First name only; no
   code, email or phone. Plain text to `TELEGRAM_GROUP_CHAT_ID` (`postToMembersChat`). Before 073 runs: nothing posted.

@@ -13,13 +13,14 @@ export type FirstVisitInfo = {
   /** The day they said, YYYY-MM-DD, and how the page says it ("tomorrow", "Thursday, Nov 27"). */
   planned: { date: string; words: string } | null;
 };
+type Planned = { date: string; words: string; told?: boolean };
 
 /**
  * What a first visit looks like (T-482): who's usually in, "Tell us when you're coming" (the members' chat hears it),
  * how to get in, what to bring. On /freeday before the code; the words are @regenhub/shared firstVisitWords.ts.
  */
 export default function FirstVisitGuide({ info }: { info: FirstVisitInfo }) {
-  const [planned, setPlanned] = useState(info.planned);
+  const [planned, setPlanned] = useState<Planned | null>(info.planned ? { ...info.planned, told: true } : null);
   const [picking, setPicking] = useState(!info.planned);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +36,9 @@ export default function FirstVisitGuide({ info }: { info: FirstVisitInfo }) {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error ?? "That didn't go through. Try again.");
-      setPlanned({ date: json.planned_day, words: info.days.find((d) => d.date === json.planned_day)?.long ?? day.long });
+      const words = info.days.find((d) => d.date === json.planned_day)?.long ?? day.long;
+      // "told": the chat heard this day now, or (same day again) already had.
+      setPlanned({ date: json.planned_day, words, told: json.posted || (planned?.date === json.planned_day && !!planned?.told) });
       setPicking(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "That didn't go through. Try again.");
@@ -57,7 +60,8 @@ export default function FirstVisitGuide({ info }: { info: FirstVisitInfo }) {
         <h2 className="text-lg font-semibold text-forest mb-1">Tell us when you&apos;re coming</h2>
         {planned && !picking ? (
           <p className="text-muted" data-testid="planned-day">
-            Thanks. The members know you&apos;re coming <strong className="text-foreground">{planned.words}</strong>.{" "}
+            {planned.told ? "Thanks. The members know you're coming " : "Thanks. We've noted you're coming "}
+            <strong className="text-foreground">{planned.words}</strong>.{" "}
             <button type="button" onClick={() => setPicking(true)} className="underline hover:text-sage">
               Change day
             </button>
