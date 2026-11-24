@@ -1,251 +1,41 @@
-import { requireAdminMember } from "@/lib/admin";
 import { NextResponse } from "next/server";
+import { requireAdminMember } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase/admin";
-import {
-  createApprovalCheckoutSession,
-  getPlan,
-  getStripe,
-  isStripeConfigured,
-} from "@/lib/stripe";
-import { sendEmail, approvalCheckoutEmail } from "@/lib/email";
-import { notifyApplicationApproved } from "@/lib/applicationNotify";
-import type { PlanKey, DiscountDuration } from "@/lib/supabase/types";
+import { sendEmail } from "@/lib/email";
+import { approveApplication, refreshApplicationCard } from "@regenhub/shared";
 
-interface ApproveBody {
-  plan_key: PlanKey;
-  monthly_cents: number;
-  discount_cents?: number;
-  discount_duration?: DiscountDuration;
-  discount_months?: number;
-  discount_note?: string;
-}
-
-export async function POST(
-  req: Request,
-  ctx: { params: Promise<{ id: string }> },
-) {
+/**
+ * POST /api/admin/applications/[id]/approve — the one approval, from People → Applications. The chat card's
+ * Approve button runs the same function (@regenhub/shared approveApplication → migration 072's
+ * approve_application): it needs a member's vouch, turns the person into an approved member and emails them to pick
+ * a day plan from their portal. Custom pricing is no longer part of approval: it's on the member's admin page.
+ */
+export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminMember();
   if (!auth) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const adminMember = auth.member;
-
-  if (!isStripeConfigured()) {
-    return NextResponse.json(
-      { error: "Stripe is not configured on this environment" },
-      { status: 503 },
-    );
-  }
-
-  const { id: idParam } = await ctx.params;
-  const applicationId = parseInt(idParam, 10);
-  if (!applicationId) {
-    return NextResponse.json({ error: "Invalid application id" }, { status: 400 });
-  }
-
-  const body = (await req.json().catch(() => null)) as ApproveBody | null;
-  if (!body?.plan_key || !getPlan(body.plan_key)) {
-    return NextResponse.json({ error: "Missing or unknown plan_key" }, { status: 400 });
-  }
-  if (!body.monthly_cents || body.monthly_cents < 100) {
-    return NextResponse.json(
-      { error: "monthly_cents required and must be ≥ $1" },
-      { status: 400 },
-    );
-  }
-
-  const discountCents = body.discount_cents ?? 0;
-  const discountDuration: DiscountDuration | null = discountCents > 0
-    ? (body.discount_duration ?? "forever")
-    : null;
-  const discountMonths = discountDuration === "repeating" ? (body.discount_months ?? null) : null;
-  if (discountDuration === "repeating" && (!discountMonths || discountMonths < 1)) {
-    return NextResponse.json(
-      { error: "discount_months required when duration=repeating" },
-      { status: 400 },
-    );
-  }
+  const id = Number((await ctx.params).id);
+  if (!Number.isInteger(id) || id <= 0) return NextResponse.json({ error: "Invalid application id" }, { status: 400 });
 
   const admin = createServiceClient();
-
-  const { data: application } = await admin
-    .from("applications")
-    .select("*")
-    .eq("id", applicationId)
-    .single();
-  if (!application) {
-    return NextResponse.json({ error: "Application not found" }, { status: 404 });
-  }
-
-  // Idempotency: if this application already has an open Stripe Checkout
-  // Session, return its URL instead of creating a new customer + coupon +
-  // session. Protects against double-click submissions and admin re-clicks.
-  if (application.stripe_checkout_session_id && !application.checkout_completed_at) {
-    try {
-      const existing = await getStripe().checkout.sessions.retrieve(
-        application.stripe_checkout_session_id,
-      );
-      if (existing.status === "open" && existing.url) {
-        return NextResponse.json({
-          checkout_url: existing.url,
-          session_id: existing.id,
-          reused: true,
-        });
-      }
-      // Status is "complete" or "expired" — fall through to create a new one
-    } catch (err) {
-      console.warn("[ApproveApp] Couldn't retrieve existing session, creating new:", err);
-      // Fall through to create new
-    }
-  }
-
-  // Find or create the member row for this applicant.
-  let { data: member } = await admin
-    .from("members")
-    .select("id, name, email, stripe_customer_id, member_type")
-    .eq("email", application.email)
-    .maybeSingle();
-
-  // Carry the applicant's Telegram handle onto the member row — without this
-  // the handle dies on the application and the bot won't recognize them.
-  // The unique index on members.telegram_username may reject a duplicate;
-  // degrade to no-handle rather than failing the approval (mirrors the
-  // free-day trigger's behavior in migration 036).
-  const telegramHandle = application.telegram?.replace(/^@+/, "").trim() || null;
-
-  if (!member) {
-    const insertMember = (withTelegram: boolean) =>
-      admin
-        .from("members")
-        .insert({
-          name: application.name,
-          email: application.email,
-          member_type: "day_pass",
-          supabase_user_id: application.supabase_user_id,
-          ...(withTelegram && telegramHandle ? { telegram_username: telegramHandle } : {}),
-        })
-        .select("id, name, email, stripe_customer_id, member_type")
-        .single();
-    let { data: created, error: createErr } = await insertMember(true);
-    if (createErr?.code === "23505" && telegramHandle) {
-      ({ data: created, error: createErr } = await insertMember(false));
-    }
-    if (createErr || !created) {
-      console.error("[ApproveApp] Failed to create member:", createErr);
-      return NextResponse.json({ error: "Failed to create member" }, { status: 500 });
-    }
-    member = created;
-  } else if (telegramHandle) {
-    // Existing member without a handle: backfill from the application.
-    const { error: tgErr } = await admin
-      .from("members")
-      .update({ telegram_username: telegramHandle })
-      .eq("id", member.id)
-      .is("telegram_username", null);
-    if (tgErr && tgErr.code !== "23505") {
-      console.warn("[ApproveApp] Telegram backfill failed:", tgErr);
-    }
-  }
-
-  const baseUrl =
-    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://regenhub.xyz";
-
-  let checkoutUrl: string;
-  let sessionId: string;
-  let customerId: string;
-  try {
-    const result = await createApprovalCheckoutSession({
-      application_id: application.id,
-      member,
-      planKey: body.plan_key,
-      monthlyCents: body.monthly_cents,
-      discountCents: discountCents > 0 ? discountCents : null,
-      discountDuration,
-      discountMonths,
-      discountNote: body.discount_note ?? null,
-      successUrl: `${baseUrl}/portal?welcome=1`,
-      cancelUrl: `${baseUrl}/portal?checkout=cancelled`,
-    });
-    checkoutUrl = result.session.url ?? "";
-    sessionId = result.session.id;
-    customerId = result.customer.id;
-    if (!checkoutUrl) throw new Error("Stripe returned no checkout URL");
-  } catch (err) {
-    console.error("[ApproveApp] Stripe error:", err);
-    const msg = err instanceof Error ? err.message : "Stripe request failed";
-    return NextResponse.json({ error: msg }, { status: 502 });
-  }
-
-  // Persist customer id on the member if newly created
-  if (!member.stripe_customer_id) {
-    await admin
-      .from("members")
-      .update({ stripe_customer_id: customerId })
-      .eq("id", member.id);
-  }
-
-  const { error: updateErr } = await admin
-    .from("applications")
-    .update({
-      status: "approved",
-      approved_plan_key: body.plan_key,
-      approved_monthly_cents: body.monthly_cents,
-      approved_by: adminMember.id,
-      // Clear any prior rejection signal — this is a fresh approval
-      rejected_by: null,
-      rejected_at: null,
-      discount_cents: discountCents > 0 ? discountCents : null,
-      discount_duration: discountDuration,
-      discount_months: discountMonths,
-      discount_note: body.discount_note ?? null,
-      stripe_checkout_session_id: sessionId,
-      stripe_checkout_url: checkoutUrl,
-      checkout_sent_at: new Date().toISOString(),
-    })
-    .eq("id", application.id);
-
-  if (updateErr) {
-    console.error("[ApproveApp] Failed to update application:", updateErr);
-    return NextResponse.json({ error: "Failed to update application" }, { status: 500 });
-  }
-
-  // Email the applicant their checkout link. Historically this was left to the
-  // admin to copy-paste manually — which quietly meant most applicants never
-  // received anything. Best-effort: a failed send doesn't undo the approval,
-  // but the response tells the admin UI so it can prompt a manual send.
-  const plan = getPlan(body.plan_key);
-  const tpl = approvalCheckoutEmail({
-    name: application.name,
-    planLabel: plan?.label ?? body.plan_key,
-    monthlyCents: body.monthly_cents,
-    discountCents: discountCents > 0 ? discountCents : null,
-    discountDuration,
-    discountMonths,
-    checkoutUrl,
-    siteUrl: baseUrl,
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
+  const result = await approveApplication(admin, {
+    applicationId: id,
+    approverMemberId: auth.member.id,
+    via: "site",
+    siteUrl,
+    send: (mail) => sendEmail(mail),
   });
-  const emailSent = await sendEmail({ kind: "approval_checkout",
-    to: application.email,
-    subject: tpl.subject,
-    html: tpl.html,
-    text: tpl.text,
-  });
-  if (!emailSent) {
-    console.warn(`[ApproveApp] Checkout email to ${application.email} did not send — admin should share the link manually.`);
+  if (!result.ok) {
+    const status = result.reason === "not_found" ? 404 : result.reason === "waiting_for_072" ? 503
+      : result.reason === "failed" ? 500 : 409;
+    return NextResponse.json({ error: result.message, reason: result.reason }, { status });
   }
-
-  // Tell the group — the bot's standard-rate path edits its message; this
-  // gives the admin-panel path the same visibility. Fire-and-forget.
-  notifyApplicationApproved({
-    name: application.name,
-    planLabel: plan?.label ?? body.plan_key,
-    monthlyDollars: body.monthly_cents / 100,
-    emailSent,
-    email: application.email,
-  });
-
+  await refreshApplicationCard(admin, id, undefined, siteUrl).catch(() => false);
   return NextResponse.json({
-    checkout_url: checkoutUrl,
-    session_id: sessionId,
-    email_sent: emailSent,
-    email_to: application.email,
+    approved: true,
+    already: result.already,
+    member_id: result.memberId,
+    email_sent: result.emailSent,
+    email_to: result.email,
   });
 }

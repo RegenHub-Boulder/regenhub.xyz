@@ -2,110 +2,10 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { ALREADY_MEMBER, isAlreadyMember } from "@/lib/freeDayClaim";
-import { freeDayAlreadyMemberEmail, freeDayReceivedEmail, sendEmail } from "@/lib/email";
-
-/** Post an informational notification for invited free days */
-async function notifyTelegramInvited(claim: {
-  name: string;
-  email: string;
-  inviter_name: string;
-  know_at_hub?: string;
-  telegram?: string;
-}) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_GROUP_CHAT_ID;
-  if (!token || !chatId) return;
-
-  const lines = [
-    `🎟️ *Free Day*`,
-    ``,
-    `*${claim.name}*  ·  ${claim.email}`,
-    `Invited by: *${claim.inviter_name}*`,
-    `Visits any weekday`,
-  ];
-  if (claim.telegram) lines.push(`Telegram: @${claim.telegram.replace(/_/g, "\\_")}`);
-  if (claim.know_at_hub) lines.push(`Knows: ${claim.know_at_hub}`);
-
-  try {
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: lines.join("\n"),
-        parse_mode: "Markdown",
-        disable_web_page_preview: true,
-      }),
-    });
-  } catch (err) {
-    console.error("[FreeDay] Telegram notify error:", err);
-  }
-}
-
-/** Post an application to Telegram with an Approve button */
-async function notifyTelegramApplication(claim: {
-  id: number;
-  name: string;
-  email: string;
-  about: string;
-  why_join: string;
-  know_at_hub?: string;
-  telegram?: string;
-}) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_GROUP_CHAT_ID;
-  if (!token || !chatId) return;
-
-  const lines = [
-    `🎟️ *Free Day Application*`,
-    ``,
-    `*${claim.name}*  ·  ${claim.email}`,
-    `Visits any weekday`,
-  ];
-  if (claim.telegram) {
-    lines.push(`Telegram: @${claim.telegram.replace(/_/g, "\\_")}`);
-  }
-  if (claim.know_at_hub) {
-    lines.push(`Knows at hub: ${claim.know_at_hub}`);
-  }
-  lines.push(
-    ``,
-    `*What are you working on?*`,
-    claim.about,
-    ``,
-    `*Why RegenHub?*`,
-    claim.why_join,
-  );
-
-  try {
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: lines.join("\n"),
-        parse_mode: "Markdown",
-        disable_web_page_preview: true,
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: "✅ Free day only",
-                callback_data: `freeday_approve_${claim.id}`,
-              },
-              {
-                text: "✅ Free day + Membership",
-                callback_data: `freeday_approve_membership_${claim.id}`,
-              },
-            ],
-          ],
-        },
-      }),
-    });
-  } catch (err) {
-    console.error("[FreeDay] Telegram application notify error:", err);
-  }
-}
+import { freeDayAlreadyMemberEmail, freeDayApprovedEmail, freeDayReceivedEmail, sendEmail } from "@/lib/email";
+import { freeDayCard, postCard } from "@regenhub/shared";
+import { freeDayDecision, knownWords, whoKnows } from "@/lib/freeDayRule";
+import { currentTechne } from "@/lib/techne/webSession";
 
 /** Whether an email of this kind went to this address in the last day (email_log, 069): one answer a day is enough. */
 async function sentRecently(admin: ReturnType<typeof createServiceClient>, email: string, kind: string): Promise<boolean> {
@@ -204,6 +104,12 @@ export async function POST(req: Request) {
   if (user && !ownEmail) {
     return NextResponse.json({ error: "Sign out to ask for a free day with another email." }, { status: 400 });
   }
+  // The free-day rule (lib/freeDayRule.ts): approved at once when we know them, else one tap in the members' chat.
+  const known = await whoKnows(admin, { email: normalizedEmail, inviter, did: (await currentTechne(admin).catch(() => null))?.did ?? null })
+    .catch(() => null);
+  const autoApprove = freeDayDecision(known) === "approve";
+  // Signed out, the page's answer doesn't depend on who the email belongs to (whether we know them, whether they're a
+  // member or asked before): only on what the person typed (an invite link). The email tells its owner the rest.
   const quietly = inviter ? "reserved" : "pending";
   if (!ownEmail && await isAlreadyMember(admin, normalizedEmail)) {
     if (!await sentRecently(admin, normalizedEmail, "free_day_already_member")) {
@@ -231,7 +137,7 @@ export async function POST(req: Request) {
   }
 
   // claimed_date is NULL by design (visit any weekday).
-  const status = inviter ? "reserved" : "pending";
+  const status = autoApprove ? "reserved" : "pending";
   const fields = {
     email: normalizedEmail,
     name: name.trim(),
@@ -243,11 +149,12 @@ export async function POST(req: Request) {
     why_join: why_join?.trim() || null,
     know_at_hub: know_at_hub?.trim() || null,
     telegram: telegramHandle,
+    approved_by: autoApprove ? (known ? `auto: ${knownWords(known)}` : "auto") : null,
   };
   const { data: inserted, error: dbError } = existing
     ? await admin
       .from("free_day_claims")
-      .update({ ...fields, created_at: new Date().toISOString(), day_code_id: null, activated_at: null, approved_by: null })
+      .update({ ...fields, created_at: new Date().toISOString(), day_code_id: null, activated_at: null })
       .eq("id", existing.id)
       .eq("status", "expired")
       .select("id")
@@ -272,35 +179,27 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Failed to save claim" }, { status: 500 });
   }
 
-  // A claim a person has to review: tell them it arrived.
-  if (status === "pending") {
-    const tpl = freeDayReceivedEmail({ name: name.trim(), siteUrl });
-    await sendEmail({ kind: "free_day_received", to: normalizedEmail, ...tpl })
-      .catch((err) => console.error("[FreeDay] received email failed:", err));
-  }
+  // Tell them where it stands: approved now, or it arrived and a member will look within a day.
+  const tpl = status === "reserved"
+    ? freeDayApprovedEmail({ name: name.trim(), siteUrl })
+    : freeDayReceivedEmail({ name: name.trim(), siteUrl });
+  await sendEmail({ kind: status === "reserved" ? "free_day_approved" : "free_day_received", to: normalizedEmail, ...tpl })
+    .catch((err) => console.error("[FreeDay] email failed:", err));
 
-  // Notify Telegram (fire-and-forget)
-  if (inviter) {
-    notifyTelegramInvited({
-      name: name.trim(),
-      email: normalizedEmail,
-      inviter_name: inviter.name,
-      know_at_hub: know_at_hub?.trim() || undefined,
-      telegram: telegramHandle ?? undefined,
-    });
-  } else {
-    notifyTelegramApplication({
-      id: inserted.id,
-      name: name.trim(),
-      email: normalizedEmail,
-      about: about!.trim(),
-      why_join: why_join!.trim(),
-      know_at_hub: know_at_hub?.trim() || undefined,
-      telegram: telegramHandle ?? undefined,
-    });
-  }
+  // The members' chat: one tap to approve, or a note saying why it was approved at once (fire-and-forget).
+  void postCard(freeDayCard({
+    id: inserted.id,
+    name: name.trim(),
+    email: normalizedEmail,
+    status,
+    telegram: telegramHandle,
+    about: about?.trim() || null,
+    why_join: why_join?.trim() || null,
+    know_at_hub: know_at_hub?.trim() || null,
+    approvedBecause: status === "reserved" ? (known ? knownWords(known) : "approved at once") : null,
+  })).catch((err) => console.error("[FreeDay] chat card failed:", err));
 
   // Signed out: a sign-in link so they can see where it stands and get their code.
   if (!user) await sendSignInLink();
-  return answer(status);
+  return answer(ownEmail ? status : quietly);
 }

@@ -6,7 +6,8 @@ import { NextActions, type NextAction } from "@/components/admin/NextActions";
 import { readScoreboard } from "@/lib/scoreboardData";
 import { ACTION_RULES, type RecommendedAction } from "@/lib/scoreboardActions";
 import { SCOREBOARD_TZ, usd } from "@/lib/scoreboard";
-import { adminQueue } from "@/lib/adminQueue";
+import { adminQueue, lateItems } from "@/lib/adminQueue";
+import { missingColumn } from "@/lib/approval";
 import { lockWriterStatus, readLockWriter } from "@/lib/lockWriterStatus";
 import { fmtBoulderDateTime } from "@/lib/boulderTime";
 import { readAll } from "@/lib/supabase/readAll";
@@ -39,10 +40,12 @@ export default async function AdminHome() {
   // eslint-disable-next-line react-hooks/purity -- server component, renders once per request
   const nowMs = Date.now();
   const dayAgo = new Date(nowMs - 24 * 60 * 60 * 1000).toISOString();
-  const [s, apps, freeDays, desks, live, lastSync, quarantine, doorFailures, writer] = await Promise.all([
+  const [s, apps, freeDays, deskAsks, desks, live, lastSync, quarantine, doorFailures, writer] = await Promise.all([
     settle("scoreboard", readScoreboard(admin)),
-    admin.from("applications").select("id", { count: "exact", head: true }).eq("status", "pending"),
-    admin.from("free_day_claims").select("id", { count: "exact", head: true }).eq("status", "pending"),
+    admin.from("applications").select("id, name, created_at").eq("status", "pending"),
+    admin.from("free_day_claims").select("id, name, created_at").eq("status", "pending"),
+    // Before migration 072 the columns are missing: no desk asks yet, not "couldn't check".
+    admin.from("members").select("id", { count: "exact", head: true }).not("desk_asked_at", "is", null).eq("desk_access", false),
     settle("desk members", readAll<{ id: number; disabled: boolean; member_type: string }>("desk members", (from, to) => admin.from("members")
       .select("id, disabled, member_type").in("member_type", [...DESK_MEMBER_TYPES]).order("id").range(from, to))),
     settle("billed subscriptions", readAll<{ member_id: number; status: string }>("billed subscriptions", (from, to) => admin.from("subscriptions")
@@ -59,11 +62,16 @@ export default async function AdminHome() {
     doorWriteFailures: count(doorFailures),
     // Every past-due subscription, as Billing counts them; the item opens Members filtered to overdue (per member).
     pastDue: live && live.filter((r) => r.status === "past_due").length,
-    pendingApplications: count(apps),
-    pendingFreeDays: count(freeDays),
+    pendingApplications: apps.error ? null : (apps.data ?? []).length,
+    pendingFreeDays: freeDays.error ? null : (freeDays.data ?? []).length,
+    deskAsks: deskAsks.error ? (missingColumn(deskAsks.error) ? 0 : null) : deskAsks.count ?? 0,
     // The same predicate as its link (/admin/members?status=unbilled_desk), so the count is the list.
     unbilledDesks: desks && live ? countUnbilledDesks(desks, live) : null,
-  }, writerNow?.state === "stuck" ? { holder: writerNow.holder, since: fmtBoulderDateTime(writerNow.since), recovers: writerNow.recovers } : null);
+  }, writerNow?.state === "stuck" ? { holder: writerNow.holder, since: fmtBoulderDateTime(writerNow.since), recovers: writerNow.recovers } : null,
+  lateItems([
+    ...(apps.data ?? []).map((a) => ({ kind: "application" as const, id: a.id, name: a.name, createdAt: a.created_at })),
+    ...(freeDays.data ?? []).map((c) => ({ kind: "free day" as const, id: c.id, name: c.name, createdAt: c.created_at })),
+  ], nowMs));
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: SCOREBOARD_TZ });
 
   return (

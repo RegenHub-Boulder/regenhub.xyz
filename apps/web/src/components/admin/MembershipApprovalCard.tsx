@@ -4,201 +4,151 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { ShieldCheck, Mail, Loader2, Armchair } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { ShieldCheck, Mail, Loader2, Armchair, Tag } from "lucide-react";
+import { getAllPlansSorted } from "@/lib/plans";
 
 interface Props {
   memberId: number;
-  /** Currently unused — kept on the caller for parity with other admin cards. */
-  memberName?: string;
   memberEmail: string | null;
+  /** The one approval (lib/approval.ts approvalOf). */
   approved: boolean;
   approvedAt: string | null;
   approvedByName: string | null;
-  approvedForFull: boolean;
-  approvedForFullAt: string | null;
-  approvedForFullByName: string | null;
+  /** Who vouched on their application, if they came in that way. */
+  vouch: { name: string; at: string | null } | null;
+  desk: boolean;
+  deskAt: string | null;
+  deskByName: string | null;
+  deskAskedAt: string | null;
+  /** canApproveDesks for the signed-in steward. */
+  canDesks: boolean;
   hasActiveSubscription: boolean;
 }
 
+const PLANS = getAllPlansSorted().map(({ key, def }) => ({ key, label: def.label, dollars: def.defaultMonthlyCents / 100 }));
+
 function fmtDate(iso: string | null): string {
   if (!iso) return "";
-  return new Date(iso).toLocaleDateString("en-US", {
-    timeZone: "America/Denver",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return new Date(iso).toLocaleDateString("en-US", { timeZone: "America/Denver", month: "short", day: "numeric", year: "numeric" });
 }
 
-export function MembershipApprovalCard({
-  memberId,
-  memberEmail,
-  approved: initialApproved,
-  approvedAt,
-  approvedByName,
-  approvedForFull: initialDeskApproved,
-  approvedForFullAt,
-  approvedForFullByName,
-  hasActiveSubscription,
-}: Props) {
+/**
+ * Joining, on the member page (T-482 round 5): the one approval (who approved, who vouched), desk access (only a
+ * steward who approves desks switches it), and a custom price: a checkout link at a price the steward sets.
+ */
+export function MembershipApprovalCard(p: Props) {
   const router = useRouter();
-  const [approved, setApproved] = useState(initialApproved);
-  const [approvedForFull, setApprovedForFull] = useState(initialDeskApproved);
-  const [busy, setBusy] = useState<"toggle" | "toggleFull" | "email" | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [emailStatus, setEmailStatus] = useState<"sent" | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [showPrice, setShowPrice] = useState(false);
+  const [planKey, setPlanKey] = useState<string>(PLANS[0]?.key ?? "member_basic");
+  const [dollars, setDollars] = useState(String(PLANS[0]?.dollars ?? 30));
+  const [note, setNote] = useState("");
 
-  async function toggle(level: "daily" | "full") {
-    const isFull = level === "full";
-    const next = !(isFull ? approvedForFull : approved);
-    setBusy(isFull ? "toggleFull" : "toggle");
+  async function call(label: string, url: string, init: RequestInit, done: (j: Record<string, unknown>) => string) {
+    setBusy(label);
     setError(null);
+    setNotice(null);
     try {
-      const res = await fetch(`/api/admin/members/${memberId}/approve-membership`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ approved: next, level }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        setError(data?.error ?? "Update failed");
-        return;
-      }
-      if (isFull) {
-        setApprovedForFull(next);
-        // Granting Full implies Daily — reflect locally
-        if (next) setApproved(true);
-      } else {
-        setApproved(next);
-      }
+      const res = await fetch(url, { headers: { "Content-Type": "application/json" }, ...init });
+      const j = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) { setError((j.error as string) ?? "Request failed"); return; }
+      setNotice(done(j));
       router.refresh();
     } finally {
       setBusy(null);
     }
   }
-
-  async function sendEmail() {
-    setBusy("email");
-    setError(null);
-    setEmailStatus(null);
-    try {
-      const res = await fetch(`/api/admin/members/${memberId}/send-approval-email`, {
-        method: "POST",
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        setError(data?.error ?? "Email send failed");
-        return;
-      }
-      setEmailStatus("sent");
-    } finally {
-      setBusy(null);
-    }
-  }
+  const spin = (label: string) => busy === label ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null;
 
   return (
     <Card className="glass-panel">
       <CardContent className="p-6 space-y-5">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="w-5 h-5 text-sage" />
-          <h3 className="font-semibold">Approval ladder</h3>
-        </div>
+        <h2 className="font-semibold">Joining</h2>
 
-        <p className="text-xs text-muted italic">
-          Three explicit levels — each granted separately. Free-day approval lives on the
-          free-day claim. These two gate self-serve subscription.
-        </p>
-
-        {/* Daily-membership approval row (social tiers $30/$50/$100) */}
-        <div className="space-y-3 pt-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <ShieldCheck className="w-4 h-4 text-sage" />
-            <p className="text-sm font-medium">Daily Member ($30 / $50 / $100)</p>
-            {approved ? (
-              <Badge className="text-xs bg-ok/10 text-ok border-ok/40">Approved</Badge>
+        <section className="space-y-2" data-testid="member-approval">
+          <p className="text-sm flex items-start gap-2">
+            <ShieldCheck className={`w-4 h-4 mt-0.5 shrink-0 ${p.approved ? "text-ok" : "text-muted"}`} />
+            {p.approved ? (
+              <span>
+                Approved as a member{p.approvedAt ? ` on ${fmtDate(p.approvedAt)}` : ""}{p.approvedByName ? ` by ${p.approvedByName}` : ""}
+                {p.vouch ? `; ${p.vouch.name} vouched${p.vouch.at ? ` on ${fmtDate(p.vouch.at)}` : ""}` : ""}.
+                {!p.hasActiveSubscription && " They pick a day plan from their portal."}
+              </span>
             ) : (
-              <Badge className="text-xs bg-tint text-muted border-rule">Not approved</Badge>
+              <span className="text-muted">Not approved. Approval comes from an application: a member vouches, then a steward approves.</span>
             )}
-          </div>
-          {approved && approvedAt && (
-            <p className="text-xs text-muted">
-              Granted {fmtDate(approvedAt)}
-              {approvedByName && <> by <span className="text-sage">{approvedByName}</span></>}
-            </p>
-          )}
-          <Button
-            size="sm"
-            disabled={busy !== null}
-            onClick={() => toggle("daily")}
-            className={
-              approved
-                ? "btn-glass text-xs h-7 gap-1"
-                : "bg-ok/10 hover:bg-ok/20 text-ok border border-ok/40 text-xs h-7 gap-1"
-            }
-          >
-            {busy === "toggle" ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
-            {approved ? "Revoke Daily approval" : "Approve for Daily"}
-          </Button>
-        </div>
-
-        {/* Full-membership approval row (Hot $250 / Cold $500) */}
-        <div className="space-y-3 pt-3 border-t border-rule">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Armchair className="w-4 h-4 text-gold" />
-            <p className="text-sm font-medium">Full Member (Hot $250 / Cold $500)</p>
-            {approvedForFull ? (
-              <Badge className="text-xs bg-gold/20 text-gold border-gold/30">Approved</Badge>
-            ) : (
-              <Badge className="text-xs bg-tint text-muted border-rule">Not approved</Badge>
-            )}
-          </div>
-          <p className="text-xs text-muted">
-            Grant after the welcome chat. Full Member approval also grants Daily
-            approval (the more permissive flag). Subscriptions auto-allocate a PIN slot
-            on Stripe activation.
           </p>
-          {approvedForFull && approvedForFullAt && (
-            <p className="text-xs text-muted">
-              Granted {fmtDate(approvedForFullAt)}
-              {approvedForFullByName && <> by <span className="text-sage">{approvedForFullByName}</span></>}
-            </p>
+          {p.approved && (
+            <div className="flex flex-wrap gap-2">
+              {!p.hasActiveSubscription && p.memberEmail && (
+                <Button size="sm" variant="ghost" className="gap-1.5" disabled={!!busy}
+                  onClick={() => call("email", `/api/admin/members/${p.memberId}/send-approval-email`, { method: "POST" }, () => `Sent to ${p.memberEmail}.`)}>
+                  {spin("email") ?? <Mail className="w-3.5 h-3.5" />} Email &ldquo;pick your plan&rdquo; again
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" className="gap-1.5 text-danger" disabled={!!busy}
+                onClick={() => call("revoke", `/api/admin/members/${p.memberId}/approve-membership`,
+                  { method: "PATCH", body: JSON.stringify({ level: "member", approved: false }) }, () => "Approval taken back.")}>
+                {spin("revoke")} Take approval back
+              </Button>
+            </div>
           )}
-          <Button
-            size="sm"
-            disabled={busy !== null}
-            onClick={() => toggle("full")}
-            className={
-              approvedForFull
-                ? "btn-glass text-xs h-7 gap-1"
-                : "bg-gold/20 hover:bg-gold/40 text-gold border border-gold/30 text-xs h-7 gap-1"
-            }
-          >
-            {busy === "toggleFull" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Armchair className="w-3 h-3" />}
-            {approvedForFull ? "Revoke Full approval" : "Approve for Full"}
-          </Button>
-        </div>
+        </section>
 
-        {hasActiveSubscription && (
-          <p className="text-xs text-warn">
-            Member already has an active subscription — approval changes here won&apos;t affect it.
+        <section className="space-y-2 border-t border-rule pt-4" data-testid="desk-access">
+          <p className="text-sm flex items-start gap-2">
+            <Armchair className={`w-4 h-4 mt-0.5 shrink-0 ${p.desk ? "text-ok" : "text-muted"}`} />
+            <span>
+              {p.desk
+                ? `Desk access on${p.deskAt ? ` since ${fmtDate(p.deskAt)}` : ""}${p.deskByName ? `, by ${p.deskByName}` : ""}: they can pick a hot or cold desk.`
+                : "No desk access: they can't pick a desk."}
+              {p.deskAskedAt && !p.desk && <strong className="text-warn"> Asked about a desk on {fmtDate(p.deskAskedAt)}.</strong>}
+            </span>
           </p>
-        )}
-
-        {(approved || approvedForFull) && memberEmail && (
-          <div className="pt-3 border-t border-rule">
-            <Button
-              size="sm"
-              disabled={busy !== null}
-              onClick={sendEmail}
-              className="btn-glass text-xs h-7 gap-1"
-            >
-              {busy === "email" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mail className="w-3 h-3" />}
-              {emailStatus === "sent" ? "Email sent ✓" : "Send approval email"}
+          {p.canDesks ? (
+            <Button size="sm" className={p.desk ? "btn-glass" : "btn-primary-glass"} disabled={!!busy}
+              onClick={() => call("desk", `/api/admin/members/${p.memberId}/approve-membership`,
+                { method: "PATCH", body: JSON.stringify({ level: "desk", approved: !p.desk }) },
+                () => p.desk ? "Desk access off." : "Desk access on. Tell them they can pick a desk from their portal.")}>
+              {spin("desk")} {p.desk ? "Turn desk access off" : "Turn desk access on"}
             </Button>
-          </div>
-        )}
+          ) : (
+            <p className="text-xs text-muted">Desk access is turned on by a steward who approves desks (ops admin), after a talk.</p>
+          )}
+        </section>
 
+        <section className="space-y-3 border-t border-rule pt-4">
+          <button type="button" className="text-sm text-sage hover:underline flex items-center gap-1.5" onClick={() => setShowPrice((v) => !v)}>
+            <Tag className="w-3.5 h-3.5" /> Custom price…
+          </button>
+          {showPrice && (
+            <div className="space-y-3">
+              <p className="text-xs text-muted">A checkout link at the price you set, emailed to {p.memberEmail ?? "them"}. For sliding scale or a deal you agreed.</p>
+              <div className="flex flex-wrap gap-2 items-center">
+                <select value={planKey} onChange={(e) => { setPlanKey(e.target.value); setDollars(String(PLANS.find((x) => x.key === e.target.value)?.dollars ?? "")); }}
+                  className="rounded-md px-3 py-2 text-sm glass-input" aria-label="Plan">
+                  {PLANS.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
+                </select>
+                <span className="text-sm">$</span>
+                <Input value={dollars} onChange={(e) => setDollars(e.target.value)} className="glass-input w-24" inputMode="decimal" aria-label="Monthly price in dollars" />
+                <span className="text-sm text-muted">a month</span>
+              </div>
+              <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (shows on the coupon, optional)" className="glass-input" />
+              <Button size="sm" className="btn-primary-glass" disabled={!!busy || !p.memberEmail}
+                onClick={() => call("price", `/api/admin/members/${p.memberId}/custom-price`, {
+                  method: "POST",
+                  body: JSON.stringify({ plan_key: planKey, monthly_cents: Math.round(Number(dollars) * 100), discount_note: note || undefined }),
+                }, (j) => j.email_sent ? `Link emailed to ${j.email_to}.` : `Link made, but the email didn't send: ${j.checkout_url}`)}>
+                {spin("price")} Make the link and email it
+              </Button>
+            </div>
+          )}
+        </section>
+
+        {notice && <p className="text-xs text-ok break-all">{notice}</p>}
         {error && <p className="text-xs text-danger">{error}</p>}
       </CardContent>
     </Card>

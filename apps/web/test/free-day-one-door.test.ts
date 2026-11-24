@@ -311,8 +311,8 @@ describe("the emails a claim gets", () => {
 
   it("no '$' typed into the free-day emails: prices come from the shared catalog", async () => {
     const shared = await import("@regenhub/shared");
-    const t = shared.freeDayPlusMembershipApprovedEmail({ name: "Pat", siteUrl: "https://x" });
-    expect(t.text).toContain(`starts at ${shared.dollars(shared.PLAN_MONTHLY_CENTS.member_basic)} a month`);
+    const t = shared.membershipApprovedEmail({ name: "Pat", siteUrl: "https://x" });
+    expect(t.text).toContain(`${shared.dollars(shared.PLAN_MONTHLY_CENTS.member_basic)} a month`);
     const { readFile } = await import("node:fs/promises");
     for (const f of ["../../packages/shared/src/freeDayEmails.ts", "../bot/src/email.ts"]) {
       const src = await readFile(new URL(f, `file://${process.cwd()}/`), "utf8");

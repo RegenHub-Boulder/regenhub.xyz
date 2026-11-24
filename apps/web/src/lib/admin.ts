@@ -18,12 +18,13 @@ export async function requireAdminMember() {
 
   const { data } = await supabase
     .from("members")
-    .select("id, name, is_admin, disabled")
+    .select("id, name, is_admin, is_ops_admin, disabled")
     .eq("supabase_user_id", user.id)
     .single();
 
   if (!data?.is_admin || data.disabled) return null;
-  return { user, member: { id: data.id, name: data.name } };
+  // isOpsAdmin: with is_admin, who may turn desk access on (lib/approval.ts canApproveDesks).
+  return { user, member: { id: data.id, name: data.name, isOpsAdmin: !!data.is_ops_admin } };
 }
 
 /** `requireAdminMember` for routes that only need the yes/no. */

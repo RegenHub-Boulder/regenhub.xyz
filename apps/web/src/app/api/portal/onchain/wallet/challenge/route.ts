@@ -1,3 +1,4 @@
+import { approvalOf } from "@/lib/approval";
 import { NextResponse } from "next/server";
 import { getAddress, isAddress } from "viem";
 import { createServiceClient } from "@/lib/supabase/admin";
@@ -43,10 +44,10 @@ export async function POST(request: Request) {
       }
       const { data: member } = await admin
         .from("members")
-        .select("approved_for_daily, approved_for_full")
+        .select("*")
         .eq("id", session.member.id)
         .single();
-      if (!member?.approved_for_daily && !member?.approved_for_full) {
+      if (!approvalOf(member).member) {
         return NextResponse.json({ error: "Membership has not been approved yet" }, { status: 403 });
       }
     }

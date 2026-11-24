@@ -3,15 +3,15 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { sendEmail, membershipApprovedEmail } from "@/lib/email";
+import { approvalOf } from "@/lib/approval";
 
 /**
  * POST /api/admin/members/[id]/send-approval-email
  *
- * Sends the member the "you're approved to subscribe" email. Separate
- * from the toggle endpoint so admins can flip approval silently and
- * choose when to send the email (e.g., after a personal note).
+ * Sends an approved member the "pick your plan" email again (the one approval
+ * sends it once; this is the member page's "Email it again").
  *
- * Only valid for members who already have approved_for_daily=true.
+ * Only for members who are approved (lib/approval.ts approvalOf).
  */
 export async function POST(
   req: Request,
@@ -32,7 +32,7 @@ export async function POST(
   const admin = createServiceClient();
   const { data: member } = await admin
     .from("members")
-    .select("id, name, email, approved_for_daily")
+    .select("*")
     .eq("id", memberId)
     .single();
 
@@ -42,9 +42,9 @@ export async function POST(
   if (!member.email) {
     return NextResponse.json({ error: "Member has no email" }, { status: 400 });
   }
-  if (!member.approved_for_daily) {
+  if (!approvalOf(member).member) {
     return NextResponse.json(
-      { error: "Member isn't marked as approved yet — flip the toggle first." },
+      { error: "They aren't approved yet: approval comes from their application." },
       { status: 400 },
     );
   }

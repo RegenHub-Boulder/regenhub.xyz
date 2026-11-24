@@ -178,7 +178,7 @@ export default function FreeDayForm({
               <CheckCircle className="w-12 h-12 text-sage mx-auto mb-4" />
             )}
             <h1 className="text-2xl font-bold text-forest mb-3">
-              {isPending ? "Application Submitted!" : "Check Your Email!"}
+              {isPending ? "Got it" : "Check your email"}
             </h1>
             <p className="text-muted mb-2">
               We&apos;ve sent a sign-in link to{" "}
@@ -186,7 +186,7 @@ export default function FreeDayForm({
             </p>
             <p className="text-sm text-muted mb-8">
               {isPending
-                ? "A community member will review your application shortly. Click the email link to check your status."
+                ? "A member will look at it within a day, and we'll email you. The link in that email shows where it stands."
                 : "Click the link to confirm your email and get your free day pass code."}
             </p>
             <Link href="/">
@@ -210,17 +210,16 @@ export default function FreeDayForm({
           <CardContent className="p-10 text-center">
             <Clock className="w-12 h-12 text-sage mx-auto mb-4" />
 <h1 className="text-2xl font-bold text-forest mb-3">
-              Application Under Review
+              Waiting for a member
             </h1>
             <p className="text-muted mb-2">
-              Your free day application is being reviewed.
+              Your free day is waiting for a member to approve it.
               {claim.claimed_date && (
                 <> Originally requested for <strong className="text-foreground">{formatDate(claim.claimed_date)}</strong>.</>
               )}
             </p>
             <p className="text-sm text-muted mb-6">
-              A community member will approve your visit shortly. Check back
-              here or watch your email for updates.
+              We answer within a day. Check back here or watch your email.
             </p>
             <div className="glass-panel-subtle p-4 rounded-lg text-left space-y-2">
               <div className="flex items-center gap-2 text-sm text-muted">

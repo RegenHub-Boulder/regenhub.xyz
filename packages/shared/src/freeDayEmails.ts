@@ -12,7 +12,6 @@ export interface EmailTemplate {
 }
 
 const ADDRESS = "1515 Walnut St, Suite 200, Boulder, CO";
-const MEMBERSHIP_FROM = dollars(PLAN_MONTHLY_CENTS.member_basic);
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 /** The greeting's first name: `html` escaped for the HTML part, `text` as typed for the plain-text part. */
@@ -50,7 +49,7 @@ function approvedBody(first: { html: string; text: string }, base: string) {
   };
 }
 
-/** Sent when a free-day claim is approved (web: People → Free days; bot: "Free day only"; or an invite link). */
+/** Sent when a free-day claim is approved (web: People → Free days; the chat card; or an invite link). */
 export function freeDayApprovedEmail(args: { name: string; siteUrl: string }): EmailTemplate {
   const first = firstNameOf(args.name);
   const body = approvedBody(first, siteBase(args.siteUrl));
@@ -60,21 +59,6 @@ export function freeDayApprovedEmail(args: { name: string; siteUrl: string }): E
         <p>Any questions, just reply. A person reads these.</p>
         <p>See you soon,<br>RegenHub</p>`),
     text: `${body.text}\n\nAny questions, just reply. A person reads these.\n\nSee you soon,\nRegenHub`,
-  };
-}
-
-/** Sent when a free-day claim is approved and the person is also cleared to join ("Free day + Membership"). */
-export function freeDayPlusMembershipApprovedEmail(args: { name: string; siteUrl: string }): EmailTemplate {
-  const first = firstNameOf(args.name);
-  const base = siteBase(args.siteUrl);
-  const body = approvedBody(first, base);
-  return {
-    subject: "Your free day at RegenHub, and membership when you want it",
-    html: shell(`        ${body.html}
-        <p style="margin-top: 24px;">You&rsquo;re also cleared to join whenever you like. Membership starts at ${MEMBERSHIP_FROM} a month: ${link(`${base}/membership`, "see the plans")}.</p>
-        <p>Any questions, just reply. A person reads these.</p>
-        <p>See you soon,<br>RegenHub</p>`),
-    text: `${body.text}\n\nYou're also cleared to join whenever you like. Membership starts at ${MEMBERSHIP_FROM} a month: ${base}/membership\n\nAny questions, just reply. A person reads these.\n\nSee you soon,\nRegenHub`,
   };
 }
 
@@ -126,31 +110,29 @@ export function freeDayDeclinedEmail(args: { name: string; siteUrl: string }): E
 }
 
 /**
- * Sent when a membership application is approved at the standard rate (bot "Approve", web Applications): they choose
- * a plan at /membership.
+ * Sent when an application is approved (the one approval: the chat card or People → Applications, both through
+ * ./joining.ts approveApplication). They pick a day plan themselves; a desk comes later, from the portal.
  */
 export function membershipApprovedEmail(args: { name: string; siteUrl: string }): EmailTemplate {
   const first = firstNameOf(args.name);
   const base = siteBase(args.siteUrl);
   const p = PLAN_MONTHLY_CENTS;
   const plans: [string, string][] = [
-    [`${dollars(p.member_basic)} a month`, "one coworking day a month, the member nights and demos"],
+    [`${dollars(p.member_basic)} a month`, "one day a month"],
     [`${dollars(p.member_2day)} a month`, "two days a month"],
     [`${dollars(p.member_5day)} a month`, "five days a month"],
-    [`Hot desk, ${dollars(p.hot_desk)} a month`, "every day, 24/7, your own door code"],
-    [`Cold desk, ${dollars(p.cold_desk)} a month`, "a desk of your own, 24/7, your own door code"],
   ];
   return {
-    subject: "You're cleared to join RegenHub",
+    subject: "Welcome to RegenHub: pick your plan",
     html: shell(`        <p>Hi ${first.html},</p>
-        <p>You&rsquo;re approved to join RegenHub whenever you&rsquo;re ready. The plans:</p>
+        <p>You&rsquo;re approved: welcome to RegenHub. Pick a day plan whenever you&rsquo;re ready, by card or USDC. Every plan has the member demos and Studio Night.</p>
         <ul style="line-height: 1.7; padding-left: 20px;">
           ${plans.map(([a, b]) => `<li><strong>${a}</strong>: ${b}</li>`).join("\n          ")}
         </ul>
-        <p>Days you don&rsquo;t use carry over. Members pay ${dollars(DAY_PASS_MEMBER_CENTS)} for an extra day pass.</p>
-        ${button(`${base}/membership`, "Choose a plan")}
+        <p>Days you don&rsquo;t use carry over. Members pay ${dollars(DAY_PASS_MEMBER_CENTS)} for an extra day pass. Want a desk later? Ask from your portal.</p>
+        ${button(`${base}/portal`, "Pick my plan")}
         <p>Any questions, just reply.</p>
         <p>RegenHub</p>`),
-    text: `Hi ${first.text},\n\nYou're approved to join RegenHub whenever you're ready. The plans:\n\n${plans.map(([a, b]) => `- ${a}: ${b}`).join("\n")}\n\nDays you don't use carry over. Members pay ${dollars(DAY_PASS_MEMBER_CENTS)} for an extra day pass.\n\nChoose a plan: ${base}/membership\n\nAny questions, just reply.\n\nRegenHub`,
+    text: `Hi ${first.text},\n\nYou're approved: welcome to RegenHub. Pick a day plan whenever you're ready, by card or USDC. Every plan has the member demos and Studio Night.\n\n${plans.map(([a, b]) => `- ${a}: ${b}`).join("\n")}\n\nDays you don't use carry over. Members pay ${dollars(DAY_PASS_MEMBER_CENTS)} for an extra day pass. Want a desk later? Ask from your portal.\n\nPick my plan: ${base}/portal\n\nAny questions, just reply.\n\nRegenHub`,
   };
 }

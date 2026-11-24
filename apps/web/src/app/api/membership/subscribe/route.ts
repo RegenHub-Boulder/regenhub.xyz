@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { approvalOf, planGate, type ApprovalRow } from "@/lib/approval";
 import Stripe from "stripe";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
@@ -23,9 +24,9 @@ interface SubscribeBody {
  *
  * Self-serve subscription signup for any tier flagged `selfServe` in
  * lib/plans.ts — currently every tier from $30 Member+1 day up to
- * $500 Cold Desk. The only real gate is `approved_for_daily`:
- * everyone needs to go through the free-day → approval flow before
- * they can attach a card.
+ * $500 Cold Desk. The gate is lib/approval.ts `planGate`: a day plan needs
+ * the one approval (apply, a member vouches, a steward approves); a desk
+ * needs desk access, which a steward turns on for a member who asked.
  *
  * Works for both authenticated and unauthenticated users:
  * - Authed: uses the linked member record
@@ -73,9 +74,7 @@ export async function POST(req: Request) {
     stripe_customer_id: string | null;
     member_type: string;
     supabase_user_id: string | null;
-    approved_for_daily: boolean;
-    approved_for_full: boolean;
-  };
+  } & ApprovalRow;
 
   let member: SubscriptionMember | null = null;
   let memberEmail: string | null = null;
@@ -83,7 +82,7 @@ export async function POST(req: Request) {
   if (user) {
     const { data: linkedMember, error: linkedMemberError } = await admin
       .from("members")
-      .select("id, name, email, stripe_customer_id, member_type, supabase_user_id, approved_for_daily, approved_for_full")
+      .select("*")
       .eq("supabase_user_id", user.id)
       .maybeSingle();
     if (linkedMemberError) {
@@ -115,7 +114,7 @@ export async function POST(req: Request) {
   if (!member && memberEmail) {
     const { data: emailMember, error: emailMemberError } = await admin
       .from("members")
-      .select("id, name, email, stripe_customer_id, member_type, supabase_user_id, approved_for_daily, approved_for_full")
+      .select("*")
       .eq("email", memberEmail)
       .maybeSingle();
     if (emailMemberError) {
@@ -134,26 +133,9 @@ export async function POST(req: Request) {
     );
   }
 
-  // Three-level gate: membership for social tiers, desk for desk tiers.
-  const isDeskTier =
-    plan.grantsMemberType === "cold_desk" || plan.grantsMemberType === "hot_desk";
-  if (isDeskTier && !member.approved_for_full) {
-    return NextResponse.json(
-      {
-        error:
-          "Full Access tiers (Hot/Cold Desk) need an extra welcome chat. Apply at /apply or reach out to boulder.regenhub@gmail.com and we'll get you set up.",
-      },
-      { status: 403 },
-    );
-  }
-  if (!isDeskTier && !member.approved_for_daily) {
-    return NextResponse.json(
-      {
-        error: "This email isn't approved for membership yet. Apply at /apply or reach out to boulder.regenhub@gmail.com.",
-      },
-      { status: 403 },
-    );
-  }
+  // One approval for the day plans, desk access for the desks (lib/approval.ts).
+  const gate = planGate(approvalOf(member), body.plan_key);
+  if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: 403 });
   // Avoid unused-var lint on the supabase-only fields
   void memberName;
 

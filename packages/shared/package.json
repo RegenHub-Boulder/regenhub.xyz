@@ -13,6 +13,10 @@
     "./prices": {
       "import": "./dist/prices.js",
       "types": "./dist/prices.d.ts"
+    },
+    "./joining": {
+      "import": "./dist/joining.js",
+      "types": "./dist/joining.d.ts"
     }
   },
   "scripts": {

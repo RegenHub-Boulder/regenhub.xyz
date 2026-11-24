@@ -26,8 +26,8 @@ function getTodayMountain(): string {
   return fmt.format(new Date()); // en-CA gives YYYY-MM-DD
 }
 
-/** Calculate 6 PM Mountain Time today (free day passes end at 6 PM) */
-function calculateFreeDayExpiration(): Date {
+/** 6 PM Mountain Time today (a free day ends at 6 PM), or null once it's past. */
+function calculateFreeDayExpiration(): Date | null {
   const now = new Date();
   const fmt = new Intl.DateTimeFormat("en-US", {
     timeZone: TIMEZONE,
@@ -47,11 +47,8 @@ function calculateFreeDayExpiration(): Date {
   const offsetMs = guess.getTime() - localAsUtc.getTime();
   const exp = new Date(guess.getTime() + offsetMs);
 
-  if (exp <= now) {
-    // Already past 6 PM — expire tomorrow at 6 PM
-    return new Date(exp.getTime() + 24 * 60 * 60 * 1000);
-  }
-  return exp;
+  // Past 6 PM there is no free day left today: the code is good for that one day only (lib/freeDayRule.ts).
+  return exp <= now ? null : exp;
 }
 
 /** Post activation notification to Telegram */
@@ -142,8 +139,14 @@ export async function POST() {
       );
     }
 
-    const code = generateRandomCode();
     const expiresAt = calculateFreeDayExpiration();
+    if (!expiresAt) {
+      return NextResponse.json(
+        { error: "A free day runs 8 AM to 6 PM. Come back on a weekday and get your code when you arrive." },
+        { status: 400 }
+      );
+    }
+    const code = generateRandomCode();
 
     // The free-day approval trigger (migration 016/036) made (or found) the member row for this email when the claim
     // was approved, and gave it the free day's one pass. Link day_code.member_id to it (else the unlock lands in

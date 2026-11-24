@@ -4,23 +4,9 @@ import { useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Search, X } from "lucide-react";
-import { ApplicationActions } from "@/components/admin/ApplicationActions";
-import type { Application, ApplicationStatus } from "@/lib/supabase/types";
-
-const interestLabels: Record<string, string> = {
-  daypass_single: "Day Pass",
-  daypass_5pack: "5-Pack",
-  member_basic: "Member · 1 day/mo",
-  member_2day: "Member · 2 days/mo",
-  member_5day: "Member · 5 days/mo",
-  // Legacy keys kept so historical applications still display nicely
-  social_events_1: "Social · 1 day/mo",
-  social_events_5: "Social · 5 days/mo",
-  hot_desk: "Hot Desk",
-  cold_desk: "Cold Desk",
-  reserved_desk: "Reserved Desk",
-  community: "Community",
-};
+import { ApplicationActions, relTime, type JoinApplication } from "@/components/admin/ApplicationActions";
+import type { ApplicationStatus } from "@/lib/supabase/types";
+import { ANSWER_WITHIN_HOURS } from "@regenhub/shared/joining";
 
 const statusStyle: Record<ApplicationStatus, string> = {
   pending: "border-warn/40 text-warn",
@@ -33,12 +19,13 @@ const statusTabs = ["all", "pending", "approved", "rejected", "closed"] as const
 
 export function ApplicationsFilter({
   applications,
-  adminNames = {},
+  names = {},
 }: {
-  applications: Application[];
-  adminNames?: Record<number, string>;
+  applications: JoinApplication[];
+  /** Member names by id: who they named, who vouched, who decided. */
+  names?: Record<number, string>;
 }) {
-  const [activeTab, setActiveTab] = useState<string>("all");
+  const [activeTab, setActiveTab] = useState<string>("pending");
   const [search, setSearch] = useState("");
 
   const filtered = useMemo(() => {
@@ -123,11 +110,8 @@ export function ApplicationsFilter({
                 </div>
                 <div className="flex items-center gap-3 text-xs text-muted">
                   <span>{app.email}</span>
-                  <Badge variant="outline" className="text-xs border-rule text-muted">
-                    {interestLabels[app.membership_interest] ?? app.membership_interest}
-                  </Badge>
-                  <span>
-                    {new Date(app.created_at).toLocaleDateString("en-US", {
+                  <span className={app.status === "pending" && Date.now() - Date.parse(app.created_at) > ANSWER_WITHIN_HOURS * 3_600_000 ? "text-danger" : ""}>
+                    {app.status === "pending" ? `waiting ${relTime(app.created_at).replace(" ago", "")}` : new Date(app.created_at).toLocaleDateString("en-US", {
                       timeZone: "America/Denver",
                       month: "short",
                       day: "numeric",
@@ -136,22 +120,19 @@ export function ApplicationsFilter({
                 </div>
               </div>
 
-              {(app.about || app.why_join) && (
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {app.about && (
-                    <div>
-                      <p className="text-xs text-muted mb-1 font-medium">What are you working on?</p>
-                      <p className="text-sm text-muted">{app.about}</p>
-                    </div>
-                  )}
-                  {app.why_join && (
-                    <div>
-                      <p className="text-xs text-muted mb-1 font-medium">Why do you want to join?</p>
-                      <p className="text-sm text-muted">{app.why_join}</p>
-                    </div>
-                  )}
-                </div>
-              )}
+              <dl className="grid sm:grid-cols-[9rem_1fr] gap-x-4 gap-y-1 text-sm">
+                {app.about && (<><dt className="text-muted">Works on</dt><dd>{app.about}</dd></>)}
+                {app.how_found && (<><dt className="text-muted">Found us</dt><dd>{app.how_found}</dd></>)}
+                {app.why_join && (<><dt className="text-muted">Why join</dt><dd>{app.why_join}</dd></>)}
+                <dt className="text-muted">Knows</dt>
+                <dd>{app.known_by_member_id ? names[app.known_by_member_id] ?? "a member" : "Nobody yet"}</dd>
+                <dt className="text-muted">Vouch</dt>
+                <dd data-testid="vouch-line">
+                  {app.vouched_by
+                    ? <span className="text-ok">{names[app.vouched_by] ?? "A member"} vouched, {relTime(app.vouched_at)}</span>
+                    : app.status === "pending" ? <span className="text-warn">Waiting for a member who knows them</span> : "None"}
+                </dd>
+              </dl>
 
               {app.admin_notes && (
                 <p className="text-xs text-sage border-l-2 border-sage/30 pl-3">
@@ -159,7 +140,7 @@ export function ApplicationsFilter({
                 </p>
               )}
 
-              <ApplicationActions application={app} adminNames={adminNames} />
+              <ApplicationActions application={app} names={names} />
             </div>
           ))}
         </div>

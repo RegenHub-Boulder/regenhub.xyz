@@ -12,6 +12,7 @@ import type { AdminUsersResponse, AdminUser, AdminUserSubscription } from "@/app
 import type { Member } from "@/lib/supabase/types";
 import { effectiveMonthlyCents } from "@/lib/stripeNet";
 import { matchesStatusFilter } from "@/lib/adminMemberFilters";
+import { approvalOf, type ApprovalRow } from "@/lib/approval";
 
 function subBadge(sub: AdminUserSubscription | null) {
   if (!sub) return null;
@@ -38,8 +39,8 @@ function subBadge(sub: AdminUserSubscription | null) {
 }
 
 /** Member is approved to subscribe but hasn't yet — distinct from active subscriber. */
-function approvalBadge(approved: boolean | undefined, hasSub: boolean) {
-  if (hasSub || !approved) return null;
+function approvalBadge(member: Member | null | undefined, hasSub: boolean) {
+  if (hasSub || !approvalOf(member as ApprovalRow | null).member) return null;
   return (
     <Badge
       className="text-sm bg-sage/10 text-sage border-sage/30"
@@ -134,7 +135,7 @@ function AuthUserRow({ u, showMoreCols }: { u: AdminUser; showMoreCols: boolean 
           <div className="flex items-center gap-1.5 flex-wrap">
             {memberStatusBadge(u.member)}
             {subBadge(u.subscription)}
-            {approvalBadge(u.member?.approved_for_daily, !!u.subscription)}
+            {approvalBadge(u.member, !!u.subscription)}
           </div>
         </td>
         {showMoreCols && <td className="px-4 py-3 text-muted text-sm">{u.member?.telegram_username ?? "—"}</td>}
@@ -185,7 +186,7 @@ function LegacyMemberRow({ m, showMoreCols }: { m: LegacyMemberWithSub; showMore
           <div className="flex items-center gap-1.5 flex-wrap">
             {memberStatusBadge(m)}
             {subBadge(m.subscription)}
-            {approvalBadge(m.approved_for_daily, !!m.subscription)}
+            {approvalBadge(m, !!m.subscription)}
           </div>
         </td>
         {showMoreCols && <td className="px-4 py-3 text-muted text-sm">{m.telegram_username ?? "—"}</td>}
@@ -392,6 +393,7 @@ export function MembersList() {
             <option value="active">Active</option>
             <option value="disabled">Disabled</option>
             <option value="no_subscription">No subscription (any type)</option>
+            <option value="desk_ask">Asked about a desk</option>
             <option value="unbilled_desk">Desk, not billed ({unbilledDeskCount})</option>
             <option value="overdue">Overdue — past due, card or crypto ({overdueCount})</option>
           </select>

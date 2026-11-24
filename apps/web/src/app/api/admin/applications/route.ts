@@ -3,13 +3,15 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import type { ApplicationStatus } from "@/lib/supabase/types";
 import { logAction, AuditAction } from "@/lib/auditLog";
+import { createServiceClient } from "@/lib/supabase/admin";
+import { refreshApplicationCard } from "@regenhub/shared";
 
 /**
  * PATCH /api/admin/applications — update application status & notes.
  *
  * Valid status transitions used by the UI:
- *   - pending → approved   (use the /approve route, not this — that one
- *                           also handles Stripe checkout)
+ *   - pending → approved   refused here: approval is the one function behind
+ *                           /approve and the chat card (it needs a vouch)
  *   - pending → rejected   (the applicant won't be granted access)
  *   - pending → closed     (already handled separately — e.g. they're
  *                           already a member from a prior path; clears
@@ -31,6 +33,10 @@ export async function PATCH(req: Request) {
     status?: ApplicationStatus;
     admin_notes?: string;
   };
+
+  if (status === "approved") {
+    return NextResponse.json({ error: "Approve from the Approve button: it needs a member's vouch." }, { status: 400 });
+  }
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (status) {
@@ -56,8 +62,7 @@ export async function PATCH(req: Request) {
   // Audit log for status-changing transitions. Pure notes edits don't get logged.
   if (status) {
     const action =
-      status === "approved" ? AuditAction.APPLICATION_APPROVED
-      : status === "rejected" ? AuditAction.APPLICATION_REJECTED
+      status === "rejected" ? AuditAction.APPLICATION_REJECTED
       : status === "closed" ? "application_closed_already_handled"
       : "application_reverted_to_pending";
     await logAction({
@@ -66,6 +71,8 @@ export async function PATCH(req: Request) {
       target: { table: "applications", id },
       payload: { new_status: status },
     });
+    // The chat card shows the decision and drops its buttons.
+    await refreshApplicationCard(createServiceClient(), id, undefined, process.env.NEXT_PUBLIC_SITE_URL).catch(() => false);
   }
 
   return NextResponse.json({ updated: true });

@@ -1,3 +1,4 @@
+import { approvalOf, planGate } from "@/lib/approval";
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { requirePortalMember } from "@/lib/onchain/portalMember";
@@ -52,20 +53,16 @@ export async function POST(request: Request) {
   const admin = createServiceClient();
   const { data: member, error: memberError } = await admin
     .from("members")
-    .select("id, approved_for_daily, approved_for_full")
+    .select("*")
     .eq("id", session.member.id)
     .single();
   if (memberError || !member) {
     return NextResponse.json({ error: "Couldn't look up your membership." }, { status: 500 });
   }
 
-  const isDeskTier = plan.grantsMemberType === "hot_desk" || plan.grantsMemberType === "cold_desk";
-  if ((isDeskTier && !member.approved_for_full) || (!isDeskTier && !member.approved_for_daily)) {
-    return NextResponse.json(
-      { error: isDeskTier ? "Full Access has not been approved yet." : "Membership has not been approved yet." },
-      { status: 403 },
-    );
-  }
+  // One approval for the day plans, desk access for the desks: the same gate as the card route (lib/approval.ts).
+  const gate = planGate(approvalOf(member), body.plan_key);
+  if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: 403 });
 
   const { data: existing, error: existingError } = await admin
     .from("subscriptions")

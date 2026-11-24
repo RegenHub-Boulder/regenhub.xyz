@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { notifyNewApplication, interestLabel } from "@/lib/applicationNotify";
+import { postApplicationCard } from "@regenhub/shared";
 import { sendEmail, applicationReceivedEmail } from "@/lib/email";
-import type { MembershipInterest } from "@/lib/supabase/types";
+import { missingColumn } from "@/lib/approval";
 import { isSyntheticEmail } from "@/lib/regenos/syntheticEmail";
 
 export async function GET() {
@@ -28,12 +28,13 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
 
-  const { name, telegram, about, why_join, membership_interest, email: bodyEmail } = body as {
+  // The short form (T-482 round 5): name, email, what they work on, how they found us, and who here knows them.
+  // No level: once approved they pick any day plan themselves; desks are an upgrade for members.
+  const { name, about, how_found, known_by_member_id, email: bodyEmail } = body as {
     name?: string;
-    telegram?: string;
     about?: string;
-    why_join?: string;
-    membership_interest?: MembershipInterest;
+    how_found?: string;
+    known_by_member_id?: number | null;
     email?: string;
   };
 
@@ -52,7 +53,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Email is required" }, { status: 400 });
   }
 
-  const telegramHandle = telegram?.trim().replace(/^@+/, "") || null;
+  // "Who here knows you?": a member who may vouch (lib: 072's member_can_vouch; the type-ahead offers only them).
+  let knownBy: { id: number; name: string } | null = null;
+  if (known_by_member_id != null) {
+    const id = Number(known_by_member_id);
+    const { data: m } = await createServiceClient().from("members").select("id, name, disabled")
+      .eq("id", Number.isInteger(id) ? id : -1).maybeSingle();
+    if (!m || m.disabled) return NextResponse.json({ error: "Pick a member from the list, or \"Nobody yet\"." }, { status: 400 });
+    knownBy = { id: m.id, name: m.name };
+  }
 
   // Application workflow fields (approval, plan, rate) are deliberately not
   // client-writable. Perform the validated write with the service client and
@@ -61,7 +70,7 @@ export async function POST(req: Request) {
   const admin = createServiceClient();
   const { data: existing, error: lookupError } = await admin
     .from("applications")
-    .select("id, email")
+    .select("id, email, status")
     .eq("supabase_user_id", user.id)
     .maybeSingle();
   if (lookupError) {
@@ -88,43 +97,38 @@ export async function POST(req: Request) {
     supabase_user_id: user.id,
     email,
     name: name.trim(),
-    telegram: telegramHandle,
     about: about?.trim() || null,
-    why_join: why_join?.trim() || null,
-    membership_interest: membership_interest ?? "member_basic",
+    how_found: how_found?.trim() || null,
+    known_by_member_id: knownBy?.id ?? null,
     status: "pending" as const,
     updated_at: new Date().toISOString(),
   };
-  const write = existing
-    ? admin.from("applications").update(values).eq("id", existing.id).select().single()
-    : admin.from("applications").insert(values).select().single();
-  const { data, error } = await write;
+  const save = (row: Record<string, unknown>) => existing
+    ? admin.from("applications").update(row).eq("id", existing.id).select().single()
+    : admin.from("applications").insert(row).select().single();
+  let { data, error } = await save(values);
+  if (missingColumn(error)) {
+    // Before migration 072: keep the two new answers in why_join so nothing they typed is lost.
+    const { how_found: found, known_by_member_id: _known, ...rest } = values;
+    void _known;
+    const note = [found && `Found us: ${found}`, `Knows: ${knownBy?.name ?? "nobody yet"}`].filter(Boolean).join(". ");
+    ({ data, error } = await save({ ...rest, why_join: note }));
+  }
 
-  if (error) {
+  if (error || !data) {
     console.error("[PortalApplication] DB error:", error);
     return NextResponse.json({ error: "Failed to save application" }, { status: 500 });
   }
 
-  // Ping the RegenHub Telegram group so the coordinator sees the application.
-  // Fire-and-forget — don't block or fail the response on a notify error.
-  notifyNewApplication({
-    id: data.id,
-    name: name.trim(),
-    email,
-    telegram: telegramHandle,
-    about: about?.trim() || null,
-    why_join: why_join?.trim() || null,
-    membership_interest: membership_interest ?? "member_basic",
-  });
-
-  // Acknowledge receipt to the applicant — the review can take a day or two,
-  // and until now this window was silent. Fire-and-forget like the notify.
+  // The members' chat card (@regenhub/shared joining.ts): the named member taps "I know them", then a steward
+  // approves on the same card. Fire-and-forget: a chat outage never fails the application.
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
-  const ackTpl = applicationReceivedEmail({
-    name: name.trim(),
-    interestLabel: interestLabel(membership_interest ?? "member_basic"),
-    siteUrl,
-  });
+  // An edit of an application still waiting changes the answers, not the card or the email: one of each.
+  if (existing?.status === "pending") return NextResponse.json({ application: data });
+  void postApplicationCard(admin, data.id, siteUrl).catch((err) => console.error("[PortalApplication] chat card failed:", err));
+
+  // Acknowledge receipt: what happens next, and that we reply within a day. Fire-and-forget like the card.
+  const ackTpl = applicationReceivedEmail({ name: name.trim(), namedMember: knownBy?.name ?? null, siteUrl });
   sendEmail({ kind: "application_received", to: email, subject: ackTpl.subject, html: ackTpl.html, text: ackTpl.text })
     .catch((err) => console.error("[PortalApplication] Ack email failed:", err));
 
