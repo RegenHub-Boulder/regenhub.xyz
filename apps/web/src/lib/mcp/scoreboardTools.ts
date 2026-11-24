@@ -8,6 +8,7 @@ import { ACTION_KIND_LABEL } from "@/lib/scoreboardActionKinds";
 import { readWhoIsComing } from "@/lib/whoIsComingData";
 import { dateIn } from "@/lib/series";
 import { MONTH_NOTES, PLAN_BUCKETS, monthCsv } from "@/lib/scoreboardMonths";
+import { leakCsv, leakNotes, type LeakFunnels } from "@/lib/leakFunnel";
 
 /**
  * The MCP's scoreboard tools (T-497): the numbers /admin/scoreboard shows and the recommended actions on /admin (Today), so Uni can
@@ -18,9 +19,9 @@ import { MONTH_NOTES, PLAN_BUCKETS, monthCsv } from "@/lib/scoreboardMonths";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
-async function read(admin: ServiceClient): Promise<Scoreboard | ToolResult> {
+async function read(admin: ServiceClient, opts: { leaks?: boolean } = {}): Promise<Scoreboard | ToolResult> {
   try {
-    return await readScoreboard(admin);
+    return await readScoreboard(admin, new Date(), opts);
   } catch (e) {
     return fail(`Couldn't read the scoreboard: ${e instanceof Error ? e.message : String(e)}`);
   }
@@ -34,7 +35,7 @@ export async function scoreboardSummaryHandler(
 ): Promise<ToolResult> {
   const denied = scopeDenied(auth, "scoreboard_summary", "read");
   if (denied) return denied;
-  const s = await read(admin);
+  const s = await read(admin, { leaks: true });
   if (isResult(s)) return s;
   const { goal, pace } = s;
   const lines = [
@@ -55,6 +56,8 @@ export async function scoreboardSummaryHandler(
     "```csv",
     monthCsv(s.monthTable).trimEnd().replace(/\r\n/g, "\n"),
     "```",
+    "",
+    ...leakLines(s.leaks),
     "",
     "### By plan now (total paying and net are the headline's)",
     "| plan | paying | net/mo | comped | past due |",
@@ -81,6 +84,25 @@ export async function scoreboardSummaryHandler(
   if (args.who_is_coming) lines.push("", ...(await comingLines(admin, s.turnout)));
   lines.push("", `Open recommended actions: ${s.actions.open.length} (recommended_actions lists them).`);
   return text(lines.join("\n"));
+}
+
+/** "Where people drop off": the biggest drop, each way in as one line, and the CSV (counts only). */
+function leakLines(leaks: LeakFunnels | null): string[] {
+  const lines = ["### Where people drop off (one funnel per way in; % of the step before / of the start)"];
+  if (!leaks) return [...lines, "Couldn't work this out right now."];
+  lines.push(leaks.biggest ? leaks.biggest.sentence : "No drop to name yet: nobody's window has closed.");
+  for (const d of leaks.doors) {
+    if (!d.read) {
+      lines.push(`- ${d.label}: couldn't be read`);
+      continue;
+    }
+    const steps = d.steps.map((st) => `${st.label.toLowerCase()} ${st.count} (${st.ofPrev ?? "–"}% / ${st.ofStart ?? "–"}%)`);
+    lines.push(`- ${d.label} ${d.started} → ${steps.join(" → ")}` +
+      (d.alreadyMembers ? `; ${d.alreadyMembers} already members not counted` : "") +
+      (d.noMemberRow ? `; ${d.noMemberRow} with no member row, counted at the start only` : ""));
+  }
+  return [...lines, "How it's counted:", ...leakNotes(leaks.cardPeriods).map((n) => `- ${n}`),
+    "```csv", leakCsv(leaks).trimEnd().replace(/\r\n/g, "\n"), "```"];
 }
 
 /** Who is going to each upcoming night: names and handles, members first, never an email (withEmails: false). */

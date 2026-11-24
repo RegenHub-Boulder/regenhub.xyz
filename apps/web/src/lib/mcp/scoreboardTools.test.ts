@@ -25,6 +25,8 @@ import { fetchAttendance, fetchCollectiveEvents } from "@/lib/regenos/events";
 import { readScoreboard } from "@/lib/scoreboardData";
 import { POST as markAction } from "@/app/api/admin/scoreboard/actions/route";
 import { GET as downloadCsv } from "@/app/api/admin/scoreboard/months/route";
+import { GET as downloadLeaks } from "@/app/api/admin/scoreboard/leaks/route";
+import { POST as addPasses } from "@/app/api/admin/members/[id]/add-passes/route";
 import type { McpAuthInfo } from "./oauth";
 import { recommendedActionsHandler, scoreboardSummaryHandler } from "./scoreboardTools";
 import type { ToolResult } from "./billingTools";
@@ -164,6 +166,76 @@ describe("the month table, on the real schema", () => {
     const download = await res.text();
     expect(download.replace(/\r\n/g, "\n").trim()).toBe(csv);
     for (const name of ["Ada", "Pat", "Brent", "Cleo", "Gil"]) expect(download).not.toContain(name);
+  });
+});
+
+describe("where people drop off, on the real schema", () => {
+  const signedInAsAda = () => vi.mocked(createClient).mockResolvedValue(makeSupabaseMock({
+    auth: { user: { id: "u1", email: "ada@example.test" } }, selects: { members: { data: { id: 1, name: "Ada Admin", is_admin: true, disabled: false } } },
+  }) as never);
+
+  beforeEach(async () => {
+    vi.stubEnv("STRIPE_SECRET_KEY", ""); // no Stripe here: card periods by months elapsed
+    await db.exec(`insert into members (id, name, email, member_type) values (11, 'Hana Gift', 'hana@example.test', 'day_pass')`);
+    // Gil: a free day 100 days ago, used 95 days ago, joined in USDC 80 days ago, two periods paid.
+    await db.sql(`insert into free_day_claims (email, name, status, created_at, activated_at) values ('gil@example.test', 'Gil Guest', 'activated', $1, $2)`, [iso(-100 * DAY), iso(-95 * DAY)]);
+    await db.exec(`insert into member_wallets (id, member_id, address, verification_method) values (1, 10, '0x${"a".repeat(40)}', 'signature')`);
+    await db.sql(`insert into subscriptions (id, member_id, payment_rail, wallet_id, plan_key, monthly_cents, net_cents, status, created_at)
+      values (63, 10, 'onchain', 1, 'hot_desk', 25000, 23750, 'active', $1)`, [iso(-80 * DAY)]);
+    for (const [n, status] of [[0, "paid"], [1, "paid"], [2, "open"]] as const) {
+      await db.sql(`insert into onchain_invoices (subscription_id, member_id, period_start, period_end, due_at, base_amount_cents, amount_cents, amount_usdc_micros, status, kind)
+        values (63, 10, $1, $2, $1, 25000, 23750, 237500000, $3, 'membership')`, [iso((-80 + 30 * n) * DAY), iso((-50 + 30 * n) * DAY), status]);
+    }
+    // Cleo: a free day 10 days ago, then her card $30 plan (5 days ago, in the base seed): a card join, too recent to judge.
+    await db.sql(`insert into free_day_claims (email, name, status, created_at) values ('cleo@example.test', 'Cleo Card', 'activated', $1)`, [iso(-10 * DAY)]);
+    // A free day approved for an email the site has no member row for: approval makes one (migration 016), so this is
+    // a member row since deleted (or its email changed), as with production's few unmatched claims.
+    await db.exec("select setval('members_id_seq', 100)");
+    await db.sql(`insert into free_day_claims (email, name, status, created_at) values ('ghost@example.test', 'Ghost', 'reserved', $1)`, [iso(-65 * DAY)]);
+    await db.exec("delete from members where email = 'ghost@example.test'");
+    // Hana is given passes on the member page: the route logs it, and that log is the door.
+    signedInAsAda();
+    const res = await addPasses(new Request("http://localhost/api/admin/members/11/add-passes", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ count: 2 }),
+    }), { params: Promise.resolve({ id: "11" }) });
+    expect(res.status).toBe(200);
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("the add-passes route records who gave how many", async () => {
+    expect(await db.sql("select actor_member_id, target_table, target_id, payload from admin_actions where action = 'passes_granted'"))
+      .toEqual([{ actor_member_id: 1, target_table: "members", target_id: "11", payload: { amount: 2, balance: 2 } }]);
+  });
+
+  it("each way in as a funnel, the biggest drop, the same CSV in the summary and the download, and no names", async () => {
+    const s = await readScoreboard(db as never, new Date(), { leaks: true });
+    const door = (k: string) => {
+      const d = s.leaks!.doors.find((x) => x.door === k)!;
+      return [d.started, d.alreadyMembers, d.noMemberRow, ...d.steps.map((x) => x.count)];
+    };
+    // Gil, Cleo and the ghost; Gil came in, joined, paid twice; Cleo joined (so counts as in) with one card month.
+    expect(door("free_day")).toEqual([3, 0, 1, 2, 2, 1, 0, 0]);
+    expect(door("gifted")).toEqual([1, 0, 0, 0, 0, 0, 0, 0]);
+    expect(door("day_pass")).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(door("rsvp")).toEqual([1, 1, 1, 0, 0, 0, 0, 0, 0]); // the unlinked account; Gil was a member by then
+    expect(s.leaks!.cardPeriods).toBe("elapsed");
+    expect(s.leaks!.biggest!.sentence).toBe("Most people are lost between a free day approved and coming in: 1 of 2 never came in.");
+
+    const t = body(await scoreboardSummaryHandler(db as never, ada()));
+    expect(t).toContain("### Where people drop off");
+    expect(t).toContain("Most people are lost between a free day approved and coming in");
+    const csv = t.split("```csv\n")[2].split("\n```")[0];
+    expect(csv.split("\n")[1]).toBe("Free day approved,all,3,0,1,,2,2,1,0,0,");
+    signedInAsAda();
+    const res = await downloadLeaks();
+    expect(res.headers.get("content-disposition")).toMatch(/attachment; filename="regenhub-drop-off-\d{4}-\d{2}-\d{2}\.csv"/);
+    expect((await res.text()).replace(/\r\n/g, "\n").trim()).toBe(csv);
+    expect(t).not.toMatch(EMAIL);
+    for (const name of ["Gil", "Hana", "Cleo", "Ghost", "ghost"]) expect(t).not.toContain(name);
+  });
+
+  it("the admin home's read leaves it out", async () => {
+    expect((await readScoreboard(db as never)).leaks).toBeNull();
   });
 });
 

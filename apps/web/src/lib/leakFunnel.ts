@@ -102,10 +102,11 @@ export interface LeakInput {
   subs: readonly SubRow[];
   /** Periods paid per subscription id (USDC: paid membership invoices; card: Stripe paid invoices, or elapsed). */
   paidPeriods: ReadonlyMap<number, number>;
-  claims: readonly LeakClaim[];
+  /** Null when the claims couldn't be read: that door shows as unread. */
+  claims: readonly LeakClaim[] | null;
   purchases: readonly { member_id: number | null; email: string | null; created_at: string }[];
   /** Passes an admin added to a member (admin_actions `passes_granted`). */
-  gifts: readonly { memberId: number; at: string }[];
+  gifts: readonly { memberId: number; at: string }[] | null;
   /** Past nights each person RSVP'd going to: the night's start. Null when Techne couldn't be read. */
   rsvps: readonly { did: string; at: string }[] | null;
   /** Who an RSVP's DID is (lib/nightFollowups.ts rsvpPeople): their member row, else the email they confirmed. */
@@ -217,8 +218,9 @@ function context(input: Omit<LeakInput, "paidPeriods" | "now">) {
 
 /** Each person's first start through one door, oldest first; null when the door's rows couldn't be read. */
 function startsFor(door: DoorKey, input: Omit<LeakInput, "paidPeriods" | "now">, ctx: ReturnType<typeof context>): Start[] | null {
-  const raw: (Start & { key: string | null })[] = [];
+  const raw: (Omit<Start, "key"> & { key: string | null })[] = [];
   if (door === "free_day") {
+    if (!input.claims) return null;
     for (const c of input.claims) {
       if (!APPROVED.has(c.status)) continue;
       const p = ctx.personKey(c.memberId, norm(c.email));
@@ -227,6 +229,7 @@ function startsFor(door: DoorKey, input: Omit<LeakInput, "paidPeriods" | "now">,
   } else if (door === "day_pass") {
     for (const b of input.purchases) raw.push({ ...ctx.personKey(b.member_id, norm(b.email)), at: ms(b.created_at) });
   } else if (door === "gifted") {
+    if (!input.gifts) return null;
     for (const g of input.gifts) raw.push({ ...ctx.personKey(g.memberId, null), at: ms(g.at) });
   } else {
     if (!input.rsvps) return null;
@@ -239,7 +242,7 @@ function startsFor(door: DoorKey, input: Omit<LeakInput, "paidPeriods" | "now">,
   for (const s of raw) {
     if (!s.key || Number.isNaN(s.at)) continue;
     const prev = first.get(s.key);
-    if (!prev || s.at < prev.at) first.set(s.key, s as Start);
+    if (!prev || s.at < prev.at) first.set(s.key, { ...s, key: s.key });
   }
   return [...first.values()].sort((a, b) => a.at - b.at);
 }
@@ -269,9 +272,9 @@ export function leakFunnels(input: LeakInput, cardPeriods: LeakFunnels["cardPeri
   const addPass = (key: string | null, at: number) => {
     if (key) passesOf.set(key, [...(passesOf.get(key) ?? []), at]);
   };
-  for (const c of input.claims) if (APPROVED.has(c.status)) addPass(ctx.personKey(c.memberId, norm(c.email)).key, ms(c.created_at));
+  for (const c of input.claims ?? []) if (APPROVED.has(c.status)) addPass(ctx.personKey(c.memberId, norm(c.email)).key, ms(c.created_at));
   for (const b of input.purchases) addPass(ctx.personKey(b.member_id, norm(b.email)).key, ms(b.created_at));
-  for (const g of input.gifts) addPass(ctx.personKey(g.memberId, null).key, ms(g.at));
+  for (const g of input.gifts ?? []) addPass(ctx.personKey(g.memberId, null).key, ms(g.at));
 
   /** Already a member at `at`: a subscription that started before, or a desk / hub friend with no subscription. */
   const memberBefore = (id: number | null, at: number) => {

@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { requireAdmin } from "@/lib/admin";
+import { requireAdminMember } from "@/lib/admin";
+import { AuditAction, logAction } from "@/lib/auditLog";
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!await requireAdmin()) {
+  const adminMember = await requireAdminMember();
+  if (!adminMember) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -37,6 +39,11 @@ export async function POST(
       return NextResponse.json({ error: "Member not found" }, { status: 404 });
     }
 
+    // Passes given by an admin are a way in on the scoreboard's "Where people drop off" (T-497), read from here.
+    await logAction({
+      actorMemberId: adminMember.member.id, action: AuditAction.PASSES_GRANTED,
+      target: { table: "members", id: Number(id) }, payload: { amount: count, balance: newBalance },
+    }, supabase);
     return NextResponse.json({ balance: newBalance });
   } else {
     // Atomic decrement
@@ -53,6 +60,10 @@ export async function POST(
       return NextResponse.json({ error: "Member not found or insufficient balance" }, { status: 400 });
     }
 
+    await logAction({
+      actorMemberId: adminMember.member.id, action: AuditAction.PASSES_ADJUSTED,
+      target: { table: "members", id: Number(id) }, payload: { amount: count, balance: newBalance },
+    }, supabase);
     return NextResponse.json({ balance: newBalance });
   }
 }
