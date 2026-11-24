@@ -111,7 +111,7 @@ function AuthUserRow({ u, showMoreCols }: { u: AdminUser; showMoreCols: boolean 
       {u.member?.is_admin && <span className="ml-2 text-xs text-gold">[Admin]</span>}
       {u.member?.is_coop_member && <span className="ml-1 text-xs text-sage">[Co-op]</span>}
       {!u.member && u.application && (
-        <span className="ml-2 text-xs text-muted italic">({u.application.membership_interest.replace(/_/g, " ")})</span>
+        <span className="ml-2 text-xs text-muted italic">(applied, {u.application.status})</span>
       )}
     </>
   );

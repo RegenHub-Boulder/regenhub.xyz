@@ -21,7 +21,7 @@ export const FOLLOWUP_COPY = {
       "The next {series} is [{nextWhen}]({nextUrl}).",
       "See what else is coming up at [regenhub.xyz/events]({eventsUrl}).",
       "420 Happy Hour is every Friday and open to everyone. Come say hi.",
-      "Want to see the space by day? [Your first day here is free]({freeDayUrl}).",
+      "Want to see the space by day? [Your first day here is free]({freeDayUrl}), approved as soon as you ask.",
       "If you'd like to come closer, members get a few things of their own: on Fridays before Happy Hour they show each other what they're building, and Studio Night, the fourth Tuesday, is an evening to work on your agent, your data and your tools with people who get it. The next one is {studioWhen}.",
       "Membership starts at {membershipFrom} a month. Here's what it includes: [regenhub.xyz/membership]({membershipUrl})",
     ],

@@ -59,8 +59,8 @@ export function CommunicationsComposer() {
     const f: Record<string, unknown> = {};
     if (selectedTypes.size > 0) f.member_type = Array.from(selectedTypes);
     if (signupWindowDays) f.signup_window_days = parseInt(signupWindowDays, 10);
-    if (approvedForDaily !== "any") f.approved_for_daily = approvedForDaily === "true";
-    if (approvedForFull !== "any") f.approved_for_full = approvedForFull === "true";
+    if (approvedForDaily !== "any") f.approved = approvedForDaily === "true";
+    if (approvedForFull !== "any") f.desk_access = approvedForFull === "true";
     if (hasActiveSubscription !== "any") f.has_active_subscription = hasActiveSubscription === "true";
     if (balanceAtLeast) f.day_passes_balance_at_least = parseInt(balanceAtLeast, 10);
     if (emailIn.trim()) {
@@ -145,7 +145,7 @@ export function CommunicationsComposer() {
               <Input id="balance" type="number" min="0" value={balanceAtLeast} onChange={(e) => setBalanceAtLeast(e.target.value)} placeholder="e.g. 1" className="glass-input mt-1 text-sm" />
             </div>
             <div>
-              <Label className="text-xs">Approved for Daily</Label>
+              <Label className="text-xs">Approved</Label>
               <select value={approvedForDaily} onChange={(e) => setApprovedForDaily(e.target.value as "any" | "true" | "false")} className="glass-input mt-1 text-sm w-full px-2 py-1.5 rounded">
                 <option value="any">Any</option>
                 <option value="true">Yes</option>
@@ -153,7 +153,7 @@ export function CommunicationsComposer() {
               </select>
             </div>
             <div>
-              <Label className="text-xs">Approved for Full</Label>
+              <Label className="text-xs">Desk access</Label>
               <select value={approvedForFull} onChange={(e) => setApprovedForFull(e.target.value as "any" | "true" | "false")} className="glass-input mt-1 text-sm w-full px-2 py-1.5 rounded">
                 <option value="any">Any</option>
                 <option value="true">Yes</option>

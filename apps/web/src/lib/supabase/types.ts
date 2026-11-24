@@ -129,6 +129,13 @@ export interface Database {
           approved_for_full: boolean;
           approved_for_full_at: string | null;
           approved_for_full_by: number | null;
+          member_approved?: boolean;
+          member_approved_at?: string | null;
+          member_approved_by?: number | null;
+          desk_access?: boolean;
+          desk_access_at?: string | null;
+          desk_access_by?: number | null;
+          desk_asked_at?: string | null;
           regenos_synced_role: string | null;
           regenos_synced_at: string | null;
           created_at: string;
@@ -165,6 +172,13 @@ export interface Database {
           approved_for_full?: boolean;
           approved_for_full_at?: string | null;
           approved_for_full_by?: number | null;
+          member_approved?: boolean;
+          member_approved_at?: string | null;
+          member_approved_by?: number | null;
+          desk_access?: boolean;
+          desk_access_at?: string | null;
+          desk_access_by?: number | null;
+          desk_asked_at?: string | null;
           regenos_synced_role?: string | null;
           regenos_synced_at?: string | null;
         };

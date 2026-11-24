@@ -1,4 +1,5 @@
 import { requireAdminMember } from "@/lib/admin";
+import { withApprovalColumns } from "@/lib/approval";
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email";
@@ -15,8 +16,8 @@ import { logAction, AuditAction } from "@/lib/auditLog";
  *       member_type?: ("cold_desk" | "hot_desk" | "hub_friend" | "day_pass")[];
  *       signup_window_days?: number;   // members.created_at within this many days
  *       has_active_subscription?: boolean;
- *       approved_for_daily?: boolean;
- *       approved_for_full?: boolean;
+ *       approved?: boolean;           // the one approval (may pick a day plan)
+ *       desk_access?: boolean;        // desk access turned on
  *       day_passes_balance_at_least?: number;
  *       email_in?: string[];           // explicit email allow-list
  *     },
@@ -44,8 +45,8 @@ interface Filter {
   member_type?: string[];
   signup_window_days?: number;
   has_active_subscription?: boolean;
-  approved_for_daily?: boolean;
-  approved_for_full?: boolean;
+  approved?: boolean;
+  desk_access?: boolean;
   day_passes_balance_at_least?: number;
   email_in?: string[];
 }
@@ -84,26 +85,26 @@ export async function POST(req: Request) {
 
   const admin = createServiceClient();
 
-  // Build the query
-  let q = admin
-    .from("members")
-    .select("id, name, email, member_type, day_passes_balance, approved_for_daily, approved_for_full, created_at")
-    .eq("disabled", false)
-    .not("email", "is", null);
-
-  if (body.filter.member_type?.length) q = q.in("member_type", body.filter.member_type);
-  if (body.filter.approved_for_daily != null) q = q.eq("approved_for_daily", body.filter.approved_for_daily);
-  if (body.filter.approved_for_full != null) q = q.eq("approved_for_full", body.filter.approved_for_full);
-  if (body.filter.day_passes_balance_at_least != null) q = q.gte("day_passes_balance", body.filter.day_passes_balance_at_least);
-  if (body.filter.signup_window_days != null) {
-    const since = new Date(Date.now() - body.filter.signup_window_days * 24 * 60 * 60 * 1000).toISOString();
-    q = q.gte("created_at", since);
-  }
-  if (body.filter.email_in?.length) {
-    q = q.in("email", body.filter.email_in.map((e) => e.trim().toLowerCase()));
-  }
-
-  const { data: candidates, error: qErr } = await q.limit(MAX_RECIPIENTS_PER_CALL);
+  // Build the query (the approval columns by their 072 names, or the old ones before it runs: lib/approval.ts).
+  const { data: candidates, error: qErr } = await withApprovalColumns((cols) => {
+    let q = admin
+      .from("members")
+      .select("id, name, email, member_type, day_passes_balance, created_at")
+      .eq("disabled", false)
+      .not("email", "is", null);
+    if (body.filter.member_type?.length) q = q.in("member_type", body.filter.member_type);
+    if (body.filter.approved != null) q = q.eq(cols.member, body.filter.approved);
+    if (body.filter.desk_access != null) q = q.eq(cols.desk, body.filter.desk_access);
+    if (body.filter.day_passes_balance_at_least != null) q = q.gte("day_passes_balance", body.filter.day_passes_balance_at_least);
+    if (body.filter.signup_window_days != null) {
+      const since = new Date(Date.now() - body.filter.signup_window_days * 24 * 60 * 60 * 1000).toISOString();
+      q = q.gte("created_at", since);
+    }
+    if (body.filter.email_in?.length) {
+      q = q.in("email", body.filter.email_in.map((e) => e.trim().toLowerCase()));
+    }
+    return q.limit(MAX_RECIPIENTS_PER_CALL);
+  });
   if (qErr) {
     return NextResponse.json({ error: qErr.message }, { status: 500 });
   }

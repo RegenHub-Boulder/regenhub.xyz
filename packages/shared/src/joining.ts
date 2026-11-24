@@ -36,7 +36,9 @@ function refusalOf(error: DbError): JoinRefusal {
   if (!error) return "failed";
   if (error.code === "PGRST202" || error.code === "42883") return "waiting_for_072";
   const code = (error.message ?? "").trim() as JoinRefusal;
-  return REFUSALS.has(code) ? code : "failed";
+  if (REFUSALS.has(code)) return code;
+  console.error("[joining] database error:", error.code, error.message);
+  return "failed";
 }
 
 export type JoinOutcome<T> = ({ ok: true } & T) | { ok: false; reason: JoinRefusal; message: string };

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { approvalOf, withApprovalColumns } from "@/lib/approval";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
@@ -89,27 +90,35 @@ function buildServer(auth: McpAuthInfo): McpServer {
 
   server.tool(
     "audit_approvals",
-    "Read-only audit of the membership-approval funnel. Reports (1) approved applications whose " +
-      "Stripe checkout was never completed — including whether the stored checkout session is still " +
-      "open or has expired (sessions die after ~24h, and before 2026-07-22 the approval email was " +
-      "never sent at all), and (2) members flagged approved_for_daily who have no active subscription. " +
-      "Use it to find people who were approved but may never have heard from us.",
+    "Read-only audit of joining (apply, a member vouches, one approval, they pick a day plan). Reports (1) " +
+      "applications still waiting, with their vouch and age (over 24 hours is late: we answer within a day), " +
+      "(2) approved applications with an old custom-price checkout link never completed (open or expired), and " +
+      "(3) approved members with no subscription yet. Use it to find people waiting on us or who never picked a plan.",
     async () => {
       const sb = createServiceClient();
       const lines: string[] = [];
 
-      // ---- 1) Approved applications, checkout not completed ----
+      // ---- 1) Waiting applications: vouch and age ----
+      const { data: waiting } = await sb.from("applications").select("*").eq("status", "pending").order("created_at", { ascending: true });
+      lines.push(`## Applications waiting: ${waiting?.length ?? 0}`);
+      for (const w of (waiting ?? []) as { id: number; name: string; email: string; created_at: string; vouched_by?: number | null }[]) {
+        const hours = Math.floor((Date.now() - Date.parse(w.created_at)) / 3_600_000);
+        lines.push(`- [app ${w.id}] ${w.name} <${w.email}> — waiting ${hours} h${hours >= 24 ? " (LATE)" : ""} · ${w.vouched_by ? `vouched (member ${w.vouched_by}): ready to approve` : "needs a member's vouch"}`);
+      }
+
+      // ---- 2) Approved applications, custom-price checkout not completed ----
       const { data: apps, error: appsErr } = await sb
         .from("applications")
         .select("id, name, email, status, approved_plan_key, approved_monthly_cents, checkout_sent_at, checkout_completed_at, stripe_checkout_session_id, updated_at")
         .eq("status", "approved")
+        .not("stripe_checkout_session_id", "is", null)
         .is("checkout_completed_at", null)
         .order("checkout_sent_at", { ascending: false });
       if (appsErr) {
         return { isError: true, content: [{ type: "text" as const, text: `applications query failed: ${appsErr.message}` }] };
       }
 
-      lines.push(`## Approved applications with checkout NOT completed: ${apps?.length ?? 0}`);
+      lines.push(`\n## Approved applications with a checkout link NOT completed: ${apps?.length ?? 0}`);
       const stripeReady = isStripeConfigured();
       for (const a of apps ?? []) {
         let sessionState = "no session id";
@@ -135,13 +144,13 @@ function buildServer(auth: McpAuthInfo): McpServer {
         );
       }
 
-      // ---- 2) approved_for_daily members with no active subscription ----
-      const { data: approvedMembers, error: memErr } = await sb
+      // ---- 3) Approved members (the one approval; lib/approval.ts) with no subscription ----
+      const { data: approvedMembers, error: memErr } = await withApprovalColumns((cols) => sb
         .from("members")
-        .select("id, name, email, approved_for_daily_at, telegram_username")
-        .eq("approved_for_daily", true)
+        .select("*")
+        .eq(cols.member, true)
         .eq("member_type", "day_pass")
-        .eq("disabled", false);
+        .eq("disabled", false));
       if (memErr) {
         return { isError: true, content: [{ type: "text" as const, text: `members query failed: ${memErr.message}` }] };
       }
@@ -156,14 +165,14 @@ function buildServer(auth: McpAuthInfo): McpServer {
         subbed = new Set((subs ?? []).map((s) => s.member_id));
       }
       const unsubbed = (approvedMembers ?? []).filter((m) => !subbed.has(m.id));
-      lines.push(`\n## Members approved_for_daily but NO active subscription: ${unsubbed.length}`);
+      lines.push(`\n## Approved members with NO subscription yet: ${unsubbed.length}`);
       for (const m of unsubbed) {
         const tg = m.telegram_username ? ` (@${m.telegram_username})` : "";
-        lines.push(`- [member ${m.id}] ${m.name} <${m.email}>${tg} — approved ${m.approved_for_daily_at ?? "?"}`);
+        lines.push(`- [member ${m.id}] ${m.name} <${m.email}>${tg} — approved ${approvalOf(m).memberAt ?? "?"}`);
       }
       lines.push(
-        `\n(These may be fine — self-serve approval means "cleared to subscribe whenever." ` +
-          `Bot-path approvals DID email; admin-toggle approvals only emailed if the admin clicked the send button.)`,
+        `\n(These may be fine: approved means "pick a day plan whenever". The approval email went when they were approved; ` +
+          `"Email pick your plan again" is on their member page.)`,
       );
 
       return { content: [{ type: "text" as const, text: lines.join("\n") }] };

@@ -131,8 +131,8 @@ export function MemberForm({ member, initialEmail, initialUserId }: Props) {
                 <option value="day_pass">Day Pass</option>
               </select>
               <p className="text-xs text-muted">
-                {form.member_type === "cold_desk" && "Dedicated desk — permanent PIN, full access"}
-                {form.member_type === "hot_desk" && "Flexible desk — permanent PIN, full access"}
+                {form.member_type === "cold_desk" && "Dedicated desk — permanent PIN, any hour"}
+                {form.member_type === "hot_desk" && "Flexible desk — permanent PIN, any hour"}
                 {form.member_type === "hub_friend" && "Community friend — permanent PIN, no desk membership"}
                 {form.member_type === "day_pass" && "Drop-in — access via day pass pool, no permanent PIN"}
               </p>
