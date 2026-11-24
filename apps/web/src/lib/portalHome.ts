@@ -1,3 +1,4 @@
+import { canApproveOnSite } from "@/lib/approval";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { PAYING_STATUSES } from "@/lib/memberStanding";
 import { isListed } from "@/lib/memberDirectory";
@@ -90,6 +91,8 @@ export interface PortalHomeView {
   askDirectory: boolean;
   /** Applications naming this member, waiting for their "I know them". */
   vouchAsks: VouchAsk[];
+  /** Whether they vouch from here (a co-op member, migration 074); otherwise from the card in the members' chat. */
+  vouchHere: boolean;
   onchainWallet: { address: string; verification_method: string } | null;
   onchainInvoice: PortalOnchainInvoice | null;
   idleWallet: { id: number; address: string } | null;
@@ -176,7 +179,7 @@ export async function loadPortalHome(
   let vouchAsks: VouchAsk[] = [];
   if (member && !member.disabled) {
     const { data } = await service.from("applications").select("id, name, about")
-      .eq("known_by_member_id", member.id).eq("status", "pending").is("vouched_by", null)
+      .eq("known_by_member_id", member.id).eq("status", "pending").is("vouched_at", null)
       .order("created_at", { ascending: true }).limit(5);
     vouchAsks = (data ?? []) as VouchAsk[];
   }
@@ -264,6 +267,7 @@ export async function loadPortalHome(
     subscription,
     askDirectory,
     vouchAsks,
+    vouchHere: canApproveOnSite(member),
     onchainWallet,
     onchainInvoice,
     idleWallet,

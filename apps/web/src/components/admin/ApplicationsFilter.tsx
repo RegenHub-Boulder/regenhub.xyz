@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Search, X } from "lucide-react";
 import { ApplicationActions, relTime, type JoinApplication } from "@/components/admin/ApplicationActions";
 import type { ApplicationStatus } from "@/lib/supabase/types";
-import { ANSWER_WITHIN_HOURS } from "@regenhub/shared/joining";
+import { ANSWER_WITHIN_HOURS, approverWords } from "@regenhub/shared/joining";
 
 const statusStyle: Record<ApplicationStatus, string> = {
   pending: "border-warn/40 text-warn",
@@ -21,12 +21,15 @@ export function ApplicationsFilter({
   applications,
   names = {},
   nowMs,
+  canApprove,
 }: {
   applications: JoinApplication[];
   /** The page's "now" (server render): which ones are late. */
   nowMs: number;
   /** Member names by id: who they named, who vouched, who decided. */
   names?: Record<number, string>;
+  /** A co-op member (lib/approval.ts canApproveOnSite): vouch, approve and turn down. Otherwise the lists only. */
+  canApprove: boolean;
 }) {
   const [activeTab, setActiveTab] = useState<string>("pending");
   const [search, setSearch] = useState("");
@@ -133,8 +136,8 @@ export function ApplicationsFilter({
                 <dd>{app.known_by_member_id ? names[app.known_by_member_id] ?? "a member" : "Nobody yet"}</dd>
                 <dt className="text-muted">Vouch</dt>
                 <dd data-testid="vouch-line">
-                  {app.vouched_by
-                    ? <span className="text-ok">{names[app.vouched_by] ?? "A member"} vouched, {relTime(app.vouched_at)}</span>
+                  {app.vouched_by || app.vouched_by_telegram_id
+                    ? <span className="text-ok">{approverWords({ name: app.vouched_by ? names[app.vouched_by] : null, telegram: app.vouched_by_telegram }) ?? "Someone in the chat"} vouched, {relTime(app.vouched_at)}</span>
                     : app.status === "pending" ? <span className="text-warn">Waiting for a member who knows them</span> : "None"}
                 </dd>
               </dl>
@@ -145,7 +148,7 @@ export function ApplicationsFilter({
                 </p>
               )}
 
-              <ApplicationActions application={app} names={names} />
+              <ApplicationActions application={app} names={names} canApprove={canApprove} />
             </div>
           ))}
         </div>

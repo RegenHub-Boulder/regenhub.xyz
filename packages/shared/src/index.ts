@@ -71,6 +71,16 @@ export {
   type ChatCard,
   type ApplicationCardFacts,
   type FreeDayCardFacts,
+  isMembersChat,
+  approverWords,
+  vouchInChat,
+  approveInChat,
+  approveFreeDay,
+  handleApprovalTap,
+  type ChatTapper,
+  type ChatTap,
+  type ChatTapDeps,
+  type FreeDayApprover,
 } from "./joining.js";
 export {
   ADDRESS, ARRIVAL_STEPS, BRING_LINE, arrivalSection,

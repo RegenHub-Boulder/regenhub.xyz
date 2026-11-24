@@ -25,7 +25,7 @@ interface SubscribeBody {
  * Self-serve subscription signup for any tier flagged `selfServe` in
  * lib/plans.ts — currently every tier from $30 Member+1 day up to
  * $500 Cold Desk. The gate is lib/approval.ts `planGate`: a day plan needs
- * the one approval (apply, a member vouches, a steward approves); a desk
+ * the one approval (apply, a member vouches, one approval: migration 074); a desk
  * needs desk access, which a steward turns on for a member who asked.
  *
  * Works for both authenticated and unauthenticated users:

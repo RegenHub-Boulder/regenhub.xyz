@@ -1,6 +1,5 @@
 import type { createServiceClient } from "@/lib/supabase/admin";
 import { isMemberInStanding, PAYING_STATUSES } from "@/lib/memberStanding";
-import { canApproveMembers } from "@/lib/approval";
 import { escapeLike } from "@/lib/supabase/escapeLike";
 
 type Service = ReturnType<typeof createServiceClient>;
@@ -10,8 +9,9 @@ type Row = { id: number; name: string; member_type: string | null; disabled: boo
 const COLUMNS = "id, name, member_type, disabled, is_coop_member, is_admin, supabase_user_id, show_in_directory";
 
 /**
- * Who may vouch for an application (T-482 round 5): the same set as migration 072's member_can_vouch, a member in
- * standing (lib/memberStanding.ts), a co-op owner or a site admin, never disabled. Used by the apply form's
+ * Who an applicant may name as knowing them (T-482 round 5): the same set as migration 072's member_can_vouch, a
+ * member in standing (lib/memberStanding.ts), a co-op owner or a site admin, never disabled. (Who may then vouch is
+ * anyone in the members' chat, or a co-op member on the site: migration 074, lib/approval.ts canApproveOnSite.) Used by the apply form's
  * "Who here knows you?" type-ahead and by the apply route, so an applicant can only name someone who can vouch.
  */
 async function keepVouchers(admin: Service, rows: Row[]): Promise<Row[]> {
@@ -19,7 +19,7 @@ async function keepVouchers(admin: Service, rows: Row[]): Promise<Row[]> {
   if (live.length === 0) return [];
   const { data: subs } = await admin.from("subscriptions").select("member_id, status, monthly_cents")
     .in("member_id", live.map((m) => m.id)).in("status", PAYING_STATUSES);
-  return live.filter((m) => m.is_coop_member || canApproveMembers(m)
+  return live.filter((m) => m.is_coop_member || m.is_admin
     || isMemberInStanding(m, (subs ?? []).filter((s) => s.member_id === m.id)));
 }
 

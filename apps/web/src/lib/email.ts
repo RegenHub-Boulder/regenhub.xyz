@@ -367,10 +367,10 @@ export function applicationReceivedEmail(args: {
   const firstName = escapeHtml(args.name.split(" ")[0]);
   const base = args.siteUrl.replace(/\/$/, "");
   const next = args.namedMember
-    ? `We&rsquo;ve asked ${escapeHtml(args.namedMember)} to vouch for you, then a steward approves.`
+    ? `We&rsquo;ve asked ${escapeHtml(args.namedMember)} to vouch for you, then we approve.`
     : `One member needs to vouch for you before we approve: come to a night or a free day and meet us.`;
   const nextText = args.namedMember
-    ? `We've asked ${args.namedMember} to vouch for you, then a steward approves.`
+    ? `We've asked ${args.namedMember} to vouch for you, then we approve.`
     : `One member needs to vouch for you before we approve: come to a night or a free day and meet us.`;
   return {
     subject: "We got your RegenHub application",

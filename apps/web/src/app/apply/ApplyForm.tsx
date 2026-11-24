@@ -27,7 +27,7 @@ type Pick = { id: number; name: string };
 
 /**
  * The application (T-482 round 5): a minute's worth. Name, email, what you work on, how you found us, and who here
- * knows you. No level: once a member vouches and a steward approves, they pick any day plan themselves.
+ * knows you. No level: once a member vouches and they are approved, they pick any day plan themselves.
  */
 export default function ApplyForm({ authenticatedEmail, initial }: Props) {
   const router = useRouter();
@@ -103,7 +103,7 @@ export default function ApplyForm({ authenticatedEmail, initial }: Props) {
           </Link>
           <h1 className="text-3xl md:text-4xl font-bold text-forest mb-3">Apply to join</h1>
           <p className="text-muted max-w-md mx-auto">
-            A member who knows you vouches, a steward approves, and then you pick a day plan. We reply within a day.
+            A member who knows you vouches, we approve, and then you pick a day plan. We reply within a day.
           </p>
         </div>
 

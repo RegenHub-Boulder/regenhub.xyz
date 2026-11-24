@@ -16,7 +16,7 @@ import { techneConfig } from "@/lib/techne/config";
 export const metadata: Metadata = {
   title: "Apply to join — RegenHub",
   description:
-    "Apply to join RegenHub Boulder in a minute. A member who knows you vouches, a steward approves, and you pick a day plan. We reply within a day.",
+    "Apply to join RegenHub Boulder in a minute. A member who knows you vouches, we approve, and you pick a day plan. We reply within a day.",
 };
 
 export default async function ApplyPage() {

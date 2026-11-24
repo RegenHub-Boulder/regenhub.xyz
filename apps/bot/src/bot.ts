@@ -1,8 +1,8 @@
-import { freeDayUsedLine, withLockWriter, LockWriterBusyError, recordLockWriterFailure, readUsuallyHere } from "@regenhub/shared";
+import { freeDayUsedLine, withLockWriter, LockWriterBusyError, recordLockWriterFailure } from "@regenhub/shared";
 import TelegramBot from "node-telegram-bot-api";
 import { db, findMemberByTelegram, resolveSender, resolveAdminSender, type MemberRow } from "./db/supabase.js";
-import { sendEmail, freeDayApprovedEmail } from "./email.js";
-import { approveApplication, refreshApplicationCard, vouchForApplication } from "@regenhub/shared";
+import { sendEmail } from "./email.js";
+import { handleApprovalTap } from "@regenhub/shared";
 import {
   allocateSlotWithRetry,
   setUserCode,
@@ -391,8 +391,6 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
   const data = query.data!;
   await bot.answerCallbackQuery(query.id).catch(() => {});
 
-  const username = query.from.username ?? "";
-
   // ── Member callbacks (no admin required) ──
   if (data.startsWith("reveal_pin_")) {
     const member = await resolveSender(query.from);
@@ -408,78 +406,25 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
     });
   }
 
-  // ── Free day approval (any group member can approve) ──
-  // One button: a free day is only a free day. Joining is an application (vouch, then one approval). A card posted
-  // before T-482 round 5 may still carry "freeday_approve_membership_": it approves the free day only.
-  if (data.startsWith("freeday_approve_")) {
-    const claimId = parseInt(data.replace(/^freeday_approve_(membership_)?/, ""));
-    const { data: claim } = await db
-      .from("free_day_claims")
-      .select("id, name, email, status")
-      .eq("id", claimId)
-      .single();
-    if (!claim) return bot.sendMessage(chatId, "Claim not found.");
-    if (claim.status !== "pending") {
-      return bot.sendMessage(chatId, `Already ${claim.status}.`);
-    }
-    const approver = username ? `@${username}` : query.from.first_name;
-
-    // Flip the claim — trigger create_day_pass_member_on_approval auto-creates
-    // a day_pass member row keyed by email if one doesn't exist yet.
-    const { data: moved } = await db
-      .from("free_day_claims")
-      .update({ status: "reserved", approved_by: approver })
-      .eq("id", claimId)
-      .eq("status", "pending")
-      .select("id");
-    if (!(moved ?? []).length) return bot.sendMessage(chatId, "Someone else just approved it.");
-
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
-    // The "who's usually here" line, from the door log (aggregate only); left out if the read fails.
-    const usuallyHere = await readUsuallyHere(db).catch(() => null);
-    const tpl = freeDayApprovedEmail({ name: claim.name, siteUrl, usuallyHere });
-    sendEmail({ kind: "free_day_approved", to: claim.email, subject: tpl.subject, html: tpl.html, text: tpl.text })
-      .then((ok) => { if (ok) console.log(`[FreeDay] email sent to ${claim.email}`); })
-      .catch((err) => console.error("[FreeDay] Email send failed:", err));
-
-    const originalText = query.message?.text ?? "";
-    return bot.editMessageText(
-      `✅ Free day approved by ${approver} · email sent to ${claim.email}\n\n${originalText}`,
-      { chat_id: chatId, message_id: query.message!.message_id },
-    );
-  }
-
-  // ── Applications: a member vouches, then a steward approves (T-482 round 5) ──
-  // Both buttons run the same functions as the site (@regenhub/shared joining.ts → migration 072), so the chat and
-  // People → Applications can't disagree. The card is redrawn from the database after each tap.
-  if (data.startsWith("app_vouch_") || data.startsWith("app_approve_")) {
-    const vouching = data.startsWith("app_vouch_");
-    const appId = parseInt(data.replace(/^app_(vouch|approve)_/, ""));
-    const target = { chatId, messageId: query.message!.message_id };
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
-    // By Telegram id first, like every other sender check: a recycled handle can't vouch or approve as someone else.
-    const me = await resolveSender(query.from);
-    if (!me) {
-      return bot.sendMessage(chatId, `@${username || query.from.first_name}, I don't know you as a member yet: link your Telegram on your portal profile first.`);
-    }
-    if (vouching) {
-      const result = await vouchForApplication(db, appId, me.id);
-      if (!result.ok) return bot.sendMessage(chatId, result.message);
-      await refreshApplicationCard(db, appId, target, siteUrl);
-      return;
-    }
-    const result = await approveApplication(db, {
-      applicationId: appId,
-      approverMemberId: me.id,
-      via: "chat",
-      siteUrl,
-      send: (mail) => sendEmail(mail),
-    });
-    if (!result.ok) return bot.sendMessage(chatId, result.message);
-    await refreshApplicationCard(db, appId, target, siteUrl);
-    if (!result.already && !result.emailSent) {
-      return bot.sendMessage(chatId, `⚠️ Approved, but the email to ${result.email} didn't send: tell them to open their portal to pick a plan.`);
-    }
+  // ── The chat cards: vouch, approve an application, approve a free day (T-482, migration 074) ──
+  // Anyone in the members' chat may tap them (Aaron, 11-24); a tap from any other chat or a DM is refused. Linked
+  // members are recorded by their member row, others by their Telegram id and @username. The same functions as the
+  // site (@regenhub/shared joining.ts → 072/074), so the chat and People → Applications can't disagree.
+  const tap = await handleApprovalTap(db, {
+    data,
+    chatId: query.message?.chat.id ?? null,
+    messageId: query.message?.message_id ?? null,
+    messageText: query.message?.text ?? null,
+    from: query.from,
+  }, {
+    // By Telegram id first, like every other sender check: a recycled handle can't act as someone else. Disabled
+    // rows are included so the database refuses them, rather than counting them as an unlinked person.
+    memberFor: (from) => resolveSender({ id: from.id, username: from.username ?? undefined }, { includeDisabled: true }),
+    send: (mail) => sendEmail(mail),
+    siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz",
+  });
+  if (tap.handled) {
+    if (tap.reply && query.message) return bot.sendMessage(chatId, tap.reply);
     return;
   }
 

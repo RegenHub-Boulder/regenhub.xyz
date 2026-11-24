@@ -101,9 +101,10 @@ function buildServer(auth: McpAuthInfo): McpServer {
       // ---- 1) Waiting applications: vouch and age ----
       const { data: waiting } = await sb.from("applications").select("*").eq("status", "pending").order("created_at", { ascending: true });
       lines.push(`## Applications waiting: ${waiting?.length ?? 0}`);
-      for (const w of (waiting ?? []) as { id: number; name: string; email: string; created_at: string; vouched_by?: number | null }[]) {
+      for (const w of (waiting ?? []) as { id: number; name: string; email: string; created_at: string; vouched_by?: number | null; vouched_by_telegram?: string | null; vouched_at?: string | null }[]) {
         const hours = Math.floor((Date.now() - Date.parse(w.created_at)) / 3_600_000);
-        lines.push(`- [app ${w.id}] ${w.name} <${w.email}> — waiting ${hours} h${hours >= 24 ? " (LATE)" : ""} · ${w.vouched_by ? `vouched (member ${w.vouched_by}): ready to approve` : "needs a member's vouch"}`);
+        const by = w.vouched_by ? `member ${w.vouched_by}` : w.vouched_by_telegram ? `@${w.vouched_by_telegram} in the chat` : "in the chat";
+        lines.push(`- [app ${w.id}] ${w.name} <${w.email}> — waiting ${hours} h${hours >= 24 ? " (LATE)" : ""} · ${w.vouched_at ? `vouched (${by}): ready to approve` : "needs a vouch"}`);
       }
 
       // ---- 2) Approved applications, custom-price checkout not completed ----

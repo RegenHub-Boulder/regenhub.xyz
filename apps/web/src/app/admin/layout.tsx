@@ -19,18 +19,22 @@ const before: NavLink[] = [
   { href: "/admin/access", label: "Door" },
 ];
 const eventsLink: NavLink = { href: "/admin/events", label: "Events" };
+const peopleLink: NavLink = { href: "/admin/people", label: "People" };
 const after: NavLink[] = [{ href: "/admin/mail", label: "Mail" }];
 const portalLink: NavLink = { href: "/portal", label: "Portal", accent: true };
 
 /**
  * The admin area's frame. Who may see what is decided below it: the portal admin pages by `members.is_admin`
  * ((staff)/layout.tsx), /admin/events (with its Roles section) by the Techne role in RegenHub. This only chooses
- * which links to show: a RegenHub admin sees them all, anyone else just Events (while the Techne door is on).
+ * which links to show: a RegenHub admin sees them all, a co-op member People (to approve), anyone else just Events
+ * (while the Techne door is on).
  */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { user, isAdmin } = await portalViewer();
+  const { user, isAdmin, canApprove } = await portalViewer();
   const events = techneConfig() && regenosCollectiveDid() ? [eventsLink] : [];
-  const links = [...(isAdmin ? [...before, ...events, ...after] : events), ...(user ? [portalLink] : [])];
+  // A co-op member who isn't a site admin: People (Applications and Free days, to approve; migration 074).
+  const people = !isAdmin && canApprove ? [peopleLink] : [];
+  const links = [...(isAdmin ? [...before, ...events, ...after] : [...people, ...events]), ...(user ? [portalLink] : [])];
   // While a portal preview is on (lib/viewAs.ts) every write is paused here too: say so.
   const viewAs = isAdmin ? await currentViewAs() : null;
   const preview = viewAs ? await previewFrame(viewAs) : null;

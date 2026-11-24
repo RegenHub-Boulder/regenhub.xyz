@@ -4,13 +4,16 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Check, X } from "lucide-react";
+import { COOP_APPROVES } from "@/lib/approval";
 
 interface Props {
   claimId: number;
   currentStatus: string;
+  /** A co-op member (migration 074): Approve and Reject a waiting request. A site admin who isn't one sees why not. */
+  canApprove: boolean;
 }
 
-export function ClaimActions({ claimId, currentStatus }: Props) {
+export function ClaimActions({ claimId, currentStatus, canApprove }: Props) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +41,10 @@ export function ClaimActions({ claimId, currentStatus }: Props) {
 
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
-      {currentStatus === "pending" && (
+      {currentStatus === "pending" && !canApprove && (
+        <span className="text-xs text-muted" data-testid="coop-approves">{COOP_APPROVES}.</span>
+      )}
+      {currentStatus === "pending" && canApprove && (
         <>
           <Button
             size="sm"

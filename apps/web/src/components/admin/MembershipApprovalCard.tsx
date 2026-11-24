@@ -78,7 +78,7 @@ export function MembershipApprovalCard(p: Props) {
                 {!p.hasActiveSubscription && " They pick a day plan from their portal."}
               </span>
             ) : (
-              <span className="text-muted">Not approved. Approval comes from an application: a member vouches, then a steward approves.</span>
+              <span className="text-muted">Not approved. Approval comes from an application: someone vouches, then anyone in the members&apos; chat or a co-op member approves.</span>
             )}
           </p>
           {p.approved && (

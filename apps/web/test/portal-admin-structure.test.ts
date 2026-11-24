@@ -29,7 +29,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import AdminLayout from "@/app/admin/layout";
 import PortalLayout from "@/app/portal/layout";
-import PeoplePage from "@/app/admin/(staff)/people/page";
+import PeoplePage from "@/app/admin/people/page";
 import MembersPage from "@/app/admin/(staff)/members/page";
 import MailPage from "@/app/admin/(staff)/mail/page";
 import BillingPage from "@/app/admin/(staff)/billing/page";

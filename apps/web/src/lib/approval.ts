@@ -66,7 +66,7 @@ export function approvalOf(row: ApprovalRow | null | undefined): Approval {
   };
 }
 
-export const NOT_APPROVED = "You can pick a plan once you're approved. Apply at /apply: a member vouches, then a steward approves, within a day.";
+export const NOT_APPROVED = "You can pick a plan once you're approved. Apply at /apply: a member vouches, then we approve, within a day.";
 export const NO_DESK_ACCESS = "Desks are for members: ask about one from your portal and a steward will talk with you.";
 
 /** Whether this approval may buy this plan; the reason in words when not. One check for card and USDC. */
@@ -75,7 +75,7 @@ export function planGate(approval: Approval, planKey: string): { ok: true } | { 
   return approval.member ? { ok: true } : { ok: false, error: NOT_APPROVED };
 }
 
-type Flags = { is_admin?: boolean | null; is_ops_admin?: boolean | null; disabled?: boolean | null } | null | undefined;
+type Flags = { is_admin?: boolean | null; is_ops_admin?: boolean | null; is_coop_member?: boolean | null; disabled?: boolean | null } | null | undefined;
 
 /**
  * Who may turn desk access on (Aaron, 11-24: "Aaron or Carey"): a site admin who is also an ops admin. A role check
@@ -85,10 +85,18 @@ export function canApproveDesks(m: Flags): boolean {
   return !!m && !m.disabled && !!m.is_admin && !!m.is_ops_admin;
 }
 
-/** Who may approve an application (the same rule as 072's member_can_approve): a site admin. */
-export function canApproveMembers(m: Flags): boolean {
-  return !!m && !m.disabled && !!m.is_admin;
+/**
+ * Who may approve and vouch ON THE SITE (Aaron, 11-24: "on the website, they need to be a co-op member"): a co-op
+ * member, not disabled, admin or not. The one rule for People → Applications and Free days, the portal's vouch and
+ * the routes behind them; migration 074's member_can_approve is the same rule in SQL. In the members' chat anyone
+ * may approve (@regenhub/shared isMembersChat). A site admin who isn't a co-op member sees the lists, not the buttons.
+ */
+export function canApproveOnSite(m: Flags): boolean {
+  return !!m && !m.disabled && !!m.is_coop_member;
 }
+
+/** What the site shows a site admin who may not approve, in place of the buttons. */
+export const COOP_APPROVES = "Co-op members approve";
 
 export const missingColumn = (e: { code?: string; message?: string } | null | undefined) =>
   !!e && (e.code === "42703" || e.code === "PGRST204");
