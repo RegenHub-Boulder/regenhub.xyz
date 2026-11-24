@@ -163,7 +163,8 @@ export const SCOREBOARD_DESCRIPTIONS = {
     "Read-only. The co-op scoreboard (/admin/scoreboard) as text: paying members ($30+/mo plans) and net membership revenue against the " +
     "goals (net +10 members and $2,750/mo by 2027-01-20), pace against the straight line to the goal, " +
     "the month-by-month table from July 2026 as CSV (space visits, stay-in-touch list, free days asked for and what came of them, day passes by kind and rail, memberships new, " +
-    "cancelled and paying at month end by plan with net revenue, and four conversion rates, each column defined), paying members and " +
+    "cancelled and paying at month end by plan with net revenue, and four conversion rates, each column defined), \"where people drop off\" (one funnel per way in: free day approved, first day pass, passes given by an admin, RSVP to a night as a non-member; " +
+    "came in, joined, paid a 2nd/3rd/4th month; the biggest drop named; as CSV by month started, too-early cells marked), paying members and " +
     "revenue by plan now with comped and past-due counts, event turnout from Techne by series, " +
     "and the newsletter list. Same definitions as the scoreboard page, the admin home and billing_summary. No names or contact details, " +
     "unless who_is_coming: then each upcoming night also lists who is going (names, handles, member or guest; never an email).",

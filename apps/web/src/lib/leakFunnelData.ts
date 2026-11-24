@@ -19,6 +19,9 @@ import {
 
 type Admin = ReturnType<typeof createServiceClient>;
 
+/** Stripe invoices that bill a membership period. */
+const PERIOD_REASONS = new Set(["subscription_create", "subscription_cycle"]);
+
 const inChunks = async <T, R>(items: readonly T[], fn: (chunk: T[]) => Promise<R[]>): Promise<R[]> => {
   const chunks: T[][] = [];
   for (let i = 0; i < items.length; i += 200) chunks.push(items.slice(i, i + 200));
@@ -89,7 +92,8 @@ async function stripePeriods(admin: Admin, ids: number[]): Promise<Map<number, n
     await mapLimit(rows.filter((r) => r.stripe_subscription_id), 4, async (r) => {
       let n = 0;
       for await (const inv of stripe.invoices.list({ subscription: r.stripe_subscription_id!, status: "paid", limit: 100 })) {
-        if ((inv.amount_paid ?? 0) > 0) n += 1;
+        // A period: the first or a renewal, with money in it. A proration (a plan changed mid-month) or a one-off isn't.
+        if ((inv.amount_paid ?? 0) > 0 && PERIOD_REASONS.has(inv.billing_reason ?? "")) n += 1;
       }
       out.set(r.id, n);
     });

@@ -113,9 +113,23 @@ describe("leakFunnels", () => {
     });
   });
 
-  it("names the biggest drop among people whose window has closed (Dee, four days in, isn't a loss yet)", () => {
-    expect(f.biggest).toMatchObject({ door: "free_day", step: "came_in", lost: 2, of: 4 });
-    expect(f.biggest!.sentence).toBe("Most people are lost between a free day approved and coming in: 2 of 4 never came in.");
+  it("names the biggest drop among people whose window has closed and whose step can be seen", () => {
+    // Dee (four days in) isn't a loss yet, and the claim with no member row can't be seen coming in: Ana, Ben, Jo.
+    expect(f.biggest).toMatchObject({ door: "free_day", step: "came_in", lost: 1, of: 3 });
+    expect(f.biggest!.sentence).toBe("Most people are lost between a free day approved and coming in: 1 of 3 never came in.");
+  });
+
+  it("a used free-day code counts as coming in with no member row", () => {
+    const g = leakFunnels({ ...input, claims: input.claims!.map((c) => (c.email.startsWith("ghost")
+      ? { ...c, status: "activated", activated_at: "2026-08-20T16:00:00Z" } : c)) });
+    expect(counts(g, "free_day").steps.came_in).toBe(3);
+  });
+
+  it("someone given a desk by hand after their start (no subscription) isn't taken for an earlier member", () => {
+    const withDesk = (created: string) => leakFunnels({ ...input,
+      members: input.members.map((m) => (m.id === 10 ? { ...m, member_type: "cold_desk", created_at: created } : m)) });
+    expect(counts(withDesk("2026-09-06T16:00:00Z"), "free_day").already).toBe(1); // Jo's row is newer than the claim
+    expect(counts(withDesk("2026-01-06T16:00:00Z"), "free_day").already).toBe(2); // a desk since January: already in
   });
 
   it("cohorts by month, with too early where the window hasn't closed", () => {

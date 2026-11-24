@@ -5,7 +5,7 @@
 import type { createServiceClient } from "@/lib/supabase/admin";
 import { compileAudience } from "@/lib/newsletter";
 import { issueProgress } from "@/lib/newsletterSend";
-import { dayAlignedWindow, fetchAttendance, fetchCollectiveEvents } from "@/lib/regenos/events";
+import { fetchAttendance, fetchCollectiveEvents } from "@/lib/regenos/events";
 import { mapLimit } from "@/lib/mapLimit";
 import { isMissingColumn, membershipInvoices } from "@/lib/onchain/invoiceKind";
 import { dateIn } from "@/lib/series";
@@ -102,10 +102,9 @@ async function followupsSent(admin: Admin, since: string) {
   }
 }
 
-/** The collective's events from `after` (default 60 days back) on, each with its going count (the same read
- *  /admin/events does). */
-async function turnout(now: Date, after = new Date(now.getTime() - TURNOUT_PAST_DAYS * 86_400_000).toISOString()): Promise<TurnoutEvent[] | null> {
-  const events = await fetchCollectiveEvents({ after });
+/** The collective's events from 60 days back on, each with its going count (the same read /admin/events does). */
+async function turnout(now: Date): Promise<TurnoutEvent[] | null> {
+  const events = await fetchCollectiveEvents({ after: new Date(now.getTime() - TURNOUT_PAST_DAYS * 86_400_000).toISOString() });
   if (!events) return null;
   // The same per-event read /admin/events does; a few at a time so a long calendar doesn't fan out at once.
   const going = await mapLimit(events, 6, (e) => fetchAttendance(e.uri));
@@ -178,7 +177,7 @@ async function readRows(admin: Admin, since: string, doorsSince: string) {
       .select("id, member_id, plan_key, status, monthly_cents, net_cents, payment_rail, created_at, canceled_at, updated_at, " +
         "cancel_at_period_end, admin_canceled_at, admin_cancel_mode, past_due_since, current_period_end")
       .order("id", { ascending: true }).range(f, t)),
-    readAll<MemberRow>("members", (f, t) => admin.from("members").select("id, name, email, member_type, disabled, did")
+    readAll<MemberRow>("members", (f, t) => admin.from("members").select("id, name, email, member_type, disabled, did, created_at")
       .order("id", { ascending: true }).range(f, t)),
     // All of it: the list's size at each month end counts everyone who ever signed up.
     readAll<InterestRow>("interests", (f, t) => admin.from("interests").select("id, email, source_path, member_id, created_at")
@@ -235,24 +234,48 @@ export async function readMonthTable(admin: Admin, now = new Date()): Promise<Mo
   return monthRows(await readRows(admin, since, doorsSince), now);
 }
 
+/**
+ * The collective's own past nights since LEAK_NIGHTS_FROM with who went (the RSVP door). Read strictly, so a calendar
+ * that comes back short is unread (null) rather than quietly missing nights; listed events of other groups aren't
+ * RegenHub's nights. Going counts already read for the page (`known`) are reused.
+ */
+async function pastNights(now: Date, known: readonly TurnoutEvent[] | null): Promise<TurnoutEvent[] | null> {
+  const events = await fetchCollectiveEvents({ after: LEAK_NIGHTS_FROM, before: now.toISOString(), ownOnly: true, strict: true });
+  if (!events) return null;
+  const seen = new Map((known ?? []).map((e) => [e.uri, e]));
+  const past = events.filter((e) => e.startAt && Date.parse(e.startAt) < now.getTime());
+  const going = await mapLimit(past, 6, async (e) => {
+    const k = seen.get(e.uri);
+    return k && k.going != null ? { goingDids: k.goingDids ?? [] } : fetchAttendance(e.uri);
+  });
+  // A night whose RSVPs couldn't be read leaves the door unread, rather than counting nobody.
+  if (going.some((g) => g == null)) return null;
+  return past.map((e, i) => ({ uri: e.uri, name: e.name, startAt: e.startAt, url: e.url, seriesName: null, going: null, goingDids: going[i]!.goingDids ?? [] }));
+}
+
 /** "Where people drop off" from rows already read; null (and logged) when it fails, so the rest of the page stands. */
-const leaksFrom = (admin: Admin, rows: Rows, events: TurnoutEvent[] | null, now: Date): Promise<LeakFunnels | null> =>
-  readLeakFunnels(admin, rows, events, now).catch((e) => {
+const leaksFrom = async (admin: Admin, rows: Rows, known: TurnoutEvent[] | null, now: Date): Promise<LeakFunnels | null> => {
+  try {
+    const nights = await pastNights(now, known).catch((e) => {
+      console.error("[scoreboard] nights read failed; the RSVP door is unread", e);
+      return null;
+    });
+    return await readLeakFunnels(admin, rows, nights, now);
+  } catch (e) {
     console.error("[scoreboard] drop-off read failed", e);
     return null;
-  });
+  }
+};
 
 /** "Where people drop off" alone (its CSV download): the same rows and counts as the page's. */
 export async function readLeaks(admin: Admin, now = new Date()): Promise<LeakFunnels> {
   const { since, doorsSince } = readBounds(now);
-  const [rows, events] = await Promise.all([
-    readRows(admin, since, doorsSince),
-    turnout(now, LEAK_NIGHTS_FROM).catch((e) => {
-      console.error("[scoreboard] events read failed", e);
-      return null;
-    }),
-  ]);
-  return readLeakFunnels(admin, rows, events, now);
+  const rows = await readRows(admin, since, doorsSince);
+  const nights = await pastNights(now, null).catch((e) => {
+    console.error("[scoreboard] nights read failed; the RSVP door is unread", e);
+    return null;
+  });
+  return readLeakFunnels(admin, rows, nights, now);
 }
 
 /**
@@ -261,19 +284,15 @@ export async function readLeaks(admin: Admin, now = new Date()): Promise<LeakFun
  */
 export async function readScoreboard(admin: Admin, now = new Date(), opts: { leaks?: boolean } = {}) {
   const { months, since, doorsSince } = readBounds(now);
-  // The day-aligned bound the 60-day read itself uses, so the filtered list is exactly what that read returns.
-  const recentFrom = Date.parse(dayAlignedWindow({ after: new Date(now.getTime() - TURNOUT_PAST_DAYS * 86_400_000).toISOString() }).after!);
-  const [rows, newsletter, allEvents] = await Promise.all([
+  const [rows, newsletter, events] = await Promise.all([
     readRows(admin, since, doorsSince),
     newsletterNumbers(admin),
-    turnout(now, opts.leaks ? LEAK_NIGHTS_FROM : undefined).catch((e) => {
+    turnout(now).catch((e) => {
       console.error("[scoreboard] events read failed", e);
       return null;
     }),
   ]);
-  // Everything but the drop-off funnel reads the last 60 days on, as before.
-  const events = allEvents?.filter((e) => !e.startAt || Date.parse(e.startAt) >= recentFrom) ?? null;
-  const leaksRead = opts.leaks ? leaksFrom(admin, rows, allEvents, now) : Promise.resolve(null);
+  const leaksRead = opts.leaks ? leaksFrom(admin, rows, events, now) : Promise.resolve(null);
   const { subs, members, purchases } = rows;
 
   // Last visits only for the people on the follow-up lists and the leavers the actions name: find who, then read.

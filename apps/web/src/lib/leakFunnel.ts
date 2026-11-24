@@ -85,6 +85,8 @@ export interface LeakMember {
   email: string | null;
   member_type: string | null;
   did?: string | null;
+  /** When the row was made: a desk or hub friend with no subscription counts as a member only from before the start. */
+  created_at?: string | null;
 }
 
 export interface LeakClaim {
@@ -265,7 +267,7 @@ export function leakFunnels(input: LeakInput, cardPeriods: LeakFunnels["cardPeri
   };
   const subsOf = byMember(input.subs.filter((s) => started(s)), (s) => s.member_id);
   const entriesOf = byMember(input.entries, (e) => e.member_id);
-  const typeOf = new Map(input.members.map((m) => [m.id, m.member_type ?? ""]));
+  const memberOf = new Map(input.members.map((m) => [m.id, m]));
 
   // "Got a free day or day pass" (the RSVP door): an approved claim, a purchase or a gift, by person.
   const passesOf = new Map<string, number[]>();
@@ -276,23 +278,31 @@ export function leakFunnels(input: LeakInput, cardPeriods: LeakFunnels["cardPeri
   for (const b of input.purchases) addPass(ctx.personKey(b.member_id, norm(b.email)).key, ms(b.created_at));
   for (const g of input.gifts ?? []) addPass(ctx.personKey(g.memberId, null).key, ms(g.at));
 
-  /** Already a member at `at`: a subscription that started before, or a desk / hub friend with no subscription. */
+  /**
+   * Already a member at `at`: a subscription that started before, or a desk / hub friend with no subscription whose row
+   * is older than the start (the type is today's: a row made since, then given a desk by hand, isn't excluded).
+   */
   const memberBefore = (id: number | null, at: number) => {
     if (id == null) return false;
     const subs = subsOf.get(id) ?? [];
     if (subs.some((s) => ms(s.created_at) < at)) return true;
-    return subs.length === 0 && STANDING_TYPES.includes(typeOf.get(id) ?? "");
+    const m = memberOf.get(id);
+    return subs.length === 0 && STANDING_TYPES.includes(m?.member_type ?? "") && (m?.created_at == null || ms(m.created_at) < at);
   };
+  /** Whether a step can be seen for this person at all: with no member row only a free day's code being used (came
+   *  in) and, by email, getting a pass can be. The biggest drop counts only people a step can be seen for. */
+  const trackable = (s: Start, k: StepKey) =>
+    s.memberId != null || (k === "pass" && s.email != null) || (k === "came_in" && s.activatedAt != null);
 
   /** Which steps this person reached, in the door's order, as "at least" (a later step implies the earlier ones). */
   const reachedFor = (door: Door, s: Start): number => {
     const reached = new Set<StepKey>();
     const t = s.at;
     if ((passesOf.get(s.key) ?? []).some((p) => p >= t)) reached.add("pass");
+    // A free day's code used counts as coming in even when the claim's member row is gone.
+    if (s.activatedAt != null && s.activatedAt >= t) reached.add("came_in");
     if (s.memberId != null) {
-      if ((s.activatedAt != null && s.activatedAt >= t) || (entriesOf.get(s.memberId) ?? []).some((e) => ms(e.created_at) >= t)) {
-        reached.add("came_in");
-      }
+      if ((entriesOf.get(s.memberId) ?? []).some((e) => ms(e.created_at) >= t)) reached.add("came_in");
       const mine = (subsOf.get(s.memberId) ?? []).filter((x) => ms(x.created_at) >= t);
       if (mine.length > 0) {
         reached.add("joined");
@@ -323,7 +333,7 @@ export function leakFunnels(input: LeakInput, cardPeriods: LeakFunnels["cardPeri
     out.steps = door.steps.map((k, i) => {
       const count = furthest.filter((p) => p.f >= i).length;
       const prev = i === 0 ? out.started : furthest.filter((p) => p.f >= i - 1).length;
-      const closed = furthest.filter((p) => p.s.at + STEP_WINDOW_DAYS[k] * DAY_MS <= now);
+      const closed = furthest.filter((p) => p.s.at + STEP_WINDOW_DAYS[k] * DAY_MS <= now && trackable(p.s, k));
       return {
         key: k, label: STEP_LABEL[k], count, ofPrev: pctOf(count, prev), ofStart: pctOf(count, out.started),
         settled: { prev: closed.filter((p) => p.f >= i - 1).length, reached: closed.filter((p) => p.f >= i).length },
@@ -375,15 +385,15 @@ export function biggestDrop(doors: readonly DoorFunnel[]): BiggestDrop | null {
 export function leakNotes(cardPeriods: LeakFunnels["cardPeriods"]): string[] {
   return [
     "One funnel per way in. Each person counts once per door, from the first time they came through it, and not at all if they were already a member then (a plan that started before, or a desk or hub friend given by hand).",
-    "Free day approved: claims that were approved (used, waiting to be used, or lapsed), dated when they were asked for. Day pass: the first one bought, card or USDC. Given passes: an admin added passes on the member page (recorded from late November 2026 on; earlier gifts aren't). RSVP'd: going to one of the collective's past nights on Techne while not a member, matched to a member by their linked account or the email they confirmed at sign-in.",
+    "Free day approved: claims that were approved (used, waiting to be used, or lapsed), dated when they were asked for (the approval time is recorded only since migration 071, and claims waiting when it ran carry its date; a claim asked again after it lapsed keeps its first date). Day pass: the first one bought, card or USDC. Given passes: an admin added passes on the member page (recorded from late November 2026 on; earlier gifts aren't). RSVP'd: going to one of the collective's own past nights on Techne while not a member, matched to a member by their linked account or the email they confirmed at sign-in.",
     "Came in: a door entry filed under them after the start (their own code or a day code they were given), or their free day's code was used. Got a free day or day pass (RSVP door): an approved free day, a pass bought or passes given, after the night.",
     "Joined: a subscription that started after the start. Paid a 2nd, 3rd, 4th month: paid periods across the subscriptions they've had since. USDC: paid membership invoices. Card: " +
       (cardPeriods === "stripe"
-        ? "Stripe's paid invoices with money in them (a free trial or a full comp isn't a payment)."
+        ? "Stripe's paid invoices for a new or renewed period with money in them (a free trial, a full comp or a mid-month plan change's proration isn't a month)."
         : "months on the plan (one at the start, one more per 30 days while it ran), because Stripe couldn't be read; a payment that failed still counts."),
     "A step counts everyone who got at least that far: someone who joined with no door entry on record counts as having come in. % is of the step before, then of the start.",
-    "People with no member row (a claim or purchase under an email the site doesn't know, an RSVP from someone who never signed in here) count at the start only: nothing after it can be seen.",
-    `By month: people counted in the month (Denver) they started. A cell is too early until its window has closed: ${STEP_WINDOW_DAYS.came_in} days for coming in or getting a pass, ${STEP_WINDOW_DAYS.joined} for joining, ${STEP_WINDOW_DAYS.renewed1}/${STEP_WINDOW_DAYS.renewed2}/${STEP_WINDOW_DAYS.renewed3} for a 2nd/3rd/4th month, from the month's end. The biggest drop counts only people whose window has closed.`,
+    "People with no member row (a claim or purchase under an email the site doesn't know, an RSVP from someone who never signed in here) count at the start only: nothing after it can be seen, except a free day's code being used, or a pass got under the email they confirmed. A desk or hub friend given by hand, with no subscription, isn't counted as joining.",
+    `By month: people counted in the month (Denver) they started. A cell is too early until its window has closed: ${STEP_WINDOW_DAYS.came_in} days for coming in or getting a pass, ${STEP_WINDOW_DAYS.joined} for joining, ${STEP_WINDOW_DAYS.renewed1}/${STEP_WINDOW_DAYS.renewed2}/${STEP_WINDOW_DAYS.renewed3} for a 2nd/3rd/4th month, from the month's end. The biggest drop counts only people whose window has closed and whose step could be seen.`,
   ];
 }
 

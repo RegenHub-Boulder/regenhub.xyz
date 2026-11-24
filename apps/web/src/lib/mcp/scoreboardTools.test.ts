@@ -176,7 +176,10 @@ describe("where people drop off, on the real schema", () => {
 
   beforeEach(async () => {
     vi.stubEnv("STRIPE_SECRET_KEY", ""); // no Stripe here: card periods by months elapsed
-    await db.exec(`insert into members (id, name, email, member_type) values (11, 'Hana Gift', 'hana@example.test', 'day_pass')`);
+    await db.exec(`insert into members (id, name, email, member_type) values (11, 'Hana Gift', 'hana@example.test', 'day_pass'),
+      (12, 'Ivo Noshow', 'ivo@example.test', 'day_pass')`);
+    // Ivo: a free day 50 days ago, never came.
+    await db.sql(`insert into free_day_claims (email, name, status, created_at) values ('ivo@example.test', 'Ivo Noshow', 'reserved', $1)`, [iso(-50 * DAY)]);
     // Gil: a free day 100 days ago, used 95 days ago, joined in USDC 80 days ago, two periods paid.
     await db.sql(`insert into free_day_claims (email, name, status, created_at, activated_at) values ('gil@example.test', 'Gil Guest', 'activated', $1, $2)`, [iso(-100 * DAY), iso(-95 * DAY)]);
     await db.exec(`insert into member_wallets (id, member_id, address, verification_method) values (1, 10, '0x${"a".repeat(40)}', 'signature')`);
@@ -213,8 +216,8 @@ describe("where people drop off, on the real schema", () => {
       const d = s.leaks!.doors.find((x) => x.door === k)!;
       return [d.started, d.alreadyMembers, d.noMemberRow, ...d.steps.map((x) => x.count)];
     };
-    // Gil, Cleo and the ghost; Gil came in, joined, paid twice; Cleo joined (so counts as in) with one card month.
-    expect(door("free_day")).toEqual([3, 0, 1, 2, 2, 1, 0, 0]);
+    // Gil, Cleo, Ivo and the ghost; Gil came in, joined, paid twice; Cleo joined (so counts as in) with one card month.
+    expect(door("free_day")).toEqual([4, 0, 1, 2, 2, 1, 0, 0]);
     expect(door("gifted")).toEqual([1, 0, 0, 0, 0, 0, 0, 0]);
     expect(door("day_pass")).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
     expect(door("rsvp")).toEqual([1, 1, 1, 0, 0, 0, 0, 0, 0]); // the unlinked account; Gil was a member by then
@@ -225,13 +228,13 @@ describe("where people drop off, on the real schema", () => {
     expect(t).toContain("### Where people drop off");
     expect(t).toContain("Most people are lost between a free day approved and coming in");
     const csv = t.split("```csv\n")[2].split("\n```")[0];
-    expect(csv.split("\n")[1]).toBe("Free day approved,all,3,0,1,,2,2,1,0,0,");
+    expect(csv.split("\n")[1]).toBe("Free day approved,all,4,0,1,,2,2,1,0,0,");
     signedInAsAda();
     const res = await downloadLeaks();
     expect(res.headers.get("content-disposition")).toMatch(/attachment; filename="regenhub-drop-off-\d{4}-\d{2}-\d{2}\.csv"/);
     expect((await res.text()).replace(/\r\n/g, "\n").trim()).toBe(csv);
     expect(t).not.toMatch(EMAIL);
-    for (const name of ["Gil", "Hana", "Cleo", "Ghost", "ghost"]) expect(t).not.toContain(name);
+    for (const name of ["Gil", "Hana", "Cleo", "Ivo", "Ghost", "ghost"]) expect(t).not.toContain(name);
   });
 
   it("the admin home's read leaves it out", async () => {
