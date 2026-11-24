@@ -21,7 +21,7 @@ interface Props {
   deskAt: string | null;
   deskByName: string | null;
   deskAskedAt: string | null;
-  /** canApproveDesks for the signed-in steward. */
+  /** canApproveOnSite for the signed-in admin: a co-op member turns desk access on (migration 074). */
   canDesks: boolean;
   hasActiveSubscription: boolean;
 }
@@ -35,7 +35,7 @@ function fmtDate(iso: string | null): string {
 
 /**
  * Joining, on the member page (T-482 round 5): the one approval (who approved, who vouched), desk access (only a
- * steward who approves desks switches it), and a custom price: a checkout link at a price the steward sets.
+ * co-op member switches it), and a custom price: a checkout link at a price the steward sets.
  */
 export function MembershipApprovalCard(p: Props) {
   const router = useRouter();
@@ -116,7 +116,7 @@ export function MembershipApprovalCard(p: Props) {
               {spin("desk")} {p.desk ? "Turn desk access off" : "Turn desk access on"}
             </Button>
           ) : (
-            <p className="text-xs text-muted">Desk access is turned on by a steward who approves desks (ops admin), after a talk.</p>
+            <p className="text-xs text-muted">Co-op members turn desk access on, after a talk.</p>
           )}
         </section>
 

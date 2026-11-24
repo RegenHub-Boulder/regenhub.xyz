@@ -6,7 +6,6 @@ import { sendEmail, approvalCheckoutEmail } from "@/lib/email";
 import { logAction, AuditAction } from "@/lib/auditLog";
 import type { DiscountDuration, PlanKey } from "@/lib/supabase/types";
 import { isDeskPlan } from "@/lib/plans";
-import { canApproveDesks } from "@/lib/approval";
 
 /**
  * POST /api/admin/members/[id]/custom-price — a Stripe checkout link at a price the steward sets, emailed to the
@@ -29,8 +28,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const plan = body?.plan_key ? getPlan(body.plan_key) : null;
   if (!body?.plan_key || !plan) return NextResponse.json({ error: "Pick a plan" }, { status: 400 });
   // A desk carries a 24/7 door code: the same trust step as turning desk access on (lib/approval.ts).
-  if (isDeskPlan(body.plan_key) && !canApproveDesks({ is_admin: true, is_ops_admin: auth.member.isOpsAdmin })) {
-    return NextResponse.json({ error: "A desk price is for a steward who approves desks." }, { status: 403 });
+  if (isDeskPlan(body.plan_key) && !auth.member.canApprove) {
+    return NextResponse.json({ error: "Co-op members set a desk price." }, { status: 403 });
   }
   if (!body.monthly_cents || body.monthly_cents < 100) return NextResponse.json({ error: "A monthly price of $1 or more" }, { status: 400 });
   const discountCents = body.discount_cents && body.discount_cents > 0 ? body.discount_cents : null;

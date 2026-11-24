@@ -24,8 +24,8 @@ export async function requireAdminMember() {
     .single();
 
   if (!data?.is_admin || data.disabled) return null;
-  // isOpsAdmin: with is_admin, who may turn desk access on (lib/approval.ts canApproveDesks).
-  return { user, member: { id: data.id, name: data.name, isOpsAdmin: !!data.is_ops_admin } };
+  // canApprove: a co-op member, who may turn desk access on and set a desk's custom price (lib/approval.ts).
+  return { user, member: { id: data.id, name: data.name, isOpsAdmin: !!data.is_ops_admin, canApprove: canApproveOnSite(data) } };
 }
 
 /**

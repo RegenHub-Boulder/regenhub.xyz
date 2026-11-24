@@ -3,7 +3,7 @@
  *
  * A person is approved once (an application, vouched for by a member, approved by a steward: @regenhub/shared
  * joining.ts). Approved, they may buy any day plan ($30/$50/$100) themselves. A desk needs desk access, which a
- * steward who `canApproveDesks` turns on for a member who asked: the 24/7 door code is the trust step.
+ * co-op member (`canApproveOnSite`) turns on for a member who asked: the 24/7 door code is the trust step.
  *
  * Until 072 runs the new columns don't exist: reads select `*` and `approvalOf` falls back to the old pair
  * (approved_for_daily / approved_for_full); 072's trigger keeps both pairs equal for one release. Subtract: the
@@ -78,17 +78,11 @@ export function planGate(approval: Approval, planKey: string): { ok: true } | { 
 type Flags = { is_admin?: boolean | null; is_ops_admin?: boolean | null; is_coop_member?: boolean | null; disabled?: boolean | null } | null | undefined;
 
 /**
- * Who may turn desk access on (Aaron, 11-24: "Aaron or Carey"): a site admin who is also an ops admin. A role check
- * on the existing admin flags, so it moves with them; no names in code.
- */
-export function canApproveDesks(m: Flags): boolean {
-  return !!m && !m.disabled && !!m.is_admin && !!m.is_ops_admin;
-}
-
-/**
  * Who may approve and vouch ON THE SITE (Aaron, 11-24: "on the website, they need to be a co-op member"): a co-op
- * member, not disabled, admin or not. The one rule for People → Applications and Free days, the portal's vouch and
- * the routes behind them; migration 074's member_can_approve is the same rule in SQL. In the members' chat anyone
+ * member, not disabled, admin or not. The one rule for People → Applications and Free days, the portal's vouch,
+ * desk access and a desk's custom price on the member page (Aaron, 11-24: "co-op members should be able to approve
+ * folks for hot desks"; desk access stays a site action, never the chat: it hands out a 24/7 door code), and the
+ * routes behind them; migration 074's member_can_approve is the same rule in SQL. In the members' chat anyone
  * may approve (@regenhub/shared isMembersChat). A site admin who isn't a co-op member sees the lists, not the buttons.
  */
 export function canApproveOnSite(m: Flags): boolean {
@@ -115,7 +109,7 @@ export async function withApprovalColumns<T extends { error: { code?: string; me
 }
 
 /**
- * Turn desk access on or off for a member (the member page, `canApproveDesks` only). Writes the new columns, or the
+ * Turn desk access on or off for a member (the member page, `canApproveOnSite` only). Writes the new columns, or the
  * old flag before 072. Turning it on also approves them as a member (a desk member is a member).
  */
 export function deskAccessUpdate(on: boolean, by: number, now = new Date().toISOString()) {

@@ -2,15 +2,15 @@ import { requireAdminMember } from "@/lib/admin";
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { logAction, AuditAction } from "@/lib/auditLog";
-import { approvalOf, canApproveDesks, deskAccessUpdate, missingColumn } from "@/lib/approval";
+import { approvalOf, deskAccessUpdate, missingColumn } from "@/lib/approval";
 import { escapeLike } from "@/lib/supabase/escapeLike";
 
 /**
  * PATCH /api/admin/members/[id]/approve-membership — the member page's two switches (T-482 round 5).
  *
  * Body: { level: "desk" | "member", approved: boolean }
- *   - desk: desk access on or off. Only a steward who `canApproveDesks` (site admin + ops admin): the 24/7 door code
- *     is the trust step. On also approves them as a member.
+ *   - desk: desk access on or off (hot or cold: one flag). Only a co-op member (lib/approval.ts canApproveOnSite,
+ *     migration 074's rule): the 24/7 door code is the trust step, so never from the chat. On also approves them as a member.
  *   - member: revoke only. Approval itself comes from an application (a member vouches, then the one approval:
  *     @regenhub/shared approveApplication), never from a switch here.
  * Silent: no email from this route. Writes migration 072's columns, or the old flags before 072 runs.
@@ -32,8 +32,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   let next: Record<string, unknown>;
   let old: Record<string, unknown>;
   if (level === "desk") {
-    if (!canApproveDesks({ is_admin: true, is_ops_admin: auth.member.isOpsAdmin })) {
-      return NextResponse.json({ error: "Only a steward who approves desks can turn desk access on or off." }, { status: 403 });
+    if (!auth.member.canApprove) {
+      return NextResponse.json({ error: "Co-op members turn desk access on or off." }, { status: 403 });
     }
     ({ next, old } = deskAccessUpdate(body.approved, auth.member.id));
   } else {
@@ -42,8 +42,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     }
     // Taking the approval back also ends desk access: for a member who has it, that's a desk steward's call.
     const { data: row } = await admin.from("members").select("*").eq("id", memberId).maybeSingle();
-    if (approvalOf(row).desk && !canApproveDesks({ is_admin: true, is_ops_admin: auth.member.isOpsAdmin })) {
-      return NextResponse.json({ error: "They have desk access: a steward who approves desks takes this back." }, { status: 403 });
+    if (approvalOf(row).desk && !auth.member.canApprove) {
+      return NextResponse.json({ error: "They have desk access: a co-op member takes this back." }, { status: 403 });
     }
     next = { member_approved: false, member_approved_at: null, member_approved_by: null, desk_access: false, desk_access_at: null, desk_access_by: null };
     old = { approved_for_daily: false, approved_for_daily_at: null, approved_for_daily_by: null, approved_for_full: false, approved_for_full_at: null, approved_for_full_by: null };

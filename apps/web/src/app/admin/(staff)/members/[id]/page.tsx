@@ -1,5 +1,5 @@
 import { requireAdminMember } from "@/lib/admin";
-import { approvalOf, canApproveDesks, type ApprovalRow } from "@/lib/approval";
+import { approvalOf, type ApprovalRow } from "@/lib/approval";
 import { approverWords } from "@regenhub/shared";
 import { escapeLike } from "@/lib/supabase/escapeLike";
 import { createClient } from "@/lib/supabase/server";
@@ -238,7 +238,7 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
                 deskAt={approval.deskAt}
                 deskByName={approval.deskBy ? names.get(approval.deskBy) ?? null : null}
                 deskAskedAt={approval.deskAskedAt}
-                canDesks={canApproveDesks({ is_admin: true, is_ops_admin: auth.member.isOpsAdmin })}
+                canDesks={auth.member.canApprove}
                 hasActiveSubscription={!!activeSubscription}
               />
             </>
