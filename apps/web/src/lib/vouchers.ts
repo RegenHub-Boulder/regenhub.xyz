@@ -1,6 +1,7 @@
 import type { createServiceClient } from "@/lib/supabase/admin";
 import { isMemberInStanding, PAYING_STATUSES } from "@/lib/memberStanding";
 import { canApproveMembers } from "@/lib/approval";
+import { escapeLike } from "@/lib/supabase/escapeLike";
 
 type Service = ReturnType<typeof createServiceClient>;
 type Row = { id: number; name: string; member_type: string | null; disabled: boolean | null; is_coop_member: boolean | null;
@@ -32,22 +33,29 @@ export function voucherName(m: { name: string; show_in_directory?: boolean | nul
   return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}.` : parts[0];
 }
 
-/** Up to 6 members who may vouch whose name contains `q` (2+ letters), never the person asking. */
+/**
+ * Up to 6 members who may vouch whose shown name (`voucherName`) contains `q` (2+ letters), never the person asking.
+ * Matched on the shown name, so letters of a hidden surname find nothing. The member list is small (a few hundred
+ * rows): read enough that the vouchers among them aren't cut off by other matches.
+ */
 export async function searchVouchers(admin: Service, q: string, notUserId: string): Promise<{ id: number; name: string }[]> {
   const { data, error } = await admin.from("members").select(COLUMNS)
-    .ilike("name", `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`)
-    .eq("disabled", false).order("name").limit(30);
+    .ilike("name", `%${escapeLike(q)}%`)
+    .eq("disabled", false).order("name").limit(500);
   if (error) throw new Error(error.message);
-  const found = await keepVouchers(admin, ((data ?? []) as Row[]).filter((m) => m.supabase_user_id !== notUserId));
+  const needle = q.toLowerCase();
+  const shown = ((data ?? []) as Row[])
+    .filter((m) => m.supabase_user_id !== notUserId && voucherName(m).toLowerCase().includes(needle));
+  const found = await keepVouchers(admin, shown);
   return found.slice(0, 6).map((m) => ({ id: m.id, name: voucherName(m) }));
 }
 
-/** The member an applicant named, if they may vouch and aren't the applicant; null otherwise. */
+/** The member an applicant named, if they may vouch and aren't the applicant (their shown name); null otherwise. */
 export async function namedVoucher(admin: Service, id: number, notUserId: string): Promise<{ id: number; name: string } | null> {
   if (!Number.isInteger(id) || id <= 0) return null;
   const { data } = await admin.from("members").select(COLUMNS).eq("id", id).maybeSingle();
   const row = data as Row | null;
   if (!row || row.supabase_user_id === notUserId) return null;
   const [ok] = await keepVouchers(admin, [row]);
-  return ok ? { id: ok.id, name: ok.name } : null;
+  return ok ? { id: ok.id, name: voucherName(ok) } : null;
 }

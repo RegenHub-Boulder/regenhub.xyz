@@ -61,10 +61,10 @@ export async function POST(req: Request) {
     knownBy = await namedVoucher(createServiceClient(), Number(known_by_member_id), user.id);
     if (!knownBy) return NextResponse.json({ error: "Pick a member from the list, or \"Nobody yet\"." }, { status: 400 });
   }
-  const telegramHandle = (() => {
-    const t = telegram?.trim().replace(/^@+/, "") ?? "";
-    return /^[a-zA-Z0-9_]{5,32}$/.test(t) ? t : null;
-  })();
+  const telegramHandle = telegram?.trim().replace(/^@+/, "") || null;
+  if (telegramHandle && !/^[a-zA-Z0-9_]{5,32}$/.test(telegramHandle)) {
+    return NextResponse.json({ error: "That Telegram handle doesn't look right: 5 to 32 letters, digits or _." }, { status: 400 });
+  }
 
   // Application workflow fields (approval, plan, rate) are deliberately not
   // client-writable. Perform the validated write with the service client and

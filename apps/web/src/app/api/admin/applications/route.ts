@@ -38,14 +38,6 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Approve from the Approve button: it needs a member's vouch." }, { status: 400 });
   }
 
-  // An approved application stays approved: the person is a member now. Take the approval back on their member page.
-  if (status === "pending") {
-    const { data: current } = await supabase.from("applications").select("status").eq("id", id).maybeSingle();
-    if (current?.status === "approved") {
-      return NextResponse.json({ error: "They're approved already. To undo it, use Take approval back on their member page." }, { status: 409 });
-    }
-  }
-
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (status) {
     updates.status = status;
@@ -57,14 +49,18 @@ export async function PATCH(req: Request) {
   }
   if (admin_notes !== undefined) updates.admin_notes = admin_notes;
 
-  const { error } = await supabase
-    .from("applications")
-    .update(updates)
-    .eq("id", id);
+  // An approved application stays approved: the person is a member. Its status changes only through Take approval
+  // back on their member page (which closes it). Conditional, so an approval landing meanwhile isn't overwritten.
+  let write = supabase.from("applications").update(updates).eq("id", id);
+  if (status) write = write.neq("status", "approved");
+  const { data: moved, error } = await write.select("id");
 
   if (error) {
     console.error("[Admin/Applications] Update error:", error);
     return NextResponse.json({ error: "Failed to update" }, { status: 500 });
+  }
+  if (status && !(moved ?? []).length) {
+    return NextResponse.json({ error: "They're approved: to undo it, use Take approval back on their member page." }, { status: 409 });
   }
 
   // Audit log for status-changing transitions. Pure notes edits don't get logged.

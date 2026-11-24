@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { namedVoucher } from "@/lib/vouchers";
 import { Card, CardContent } from "@/components/ui/card";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { TechneDoor } from "@/components/auth/TechneDoor";
@@ -75,10 +76,7 @@ export default async function ApplyPage() {
   // Approved already: nothing to apply for; the portal is where they pick a plan.
   if (app?.status === "approved") redirect("/portal");
   let knownBy: { id: number; name: string } | null = null;
-  if (app?.known_by_member_id) {
-    const { data: m } = await createServiceClient().from("members").select("id, name").eq("id", app.known_by_member_id).maybeSingle();
-    knownBy = m ? { id: m.id, name: m.name } : null;
-  }
+  if (app?.known_by_member_id) knownBy = await namedVoucher(createServiceClient(), app.known_by_member_id, user.id);
 
   const initial = {
     name: app?.name ?? member?.name ?? "",

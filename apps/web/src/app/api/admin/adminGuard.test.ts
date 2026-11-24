@@ -153,7 +153,9 @@ describe("active admin: the guard hands the route the right identity", () => {
   }, 30_000);
 
   it("applications PATCH stamps rejected_by with the admin's member id", async () => {
-    const session = signInAs({ user: USER, member: ADMIN });
+    // The conditional update answers the row it moved (an approved application isn't moved: 409).
+    const session = makeSupabaseMock({ auth: { user: USER }, selects: { members: { data: ADMIN }, applications: { data: [{ id: 5 }] } } });
+    vi.mocked(createClient).mockResolvedValue(session as never);
     const { PATCH } = await import("./applications/route");
     const res = await PATCH(new Request("http://localhost/x", { method: "PATCH", body: JSON.stringify({ id: 5, status: "rejected" }) }));
     expect(res.status).toBe(200);

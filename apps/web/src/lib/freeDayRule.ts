@@ -4,10 +4,10 @@
  * else's goes to the members' chat for one tap.
  *
  * Known means one of:
- *   - a night: they RSVP'd going to one of our nights that has already happened (a night follow-up we sent or held
- *     for them, which only exists after a night, for someone who RSVP'd going; or the Techne RSVP of the account
- *     whose confirmed email this is, to a night of ours that has started). An RSVP to a future night doesn't count:
- *     anyone can make one in seconds;
+ *   - a night: they RSVP'd going to one of our nights and it happened: a night follow-up we sent or held for them
+ *     (night_followups, written when a steward decides a night's follow-ups after it ended). A Techne RSVP alone doesn't
+ *     count: its createdAt is the author's own and Techne gives no time it was seen, so an RSVP written today to last
+ *     week's night would look the same as a real one;
  *   - an invite: a member invited them (`invited_by_member_id`, the invite link);
  *   - the list: they've been on the stay-in-touch list for LIST_DAYS days or more (and haven't unsubscribed).
  *
@@ -16,8 +16,6 @@
  * (api/freeday/activate, `freeDayCodeExpiry`).
  */
 import type { createServiceClient } from "@/lib/supabase/admin";
-import { getRecords, listRecords } from "@/lib/techne/query";
-import { regenosCollectiveDid } from "@/lib/regenos/config";
 
 type Service = ReturnType<typeof createServiceClient>;
 
@@ -67,12 +65,6 @@ export async function whoKnows(
   const { data: followups } = await admin.from("night_followups").select("id").eq("email", email).limit(1);
   if ((followups ?? []).length) return { kind: "night" };
 
-  // The Techne RSVP of the account this email belongs to: the one their sign-in recorded for it, confirmed emails only
-  // (as everywhere else), never just whoever is signed in in this browser, so one account can't vouch for any email.
-  const { data: person } = await admin.from("techne_people").select("did").eq("email", email).eq("email_confirmed", true).limit(1);
-  const did = ((person ?? [])[0] as { did?: string } | undefined)?.did ?? null;
-  if (did && await rsvpdToOurPastNight(did, now)) return { kind: "night" };
-
   const cutoff = new Date(now.getTime() - LIST_DAYS * 86_400_000).toISOString();
   const { data: listed } = await admin.from("interests").select("created_at").eq("email", email)
     .lte("created_at", cutoff).order("created_at", { ascending: true }).limit(1);
@@ -82,20 +74,4 @@ export async function whoKnows(
     if (!(unsub ?? []).length) return { kind: "list", since };
   }
   return null;
-}
-
-/** Whether this DID has an RSVP "going" to a night in the collective's own repo that has already started. */
-async function rsvpdToOurPastNight(did: string, now: Date): Promise<boolean> {
-  const collective = regenosCollectiveDid();
-  if (!collective) return false;
-  const rows = await listRecords<{ status?: string; subject?: { uri?: string } }>(
-    { where: { all: [{ type: { is: "community.lexicon.calendar.rsvp" } }, { author: { is: did } }] } },
-    { revalidate: 0 },
-  ).catch(() => null);
-  const uris = [...new Set((rows ?? [])
-    .filter((r) => (r.value.subject?.uri ?? "").startsWith(`at://${collective}/`) && !/notgoing|interested/i.test(r.value.status ?? "going"))
-    .map((r) => r.value.subject!.uri!))];
-  if (uris.length === 0) return false;
-  const events = await getRecords<{ startsAt?: string }>(uris, { revalidate: 300 }).catch(() => null);
-  return (events ?? []).some((e) => !!e.value.startsAt && Date.parse(e.value.startsAt) <= now.getTime());
 }

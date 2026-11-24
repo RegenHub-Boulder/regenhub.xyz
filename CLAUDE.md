@@ -332,10 +332,12 @@ pointed at `/membership`; members are thanked, told the next Studio Night, and (
 ### Joining: apply, one vouch, one approval, a day plan (T-482 round 5, migration 072)
 Aaron, 11-24: "at least one member to vouch for new members"; approval stays in the members' chat; answer within 24 h.
 - **Apply** (`/apply`, sign-in as before: Techne first, email link fallback): name, email, what they work on, how they
-  found us, and "Who here knows you?" (a type-ahead of members who may vouch, `GET /api/portal/members/search`, names
-  only, 2+ letters; or "Nobody yet"). No level. `/api/portal/application` saves `how_found` and `known_by_member_id`,
-  posts the chat card and emails "we reply within a day". An approved applicant can't re-apply (409; `/apply` sends them
-  to the portal); an edit of a waiting one changes the answers, not the card.
+  found us, an optional Telegram handle, and "Who here knows you?" (a type-ahead of members who may vouch,
+  `lib/vouchers.ts` via `GET /api/portal/members/search`: 2+ letters, ids and names only, a member not listed in the
+  directory shown and matched as "First L."; or "Nobody yet"). No level. `/api/portal/application` saves `how_found`
+  and `known_by_member_id` (only someone who may vouch), posts the chat card and emails "we reply within a day". An
+  approved applicant can't re-apply (409; `/apply` sends them to the portal); an edit of a waiting one changes the
+  answers, not the card; applying again after a rejection or close starts over (new vouch, card and clock).
 - **One code path** (`packages/shared/src/joining.ts`): `vouchForApplication` and `approveApplication` call 072's SQL
   functions (`vouch_for_application`, `approve_application`: one transaction each, audited `application_vouched` /
   `membership_approved` with `via` chat|site). The bot's buttons (`app_vouch_<id>` "I know them", `app_approve_<id>`
@@ -345,7 +347,8 @@ Aaron, 11-24: "at least one member to vouch for new members"; approval stays in 
 - **Vouch:** any member who may vouch (072's `member_can_vouch`: in standing per `lib/memberStanding.ts`, a co-op owner
   or a site admin), never for themselves; the first vouch stays. **Approve:** needs a vouch, and a site admin
   (`member_can_approve`). Approval finds or makes the day-pass member row and turns `member_approved` on; the
-  `/api/admin/applications` PATCH refuses `approved`. The approval email (`membershipApprovedEmail`) points to the
+  `/api/admin/applications` PATCH refuses `approved` and never moves an approved application (conditional update);
+  "Take approval back" on the member page closes it, so they can apply again. The approval email (`membershipApprovedEmail`) points to the
   portal, where an approved member picks any day plan ($30/$50/$100, card or USDC; `components/portal/DayPlanPicker.tsx`).
 - **Desks are an upgrade:** a member asks from the portal ("Talk to us about a desk", `POST /api/portal/desk-ask`:
   `desk_asked_at`, audited, posted to the chat, on Today and `/admin/members?status=desk_ask`). A steward who
@@ -359,8 +362,9 @@ Aaron, 11-24: "at least one member to vouch for new members"; approval stays in 
   (`repostWaitingCards`, `chat_reposted_at`, last 72 h only); Today lists anything over 24 h as late, with its age
   (`lib/adminQueue.ts lateItems`); People → Applications shows waiting ones oldest first.
 - **Free days, the middle rule** (`lib/freeDayRule.ts`, one constant `FREE_DAY_AUTO_APPROVE` = known | always | never):
-  approved at once when we know the person (a night follow-up or their own Techne RSVP to one of our nights, a
-  member's invite, or 7+ days on the stay-in-touch list and not unsubscribed); anyone else's waits for one tap in the
+  approved at once when we know the person (a night follow-up row: they RSVP'd going to a night that happened, from a
+  steward's batch; a member's invite; or 7+ days on the stay-in-touch list and not unsubscribed). A bare Techne RSVP
+  doesn't count: its createdAt is the author's own, so one written today to last week's night looks real; anyone else's waits for one tap in the
   chat ("✅ Approve free day"; the old "Free day + Membership" button is gone, a stale one approves the free day only).
   The rule in words is on People → Free days. A free-day code ends 6 PM Boulder time that day; after 6 PM there's no code.
 - **072 is additive and works before it runs:** `members.member_approved`/`desk_access` (+ `_at`, `_by`) and

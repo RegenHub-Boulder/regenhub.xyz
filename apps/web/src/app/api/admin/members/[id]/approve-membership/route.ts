@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { logAction, AuditAction } from "@/lib/auditLog";
 import { approvalOf, canApproveDesks, deskAccessUpdate, missingColumn } from "@/lib/approval";
+import { escapeLike } from "@/lib/supabase/escapeLike";
 
 /**
  * PATCH /api/admin/members/[id]/approve-membership — the member page's two switches (T-482 round 5).
@@ -53,6 +54,15 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (error) {
     console.error("[ApproveMembership] update error:", error);
     return NextResponse.json({ error: "Update failed" }, { status: 500 });
+  }
+
+  // Taking the approval back closes their approved application, so they can apply again (a new vouch, a new card).
+  if (level === "member") {
+    const { data: m } = await admin.from("members").select("email").eq("id", memberId).maybeSingle();
+    if (m?.email) {
+      await admin.from("applications").update({ status: "closed", updated_at: new Date().toISOString() })
+        .ilike("email", escapeLike(m.email)).eq("status", "approved");
+    }
   }
 
   await logAction(

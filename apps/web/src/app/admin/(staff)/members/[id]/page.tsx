@@ -1,5 +1,6 @@
 import { requireAdminMember } from "@/lib/admin";
 import { approvalOf, canApproveDesks, type ApprovalRow } from "@/lib/approval";
+import { escapeLike } from "@/lib/supabase/escapeLike";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { redirect, notFound } from "next/navigation";
@@ -72,7 +73,7 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
   // The one approval and desk access (lib/approval.ts), who did each, and who vouched on their application.
   const approval = approvalOf(member as ApprovalRow);
   const { data: application } = member.email
-    ? await supabase.from("applications").select("*").ilike("email", member.email.replace(/[\\%_]/g, (c: string) => `\\${c}`)).order("created_at", { ascending: false }).limit(1).maybeSingle()
+    ? await supabase.from("applications").select("*").ilike("email", escapeLike(member.email)).order("created_at", { ascending: false }).limit(1).maybeSingle()
     : { data: null };
   const vouch = application as { vouched_by?: number | null; vouched_at?: string | null } | null;
   const peopleIds = [approval.memberBy, approval.deskBy, vouch?.vouched_by ?? null].filter((x): x is number => typeof x === "number");

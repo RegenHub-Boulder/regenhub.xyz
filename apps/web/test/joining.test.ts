@@ -109,7 +109,7 @@ describe("apply → vouch → approve", () => {
     await vi.waitFor(() => expect(stagingOutboxMails().some((m) => m.to === "pat@x.test")).toBe(true));
     const ack = stagingOutboxMails().find((m) => m.to === "pat@x.test");
     expect(ack?.html).toContain("We reply within a day");
-    expect(ack?.html).toContain("asked Carey Member to vouch");
+    expect(ack?.html).toContain("asked Carey M. to vouch"); // not listed in the directory: first name and initial
   });
 
   it("only someone who can vouch can be named; applying again after a rejection needs a new vouch", async () => {
@@ -187,6 +187,24 @@ describe("apply → vouch → approve", () => {
     // Approving again changes nothing and sends nothing.
     await approveRoute(new Request("http://x", { method: "POST" }), params(id));
     expect(stagingOutboxMails().filter((x) => x.subject.includes("pick your plan"))).toHaveLength(1);
+  });
+
+  it("an approved application can't be moved by hand; taking the approval back closes it so they can apply again", async () => {
+    const id = await apply(3);
+    as(3, "carey@hub.test");
+    await vouchRoute(new Request("http://x", { method: "POST" }), params(id));
+    as(2, "bo@hub.test");
+    await approveRoute(new Request("http://x", { method: "POST" }), params(id));
+    for (const status of ["pending", "rejected", "closed"]) {
+      const res = await statusRoute(new Request("http://x", { method: "PATCH", body: JSON.stringify({ id, status }) }));
+      expect(res.status, status).toBe(409);
+    }
+    const [pat] = await db.sql<{ id: number }>(`select id from members where email = 'pat@x.test'`);
+    const back = await switchRoute(new Request("http://x", { method: "PATCH", body: JSON.stringify({ level: "member", approved: false }) }), params(pat.id));
+    expect(back.status).toBe(200);
+    expect((await db.sql(`select status from applications where id = $1`, [id]))[0].status).toBe("closed");
+    await apply(3);
+    expect((await db.sql(`select status, vouched_by from applications where id = $1`, [id]))[0]).toEqual({ status: "pending", vouched_by: null });
   });
 
   it("the bot and the admin page approve through the same function", async () => {
