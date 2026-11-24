@@ -98,7 +98,8 @@ supabase/
     ├── …
     ├── 066_night_followups.sql       # night follow-ups: decisions, sends, opt-outs
     ├── 068_techne_people.sql         # every Techne sign-in: the person, their email, the stay-in-touch list
-    └── 069_email_log.sql             # every email sent one person at a time (metadata only)
+    ├── 069_email_log.sql             # every email sent one person at a time (metadata only)
+    └── 070_lock_writer_lease.sql     # the door-code writer becomes a 2-minute lease, taken over when stale
 DEPLOYMENT.md               # Full infra guide for agents + humans
 ```
 
@@ -206,7 +207,7 @@ the column is missing, the passes page hides "Pay with USDC", the purchase route
 
 ### The two home pages (T-482 audit, `AUDIT-PORTAL-ADMIN.md`)
 - **`/admin` "Today"** (admins): the goals in one line (→ Scoreboard), **Waiting on you** (`lib/adminQueue.ts`, pure +
-  tested: lock-sync failures, quarantined slots, past due, applications, free-day requests, unbilled desks, each a
+  tested: a stuck door-code writer, lock-sync failures, quarantined slots, door-code changes failed in the last day, past due, applications, free-day requests, unbilled desks, each a
   link; a failed read says "Couldn't check", and the queue renders even if the scoreboard read fails; each count and
   the list its link opens share one predicate, e.g. unbilled desks = `isUnbilledDesk` in `lib/adminMemberFilters.ts`,
   link `/admin/members?status=unbilled_desk`), then
@@ -347,9 +348,17 @@ edit both or they drift.
   closed; one line each. Audit and ranked next fixes: `AUDIT-FREE-DAY.md`. Test: `test/free-day-funnel.test.ts`.
 - **Quarantined slots** (Door → Lock Sync, `lib/lockQuarantine.ts`): each slot in plain words (which, since when, why,
   what each lock said, who loses a code if cleared); identical ones (same day, reason, nobody holding them) are one
-  entry. Clear per slot, per entry, or all: `/api/admin/lock-quarantine`, one slot at a time, released only if every
-  lock confirms. A failed SET quarantines its slot until cleared, so every attempt during a lock outage holds one more
-  guest-code slot (production's 101–108 from 10-09); since round 3 the SET's error is kept in the reason.
+  entry. Clear per slot, per entry, or all: one POST `/api/admin/lock-quarantine` `{ slots }` that clears them one at a
+  time under ONE writer scope and streams each slot's outcome (NDJSON), released only if every lock confirms. A failed
+  SET quarantines its slot until cleared, so every attempt during a lock outage holds one more guest-code slot
+  (production's 101–108 from 10-09); since round 3 the SET's error is kept in the reason.
+- **Door-code writer lease** (migration 070, T-482): the one writer row (`lock_slot_writer`) is a 2-minute lease that
+  `withLockWriter` renews every 20 s; the next acquire takes over a silent one (a deploy killed it mid-change), audited
+  `lock_writer_taken_over`, quarantine untouched, `cleared_slots` reset. "Busy" says "Another door-code change is
+  running; try again in a minute."; busy and part-way failures are `admin_actions` `lock_writer_failed`. Today's
+  "Waiting on you" shows a stuck writer (who, since when) and the last day's failures; Lock Sync lists them
+  (`lib/lockWriterStatus.ts`). Tests: `lib/lockWriterLease.test.ts` (real Postgres), the lock-quarantine route test.
+  Deploy order and the pre-070 recovery: DEPLOYMENT.md "Door-code writer lease".
 
 ### Admin "Cancel membership" (both rails)
 `/admin/members/[id]` → Billing → Cancel membership (`lib/membershipCancel.ts`). Each request is one row in

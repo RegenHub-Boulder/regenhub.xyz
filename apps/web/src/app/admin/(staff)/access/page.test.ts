@@ -13,29 +13,40 @@ vi.mock("@/components/admin/LockSyncSection", () => ({ LockSyncSection: () => nu
 vi.mock("@/components/admin/LiveCodesSection", () => ({ LiveCodesSection: () => null }));
 
 afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); });
-for (const seconds of [30, 120, 121]) {
-  it(`shows safe holder and age at ${seconds}s, warns only past two minutes`, async () => {
+const cases = [
+  { name: "a live writer that renewed 10s ago, 10 minutes in", acquired: 600, renewed: 10, stuck: false },
+  { name: "a writer silent for exactly the lease", acquired: 120, renewed: 120, stuck: false },
+  { name: "a writer silent past the lease", acquired: 3 * 86400, renewed: 121, stuck: true },
+  { name: "a pre-070 row (no renewed_at) past the lease", acquired: 121, renewed: null, stuck: true },
+];
+for (const c of cases) {
+  it(`says plainly what the writer is doing: ${c.name}`, async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-03T12:00:00Z"));
+    const ago = (s: number) => new Date(Date.now() - s * 1000).toISOString();
     const service = makeSupabaseMock({ selects: {
-      lock_slot_writer: { data: { acquired_at: new Date(Date.now() - seconds * 1000).toISOString(), holder_label: "Bot PIN writer", token: "private-token" } },
+      lock_slot_writer: { data: { acquired_at: ago(c.acquired), holder_label: "Bot PIN writer", token: "private-token",
+        ...(c.renewed === null ? {} : { renewed_at: ago(c.renewed) }) } },
       lock_slot_quarantine: { data: [] },
+      admin_actions: { data: [] },
     } });
     vi.mocked(createClient).mockResolvedValue(makeSupabaseMock({ auth: { user: { id: "admin", email: "admin@example.test" } }, selects: { members: { data: { is_admin: true, disabled: false } } } }) as never);
     vi.mocked(createServiceClient).mockReturnValue(service as never);
     const markup = renderToStaticMarkup(await AccessPage());
-    expect(markup).toContain(`Bot PIN writer for ${seconds} seconds`);
-    expect(markup).toContain("Stuck reservation recovery");
+    expect(markup).toContain(c.stuck ? "Bot PIN writer" : "A door-code change is running (Bot PIN writer, since");
+    if (c.stuck) expect(markup).toContain(c.renewed === null ? "Until migration 070 runs" : "The next door-code change takes it over");
     expect(markup).not.toContain("private-token");
-    expect(markup.includes('role="alert"')).toBe(seconds > 120);
-    expect(markup.includes("text-danger")).toBe(seconds > 120);
-    expect(service.from.mock.results[1].value.select).toHaveBeenCalledWith("acquired_at, holder_label");
+    expect(markup).not.toContain("operator recovery");
+    expect(markup.includes('role="alert"')).toBe(c.stuck);
+    expect(markup.includes("text-danger")).toBe(c.stuck);
+    // The token is never selected.
+    expect(service.from.mock.results[1].value.select).toHaveBeenCalledWith("acquired_at, holder_label, renewed_at");
   });
 }
 it("shows no held reservation when free", async () => {
   vi.mocked(createClient).mockResolvedValue(makeSupabaseMock({ auth: { user: { id: "admin", email: "admin@example.test" } }, selects: { members: { data: { is_admin: true, disabled: false } } } }) as never);
   vi.mocked(createServiceClient).mockReturnValue(makeSupabaseMock() as never);
-  expect(renderToStaticMarkup(await AccessPage())).not.toContain("Door-code writer held");
+  expect(renderToStaticMarkup(await AccessPage())).not.toContain("data-testid=\"lock-writer\"");
 });
 
 for (const state of ["unauthenticated", "non-admin", "disabled-admin"]) {

@@ -525,16 +525,35 @@ curl -X PATCH "$COOLIFY_URL/api/v1/applications/<app-uuid>" \
 
 **Note on Traefik + Docker Engine 29.2:** Docker's label-based auto-discovery is broken (Traefik v3.x sends API v1.24, Docker 29.2 requires min v1.44). The fix requires upgrading Docker Engine to a version with a lower minimum, or waiting for Coolify to ship a Traefik version that negotiates API version correctly. Until then, static route files + the update script are the workaround.
 
-## Door-code writer reservation
+## Door-code writer lease
 
-The global PIN writer reservation never expires. The admin Access / Lock Sync page shows its holder and age, with a warning after two minutes. Apply migration `054_lock_writer_holder.sql` before deploying the updated web and bot; it adds the holder label and preserves any held reservation. Rebuild the shared package before building either app.
+Every door-code change (member PINs, guest and free-day codes, clears, the bot's expiry sweep) runs under one writer
+row, `lock_slot_writer` (migrations 053/054). Since migration `070_lock_writer_lease.sql` it is a **lease**: a live
+writer renews `renewed_at` every 20 s (`withLockWriter`, packages/shared/src/lockSlotSafety.ts), and the next
+`acquire_lock_writer` takes over a row silent for more than 2 minutes (`lock_writer_lease_seconds()`; the slowest HA set
+or clear with every retry is about 80 s). Each takeover writes an `admin_actions` row `lock_writer_taken_over` (the
+stale holder, its times, the quarantined slots then). A takeover never touches `lock_slot_quarantine` (a slot the dead
+writer was setting or clearing stays quarantined), starts the new holder with empty `cleared_slots`, and the dead token
+fails `check_lock_writer`, which every HA attempt asks first, so a writer that wakes after a takeover can't reach a lock.
+The residual risk is a process frozen for over 2 minutes between that check and its HTTP call to HA.
 
-### Stuck reservation recovery
+A writer that can't start within 10 s answers "Another door-code change is running; try again in a minute." Busy
+acquires and changes that broke part-way are recorded (`admin_actions` `lock_writer_failed`); the admin home's
+"Waiting on you" counts the last day's, and Door → Lock Sync lists them and shows a stuck writer (who, since when).
 
-There is deliberately no force-free button. Stop/fence **all** PIN writers first and prove the old reservation holder cannot resume and outstanding HA/Z-Wave writes cannot replay. If that cannot be established, keep the reservation/quarantines and escalate to the authorized operator. With those conditions met, an authorized database administrator may delete **only** the reservation row while writers are stopped:
+**Deploy order:** deploy web and bot (rebuild the shared package first), then `run_migration("070_lock_writer_lease.sql")`.
+Before 070 runs, the code works as under 054: renewing and recording fail quietly, nothing takes over, and Lock Sync
+says a stuck writer needs the recovery below.
+
+### Stuck writer before 070
+
+Only before migration 070 runs (after it, the next door-code change takes a dead writer over by itself): stop every
+PIN writer (web and bot), check the holder can't resume, then delete **only** the writer row:
 
 ```sql
 delete from public.lock_slot_writer where id = 1;
 ```
 
-Never delete `lock_slot_quarantine` rows to make slots free. Restart only updated writers, inspect the quarantine list, and use **Retry clear** for each affected slot. Each retry independently requires every configured door to report clean success before removing quarantine and releasing its business assignment. An offline/failed door keeps the slot held.
+Never delete `lock_slot_quarantine` rows to make slots free. Use **Clear** on Door → Lock Sync: it clears the chosen
+slots one at a time under one writer, and releases a slot only when every configured door confirms; an offline or
+failed door keeps the slot held.
