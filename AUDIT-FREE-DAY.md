@@ -112,3 +112,10 @@ No email copy mentions a date. Since this PR every one of them is in the email l
 6. **One copy of the free-day emails**: the bot keeps its own (`apps/bot/src/email.ts`) and they've drifted; prices
    there are typed, not from `lib/plans.ts`.
 7. **Retire `expired`** for free days (nothing sets it now) or decide when an unused free day lapses.
+
+## The drop between approved and came in (first visits, 11-24)
+
+68 granted, 30 came in (44%): the largest drop. Aaron (11-24): people aren't sure anyone will be there. Built (CLAUDE.md
+"First visits"): who's usually here on /freeday and in the emails, "Tell us when you're coming" posted to the members'
+chat, a 7 AM note that morning, and a chat post the moment a first-timer opens the door. To watch: the share of
+approved claims with a planned day, and came-in among those vs the rest.

@@ -45,5 +45,12 @@ export {
   freeDayDeclinedEmail,
   freeDayAlreadyMemberEmail,
   membershipApprovedEmail,
+  freeDayMorningEmail,
   type EmailTemplate,
 } from "./freeDayEmails.js";
+export {
+  ADDRESS, ARRIVAL_STEPS, BRING_LINE, arrivalSection,
+  USUALLY_HERE_WEEKS, weekdayArrivals, usuallyHereLine, usuallyHereFromEntries, readUsuallyHere, type WeekdayArrivals,
+  chatFirstName, firstVisitChatMessage, plannedVisitChatMessage, type FirstVisitKind,
+  planDays, boulderToday, plannedDayWords, type PlanDay,
+} from "./firstVisitWords.js";

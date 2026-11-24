@@ -123,6 +123,8 @@ export async function POST(req: Request) {
         });
         if (attributedForThisLock) continue;
 
+        // No slot or member here, so no first-visit alert (lib/firstVisit.ts needs someone to name; an entry backfilled
+        // more than 15 minutes late wouldn't alert anyway).
         const { error } = await admin.from("access_logs").insert({
           method: "pin",
           slot: null,

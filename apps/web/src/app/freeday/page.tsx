@@ -8,6 +8,9 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CheckCircle, ArrowRight } from "lucide-react";
+import { plannedDay, usuallyHere } from "@/lib/firstVisit";
+import { boulderToday, planDays, plannedDayWords } from "@regenhub/shared";
+import type { FirstVisitInfo } from "@/components/freeday/FirstVisitGuide";
 
 export const metadata: Metadata = {
   title: "Try RegenHub Free for a Day — Boulder Coworking",
@@ -111,8 +114,21 @@ export default async function FreeDayPage({
     }
   }
 
+  // Approved, or the code out today: what to expect (who's usually in, the day they said they're coming).
+  let firstVisit: FirstVisitInfo | undefined;
+  if (claim.status === "reserved" || existingCode) {
+    const [line, planned] = await Promise.all([usuallyHere(admin), plannedDay(admin, claim.id)]);
+    firstVisit = {
+      usuallyHere: line,
+      days: planDays(),
+      // A day already past is forgotten here: they can say a new one.
+      planned: planned && planned >= boulderToday().date ? { date: planned, words: plannedDayWords(planned) } : null,
+    };
+  }
+
   return (
     <FreeDayForm
+      firstVisit={firstVisit}
       claim={{
         id: claim.id,
         email: claim.email,
