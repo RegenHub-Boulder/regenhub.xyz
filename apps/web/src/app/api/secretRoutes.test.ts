@@ -38,6 +38,7 @@ type SecretRoute = {
 
 const ROUTES: SecretRoute[] = [
   { name: "cron/admin-digest", env: "CRON_SECRET", refused: 401, unsetStatus: 503, load: async () => (await import("./cron/admin-digest/route")).POST },
+  { name: "cron/free-day-mornings", env: "CRON_SECRET", refused: 401, unsetStatus: 503, load: async () => (await import("./cron/free-day-mornings/route")).POST },
   { name: "cron/door-watchdog", env: "CRON_SECRET", refused: 401, unsetStatus: 503, load: async () => (await import("./cron/door-watchdog/route")).POST },
   { name: "cron/hub-health-digest", env: "CRON_SECRET", refused: 401, unsetStatus: 503, load: async () => (await import("./cron/hub-health-digest/route")).POST },
   { name: "cron/lifecycle-nudges", env: "CRON_SECRET", refused: 401, unsetStatus: 503, load: async () => (await import("./cron/lifecycle-nudges/route")).POST },

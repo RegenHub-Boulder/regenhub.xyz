@@ -63,6 +63,7 @@ export interface MemberRow {
   disabled: boolean;
   /** The member's Techne account, when linked (matches RSVP authors). */
   did?: string | null;
+  created_at?: string | null;
 }
 
 export interface PurchaseRow {

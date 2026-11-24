@@ -8,8 +8,8 @@
 //   04 passes-refusal      then Sam's Day passes page: "You've had your free day" (no second code)
 //   05 admin-lapsed        People → Free days → Closed: Lu's lapsed claim
 //   06 scoreboard          the month table's Free days columns
-//   07-10 emails           received (a new claim), approved (the steward approves it), declined (the steward declines
-//                          one), and the free day + membership approval (the bot's other button), each as sent
+//   07-09 emails           received (a new claim), approved (the steward approves it), declined (the steward declines
+//                          one), each as sent (the free day + membership email went with T-482 round 5)
 // Usage: PLAYWRIGHT_DIR=<dir holding node_modules/playwright> node scripts/staging/round4-shots.mjs <base> <outdir>
 import { createRequire } from "node:module";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -121,19 +121,5 @@ for (const [vw, w, h] of SIZES) {
     await outbox(name);
   }
   await ctx.close();
-}
-// 10: the free day + membership approval (the bot's second button), from the one shared template.
-{
-  const shared = await import(fileURLToPath(new URL("../../packages/shared/dist/freeDayEmails.js", import.meta.url)));
-  const t = shared.freeDayPlusMembershipApprovedEmail({ name: "Rio Rivera", siteUrl: BASE });
-  const file = `${OUT}/10-email-approved-membership.html`;
-  writeFileSync(file, `<!doctype html><meta name="viewport" content="width=device-width"><title>${t.subject}</title>` +
-    `<div style="font:14px system-ui;padding:12px 16px;background:#eee;color:#333">Template preview (sent by the bot) · <b>${t.subject}</b></div>${t.html}`);
-  for (const [vw, w, h] of SIZES) {
-    const { ctx, page } = await context(w, h);
-    await page.goto("file://" + file);
-    await shot(page, "10-email-approved-membership", vw);
-    await ctx.close();
-  }
 }
 await browser.close();

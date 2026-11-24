@@ -139,6 +139,21 @@ async function seed(pg, people) {
     await q(`insert into free_day_claims(email, name, status, claimed_date, about, why_join, created_at, activated_at, invited_by_member_id)
       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, [email, name, status, date, about, why, ago(d), act == null ? null : ago(act), email === "pat@example.test" ? ana : null]);
   }
+  if (process.env.T482_FREEDAY) {
+    // First visits (T-482): Ana invited Sam, and eight weeks of mornings for "who's usually here": Monday to Thursday
+    // someone opens the door about 7:45 (14:45 UTC, Boulder in winter), Fridays mostly after lunch. Unattributed, as
+    // the HA history poll writes them.
+    await q("update free_day_claims set invited_by_member_id = $1 where email = 'sam-sample@example.test'", [ana]);
+    const DAY = 86_400_000;
+    for (let i = 1; i <= 56; i += 1) {
+      const d = new Date(Date.now() - i * DAY);
+      const wd = d.getUTCDay(), date = d.toISOString().slice(0, 10);
+      const times = wd >= 1 && wd <= 4 ? ["14:45", "16:20"] : wd === 5 ? [i <= 14 ? "16:40" : "19:30"] : [];
+      for (const t of times) {
+        await q("insert into access_logs(member_id, method, result, note, created_at) values (null, 'pin', 'granted', 'HA:lock.front_door_lock', $1)", [`${date}T${t}:00Z`]);
+      }
+    }
+  }
   // The approval trigger (off for the seed) gives a reserved claim its one pass: Sam's is waiting.
   await q("update members set day_passes_balance = 1 where email = 'sam-sample@example.test'");
   await q("insert into access_logs(member_id, method, result, created_at) values ($1, 'daycode', 'granted', $2)", [id["eve@example.test"], ago(10)]);

@@ -4,6 +4,7 @@
  * from ./prices.ts, never typed here. Plain words, the site's palette inline, a web-safe serif stack.
  */
 import { DAY_PASS_MEMBER_CENTS, FREE_DAY_LAPSE_DAYS, PLAN_MONTHLY_CENTS, dollars } from "./prices.js";
+import { arrivalSection } from "./firstVisitWords.js";
 
 export interface EmailTemplate {
   subject: string;
@@ -11,7 +12,6 @@ export interface EmailTemplate {
   text: string;
 }
 
-const ADDRESS = "1515 Walnut St, Suite 200, Boulder, CO";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 /** The greeting's first name: `html` escaped for the HTML part, `text` as typed for the plain-text part. */
@@ -30,29 +30,26 @@ const button = (href: string, label: string) =>
   `<p style="margin: 20px 0;"><a href="${href}" style="background: #4b5a2c; color: white; padding: 12px 20px; border-radius: 2px; text-decoration: none; display: inline-block;">${label}</a></p>`;
 const link = (href: string, label: string) => `<a href="${href}" style="color: #4b5a2c;">${label}</a>`;
 
-/** How to get in, the same in every approval. */
-const ARRIVAL_HTML = `<h3 style="margin-top: 28px;">When you arrive</h3>
-        <p style="margin: 6px 0;"><strong>Address:</strong> ${ADDRESS}</p>
-        <p style="margin: 6px 0;"><strong>Hours:</strong> Monday&ndash;Friday, 8&nbsp;AM&ndash;6&nbsp;PM</p>
-        <p style="margin: 6px 0;">The street door is open during those hours; come up to the 2nd floor. Type your code and then <strong>#</strong> on the keypad, wait for the green light and the click, and pull the handle within 5 seconds. Say hi when you&rsquo;re in.</p>`;
-const ARRIVAL_TEXT = `When you arrive:\nAddress: ${ADDRESS}\nHours: Monday–Friday, 8 AM–6 PM\nThe street door is open during those hours; come up to the 2nd floor. Type your code and then # on the keypad, wait for the green light and the click, and pull the handle within 5 seconds. Say hi when you're in.`;
-
-function approvedBody(first: { html: string; text: string }, base: string) {
+function approvedBody(first: { html: string; text: string }, base: string, usuallyHere?: string | null) {
+  const arrival = arrivalSection(usuallyHere);
   return {
     html: `<p>Hi ${first.html},</p>
         <p>Your free day at RegenHub is approved. Come any weekday, 8&nbsp;AM to 6&nbsp;PM, within the next ${FREE_DAY_LAPSE_DAYS} days.</p>
         <p>When you&rsquo;re here, open this page and get your door code. It works on both doors until 6&nbsp;PM that day.</p>
         ${button(`${base}/freeday`, "Get my door code")}
         <p>You&rsquo;ll sign in with your email (no password: we send a one-time link).</p>
-        ${ARRIVAL_HTML}`,
-    text: `Hi ${first.text},\n\nYour free day at RegenHub is approved. Come any weekday, 8 AM to 6 PM, within the next ${FREE_DAY_LAPSE_DAYS} days.\n\nWhen you're here, open this page and get your door code. It works on both doors until 6 PM that day:\n${base}/freeday\n\nYou'll sign in with your email (no password: we send a one-time link).\n\n${ARRIVAL_TEXT}`,
+        ${arrival.html}`,
+    text: `Hi ${first.text},\n\nYour free day at RegenHub is approved. Come any weekday, 8 AM to 6 PM, within the next ${FREE_DAY_LAPSE_DAYS} days.\n\nWhen you're here, open this page and get your door code. It works on both doors until 6 PM that day:\n${base}/freeday\n\nYou'll sign in with your email (no password: we send a one-time link).\n\n${arrival.text}`,
   };
 }
 
-/** Sent when a free-day claim is approved (web: People → Free days; the chat card; or an invite link). */
-export function freeDayApprovedEmail(args: { name: string; siteUrl: string }): EmailTemplate {
+/**
+ * Sent when a free-day claim is approved (web: People → Free days; the chat card; the free-day rule; or an invite link).
+ * `usuallyHere`: the "who's usually here" line (firstVisitWords.ts readUsuallyHere), left out when unknown.
+ */
+export function freeDayApprovedEmail(args: { name: string; siteUrl: string; usuallyHere?: string | null }): EmailTemplate {
   const first = firstNameOf(args.name);
-  const body = approvedBody(first, siteBase(args.siteUrl));
+  const body = approvedBody(first, siteBase(args.siteUrl), args.usuallyHere);
   return {
     subject: "Your free day at RegenHub is ready",
     html: shell(`        ${body.html}
@@ -134,5 +131,25 @@ export function membershipApprovedEmail(args: { name: string; siteUrl: string })
         <p>Any questions, just reply.</p>
         <p>RegenHub</p>`),
     text: `Hi ${first.text},\n\nYou're approved: welcome to RegenHub. Pick a day plan whenever you're ready, by card or USDC. Every plan has the member demos and Studio Night.\n\n${plans.map(([a, b]) => `- ${a}: ${b}`).join("\n")}\n\nDays you don't use carry over. Members pay ${dollars(DAY_PASS_MEMBER_CENTS)} for an extra day pass. Want a desk later? Ask from your portal.\n\nPick my plan: ${base}/portal\n\nAny questions, just reply.\n\nRegenHub`,
+  };
+}
+
+/**
+ * Sent at 7 AM Boulder time on the day someone said they're coming for their free day (/freeday "Tell us when you're
+ * coming"; the cron /api/cron/free-day-mornings). The link to the code, how to get in, and who's usually here.
+ */
+export function freeDayMorningEmail(args: { name: string; siteUrl: string; usuallyHere?: string | null }): EmailTemplate {
+  const first = firstNameOf(args.name);
+  const base = siteBase(args.siteUrl);
+  const arrival = arrivalSection(args.usuallyHere);
+  return {
+    subject: "See you at RegenHub today",
+    html: shell(`        <p>Hi ${first.html},</p>
+        <p>You said you&rsquo;re coming in today. When you&rsquo;re here, open this page and get your door code. It works until 6&nbsp;PM.</p>
+        ${button(`${base}/freeday`, "Get my door code")}
+        ${arrival.html}
+        <p>Plans changed? No problem: your free day works any weekday.</p>
+        <p>RegenHub</p>`),
+    text: `Hi ${first.text},\n\nYou said you're coming in today. When you're here, open this page and get your door code. It works until 6 PM:\n${base}/freeday\n\n${arrival.text}\n\nPlans changed? No problem: your free day works any weekday.\n\nRegenHub`,
   };
 }

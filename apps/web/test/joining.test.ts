@@ -31,6 +31,7 @@ import { approveApplication, repostWaitingCards, type ChatCard } from "@regenhub
 import { approvalOf } from "@/lib/approval";
 import { freeDayDecision, whoKnows, LIST_DAYS } from "@/lib/freeDayRule";
 import { lateItems } from "@/lib/adminQueue";
+import { welcomeFirstVisit } from "@/lib/firstVisit";
 import { stagingOutboxMails } from "@/lib/staging/outbox";
 
 const HOUR = 3_600_000;
@@ -355,6 +356,23 @@ describe("the free-day rule", () => {
     const cards = chat.filter((c) => c.method === "sendMessage").map((c) => c.body);
     expect(cards.find((c) => String(c.text).includes("night@x.test"))?.reply_markup).toBeUndefined();
     expect(JSON.stringify(cards.find((c) => String(c.text).includes("stranger@x.test"))?.reply_markup)).toContain("freeday_approve_");
+  });
+});
+
+describe("a free day the rule approved still gets its first-visit hello", () => {
+  it("names the night they came to, though their member row came after the night's note", async () => {
+    await db.sql(`insert into night_followup_batches(id, event_uri, event_name, decision, decided_by_did) values (1, 'at://e/1', 'Civic Tech Night', 'send', 'did:plc:x')`);
+    await db.sql(`insert into night_followups(batch_id, event_uri, email, variant, status) values (1, 'at://e/1', 'night@x.test', 'guest', 'sent')`);
+    const res = await claimRoute(new Request("http://x", json({ name: "Nia Night", email: "night@x.test", about: "Things", why_join: "Curious" })));
+    expect(res.status).toBe(200);
+    const [m] = await db.sql<{ id: number }>(`select id from members where email = 'night@x.test'`);
+    expect(m).toBeTruthy(); // the approval trigger made the member row
+    const [log] = await db.sql<{ id: number; created_at: string }>(
+      `insert into access_logs(member_id, method, result, created_at) values ($1, 'pin', 'granted', now()) returning id, created_at`, [m.id]);
+    chat = [];
+    const outcome = await welcomeFirstVisit(db as never, { id: log.id, member_id: m.id, slot: null, result: "granted", created_at: log.created_at });
+    expect(outcome).toMatchObject({ posted: true });
+    expect(chat.map((c) => String(c.body.text)).join("\n")).toContain("Civic Tech Night");
   });
 });
 

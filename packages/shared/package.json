@@ -17,6 +17,10 @@
     "./joining": {
       "import": "./dist/joining.js",
       "types": "./dist/joining.d.ts"
+    },
+    "./firstVisitWords": {
+      "import": "./dist/firstVisitWords.js",
+      "types": "./dist/firstVisitWords.d.ts"
     }
   },
   "scripts": {

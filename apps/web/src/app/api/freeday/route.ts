@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/admin";
 import { ALREADY_MEMBER, isAlreadyMember } from "@/lib/freeDayClaim";
 import { freeDayAlreadyMemberEmail, freeDayApprovedEmail, freeDayReceivedEmail, sendEmail } from "@/lib/email";
 import { freeDayCard, postCard } from "@regenhub/shared";
+import { usuallyHere } from "@/lib/firstVisit";
 import { freeDayDecision, knownWords, whoKnows } from "@/lib/freeDayRule";
 
 /** Whether an email of this kind went to this address in the last day (email_log, 069): one answer a day is enough. */
@@ -180,7 +181,7 @@ export async function POST(req: Request) {
 
   // Tell them where it stands: approved now, or it arrived and a member will look within a day.
   const tpl = status === "reserved"
-    ? freeDayApprovedEmail({ name: name.trim(), siteUrl })
+    ? freeDayApprovedEmail({ name: name.trim(), siteUrl, usuallyHere: await usuallyHere(admin).catch(() => null) })
     : freeDayReceivedEmail({ name: name.trim(), siteUrl });
   await sendEmail({ kind: status === "reserved" ? "free_day_approved" : "free_day_received", to: normalizedEmail, ...tpl })
     .catch((err) => console.error("[FreeDay] email failed:", err));

@@ -24,6 +24,8 @@ import {
   Key,
 } from "lucide-react";
 import HubEssentials from "@/components/portal/HubEssentials";
+import FirstVisitGuide, { type FirstVisitInfo } from "@/components/freeday/FirstVisitGuide";
+import { BRING_LINE } from "@regenhub/shared/firstVisitWords";
 import regenHubFull from "@/assets/regenhub-full.svg";
 import { DAY_PASS_MEMBER_CENTS, DAY_PASS_PUBLIC_CENTS, MEMBERSHIP_FROM_CENTS, formatCents } from "@/lib/plans";
 import { FREE_DAY_LAPSE_DAYS } from "@regenhub/shared/prices";
@@ -53,6 +55,8 @@ type Props = {
   inviter?: { name: string; invite_code: string };
   /** Their last free day was approved but never used, and lapsed: the form asks again. */
   lapsed?: boolean;
+  /** An approved claim: who's usually in, the days they can say they're coming, the day they said. */
+  firstVisit?: FirstVisitInfo;
 };
 
 function formatDate(dateStr: string): string {
@@ -77,6 +81,7 @@ export default function FreeDayForm({
   existingCode,
   inviter,
   lapsed,
+  firstVisit,
 }: Props) {
   const router = useRouter();
 
@@ -353,6 +358,11 @@ export default function FreeDayForm({
             </CardContent>
           </Card>
 
+          <div className="text-center space-y-1 text-muted" data-testid="first-visit-today">
+            {firstVisit?.usuallyHere && <p>{firstVisit.usuallyHere}</p>}
+            <p className="text-sm">{BRING_LINE} Say hi when you&apos;re in.</p>
+          </div>
+
           <HubEssentials defaultExpanded freeDay />
 
           <div className="glass-panel-subtle p-6 rounded-xl">
@@ -391,9 +401,9 @@ export default function FreeDayForm({
 
   if (claim?.status === "reserved") {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center px-6">
-        <Card className="glass-panel-strong max-w-md w-full">
-          <CardContent className="p-10 text-center">
+      <div className="px-6 py-12">
+        <div className="max-w-md mx-auto space-y-10">
+          <div className="text-center">
             <Zap className="w-12 h-12 text-gold mx-auto mb-4" />
             <h1 className="text-2xl font-bold text-forest mb-3">
               Your Free Day
@@ -421,19 +431,10 @@ export default function FreeDayForm({
               )}
               {activating ? "Setting up your code…" : "Get My Door Code"}
             </Button>
+          </div>
 
-            <div className="glass-panel-subtle p-4 rounded-lg text-left space-y-2 mt-6">
-              <div className="flex items-center gap-2 text-sm text-muted">
-                <MapPin className="w-4 h-4 text-sage" />
-                1515 Walnut St, Suite 200, Boulder
-              </div>
-              <div className="flex items-center gap-2 text-sm text-muted">
-                <Coffee className="w-4 h-4 text-sage" />
-                Hours: 8 AM – 6 PM
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+          {firstVisit && <FirstVisitGuide info={firstVisit} />}
+        </div>
       </div>
     );
   }

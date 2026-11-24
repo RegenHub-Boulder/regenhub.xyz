@@ -1,4 +1,4 @@
-import { freeDayUsedLine, withLockWriter, LockWriterBusyError, recordLockWriterFailure } from "@regenhub/shared";
+import { freeDayUsedLine, withLockWriter, LockWriterBusyError, recordLockWriterFailure, readUsuallyHere } from "@regenhub/shared";
 import TelegramBot from "node-telegram-bot-api";
 import { db, findMemberByTelegram, resolveSender, resolveAdminSender, type MemberRow } from "./db/supabase.js";
 import { sendEmail, freeDayApprovedEmail } from "./email.js";
@@ -435,7 +435,9 @@ async function handleCallback(query: TelegramBot.CallbackQuery) {
     if (!(moved ?? []).length) return bot.sendMessage(chatId, "Someone else just approved it.");
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
-    const tpl = freeDayApprovedEmail({ name: claim.name, siteUrl });
+    // The "who's usually here" line, from the door log (aggregate only); left out if the read fails.
+    const usuallyHere = await readUsuallyHere(db).catch(() => null);
+    const tpl = freeDayApprovedEmail({ name: claim.name, siteUrl, usuallyHere });
     sendEmail({ kind: "free_day_approved", to: claim.email, subject: tpl.subject, html: tpl.html, text: tpl.text })
       .then((ok) => { if (ok) console.log(`[FreeDay] email sent to ${claim.email}`); })
       .catch((err) => console.error("[FreeDay] Email send failed:", err));

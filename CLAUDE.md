@@ -58,6 +58,7 @@ The `.dockerignore` has an exception (`!**/.env.production`) so the file is avai
 | `SUPABASE_DB_URL` | Web (runtime) | Full `postgres://` connection string (supabase_admin role, host-exposed Postgres port on compute-1). **Only** used by the MCP's `list_migrations`/`run_migration`. Unset = those two tools report "not configured" and everything else is unaffected. |
 | `MIGRATIONS_DIR` | Web (runtime) | Optional override for where `supabase/migrations/` lives. The Dockerfile copies it into the image and `lib/migrations.ts` finds it from either possible cwd — you shouldn't need this. |
 | `TELEGRAM_BOT_TOKEN` | Bot (runtime) | |
+| `TELEGRAM_API_URL` | Web (runtime) | **Staging only**: the members'-chat stand-in (`scripts/staging/telegram-standin.mjs`) the first-visit posts go to. Production leaves it unset. |
 | `REGENOS_BASE_URL` | Web (runtime) | regenOS AppView base URL, no trailing slash. Unset = events fall back to the Luma embed and one-login stays off. |
 | `REGENOS_COLLECTIVE_DID` | Web (runtime) | The RegenHub collective's `did:plc:…`. Required alongside the base URL for the events swap. |
 | `REGENOS_WEB_URL` | Web (runtime) | **No longer read** (T-482): the calendar feed is regenhub.xyz's own `/events.ics`. Safe to remove from Coolify. |
@@ -283,6 +284,19 @@ largest plan, so the plans add up to the headline's total. `MONTH_NOTES` holds
 each definition, shown under the table. **By plan now**: paying, net, comped, past due per plan (`planBreakdown`; its
 total is the headline's). **Download CSV** = `GET /api/admin/scoreboard/months` (staff only, counts only, each header
 says what it counts); the MCP `scoreboard_summary` carries the same CSV. Staging checks it in `scoreboard-shots.mjs`.
+**Where people drop off** (T-497, Michael 11-24: "find the biggest leak"; `lib/leakFunnel.ts` pure + tested, reads in
+`lib/leakFunnelData.ts`; `components/admin/DropOff.tsx`): one funnel per way in (free day approved, first day pass card
+or USDC, passes given on the member page, RSVP'd going to one of the collective's own past nights as a non-member),
+then came in → joined → paid a 2nd/3rd/4th month (the RSVP door first: got a free day or day pass). Each person once
+per door, from their first time; already members then are left out; a step counts everyone who got at least that far.
+Paid months: USDC = paid membership invoices; card = Stripe paid invoices with `billing_reason` create/cycle (read-only,
+per page load), or months elapsed when Stripe can't be read (the notes say which). By month started, with "too early"
+until a step's window (30/30/60/90/120/150 days from month end) closes; the biggest-drop sentence counts only settled
+people whose step can be seen (no member row: only a free day's code being used, or a pass under their email, shows). CSV: `GET /api/admin/scoreboard/leaks`; the MCP
+`scoreboard_summary` carries it. Only `/admin/scoreboard` and the MCP compute it (`readScoreboard(..., { leaks: true })`),
+not the admin home. Gifts are read from `passes_granted` audit rows, which the add-passes route writes since T-497
+(earlier gifts aren't known). Staging: `T482_SCOREBOARD=1 T497_LEAKS=1 scripts/staging/preview.sh` (production-shaped
+rows, `leak-seed.mjs`), then `scripts/staging/leak-shots.mjs`.
 **What to do next** (on the admin home `/admin`, "Today", since T-482; the scoreboard links to it): recommended actions from `lib/scoreboardActions.ts` (pure, tested), fed by
 the same rows and counts: past due (one-click payment reminder), set to end, left in the last 90 days (names what's
 new since: `MEMBER_NEWS`), new in the last 30 days (welcome, next Studio Night), day-pass buyers with 2+ passes or a
@@ -417,6 +431,31 @@ approval live once in `packages/shared/src/freeDayEmails.ts`; web and bot both i
   "Waiting on you" shows a stuck writer (who, since when) and the last day's failures; Lock Sync lists them
   (`lib/lockWriterStatus.ts`). Tests: `lib/lockWriterLease.test.ts` (real Postgres), the lock-quarantine route test.
   Deploy order and the pre-070 recovery: DEPLOYMENT.md "Door-code writer lease".
+
+### First visits (T-482, migration 073)
+Of 68 free days granted, 30 came in. `lib/firstVisit.ts` (words: `packages/shared/src/firstVisitWords.ts`):
+- **The members' chat hears a first-timer walk in.** After HA pushes a door entry (`/api/access-events`; the
+  `sync-access-logs` poll writes no slot or member, so it can't name anyone and isn't wired), `welcomeFirstVisit` posts "👋 Sam just came in
+  for their first day (free day). Invited by Ana. Anyone around to say hi?" (or "Came to <night>" from a night
+  follow-up). Only a granted entry written within 15 min of happening (no backfills), only someone we can name (the
+  member on the code, or a free-day claim's code; a day code on a desk or hub-friend member is their guest's), only
+  their first granted entry (an earlier row = lower id, so both
+  doors logging one arrival post once); a member row off a day code counts only if made in the last 90 days, and a
+  "Guest by …" code never. Once per person: a `first_visit_alerts` row is written before the post. First name only; no
+  code, email or phone. Plain text to `TELEGRAM_GROUP_CHAT_ID` (`postToMembersChat`). Before 073 runs: nothing posted.
+- **Who's usually here**: from 8 weeks of granted entries (aggregate, no names), per weekday the share of days someone
+  was in by 10 AM and the median first arrival → "Most weekdays someone's in by 8am; Fridays are quieter."
+  (`usuallyHereLine`, tested; null under 10 weekdays with anyone in). Cached 6 h per server. On `/freeday` and in the
+  approval email (web and bot) and the morning email.
+- **`/freeday` before the code** (`components/freeday/FirstVisitGuide.tsx`): who's usually here, **Tell us when you're
+  coming** (next 5 weekdays; `POST /api/freeday/plan` stores `free_day_claims.planned_day` and posts "Sam plans to come
+  in Thursday for their free day"; the same day again posts nothing, at most 3 posts per claim; the free day still
+  works any weekday), getting in (the keypad copy), what to bring. After the code: the line and what to bring.
+- **The morning of**: `POST /api/cron/free-day-mornings` (CRON_SECRET; **schedule daily at 7:00 America/Denver**) sends
+  "See you at RegenHub today" to reserved claims planned for today, only 7 AM–noon Boulder time, once per claim and day
+  (`plan_reminded_on`), kind `free_day_morning` in email_log.
+- Test: `test/first-visit.test.ts`. Staging: `T482_AUDIT=1 T482_FREEDAY=1 scripts/staging/preview.sh`, then
+  `scripts/staging/first-visit-shots.mjs` (the chat stand-in's page shows what the chat got).
 
 ### Admin "Cancel membership" (both rails)
 `/admin/members/[id]` → Billing → Cancel membership (`lib/membershipCancel.ts`). Each request is one row in

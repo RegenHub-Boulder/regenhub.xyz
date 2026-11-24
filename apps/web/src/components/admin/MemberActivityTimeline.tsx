@@ -62,7 +62,7 @@ function summary(row: ActionRow): string | null {
       return `$${typeof p.dollars === "number" ? p.dollars.toFixed(2) : "?"} — ${p.note ?? ""}`;
     case "passes_granted":
     case "passes_adjusted":
-      return `+${p.amount ?? "?"} day passes`;
+      return typeof p.amount === "number" && p.amount < 0 ? `${p.amount} day passes` : `+${p.amount ?? "?"} day passes`;
     case "membership_approved":
       return p.via === "chat" ? "From the members' chat" : p.via === "site" ? "From People → Applications" : null;
     case "batch_email_sent":

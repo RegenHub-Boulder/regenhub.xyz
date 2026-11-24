@@ -19,10 +19,14 @@
 # T482_AUDIT=1 (alone) runs the stand-in on the real schema with sample rows for every /portal and /admin screen
 # (audit-seed.mjs); scripts/staging/audit-shots.mjs captures and counts them. The steward is an admin there.
 # T482_FREEDAY=1 (with T482_AUDIT=1, T-482 round 4) runs a Home Assistant stand-in on B+5 (ha-standin.mjs) so a door
-# code can be issued end to end, and sends mail to the staging outbox; scripts/staging/round4-shots.mjs drives it.
+# code can be issued end to end, and sends mail to the staging outbox; scripts/staging/round4-shots.mjs drives it. It also
+# runs a Telegram stand-in on B+7 (telegram-standin.mjs: the members' chat, its page shows what it got) and eight weeks
+# of morning door entries for "who's usually here"; scripts/staging/first-visit-shots.mjs drives the first visit.
 # T482_JOIN=1 (with T482_AUDIT=1, T-482 round 5) adds each state of joining (audit-seed.mjs): a late application, one
 # vouched and ready, Sam approved without a plan, Dee (signs in as Lee) on a day plan; scripts/staging/joining-shots.mjs.
 # T482_SCOREBOARD=1 also seeds the fictional rows /admin/scoreboard reads (scoreboard-seed.mjs); sign in as the steward.
+# T497_LEAKS=1 (with T482_SCOREBOARD=1) adds production-shaped rows for "Where people drop off" (leak-seed.mjs);
+# scripts/staging/leak-shots.mjs checks and captures it.
 # T482_STUCK_WRITER=1 (with T482_AUDIT) also seeds a door-code writer that died on 11-20 (silent past its lease) and two
 # failed door-code changes; T482_HA_STUB=1 points HA_URL at scripts/staging/ha-stub.mjs (127.0.0.1:B+6, never the real
 # locks; its calls are logged to $T482_STATE/ha-stub.log), so Clear on Door → Lock Sync runs end to end.
@@ -55,7 +59,7 @@ export DATABASE_URL="postgres://postgres@127.0.0.1:$P_PG/t482" BIND_ADDR="127.0.
 for _ in $(seq 60); do curl -sf "http://127.0.0.1:$P_APPVIEW/health" >/dev/null && break; sleep 1; done
 node "$ROOT/scripts/staging/seed.mjs" --appview "http://127.0.0.1:$P_APPVIEW" --out "$STATE" > "$S/seed.log"
 node "$ROOT/scripts/staging/techne-standin.mjs" --port "$P_STANDIN" --appview "http://127.0.0.1:$P_APPVIEW" --state "$STATE" > "$S/standin.log" 2>&1 & pids+=($!)
-node "$ROOT/scripts/staging/supabase-standin.mjs" --port "$P_SUPA" --state "$STATE" ${T482_SCOREBOARD:+--scoreboard} ${T497_FOLLOWUPS:+--followups} ${T482_AUDIT:+--audit} > "$S/supabase-standin.log" 2>&1 & pids+=($!)
+node "$ROOT/scripts/staging/supabase-standin.mjs" --port "$P_SUPA" --state "$STATE" ${T482_SCOREBOARD:+--scoreboard} ${T497_LEAKS:+--leaks} ${T497_FOLLOWUPS:+--followups} ${T482_AUDIT:+--audit} > "$S/supabase-standin.log" 2>&1 & pids+=($!)
 for _ in $(seq 20); do curl -sf -o /dev/null "http://127.0.0.1:$P_STANDIN/signin" && break; sleep 0.5; done
 node "$ROOT/scripts/staging/seed-rsvps.mjs" --standin "http://127.0.0.1:$P_STANDIN" --state "$STATE" >> "$S/seed.log"
 if [ -n "${T497_FOLLOWUPS:-}" ]; then
@@ -67,6 +71,12 @@ if [ -n "${T482_FREEDAY:-}" ]; then
   node "$ROOT/scripts/staging/ha-standin.mjs" --port "$P_HA" > "$S/ha-standin.log" 2>&1 & pids+=($!)
   export HA_URL="http://127.0.0.1:$P_HA/api" HA_TOKEN=staging-only HA_LOCK_ENTITIES=lock.front_door_lock,lock.back_door_lock
   export EMAIL_PROVIDER=outbox EMAIL_FROM="RegenHub (staging) <hello@regenhub.test>" NEWSLETTER_UNSUBSCRIBE_SECRET=staging-only
+  # First visits: door entries pushed as HA would (HA_WEBHOOK_SECRET), the members' chat a stand-in on B+7 whose page
+  # shows what it got, and the 7 AM cron callable (CRON_SECRET). scripts/staging/first-visit-shots.mjs drives it.
+  node "$ROOT/scripts/staging/telegram-standin.mjs" --port "$((B + 7))" > "$S/telegram-standin.log" 2>&1 & pids+=($!)
+  # No TELEGRAM_BOT_TOKEN: the app's other Telegram posts stay off; only the first-visit posts reach the stand-in.
+  export TELEGRAM_API_URL="http://127.0.0.1:$((B + 7))" TELEGRAM_GROUP_CHAT_ID=-1 \
+    HA_WEBHOOK_SECRET=staging-only CRON_SECRET=staging-only
 fi
 if [ -n "${T482_HA_STUB:-}" ]; then
   node "$ROOT/scripts/staging/ha-stub.mjs" --port "$((B + 6))" --log "$S/ha-stub.log" > "$S/ha-stub.out" 2>&1 & pids+=($!)

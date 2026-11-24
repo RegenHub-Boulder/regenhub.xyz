@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 import { hasBearerSecret } from "@/lib/secretAuth";
+import { welcomeFirstVisit, type DoorEntry } from "@/lib/firstVisit";
 
 type AccessMethod = Database["public"]["Enums"]["access_method"];
 
@@ -117,13 +118,13 @@ export async function POST(req: Request) {
     ? `${body.note ?? ""} · ${dayCodeLabel}`.trim()
     : body.note ?? null;
 
-  const { error } = await admin.from("access_logs").insert({
+  const { data: inserted, error } = await admin.from("access_logs").insert({
     method: body.method,
     slot: body.slot ?? null,
     member_id: memberId,
     result: body.result ?? "granted",
     note: finalNote,
-  });
+  }).select("id, member_id, slot, result, created_at").single();
 
   // Dedup: if this is an attributed entry, delete any anonymous polling-cron
   // entries for the same lock that landed within the last 5 seconds — they're
@@ -147,5 +148,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Insert failed" }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, attributed: memberId != null });
+  // Someone's first time in: the members' chat hears it, once (lib/firstVisit.ts). Never fails the entry.
+  const welcome = inserted ? await welcomeFirstVisit(admin, inserted as DoorEntry) : null;
+
+  return NextResponse.json({ ok: true, attributed: memberId != null, first_visit: welcome?.posted ?? false });
 }

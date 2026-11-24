@@ -197,6 +197,7 @@ export {
   freeDayDeclinedEmail,
   freeDayAlreadyMemberEmail,
   membershipApprovedEmail,
+  freeDayMorningEmail,
 } from "@regenhub/shared";
 
 /**

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { sendEmail, freeDayApprovedEmail, freeDayDeclinedEmail } from "@/lib/email";
+import { usuallyHere } from "@/lib/firstVisit";
 
 export async function GET() {
   if (!await requireAdmin()) {
@@ -63,7 +64,7 @@ export async function PATCH(request: Request) {
 
   if (isApprovalTransition) {
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
-    const tpl = freeDayApprovedEmail({ name: prev.name, siteUrl });
+    const tpl = freeDayApprovedEmail({ name: prev.name, siteUrl, usuallyHere: await usuallyHere(admin) });
     sendEmail({ kind: "free_day_approved",
       to: prev.email,
       subject: tpl.subject,

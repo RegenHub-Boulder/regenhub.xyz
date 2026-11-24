@@ -1,0 +1,22 @@
+Door,Started in month (America/Denver; all = every month),"Started (people, not already members)",Already members (not counted),No member row (counted at the start only),Got a free day or day pass (people),Came in (people),Joined (people),Paid a 2nd month (people),Paid a 3rd month (people),Paid a 4th month (people),Too early to judge (steps whose window is still open)
+Free day approved,all,68,1,3,,30,8,6,3,1,
+Free day approved,2026-03,8,,,,4,2,2,2,1,
+Free day approved,2026-04,7,,,,4,2,2,1,0,
+Free day approved,2026-05,8,,,,4,2,2,0,0,
+Free day approved,2026-06,8,,,,4,2,0,0,0,Paid a 4th month
+Free day approved,2026-07,8,,,,3,0,0,0,0,Paid a 3rd month; Paid a 4th month
+Free day approved,2026-08,8,,,,3,0,0,0,0,Paid a 2nd month; Paid a 3rd month; Paid a 4th month
+Free day approved,2026-09,8,,,,3,0,0,0,0,Joined; Paid a 2nd month; Paid a 3rd month; Paid a 4th month
+Free day approved,2026-10,8,,,,3,0,0,0,0,Came in; Joined; Paid a 2nd month; Paid a 3rd month; Paid a 4th month
+Free day approved,2026-11,5,,,,2,0,0,0,0,Came in; Joined; Paid a 2nd month; Paid a 3rd month; Paid a 4th month
+Bought a first day pass,all,25,0,1,,12,3,2,1,1,
+Bought a first day pass,2026-06,4,,,,4,1,1,0,0,Paid a 4th month
+Bought a first day pass,2026-07,5,,,,5,2,1,1,1,Paid a 3rd month; Paid a 4th month
+Bought a first day pass,2026-08,5,,,,2,0,0,0,0,Paid a 2nd month; Paid a 3rd month; Paid a 4th month
+Bought a first day pass,2026-09,5,,,,0,0,0,0,0,Joined; Paid a 2nd month; Paid a 3rd month; Paid a 4th month
+Bought a first day pass,2026-10,4,,,,1,0,0,0,0,Came in; Joined; Paid a 2nd month; Paid a 3rd month; Paid a 4th month
+Bought a first day pass,2026-11,2,,,,0,0,0,0,0,Came in; Joined; Paid a 2nd month; Paid a 3rd month; Paid a 4th month
+Given passes by an admin,all,4,0,0,,2,0,0,0,0,
+Given passes by an admin,2026-10,3,,,,2,0,0,0,0,Came in; Joined; Paid a 2nd month; Paid a 3rd month; Paid a 4th month
+Given passes by an admin,2026-11,1,,,,0,0,0,0,0,Came in; Joined; Paid a 2nd month; Paid a 3rd month; Paid a 4th month
+"RSVP'd to a night, not a member",all,0,0,0,0,0,0,0,0,0,
