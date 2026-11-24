@@ -189,8 +189,6 @@ interface Start {
   memberId: number | null;
   email: string | null;
   at: number;
-  /** Free-day door: the claim was used (its code opened the door). */
-  activatedAt?: number | null;
 }
 
 /**
@@ -226,7 +224,7 @@ function startsFor(door: DoorKey, input: Omit<LeakInput, "paidPeriods" | "now">,
     for (const c of input.claims) {
       if (!APPROVED.has(c.status)) continue;
       const p = ctx.personKey(c.memberId, norm(c.email));
-      raw.push({ ...p, at: ms(c.created_at), activatedAt: c.activated_at ? ms(c.activated_at) : c.status === "activated" ? ms(c.created_at) : null });
+      raw.push({ ...p, at: ms(c.created_at) });
     }
   } else if (door === "day_pass") {
     for (const b of input.purchases) raw.push({ ...ctx.personKey(b.member_id, norm(b.email)), at: ms(b.created_at) });
@@ -277,6 +275,13 @@ export function leakFunnels(input: LeakInput, cardPeriods: LeakFunnels["cardPeri
   for (const c of input.claims ?? []) if (APPROVED.has(c.status)) addPass(ctx.personKey(c.memberId, norm(c.email)).key, ms(c.created_at));
   for (const b of input.purchases) addPass(ctx.personKey(b.member_id, norm(b.email)).key, ms(b.created_at));
   for (const g of input.gifts ?? []) addPass(ctx.personKey(g.memberId, null).key, ms(g.at));
+  // A free day's code used (any of the person's claims): coming in, seen with or without a member row.
+  const usedOf = new Map<string, number[]>();
+  for (const c of input.claims ?? []) {
+    const used = c.activated_at ? ms(c.activated_at) : c.status === "activated" ? ms(c.created_at) : null;
+    const key = ctx.personKey(c.memberId, norm(c.email)).key;
+    if (used != null && key) usedOf.set(key, [...(usedOf.get(key) ?? []), used]);
+  }
 
   /**
    * Already a member at `at`: a subscription that started before, or a desk / hub friend with no subscription whose row
@@ -289,10 +294,10 @@ export function leakFunnels(input: LeakInput, cardPeriods: LeakFunnels["cardPeri
     const m = memberOf.get(id);
     return subs.length === 0 && STANDING_TYPES.includes(m?.member_type ?? "") && (m?.created_at == null || ms(m.created_at) < at);
   };
-  /** Whether a step can be seen for this person at all: with no member row only a free day's code being used (came
-   *  in) and, by email, getting a pass can be. The biggest drop counts only people a step can be seen for. */
-  const trackable = (s: Start, k: StepKey) =>
-    s.memberId != null || (k === "pass" && s.email != null) || (k === "came_in" && s.activatedAt != null);
+  /** Whether a step can be seen for this person at all: with no member row, only coming in on a free day (its code
+   *  used or not) and, by email, getting a pass can be. The biggest drop counts only people a step can be seen for. */
+  const trackable = (door: DoorKey, s: Start, k: StepKey) =>
+    s.memberId != null || (k === "pass" && s.email != null) || (k === "came_in" && door === "free_day");
 
   /** Which steps this person reached, in the door's order, as "at least" (a later step implies the earlier ones). */
   const reachedFor = (door: Door, s: Start): number => {
@@ -300,7 +305,7 @@ export function leakFunnels(input: LeakInput, cardPeriods: LeakFunnels["cardPeri
     const t = s.at;
     if ((passesOf.get(s.key) ?? []).some((p) => p >= t)) reached.add("pass");
     // A free day's code used counts as coming in even when the claim's member row is gone.
-    if (s.activatedAt != null && s.activatedAt >= t) reached.add("came_in");
+    if ((usedOf.get(s.key) ?? []).some((u) => u >= t)) reached.add("came_in");
     if (s.memberId != null) {
       if ((entriesOf.get(s.memberId) ?? []).some((e) => ms(e.created_at) >= t)) reached.add("came_in");
       const mine = (subsOf.get(s.memberId) ?? []).filter((x) => ms(x.created_at) >= t);
@@ -333,7 +338,7 @@ export function leakFunnels(input: LeakInput, cardPeriods: LeakFunnels["cardPeri
     out.steps = door.steps.map((k, i) => {
       const count = furthest.filter((p) => p.f >= i).length;
       const prev = i === 0 ? out.started : furthest.filter((p) => p.f >= i - 1).length;
-      const closed = furthest.filter((p) => p.s.at + STEP_WINDOW_DAYS[k] * DAY_MS <= now && trackable(p.s, k));
+      const closed = furthest.filter((p) => p.s.at + STEP_WINDOW_DAYS[k] * DAY_MS <= now && trackable(door.key, p.s, k));
       return {
         key: k, label: STEP_LABEL[k], count, ofPrev: pctOf(count, prev), ofStart: pctOf(count, out.started),
         settled: { prev: closed.filter((p) => p.f >= i - 1).length, reached: closed.filter((p) => p.f >= i).length },

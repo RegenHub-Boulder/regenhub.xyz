@@ -222,7 +222,8 @@ describe("where people drop off, on the real schema", () => {
     expect(door("day_pass")).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
     expect(door("rsvp")).toEqual([1, 1, 1, 0, 0, 0, 0, 0, 0]); // the unlinked account; Gil was a member by then
     expect(s.leaks!.cardPeriods).toBe("elapsed");
-    expect(s.leaks!.biggest!.sentence).toBe("Most people are lost between a free day approved and coming in: 1 of 2 never came in.");
+    // Gil came in; Ivo and the ghost (a claim with no member row, its code never used) didn't.
+    expect(s.leaks!.biggest!.sentence).toBe("Most people are lost between a free day approved and coming in: 2 of 3 never came in.");
 
     const t = body(await scoreboardSummaryHandler(db as never, ada()));
     expect(t).toContain("### Where people drop off");

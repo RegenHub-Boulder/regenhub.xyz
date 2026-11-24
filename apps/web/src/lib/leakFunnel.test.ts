@@ -114,14 +114,17 @@ describe("leakFunnels", () => {
   });
 
   it("names the biggest drop among people whose window has closed and whose step can be seen", () => {
-    // Dee (four days in) isn't a loss yet, and the claim with no member row can't be seen coming in: Ana, Ben, Jo.
-    expect(f.biggest).toMatchObject({ door: "free_day", step: "came_in", lost: 1, of: 3 });
-    expect(f.biggest!.sentence).toBe("Most people are lost between a free day approved and coming in: 1 of 3 never came in.");
+    // Dee (four days in) isn't a loss yet. The claim with no member row is: its code was never used (Ana, Ben, Jo, it).
+    expect(f.biggest).toMatchObject({ door: "free_day", step: "came_in", lost: 2, of: 4 });
+    expect(f.biggest!.sentence).toBe("Most people are lost between a free day approved and coming in: 2 of 4 never came in.");
+    // After coming in, nothing of theirs can be seen: Ana and Ben are the 2nd-month base, not the ghost.
+    const d = f.doors.find((x) => x.door === "free_day")!;
+    expect(d.steps.find((s) => s.key === "renewed1")!.settled).toEqual({ prev: 2, reached: 1 });
   });
 
-  it("a used free-day code counts as coming in with no member row", () => {
-    const g = leakFunnels({ ...input, claims: input.claims!.map((c) => (c.email.startsWith("ghost")
-      ? { ...c, status: "activated", activated_at: "2026-08-20T16:00:00Z" } : c)) });
+  it("a used free-day code counts as coming in with no member row, from a later claim too", () => {
+    const g = leakFunnels({ ...input, claims: [...input.claims!,
+      { email: "ghost@example.test", memberId: null, status: "activated", created_at: "2026-10-01T16:00:00Z", activated_at: "2026-10-03T16:00:00Z" }] });
     expect(counts(g, "free_day").steps.came_in).toBe(3);
   });
 

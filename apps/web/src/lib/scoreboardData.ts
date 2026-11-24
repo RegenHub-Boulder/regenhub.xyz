@@ -239,8 +239,15 @@ export async function readMonthTable(admin: Admin, now = new Date()): Promise<Mo
  * that comes back short is unread (null) rather than quietly missing nights; listed events of other groups aren't
  * RegenHub's nights. Going counts already read for the page (`known`) are reused.
  */
-async function pastNights(now: Date, known: readonly TurnoutEvent[] | null): Promise<TurnoutEvent[] | null> {
-  const events = await fetchCollectiveEvents({ after: LEAK_NIGHTS_FROM, before: now.toISOString(), ownOnly: true, strict: true });
+/** The calendar read behind pastNights, started early so it runs beside the other reads. */
+const leakCalendar = (now: Date) =>
+  fetchCollectiveEvents({ after: LEAK_NIGHTS_FROM, before: now.toISOString(), ownOnly: true, strict: true }).catch((e) => {
+    console.error("[scoreboard] nights read failed; the RSVP door is unread", e);
+    return null;
+  });
+
+async function pastNights(now: Date, calendar: ReturnType<typeof leakCalendar>, known: readonly TurnoutEvent[] | null): Promise<TurnoutEvent[] | null> {
+  const events = await calendar;
   if (!events) return null;
   const seen = new Map((known ?? []).map((e) => [e.uri, e]));
   const past = events.filter((e) => e.startAt && Date.parse(e.startAt) < now.getTime());
@@ -254,9 +261,11 @@ async function pastNights(now: Date, known: readonly TurnoutEvent[] | null): Pro
 }
 
 /** "Where people drop off" from rows already read; null (and logged) when it fails, so the rest of the page stands. */
-const leaksFrom = async (admin: Admin, rows: Rows, known: TurnoutEvent[] | null, now: Date): Promise<LeakFunnels | null> => {
+const leaksFrom = async (
+  admin: Admin, rows: Rows, calendar: ReturnType<typeof leakCalendar>, known: TurnoutEvent[] | null, now: Date,
+): Promise<LeakFunnels | null> => {
   try {
-    const nights = await pastNights(now, known).catch((e) => {
+    const nights = await pastNights(now, calendar, known).catch((e) => {
       console.error("[scoreboard] nights read failed; the RSVP door is unread", e);
       return null;
     });
@@ -270,11 +279,13 @@ const leaksFrom = async (admin: Admin, rows: Rows, known: TurnoutEvent[] | null,
 /** "Where people drop off" alone (its CSV download): the same rows and counts as the page's. */
 export async function readLeaks(admin: Admin, now = new Date()): Promise<LeakFunnels> {
   const { since, doorsSince } = readBounds(now);
-  const rows = await readRows(admin, since, doorsSince);
-  const nights = await pastNights(now, null).catch((e) => {
-    console.error("[scoreboard] nights read failed; the RSVP door is unread", e);
-    return null;
-  });
+  const [rows, nights] = await Promise.all([
+    readRows(admin, since, doorsSince),
+    pastNights(now, leakCalendar(now), null).catch((e) => {
+      console.error("[scoreboard] nights read failed; the RSVP door is unread", e);
+      return null;
+    }),
+  ]);
   return readLeakFunnels(admin, rows, nights, now);
 }
 
@@ -284,6 +295,7 @@ export async function readLeaks(admin: Admin, now = new Date()): Promise<LeakFun
  */
 export async function readScoreboard(admin: Admin, now = new Date(), opts: { leaks?: boolean } = {}) {
   const { months, since, doorsSince } = readBounds(now);
+  const calendar = opts.leaks ? leakCalendar(now) : null;
   const [rows, newsletter, events] = await Promise.all([
     readRows(admin, since, doorsSince),
     newsletterNumbers(admin),
@@ -292,7 +304,7 @@ export async function readScoreboard(admin: Admin, now = new Date(), opts: { lea
       return null;
     }),
   ]);
-  const leaksRead = opts.leaks ? leaksFrom(admin, rows, events, now) : Promise.resolve(null);
+  const leaksRead = calendar ? leaksFrom(admin, rows, calendar, events, now) : Promise.resolve(null);
   const { subs, members, purchases } = rows;
 
   // Last visits only for the people on the follow-up lists and the leavers the actions name: find who, then read.

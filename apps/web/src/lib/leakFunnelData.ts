@@ -77,7 +77,8 @@ async function onchainPeriods(admin: Admin, ids: number[]): Promise<Map<number, 
   return out;
 }
 
-/** Paid card periods: Stripe invoices paid with money in them, per subscription. Null if Stripe can't be asked. */
+/** Paid card periods per subscription: Stripe invoices paid with money in them that bill a period (create or cycle;
+ *  not a proration or one-off). Null if Stripe can't be asked. */
 async function stripePeriods(admin: Admin, ids: number[]): Promise<Map<number, number> | null> {
   if (ids.length === 0) return new Map();
   if (!isStripeConfigured()) return null;

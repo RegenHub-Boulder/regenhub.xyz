@@ -286,7 +286,7 @@ per door, from their first time; already members then are left out; a step count
 Paid months: USDC = paid membership invoices; card = Stripe paid invoices with `billing_reason` create/cycle (read-only,
 per page load), or months elapsed when Stripe can't be read (the notes say which). By month started, with "too early"
 until a step's window (30/30/60/90/120/150 days from month end) closes; the biggest-drop sentence counts only settled
-people whose step can be seen (no member row = start only). CSV: `GET /api/admin/scoreboard/leaks`; the MCP
+people whose step can be seen (no member row: only a free day's code being used, or a pass under their email, shows). CSV: `GET /api/admin/scoreboard/leaks`; the MCP
 `scoreboard_summary` carries it. Only `/admin/scoreboard` and the MCP compute it (`readScoreboard(..., { leaks: true })`),
 not the admin home. Gifts are read from `passes_granted` audit rows, which the add-passes route writes since T-497
 (earlier gifts aren't known). Staging: `T482_SCOREBOARD=1 T497_LEAKS=1 scripts/staging/preview.sh` (production-shaped
