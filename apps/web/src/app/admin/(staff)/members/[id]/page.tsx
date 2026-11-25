@@ -1,5 +1,6 @@
 import { requireAdminMember } from "@/lib/admin";
-import { approvalOf, canApproveDesks, type ApprovalRow } from "@/lib/approval";
+import { approvalOf, type ApprovalRow } from "@/lib/approval";
+import { approverWords } from "@regenhub/shared";
 import { escapeLike } from "@/lib/supabase/escapeLike";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/admin";
@@ -75,7 +76,10 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
   const { data: application } = member.email
     ? await supabase.from("applications").select("*").ilike("email", escapeLike(member.email)).order("created_at", { ascending: false }).limit(1).maybeSingle()
     : { data: null };
-  const vouch = application as { vouched_by?: number | null; vouched_at?: string | null } | null;
+  const vouch = application as {
+    vouched_by?: number | null; vouched_at?: string | null; vouched_by_telegram?: string | null;
+    status?: string; approved_by_telegram?: string | null;
+  } | null;
   const peopleIds = [approval.memberBy, approval.deskBy, vouch?.vouched_by ?? null].filter((x): x is number => typeof x === "number");
   let names = new Map<number, string>();
   if (peopleIds.length > 0) {
@@ -221,13 +225,20 @@ export default async function EditMemberPage({ params }: { params: Promise<{ id:
                 memberEmail={member.email}
                 approved={approval.member}
                 approvedAt={approval.memberAt}
-                approvedByName={approval.memberBy ? names.get(approval.memberBy) ?? null : null}
-                vouch={vouch?.vouched_by ? { name: names.get(vouch.vouched_by) ?? "A member", at: vouch.vouched_at ?? null } : null}
+                approvedByName={approverWords({
+                  name: approval.memberBy ? names.get(approval.memberBy) : null,
+                  // Approved in the chat by someone whose Telegram isn't linked (migration 074): their @username.
+                  telegram: vouch?.status === "approved" ? vouch.approved_by_telegram : null,
+                })}
+                vouch={vouch?.vouched_at ? {
+                  name: approverWords({ name: vouch.vouched_by ? names.get(vouch.vouched_by) : null, telegram: vouch.vouched_by_telegram }) ?? "A member",
+                  at: vouch.vouched_at ?? null,
+                } : null}
                 desk={approval.desk}
                 deskAt={approval.deskAt}
                 deskByName={approval.deskBy ? names.get(approval.deskBy) ?? null : null}
                 deskAskedAt={approval.deskAskedAt}
-                canDesks={canApproveDesks({ is_admin: true, is_ops_admin: auth.member.isOpsAdmin })}
+                canDesks={auth.member.canApprove}
                 hasActiveSubscription={!!activeSubscription}
               />
             </>

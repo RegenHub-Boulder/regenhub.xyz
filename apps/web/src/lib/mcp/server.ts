@@ -6,6 +6,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import type { McpAuthInfo } from "./oauth";
+import { canApproveOnSite } from "@/lib/approval";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { getStripe, isStripeConfigured, PLANS, type KnownPlanKey } from "@/lib/stripe";
 import {
@@ -93,7 +94,8 @@ function buildServer(auth: McpAuthInfo): McpServer {
     "Read-only audit of joining (apply, a member vouches, one approval, they pick a day plan). Reports (1) " +
       "applications still waiting, with their vouch and age (over 24 hours is late: we answer within a day), " +
       "(2) approved applications with an old custom-price checkout link never completed (open or expired), and " +
-      "(3) approved members with no subscription yet. Use it to find people waiting on us or who never picked a plan.",
+      "(3) approved members with no subscription yet, and (4) who approves on the site (migration 074: co-op members) and " +
+      "which site admins can't. Use it to find people waiting on us or who never picked a plan.",
     async () => {
       const sb = createServiceClient();
       const lines: string[] = [];
@@ -101,9 +103,10 @@ function buildServer(auth: McpAuthInfo): McpServer {
       // ---- 1) Waiting applications: vouch and age ----
       const { data: waiting } = await sb.from("applications").select("*").eq("status", "pending").order("created_at", { ascending: true });
       lines.push(`## Applications waiting: ${waiting?.length ?? 0}`);
-      for (const w of (waiting ?? []) as { id: number; name: string; email: string; created_at: string; vouched_by?: number | null }[]) {
+      for (const w of (waiting ?? []) as { id: number; name: string; email: string; created_at: string; vouched_by?: number | null; vouched_by_telegram?: string | null; vouched_at?: string | null }[]) {
         const hours = Math.floor((Date.now() - Date.parse(w.created_at)) / 3_600_000);
-        lines.push(`- [app ${w.id}] ${w.name} <${w.email}> — waiting ${hours} h${hours >= 24 ? " (LATE)" : ""} · ${w.vouched_by ? `vouched (member ${w.vouched_by}): ready to approve` : "needs a member's vouch"}`);
+        const by = w.vouched_by ? `member ${w.vouched_by}` : w.vouched_by_telegram ? `@${w.vouched_by_telegram} in the chat` : "in the chat";
+        lines.push(`- [app ${w.id}] ${w.name} <${w.email}> — waiting ${hours} h${hours >= 24 ? " (LATE)" : ""} · ${w.vouched_at ? `vouched (${by}): ready to approve` : "needs a vouch"}`);
       }
 
       // ---- 2) Approved applications, custom-price checkout not completed ----
@@ -174,6 +177,19 @@ function buildServer(auth: McpAuthInfo): McpServer {
         `\n(These may be fine: approved means "pick a day plan whenever". The approval email went when they were approved; ` +
           `"Email pick your plan again" is on their member page.)`,
       );
+
+      // ---- 4) Who approves on the site (lib/approval.ts canApproveOnSite); anyone in the members' chat approves there ----
+      const { data: people, error: peopleErr } = await sb.from("members").select("name, is_admin, is_coop_member, disabled")
+        .or("is_admin.eq.true,is_coop_member.eq.true").order("name");
+      lines.push("", "## Who approves on the site (co-op members; anyone in the members' chat approves there)");
+      if (peopleErr) lines.push(`(couldn't read: ${peopleErr.message})`);
+      else {
+        const live = (people ?? []).filter((m) => !m.disabled);
+        const approvers = live.filter((m) => canApproveOnSite(m)).map((m) => m.name);
+        const adminsOnly = live.filter((m) => m.is_admin && !canApproveOnSite(m)).map((m) => m.name);
+        lines.push(`Co-op members (approve, vouch, desk access): ${approvers.join(", ") || "none"}`);
+        lines.push(`Site admins who aren't co-op members (see the lists, can't approve or turn desks on): ${adminsOnly.join(", ") || "none"}`);
+      }
 
       return { content: [{ type: "text" as const, text: lines.join("\n") }] };
     },

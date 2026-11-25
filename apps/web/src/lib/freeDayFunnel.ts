@@ -23,6 +23,16 @@ export interface FreeDayClaimRow {
   about?: string | null;
   why_join?: string | null;
   invited_by?: string | null;
+  /** Who approved it (free_day_claims.approved_by): a member's name, or "@username" from the chat. */
+  approved_by?: string | null;
+}
+
+/** "Approved by Carey" / "Approved by @sam in the chat"; null when nobody is recorded (the rule, or before 074). */
+export function freeDayApprovedByWords(claim: Pick<FreeDayClaimRow, "status" | "approved_by">): string | null {
+  const by = claim.approved_by?.trim();
+  // "auto: …" is the free-day rule (/api/freeday), said elsewhere on the line; nobody tapped.
+  if (!by || by === "auto" || by.startsWith("auto:") || claim.status === "pending" || claim.status === "cancelled") return null;
+  return `Approved by ${by.startsWith("@") ? `${by} in the chat` : by}`;
 }
 
 /** What the site knows about the person since (or before) they claimed. */

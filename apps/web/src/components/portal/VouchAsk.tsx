@@ -7,9 +7,10 @@ import type { VouchAsk as Ask } from "@/lib/portalHome";
 
 /**
  * Someone applying named this member as someone who knows them (T-482 round 5). One tap vouches: the same function
- * as the chat card's "I know them". If they don't know them, nothing to do: another member can vouch.
+ * as the chat card's "I know them". If they don't know them, nothing to do: another member can vouch. On the site a
+ * co-op member vouches (`here`, migration 074); anyone else is pointed at the card in the members' chat.
  */
-export function VouchAsk({ asks }: { asks: Ask[] }) {
+export function VouchAsk({ asks, here }: { asks: Ask[]; here: boolean }) {
   const preview = usePreview();
   const [done, setDone] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState<number | null>(null);
@@ -22,7 +23,9 @@ export function VouchAsk({ asks }: { asks: Ask[] }) {
             <span className="flex-1 text-sm">
               <strong>{a.name}</strong> applied to join and named you.{a.about ? <span className="text-muted"> Works on: {a.about}</span> : null}
             </span>
-            {done[a.id] ? (
+            {!here ? (
+              <span className="text-sm text-muted">Know them? Tap <strong>I know them</strong> on their card in the members&apos; chat.</span>
+            ) : done[a.id] ? (
               <span className="text-sm text-ok">{done[a.id]}</span>
             ) : (
               <Button size="sm" className="btn-primary-glass" disabled={busy !== null || preview} title={preview ? PREVIEW_TITLE : undefined}
@@ -30,7 +33,7 @@ export function VouchAsk({ asks }: { asks: Ask[] }) {
                   setBusy(a.id);
                   const res = await fetch(`/api/portal/applications/${a.id}/vouch`, { method: "POST", headers: { "Content-Type": "application/json" } }).catch(() => null);
                   const json = res ? await res.json().catch(() => ({})) : {};
-                  setDone((d) => ({ ...d, [a.id]: res?.ok ? "Thanks: a steward approves next." : json.error ?? "Couldn't vouch. Try again." }));
+                  setDone((d) => ({ ...d, [a.id]: res?.ok ? "Thanks: one approval next." : json.error ?? "Couldn't vouch. Try again." }));
                   setBusy(null);
                 }}>
                 I know them

@@ -129,7 +129,7 @@ export function MembershipStatusCard({
             <h3 className="font-semibold mb-1">Your application is in</h3>
             <p className="text-sm text-muted" data-testid="application-waiting">
               {vouched
-                ? "A member has vouched for you. A steward approves next, within a day."
+                ? "A member has vouched for you. We approve next, within a day."
                 : "Next, one member who knows you vouches. Haven't met us yet? Come to a night or a free day."}{" "}
               Then you pick a day plan here.
             </p>

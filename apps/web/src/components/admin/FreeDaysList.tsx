@@ -1,16 +1,18 @@
 import Link from "next/link";
 import { ClaimActions } from "@/components/admin/ClaimActions";
-import { FREE_DAY_GROUPS, type FreeDayGroup, type PlacedClaim } from "@/lib/freeDayFunnel";
+import { FREE_DAY_GROUPS, freeDayApprovedByWords, type FreeDayGroup, type PlacedClaim } from "@/lib/freeDayFunnel";
 
 /**
  * People → Free days: the claims grouped by where the person is now, one line each. Opens on "To review" (the
  * claims someone has to act on, the same count as "free-day requests to review" on the admin home); the other groups
  * are links (?show=…) styled like the People tabs above.
  */
-export function FreeDaysList({ placed, counts, show }: {
+export function FreeDaysList({ placed, counts, show, canApprove }: {
   placed: PlacedClaim[];
   counts: Record<FreeDayGroup, number>;
   show: FreeDayGroup;
+  /** A co-op member (lib/approval.ts canApproveOnSite) approves or turns down a request; others see the lists. */
+  canApprove: boolean;
 }) {
   const rows = placed.filter((p) => p.group === show);
   const group = FREE_DAY_GROUPS.find((g) => g.key === show)!;
@@ -47,6 +49,7 @@ export function FreeDaysList({ placed, counts, show }: {
                 <p className="text-sm text-muted">
                   {line}
                   {legacy && <span> · {legacy}</span>}
+                  {freeDayApprovedByWords(claim) && <span data-testid="free-day-approved-by"> · {freeDayApprovedByWords(claim)}</span>}
                 </p>
                 {(claim.about || claim.why_join) && (
                   <details className="text-sm text-muted">
@@ -56,7 +59,7 @@ export function FreeDaysList({ placed, counts, show }: {
                   </details>
                 )}
               </div>
-              <ClaimActions claimId={claim.id} currentStatus={claim.status} />
+              <ClaimActions claimId={claim.id} currentStatus={claim.status} canApprove={canApprove} />
             </li>
           ))}
         </ul>

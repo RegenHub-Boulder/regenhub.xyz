@@ -74,6 +74,7 @@ function view(nowMs: number, over: Partial<PortalHomeView>): PortalHomeView {
     subscription: null,
     askDirectory: false,
     vouchAsks: [],
+    vouchHere: false,
     onchainWallet: null,
     onchainInvoice: null,
     idleWallet: null,

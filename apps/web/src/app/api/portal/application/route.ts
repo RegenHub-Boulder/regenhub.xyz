@@ -115,16 +115,23 @@ export async function POST(req: Request) {
   };
   // Applying again after a rejection (or a close) is a new application: a new vouch, a new card, a new clock.
   if (existing && existing.status !== "pending") {
-    Object.assign(values, { created_at: now, vouched_by: null, vouched_at: null, chat_message_id: null, chat_reposted_at: null });
+    Object.assign(values, { created_at: now, vouched_by: null, vouched_at: null, chat_message_id: null, chat_reposted_at: null,
+      // Migration 074: a vouch or approval by an unlinked member of the chat.
+      vouched_by_telegram_id: null, vouched_by_telegram: null, approved_by_telegram_id: null, approved_by_telegram: null });
   }
   const save = (row: Record<string, unknown>) => existing
     ? admin.from("applications").update(row).eq("id", existing.id).select().single()
     : admin.from("applications").insert(row).select().single();
   let { data, error } = await save(values);
+  const NEW_074 = ["vouched_by_telegram_id", "vouched_by_telegram", "approved_by_telegram_id", "approved_by_telegram"];
+  if (missingColumn(error) && NEW_074.some((k) => k in values)) {
+    // Before migration 074: the same row without its four columns.
+    ({ data, error } = await save(Object.fromEntries(Object.entries(values).filter(([k]) => !NEW_074.includes(k)))));
+  }
   if (missingColumn(error)) {
     // Before migration 072: keep the two new answers in why_join so nothing they typed is lost.
     const NEW_072 = ["how_found", "known_by_member_id", "vouched_by", "vouched_at", "chat_message_id", "chat_reposted_at"];
-    const rest = Object.fromEntries(Object.entries(values).filter(([k]) => !NEW_072.includes(k)));
+    const rest = Object.fromEntries(Object.entries(values).filter(([k]) => !NEW_072.includes(k) && !NEW_074.includes(k)));
     const found = values.how_found as string | null;
     const note = [found && `Found us: ${found}`, `Knows: ${knownBy?.name ?? "nobody yet"}`].filter(Boolean).join(". ");
     ({ data, error } = await save({ ...rest, why_join: note }));
@@ -135,8 +142,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Failed to save application" }, { status: 500 });
   }
 
-  // The members' chat card (@regenhub/shared joining.ts): the named member taps "I know them", then a steward
-  // approves on the same card. Fire-and-forget: a chat outage never fails the application.
+  // The members' chat card (@regenhub/shared joining.ts): the named member taps "I know them", then anyone
+  // in the chat approves on the same card. Fire-and-forget: a chat outage never fails the application.
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://regenhub.xyz";
   // An edit of an application still waiting changes the answers, not the card or the email: one of each.
   if (existing?.status === "pending") return NextResponse.json({ application: data });

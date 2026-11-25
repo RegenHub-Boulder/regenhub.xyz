@@ -25,7 +25,7 @@ export async function readFreeDayFacts(admin: Service) {
 async function readFreeDayPeople(admin: Service) {
   const claims = await readAll<FreeDayClaimRow & { supabase_user_id: string | null; invited_by_member_id: number | null }>("free-day claims",
     (from, to) => admin.from("free_day_claims")
-      .select("id, email, name, claimed_date, status, created_at, activated_at, about, why_join, supabase_user_id, invited_by_member_id")
+      .select("id, email, name, claimed_date, status, created_at, activated_at, about, why_join, supabase_user_id, invited_by_member_id, approved_by")
       .order("created_at", { ascending: false }).order("id").range(from, to));
   const members = await readAll<MemberRow>("members", (from, to) => admin.from("members")
     .select("id, name, email, supabase_user_id, member_type, disabled, created_at").order("id").range(from, to));

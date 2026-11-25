@@ -1,6 +1,6 @@
-import { requireAdminMember } from "@/lib/admin";
+import { requireApprovalsViewer } from "@/lib/admin";
+import { COOP_APPROVES } from "@/lib/approval";
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import type { ApplicationStatus } from "@/lib/supabase/types";
 import { logAction, AuditAction } from "@/lib/auditLog";
 import { createServiceClient } from "@/lib/supabase/admin";
@@ -17,13 +17,17 @@ import { refreshApplicationCard } from "@regenhub/shared";
  *                           already a member from a prior path; clears
  *                           the queue without rejecting anyone)
  *   - approved/rejected/closed → pending  (revert)
+ *
+ * Who (migration 074): a site admin or a co-op member; turning someone down is a decision, so rejecting is a co-op
+ * member's (lib/approval.ts canApproveOnSite), like approving.
  */
 export async function PATCH(req: Request) {
-  const auth = await requireAdminMember();
+  const auth = await requireApprovalsViewer();
   if (!auth) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const { member } = auth;
 
-  const supabase = await createClient();
+  // The service client: the gate is above, and a co-op member who isn't a site admin has no row access of their own.
+  const supabase = createServiceClient();
 
   const body = await req.json().catch(() => null);
   if (!body?.id) return NextResponse.json({ error: "Missing application id" }, { status: 400 });
@@ -38,6 +42,9 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Approve from the Approve button: it needs a member's vouch." }, { status: 400 });
   }
 
+  if (status === "rejected" && !member.canApprove) {
+    return NextResponse.json({ error: `${COOP_APPROVES} or turn down on the site.` }, { status: 403 });
+  }
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (status) {
     updates.status = status;
@@ -78,7 +85,7 @@ export async function PATCH(req: Request) {
       payload: { new_status: status },
     });
     // The chat card shows the decision and drops its buttons.
-    await refreshApplicationCard(createServiceClient(), id, undefined, process.env.NEXT_PUBLIC_SITE_URL).catch(() => false);
+    await refreshApplicationCard(supabase, id, undefined, process.env.NEXT_PUBLIC_SITE_URL).catch(() => false);
   }
 
   return NextResponse.json({ updated: true });

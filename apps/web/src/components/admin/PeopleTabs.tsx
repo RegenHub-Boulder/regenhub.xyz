@@ -26,15 +26,18 @@ function PendingBadge({ count }: { count?: number }) {
 export function PeopleTabs({
   active,
   pending = {},
+  only,
 }: {
   active: PeopleTab;
   pending?: { applications?: number; freedays?: number };
+  /** The tabs this viewer may open (a co-op member who isn't a site admin: Applications and Free days); all if unset. */
+  only?: PeopleTab[];
 }) {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold text-forest">People</h1>
       <nav aria-label="People" className="flex gap-1 border-b border-rule -mb-px overflow-x-auto">
-        {PEOPLE_TABS.map((t) => (
+        {PEOPLE_TABS.filter((t) => !only || only.includes(t.key)).map((t) => (
           <Link
             key={t.key}
             href={t.href}

@@ -90,13 +90,13 @@ describe("free days, grouped by where the person is", () => {
   it("shows a legacy date only as 'originally requested for', and a null date not at all", () => {
     expect(groupOf(13).legacy).toBe("originally requested for Fri, Sep 4");
     expect(groupOf(12).legacy).toBeNull();
-    const html = FREE_DAY_KEYS.map((show) => renderToStaticMarkup(createElement(FreeDaysList, { ...result, show }))).join("\n");
+    const html = FREE_DAY_KEYS.map((show) => renderToStaticMarkup(createElement(FreeDaysList, { ...result, show, canApprove: true }))).join("\n");
     expect(html).not.toMatch(/Invalid Date/i);
     expect(html).toContain("originally requested for Fri, Sep 4");
   });
 
   it("opens on the claims that need action, the same count the admin home shows", () => {
-    const html = renderToStaticMarkup(createElement(FreeDaysList, { ...result, show: "review" }));
+    const html = renderToStaticMarkup(createElement(FreeDaysList, { ...result, show: "review", canApprove: true }));
     expect(html).toContain("Nora New");
     expect(html).toContain("Mo Member");
     expect(html).not.toContain("Pat Waiting");

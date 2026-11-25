@@ -68,7 +68,7 @@ function PortalHomeBody({ view }: { view: PortalHomeView }) {
           <h2 className="text-xl font-semibold mb-2">Application {application.status === "pending" ? "Under Review" : application.status === "approved" ? "Approved" : "Not Approved"}</h2>
           <p className="text-muted text-sm mb-4">
             {application.status === "pending" && (application.vouched_at
-              ? "A member has vouched for you. A steward approves next, within a day."
+              ? "A member has vouched for you. We approve next, within a day."
               : "Next, one member who knows you vouches. Haven't met us yet? Come to a night or a free day.")}
             {application.status === "approved" && "You're approved. Reload in a moment to pick your plan."}
             {application.status === "rejected" && "Your application wasn't approved this time. Reach out on Telegram to learn more."}
@@ -257,7 +257,7 @@ function PortalHomeBody({ view }: { view: PortalHomeView }) {
         </>
       )}
 
-      {view.vouchAsks.length > 0 && <VouchAsk asks={view.vouchAsks} />}
+      {view.vouchAsks.length > 0 && <VouchAsk asks={view.vouchAsks} here={view.vouchHere} />}
 
       <MembershipStatusCard
         memberType={member.member_type}

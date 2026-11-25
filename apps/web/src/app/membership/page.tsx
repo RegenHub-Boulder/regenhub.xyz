@@ -20,7 +20,7 @@ export const metadata: Metadata = {
 const STEPS = [
   { title: "Come by", body: "Come to a night (they're free and open to everyone) or take a free day." },
   { title: "Apply", body: "A minute: your name, what you work on, and who here knows you." },
-  { title: "A member vouches, a steward approves", body: "One member who has met you vouches. We reply within a day." },
+  { title: "A member vouches, we approve", body: "One member who has met you vouches. We reply within a day." },
   { title: "Pick a day plan", body: "From your portal, by card or USDC. Desks are an upgrade once you're a member." },
 ] as const;
 

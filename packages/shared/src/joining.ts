@@ -7,7 +7,8 @@
  * send the approval email and keep the chat card up to date. The chat cards for applications and free days, and the
  * one "still waiting" re-post at 12 hours, live here too, so the bot and the site post the same card.
  */
-import { membershipApprovedEmail, type EmailTemplate } from "./freeDayEmails.js";
+import { freeDayApprovedEmail, membershipApprovedEmail, type EmailTemplate } from "./freeDayEmails.js";
+import { readUsuallyHere } from "./firstVisitWords.js";
 
 /** The subset of a Supabase client these functions use (the bot's and the web's service clients both fit). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,7 +18,8 @@ type DbError = { code?: string; message: string } | null;
 
 /** A refusal code from migration 072's functions, or "waiting_for_072" when the functions aren't there yet. */
 export type JoinRefusal =
-  | "not_found" | "not_pending" | "not_a_member" | "own_application" | "no_vouch" | "not_allowed" | "waiting_for_072" | "failed";
+  | "not_found" | "not_pending" | "not_a_member" | "not_coop" | "own_application" | "no_vouch" | "not_allowed"
+  | "not_members_chat" | "chat_not_allowed" | "chat_waiting_for_074" | "waiting_for_072" | "waiting_for_074" | "failed";
 
 export const JOIN_REFUSAL_WORDS: Record<JoinRefusal, string> = {
   not_found: "That application isn't there any more.",
@@ -25,16 +27,23 @@ export const JOIN_REFUSAL_WORDS: Record<JoinRefusal, string> = {
   not_a_member: "Only a member can vouch.",
   own_application: "You can't vouch for yourself.",
   no_vouch: "A member needs to vouch for them first.",
-  not_allowed: "Only a steward can approve.",
+  not_coop: "On the site, co-op members vouch. Know them? Tap I know them on their card in the members' chat.",
+  not_allowed: "On the site, co-op members approve. Anyone in the members' chat can approve there.",
+  not_members_chat: "Approving and vouching happen in the members' chat.",
   waiting_for_072: "Vouching and approving start once migration 072 runs.",
+  chat_not_allowed: "This account can't approve: it's switched off on the site.",
+  chat_waiting_for_074: "Until migration 074 runs, only a site admin (with their Telegram linked, account on) approves from the chat; then anyone here can.",
+  waiting_for_074: "Link your Telegram on your portal profile first: approving from the chat without a link starts once migration 074 runs.",
   failed: "Something went wrong. Try again, or use People → Applications.",
 };
 
-const REFUSALS = new Set<JoinRefusal>(["not_found", "not_pending", "not_a_member", "own_application", "no_vouch", "not_allowed"]);
+const REFUSALS = new Set<JoinRefusal>(["not_found", "not_pending", "not_a_member", "not_coop", "own_application", "no_vouch", "not_allowed"]);
+
+const missingFunction = (error: DbError) => !!error && (error.code === "PGRST202" || error.code === "42883");
 
 function refusalOf(error: DbError): JoinRefusal {
   if (!error) return "failed";
-  if (error.code === "PGRST202" || error.code === "42883") return "waiting_for_072";
+  if (missingFunction(error)) return "waiting_for_072";
   const code = (error.message ?? "").trim() as JoinRefusal;
   if (REFUSALS.has(code)) return code;
   console.error("[joining] database error:", error.code, error.message);
@@ -65,11 +74,18 @@ export interface ApprovalEmail extends EmailTemplate {
 export async function approveApplication(
   db: JoinDb,
   args: { applicationId: number; approverMemberId: number; via: "chat" | "site"; siteUrl: string; send: (mail: ApprovalEmail) => Promise<boolean> },
-): Promise<JoinOutcome<{ memberId: number; name: string; email: string; already: boolean; emailSent: boolean }>> {
+): Promise<JoinOutcome<ApprovedOutcome>> {
   const { data, error } = await db.rpc("approve_application", {
     p_application: args.applicationId, p_approver: args.approverMemberId, p_via: args.via,
   });
   if (error) return refuse(refusalOf(error));
+  return approved(data, args);
+}
+
+type ApprovedOutcome = { memberId: number; name: string; email: string; already: boolean; emailSent: boolean };
+
+/** After an approval: the approval email (unless it was approved before), and what happened. */
+async function approved(data: unknown, args: { siteUrl: string; send: (mail: ApprovalEmail) => Promise<boolean> }): Promise<JoinOutcome<ApprovedOutcome>> {
   const row = data as { member_id: number; name: string; email: string; already: boolean };
   let emailSent = false;
   if (!row.already) {
@@ -77,6 +93,174 @@ export async function approveApplication(
     emailSent = await args.send({ kind: "membership_approved", to: row.email, ...tpl }).catch(() => false);
   }
   return { ok: true, memberId: row.member_id, name: row.name, email: row.email, already: row.already, emailSent };
+}
+
+// ── Who may approve (T-482, migration 074) ─────────────────────────────────
+//
+// Aaron, 11-24: "any member in the core group (telegram) can approve. I think on the website, they need to be a
+// co-op member." Two doors:
+//   - the members' chat (TELEGRAM_GROUP_CHAT_ID): anyone in it, checked here by the chat a tap came from
+//     (`isMembersChat`); the tapper is recorded by their linked member row, else their Telegram id and @username;
+//   - the site: a co-op member (the web's lib/approval.ts canApproveOnSite; 074's member_can_approve in SQL).
+
+/** Whoever tapped a button in the chat: their Telegram identity, and their member row when their Telegram is linked. */
+export interface ChatTapper {
+  telegramId: number;
+  username: string | null;
+  memberId: number | null;
+}
+
+/** Did this tap come from the members' chat (the one configured chat), not a DM, another group or a forward? */
+export function isMembersChat(chatId: number | string | null | undefined): boolean {
+  const core = groupChatId();
+  return !!core && chatId != null && String(chatId).trim() === core.trim();
+}
+
+/** How an approver or voucher reads on a card or an admin page: their name, or "@username in the chat". */
+export function approverWords(by: { name?: string | null; telegram?: string | null } | null | undefined): string | null {
+  if (by?.name) return by.name;
+  const handle = by?.telegram?.replace(/^@+/, "").trim();
+  return handle ? `@${handle} in the chat` : null;
+}
+
+const tapperArgs = (t: ChatTapper) => ({
+  p_telegram_id: t.telegramId, p_telegram_username: t.username, p_member: t.memberId,
+});
+
+/** The chat's words for a refusal: not_allowed there means a switched-off account (074), or 072's rule before it. */
+function inChat<T>(out: JoinOutcome<T>, before074 = false): JoinOutcome<T> {
+  if (out.ok || out.reason !== "not_allowed") return out;
+  return refuse(before074 ? "chat_waiting_for_074" : "chat_not_allowed");
+}
+
+/**
+ * Someone in the members' chat taps "I know them". The caller checked `isMembersChat`. Before 074 a linked member
+ * vouches through 072's function and an unlinked tapper is told to link first.
+ */
+export async function vouchInChat(db: JoinDb, applicationId: number, tapper: ChatTapper): Promise<JoinOutcome<{ already: boolean }>> {
+  const { data, error } = await db.rpc("chat_vouch_for_application", { p_application: applicationId, ...tapperArgs(tapper) });
+  if (missingFunction(error)) {
+    if (tapper.memberId == null) return refuse("waiting_for_074");
+    return inChat(await vouchForApplication(db, applicationId, tapper.memberId), true);
+  }
+  if (error) return inChat(refuse(refusalOf(error)));
+  return { ok: true, already: data === "already" };
+}
+
+type ApproveArgs = { applicationId: number; siteUrl: string; send: (mail: ApprovalEmail) => Promise<boolean> };
+
+/**
+ * Someone in the members' chat taps Approve. The caller checked `isMembersChat`. Same approval as the site's
+ * (074's approve_application_core); before 074 a linked member goes through 072's rule (a site admin).
+ */
+export async function approveInChat(db: JoinDb, args: ApproveArgs & { tapper: ChatTapper }) {
+  const { data, error } = await db.rpc("chat_approve_application", { p_application: args.applicationId, ...tapperArgs(args.tapper) });
+  if (missingFunction(error)) {
+    if (args.tapper.memberId == null) return refuse<ApprovedOutcome>("waiting_for_074");
+    return inChat(await approveApplication(db, { ...args, approverMemberId: args.tapper.memberId, via: "chat" }), true);
+  }
+  if (error) return inChat(refuse<ApprovedOutcome>(refusalOf(error)));
+  return approved(data, args);
+}
+
+export type FreeDayApprover = { site: { memberId: number; name: string } } | { chat: ChatTapper & { firstName?: string | null } };
+
+/**
+ * Approve a free day: pending → reserved, who approved, and the audit row (074's approve_free_day /
+ * chat_approve_free_day). `already` = it wasn't pending any more, so no email goes. The site's caller checked
+ * canApproveOnSite, the chat's `isMembersChat`; before 074 this is the old conditional update with who approved.
+ */
+export async function approveFreeDay(db: JoinDb, claimId: number, by: FreeDayApprover):
+  Promise<JoinOutcome<{ name: string; email: string; already: boolean; status: string }>> {
+  const { data, error } = "site" in by
+    ? await db.rpc("approve_free_day", { p_claim: claimId, p_member: by.site.memberId })
+    : await db.rpc("chat_approve_free_day", { p_claim: claimId, ...tapperArgs(by.chat) });
+  if (!missingFunction(error)) {
+    if (error) return "chat" in by ? inChat(refuse(refusalOf(error))) : refuse(refusalOf(error));
+    const row = data as { name: string; email: string; already: boolean; status: string };
+    return { ok: true, ...row };
+  }
+  // Before 074: the update the bot and the admin page made, conditional on pending so two taps can't both email.
+  const words = "site" in by ? by.site.name
+    : by.chat.username ? `@${by.chat.username.replace(/^@+/, "")}` : by.chat.firstName ?? null;
+  const { data: claim } = await db.from("free_day_claims").select("id, name, email, status").eq("id", claimId).maybeSingle();
+  if (!claim) return refuse("not_found");
+  if (claim.status !== "pending") return { ok: true, name: claim.name, email: claim.email, already: true, status: claim.status };
+  const { data: moved, error: moveErr } = await db.from("free_day_claims").update({ status: "reserved", approved_by: words })
+    .eq("id", claimId).eq("status", "pending").select("id");
+  if (moveErr) return refuse(refusalOf(moveErr));
+  if (!(moved ?? []).length) return { ok: true, name: claim.name, email: claim.email, already: true, status: "reserved" };
+  return { ok: true, name: claim.name, email: claim.email, already: false, status: "reserved" };
+}
+
+/** A tap on a card's button, as the bot sees it. */
+export interface ChatTap {
+  data: string;
+  /** The chat the tapped message is in; null when Telegram sent no message (an inline-mode message). */
+  chatId: number | string | null;
+  messageId: number | null;
+  /** The message's text, for the free-day card's "approved by" line. */
+  messageText?: string | null;
+  from: { id: number; username?: string | null; first_name?: string | null };
+}
+
+export interface ChatTapDeps {
+  /** The tapper's member row when their Telegram is linked (the bot's resolveSender, disabled rows included), else null. */
+  memberFor: (from: ChatTap["from"]) => Promise<{ id: number } | null>;
+  /** Each app's own sender, so the mail lands in email_log. */
+  send: (mail: (ApprovalEmail | (EmailTemplate & { kind: "free_day_approved"; to: string }))) => Promise<boolean>;
+  siteUrl: string;
+}
+
+/**
+ * The chat card buttons: "I know them" and Approve on an application, Approve on a free day. Anyone in the members'
+ * chat may tap them; a tap from anywhere else is refused (`isMembersChat`). Returns whether the tap was one of these
+ * (false = not ours, the bot carries on) and a line to post back in the chat, if any. The card itself is edited here.
+ */
+export async function handleApprovalTap(db: JoinDb, tap: ChatTap, deps: ChatTapDeps): Promise<{ handled: boolean; reply?: string }> {
+  const isApp = /^app_(vouch|approve)_\d+$/.test(tap.data);
+  const isFreeDay = /^freeday_approve_(membership_)?\d+$/.test(tap.data);
+  if (!isApp && !isFreeDay) return { handled: false };
+  if (!isMembersChat(tap.chatId)) return { handled: true, reply: JOIN_REFUSAL_WORDS.not_members_chat };
+
+  const member = await deps.memberFor(tap.from);
+  const tapper: ChatTapper = { telegramId: tap.from.id, username: tap.from.username || null, memberId: member?.id ?? null };
+  const target = tap.chatId != null && tap.messageId != null ? { chatId: tap.chatId, messageId: tap.messageId } : undefined;
+  const id = Number(tap.data.replace(/^\D+/, ""));
+
+  if (isFreeDay) {
+    // One button: a free day is only a free day. A card from before T-482 round 5 may still carry
+    // "freeday_approve_membership_": it approves the free day only.
+    const result = await approveFreeDay(db, id, { chat: { ...tapper, firstName: tap.from.first_name } });
+    if (!result.ok) return { handled: true, reply: result.message };
+    if (result.already) return { handled: true, reply: `Already ${result.status === "reserved" ? "approved" : result.status}.` };
+    const usuallyHere = await readUsuallyHere(db).catch(() => null);
+    const tpl = freeDayApprovedEmail({ name: result.name, siteUrl: deps.siteUrl, usuallyHere });
+    const sent = await deps.send({ kind: "free_day_approved", to: result.email, ...tpl }).catch(() => false);
+    const who = tapper.username ? `@${tapper.username}` : tap.from.first_name ?? "someone";
+    if (target) {
+      await telegramApi("editMessageText", {
+        chat_id: target.chatId, message_id: target.messageId,
+        text: `✅ Free day approved by ${who}${sent ? ` · email sent to ${result.email}` : ""}\n\n${tap.messageText ?? ""}`.trim(),
+        reply_markup: { inline_keyboard: [] },
+      });
+    }
+    return { handled: true, reply: sent ? undefined : `⚠️ Approved, but the email to ${result.email} didn't send: tell them their free day is ready.` };
+  }
+
+  if (tap.data.startsWith("app_vouch_")) {
+    const result = await vouchInChat(db, id, tapper);
+    if (!result.ok) return { handled: true, reply: result.message };
+    await refreshApplicationCard(db, id, target, deps.siteUrl);
+    return { handled: true };
+  }
+  const result = await approveInChat(db, { applicationId: id, siteUrl: deps.siteUrl, send: deps.send, tapper });
+  if (!result.ok) return { handled: true, reply: result.message };
+  await refreshApplicationCard(db, id, target, deps.siteUrl);
+  if (!result.already && !result.emailSent) {
+    return { handled: true, reply: `⚠️ Approved, but the email to ${result.email} didn't send: tell them to open their portal to pick a plan.` };
+  }
+  return { handled: true };
 }
 
 // ── The chat ────────────────────────────────────────────────────────────────
@@ -147,7 +331,8 @@ export function applicationCard(f: ApplicationCardFacts, siteUrl = "https://rege
     lines.push(`Says nobody here knows them yet; they'll come to a night or a free day first.`);
   }
   if (f.vouchedBy) lines.push(`🤝 Vouched for by ${md(f.vouchedBy.name)}, ${shortDate(f.vouchedBy.at)}.`);
-  else if (f.status === "pending") lines.push(`Needs one member to vouch: tap *I know them* if you've met them.`);
+  else if (f.status === "pending") lines.push(`Needs one vouch: tap *I know them* if you've met them.`);
+  if (f.vouchedBy && f.status === "pending") lines.push(`Anyone here can approve.`);
 
   const open: Button = { text: "Open", url: `${base}/admin/people?tab=applications` };
   let keyboard: Button[][] | undefined;
@@ -191,6 +376,7 @@ export function freeDayCard(f: FreeDayCardFacts): ChatCard {
     lines.push(``, `✅ Approved${f.approvedBy ? ` by ${md(f.approvedBy)}` : ""}.`);
     return { text: lines.join("\n") };
   }
+  lines.push(``, `Anyone here can approve.`);
   return {
     text: lines.join("\n"),
     reply_markup: { inline_keyboard: [[{ text: "✅ Approve free day", callback_data: `freeday_approve_${f.id}` }]] },
@@ -230,13 +416,15 @@ export async function applicationCardFacts(db: JoinDb, applicationId: number): P
     for (const m of (data ?? []) as { id: number; name: string; telegram_username: string | null }[]) people.set(m.id, m);
   }
   const known = app.known_by_member_id ? people.get(app.known_by_member_id) : null;
-  const voucher = app.vouched_by ? people.get(app.vouched_by) : null;
+  // Who vouched and who approved: the member row, or (074) an unlinked chat member's @username.
+  const voucher = approverWords({ name: app.vouched_by ? people.get(app.vouched_by)?.name : null, telegram: app.vouched_by_telegram });
+  const approver = approverWords({ name: app.approved_by ? people.get(app.approved_by)?.name : null, telegram: app.approved_by_telegram });
   return {
     id: app.id, name: app.name, email: app.email, status: app.status,
     about: app.about, how_found: app.how_found ?? null, why_join: app.why_join,
     knownBy: known ? { name: known.name, telegram: known.telegram_username } : null,
-    vouchedBy: voucher && app.vouched_at ? { name: voucher.name, at: app.vouched_at } : null,
-    approvedBy: app.approved_by ? people.get(app.approved_by)?.name ?? null : null,
+    vouchedBy: app.vouched_at && (app.vouched_by || app.vouched_by_telegram_id) ? { name: voucher ?? "someone in the chat", at: app.vouched_at } : null,
+    approvedBy: approver,
     chatMessageId: app.chat_message_id != null ? Number(app.chat_message_id) : null,
   };
 }

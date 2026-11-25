@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { canApproveOnSite } from "@/lib/approval";
 import { headers } from "next/headers";
 import { loginUrlFor } from "@/lib/safeNext";
 import { createClient } from "@/lib/supabase/server";
@@ -35,12 +36,14 @@ export default async function PortalLayout({ children }: { children: React.React
 
   const { data: member } = preview ? { data: null } : await supabase
     .from("members")
-    .select("is_admin, disabled, member_type")
+    .select("is_admin, is_coop_member, disabled, member_type")
     .eq("supabase_user_id", user.id)
     .single();
 
   // Matches the admin layout's gate: disabling a member also removes admin.
   const isAdmin = !preview && !!member?.is_admin && !member.disabled;
+  // A co-op member who isn't a site admin approves on People → Applications / Free days (migration 074).
+  const approves = !preview && !isAdmin && canApproveOnSite(member);
   const memberType = preview ? preview.memberType : member?.member_type;
   const events = preview ? preview.steward : await showEvents(door);
 
@@ -50,6 +53,7 @@ export default async function PortalLayout({ children }: { children: React.React
     { href: "/portal/passes", label: memberType === "day_pass" ? "Day passes" : "Guest passes" },
     ...(events ? [{ href: door ? STEWARD_PATH : "/portal/events", label: "Events" }] : []),
     ...(isAdmin ? [{ href: "/admin", label: "Admin", accent: true }] : []),
+    ...(approves ? [{ href: "/admin/people", label: "Approvals", accent: true }] : []),
   ];
 
   return (

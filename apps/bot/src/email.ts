@@ -77,5 +77,3 @@ export async function sendEmail(input: SendEmailInput): Promise<boolean> {
     return false;
   }
 }
-
-export { freeDayApprovedEmail } from "@regenhub/shared";
